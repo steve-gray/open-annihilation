@@ -24,6 +24,7 @@ using oa::ui::first_run::CardKind;
 using oa::ui::first_run::CatalogueNote;
 using oa::ui::first_run::GateFacts;
 using oa::ui::first_run::Hold;
+using oa::ui::first_run::Leave;
 using oa::ui::first_run::Model;
 using oa::ui::first_run::PackState;
 using oa::ui::first_run::Session;
@@ -228,6 +229,19 @@ std::string chrome_step(const oa::ui::first_run::Scene& scene) {
         step.index = look->step_index;
         step.count = look->step_count;
         return oa::ui::kit::step_line(step);
+    }
+    return {};
+}
+
+/// The left footer's words.
+///
+/// @param scene the layout
+/// @return the caption; empty when the step has no chrome
+std::string chrome_skip(const oa::ui::first_run::Scene& scene) {
+    for (const oa::ui::kit::Item& item : scene.list.items) {
+        const auto* look = std::get_if<oa::ui::kit::SetupChromeLook>(&item.look);
+        if (look != nullptr)
+            return look->skip;
     }
     return {};
 }
@@ -577,6 +591,88 @@ void check_centred_language() {
     oa::data::languages::set_interface_language(nullptr, oa::data::languages::english());
 }
 
+/// Presses the left footer button.
+///
+/// @param session the session
+/// @param scene the layout
+/// @return what the press asked
+oa::ui::first_run::Outcome press_skip(Session& session, const oa::ui::first_run::Scene& scene) {
+    const oa::ui::kit::Control* skip =
+        oa::ui::kit::control_of(scene.list, oa::ui::first_run::skip_id);
+    OA_CHECK(skip != nullptr && skip->enabled);
+    const oa::ui::kit::Point at{
+        skip->rect.x + skip->rect.width / 2, skip->rect.y + skip->rect.height / 2
+    };
+    std::ignore =
+        oa::ui::first_run::pointer(session, scene, oa::ui::first_run::PointerKind::down, at, 0, 1);
+    return oa::ui::first_run::pointer(session, scene, oa::ui::first_run::PointerKind::up, at, 0, 1);
+}
+
+/// Quit on every step of a first start, Skip on every step of a re-run.
+/// The footer buttons stay inside the window, at Settings' button size.
+void check_leave_word() {
+    oa::ui::kit::Frame frame;
+    frame.area = {0, 0, 1280, 720};
+    frame.size_class = oa::ui::kit::SizeClass::large;
+    const Step welcome_steps[] = {Step::language, Step::online};
+    Session again;
+    again.model.leave = Leave::skip;
+    again.model.walk = Walk::welcome;
+    for (const Step step : welcome_steps) {
+        again.model.step = step;
+        const auto scene = oa::ui::first_run::lay_out(again, frame, nullptr);
+        OA_CHECK(chrome_skip(scene) == "Skip");
+        Session pressed = again;
+        OA_CHECK(press_skip(pressed, scene).ask == Ask::skip);
+    }
+
+    const Step setup_steps[] = {Step::language, Step::game, Step::copying, Step::online};
+    Session first;
+    first.model.leave = Leave::quit;
+    first.model.walk = Walk::setup;
+    first.model.copy.running = true;
+    for (const Step step : setup_steps) {
+        first.model.step = step;
+        const auto scene = oa::ui::first_run::lay_out(first, frame, nullptr);
+        OA_CHECK(chrome_skip(scene) == "Quit");
+        const oa::ui::kit::Control* skip =
+            oa::ui::kit::control_of(scene.list, oa::ui::first_run::skip_id);
+        OA_CHECK(skip != nullptr && skip->text == "Quit");
+        OA_CHECK(skip->rect.height == oa::ui::kit::compact_metrics.button_height);
+        OA_CHECK(skip->rect.width >= oa::ui::kit::compact_metrics.button_width);
+        Session pressed = first;
+        OA_CHECK(press_skip(pressed, scene).ask == Ask::quit);
+    }
+
+    const int32_t sizes[][2] = {{640, 480}, {1280, 720}, {1344, 838}};
+    for (const auto& size : sizes) {
+        oa::ui::kit::Frame room;
+        room.area = {0, 0, size[0], size[1]};
+        room.size_class = oa::ui::kit::size_class_of(size[0], size[1]);
+        room.scale_percent = 100;
+        Session session;
+        session.model.leave = Leave::quit;
+        session.model.walk = Walk::setup;
+        session.model.step = Step::language;
+        const auto scene = oa::ui::first_run::lay_out(session, room, nullptr);
+        for (const oa::ui::kit::Control& control : scene.list.controls) {
+            const std::string_view name = control.name;
+            const bool footer =
+                name.ends_with(".skip") || name.ends_with(".back") || name.ends_with(".next");
+            if (!footer)
+                continue;
+            const int32_t right = control.rect.x + control.rect.width;
+            const int32_t bottom = control.rect.y + control.rect.height;
+            OA_CHECK(control.rect.x >= oa::ui::kit::compact_metrics.padding);
+            OA_CHECK(control.rect.y >= 0);
+            OA_CHECK(right <= size[0] - oa::ui::kit::compact_metrics.edge);
+            OA_CHECK(bottom <= size[1]);
+            OA_CHECK(control.rect.height == oa::ui::kit::compact_metrics.button_height);
+            OA_CHECK(control.rect.width >= oa::ui::kit::compact_metrics.button_width);
+        }
+    }
+}
+
 } // namespace
 
 int main() {
@@ -588,6 +684,7 @@ int main() {
     check_keys();
     check_wrap_click_and_buttons();
     check_lookup();
+    check_leave_word();
     check_centred_language();
     return oa::test::check_exit_status();
 }

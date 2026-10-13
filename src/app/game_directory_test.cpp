@@ -1120,40 +1120,40 @@ void check_found_installs() {
         );
     }
     {
+        // Several usable folders on a desktop whose dialog works: the system's
+        // picker asks, after a notice of what to choose.
         auto host = found_host();
+        host.picks = {{FolderPick::chosen, kCd, {}}};
         auto h = host.host();
         GameFilesNeeded needed;
         const auto result = resolve_game_directory(
             found_request(std::nullopt, {from_steam, from_broken, from_heroic}), h, &needed
         );
         expect(
-            !result && needed.needed && needed.chooser && needed.found.size() == 2 &&
-                needed.found[0].folder == steam && needed.found[1].folder == heroic &&
-                needed.stored_folder.empty() && needed.stored_problem.empty() &&
-                needed.dialog_offered && needed.dialog_problem.empty(),
-            "several usable folders found open the chooser with the usable ones, in order"
-        );
-        expect(
-            host.starts.empty() && host.notices.empty(),
-            "the chooser opens without a notice or the dialog"
+            result && result->path == kCd && result->source == GameDirectorySource::chosen &&
+                !needed.chooser && host.starts.size() == 1 && host.notices.size() == 1 &&
+                contains(host.notices[0], "totala1.hpi"),
+            "several usable folders found ask with the system picker, after what to choose"
         );
     }
     {
+        // A remembered folder that has gone, with another usable folder found:
+        // the notice says why, then the system's picker asks.
         auto host = found_host();
+        host.picks = {{FolderPick::chosen, kCd, {}}};
         auto h = host.host();
         GameFilesNeeded needed;
         const auto result =
             resolve_game_directory(found_request(path_to_utf8(kMoved), {from_heroic}), h, &needed);
         expect(
-            !result && needed.needed && needed.chooser && needed.stored_folder == kMoved &&
-                needed.stored_problem == "The folder does not exist." && needed.found.size() == 1 &&
-                needed.found[0].folder == heroic && host.notices.empty() && host.starts.empty(),
-            "a remembered folder that has gone opens the chooser with why, then the list"
+            result && result->path == kCd && result->source == GameDirectorySource::chosen &&
+                !needed.chooser && host.starts.size() == 1 && host.notices.size() == 1 &&
+                contains(host.notices[0], "can no longer be used") &&
+                contains(host.notices[0], path_to_utf8(kMoved)),
+            "a remembered folder that has gone is told about, then the system picker asks"
         );
     }
     {
-        // A remembered folder that has gone, with nothing found and a dialog that works,
-        // resolves as it always has.
         auto host = found_host();
         host.picks = {{FolderPick::chosen, kCd, {}}};
         auto h = host.host();
@@ -1161,23 +1161,23 @@ void check_found_installs() {
         const auto result =
             resolve_game_directory(found_request(path_to_utf8(kMoved), {from_broken}), h, &needed);
         expect(
-            !result && needed.needed && needed.chooser && needed.dialog_offered &&
-                needed.stored_folder == kMoved && needed.found.empty() && host.starts.empty() &&
-                host.notices.empty(),
-            "a remembered folder that has gone opens the locator, with the system picker offered"
+            result && result->source == GameDirectorySource::chosen && !needed.chooser &&
+                host.starts.size() == 1 && host.notices.size() == 1 &&
+                contains(host.notices[0], "can no longer be used"),
+            "a remembered folder that has gone, with nothing usable found, asks with the picker"
         );
     }
     {
-        // A first start with nothing found on a desktop whose dialog works is unchanged.
         auto host = found_host();
         host.picks = {{FolderPick::chosen, kCd, {}}};
         auto h = host.host();
         GameFilesNeeded needed;
         const auto result = resolve_game_directory(found_request(std::nullopt, {}), h, &needed);
         expect(
-            !result && needed.needed && needed.chooser && needed.dialog_offered &&
-                needed.dialog_problem.empty() && host.starts.empty() && host.notices.empty(),
-            "nothing found on a desktop opens the locator, with the system picker offered"
+            result && result->path == kCd && result->source == GameDirectorySource::chosen &&
+                !needed.chooser && host.starts.size() == 1 && host.notices.size() == 1 &&
+                contains(host.notices[0], "totala1.hpi"),
+            "nothing found on a desktop asks with the system picker, after what to choose"
         );
     }
     {
@@ -1214,9 +1214,10 @@ void check_found_installs() {
         GameFilesNeeded needed;
         const auto result = resolve_game_directory(found_request(std::nullopt, {}), h, &needed);
         expect(
-            !result && needed.needed && needed.chooser && needed.dialog_offered &&
-                needed.dialog_problem.empty() && host.starts.empty() && host.notices.empty(),
-            "the locator opens without trying the system dialog, which stays offered"
+            !result && needed.needed && needed.chooser && !needed.dialog_offered &&
+                contains(needed.dialog_problem, "no portal") && host.starts.size() == 2 &&
+                host.notices.size() == 1 && contains(host.notices[0], "totala1.hpi"),
+            "a dialog that cannot open is tried, then the locator says why"
         );
     }
     {
@@ -1264,7 +1265,8 @@ void check_found_installs() {
         );
     }
     {
-        // --choose-game-dir elsewhere still opens the dialog, never the one folder found.
+        // --choose-game-dir on a desktop opens the system picker at the stored
+        // folder, and does not play the one folder found.
         auto host = found_host();
         host.picks = {{FolderPick::chosen, kCd, {}}};
         auto h = host.host();
@@ -1273,9 +1275,10 @@ void check_found_installs() {
         request.choose = true;
         const auto result = resolve_game_directory(request, h, &needed);
         expect(
-            !result && needed.needed && needed.chooser && needed.dialog_offered &&
-                needed.found.size() == 1 && host.starts.empty() && host.notices.empty(),
-            "--choose-game-dir opens the locator over the one folder found"
+            result && result->path == kCd && result->source == GameDirectorySource::chosen &&
+                !needed.chooser && host.starts.size() == 1 && host.starts[0] == kGog &&
+                host.notices.empty(),
+            "--choose-game-dir opens the system picker at the stored folder"
         );
     }
     {

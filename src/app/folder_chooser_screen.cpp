@@ -133,18 +133,6 @@ Direction direction_of(uint8_t button) noexcept {
     return Direction::none;
 }
 
-/// Returns a word's ASCII letters lowered, for sorting names as people read them.
-///
-/// @param name the name
-/// @return the name in lower case
-std::string folded(std::string_view name) {
-    std::string lowered(name);
-    for (char& character : lowered)
-        if (character >= 'A' && character <= 'Z')
-            character = static_cast<char>(character - 'A' + 'a');
-    return lowered;
-}
-
 /// Returns one of the locator's words in the installed language.
 ///
 /// @param english the words as the source writes them
@@ -957,7 +945,10 @@ class ChooserScreen {
         model_.path = installs::path_under_home(home_, shown);
         model_.has_parent = shown.has_relative_path() && shown.parent_path() != shown;
         model_.filter.clear();
-        filter_focused_ = false;
+        // Typing filters the folder just opened, without a press on Filter first.
+        filter_focused_ = true;
+        if (window_ != nullptr)
+            SDL_StartTextInput(window_);
         fill_places();
         fill_entries();
         show_filtered();
@@ -1119,12 +1110,8 @@ class ChooserScreen {
                 row.shown.size_label = view::size_text(size);
             listed_.push_back(std::move(row));
         }
-        std::sort(listed_.begin(), listed_.end(), [](const Listed& a, const Listed& b) {
-            if (a.directory != b.directory)
-                return a.directory;
-            const std::string folded_a = folded(a.shown.name);
-            const std::string folded_b = folded(b.shown.name);
-            return folded_a != folded_b ? folded_a < folded_b : a.shown.name < b.shown.name;
+        std::stable_sort(listed_.begin(), listed_.end(), [](const Listed& a, const Listed& b) {
+            return chooser::entry_before(a.shown, b.shown);
         });
         const chooser::SourceAccount folder_account = chooser::describe_source(
             path_to_utf8(browsed_.filename()), 0, true, here, demo_1997.installer_size
@@ -1136,10 +1123,8 @@ class ChooserScreen {
     void show_filtered() {
         model_.entries.clear();
         shown_paths_.clear();
-        const std::string needle = folded(model_.filter);
         for (const Listed& row : listed_) {
-            if (!needle.empty() && folded(row.shown.name).find(needle) == std::string::npos &&
-                folded(row.shown.what).find(needle) == std::string::npos)
+            if (!chooser::name_matches(row.shown.name, model_.filter))
                 continue;
             model_.entries.push_back(row.shown);
             shown_paths_.push_back(row.path);
@@ -1271,12 +1256,15 @@ class ChooserScreen {
   public:
 
     /// Builds a scratch home, drives the locator with Tab onto its install, writes the
-    /// desktop and Deck pictures when asked, then chooses that folder with the choose key.
+    /// desktop, Deck and phone pictures when asked, then chooses that folder with the choose key.
     ///
     /// @param desktop_picture the desktop picture; empty writes none
     /// @param deck_picture the Deck picture; empty writes none
+    /// @param phone_picture the phone picture; empty writes none
     /// @return true when the choose key asked for the staged install
-    bool drive(const fs::path& desktop_picture, const fs::path& deck_picture) {
+    bool drive(
+        const fs::path& desktop_picture, const fs::path& deck_picture, const fs::path& phone_picture
+    ) {
         const fs::path root = !options_.user_folder || options_.user_folder->empty()
                                   ? fs::temp_directory_path() / "oa-folder-chooser-scene"
                                   : *options_.user_folder / "locator-scene";
@@ -1352,9 +1340,25 @@ class ChooserScreen {
         if (window_ != nullptr)
             SDL_SetWindowSize(window_, 1280, 800);
         refresh_viewport();
-        stale_ = true;
-        dirty_ = true;
+        focus_row(kept_row);
         if (!deck_picture.empty() && !write_picture(deck_picture))
+            return false;
+        model_.deck = false;
+        model_.offers_dialog = true;
+#if defined(__APPLE__)
+        model_.permission_note = true;
+#else
+        model_.permission_note = false;
+#endif
+        staged_facts_ = scene.desktop;
+        fill_places();
+        model_.selected = kept_row;
+        sync_choice();
+        if (window_ != nullptr)
+            SDL_SetWindowSize(window_, 852, 393);
+        refresh_viewport();
+        focus_row(kept_row);
+        if (!phone_picture.empty() && !write_picture(phone_picture))
             return false;
         press_key(chooser::Key::choose);
         std::error_code same;
@@ -1366,6 +1370,24 @@ class ChooserScreen {
         }
         std::cout << "folder chooser check: passed\n";
         return true;
+    }
+
+    /// Points the shown focus at a row, after the window's size has changed.
+    ///
+    /// @param row the row
+    void focus_row(int32_t row) {
+        lay_out_now();
+        ui_.focus_shown = true;
+        for (std::size_t index = 0; index < layout_.focus_order.size(); ++index) {
+            const chooser::Target target = layout_.focus_order[index];
+            if (target.kind == chooser::TargetKind::entry &&
+                target.index == static_cast<uint16_t>(std::max(row, 0))) {
+                ui_.focus = static_cast<int32_t>(index);
+                break;
+            }
+        }
+        stale_ = true;
+        dirty_ = true;
     }
 
     /// Paints the locator and writes it as a PNG.
@@ -1407,12 +1429,16 @@ bool run_folder_chooser_key_check(
     }
     RendererHost* host = display.host != nullptr ? display.host(display.context) : nullptr;
     fs::path deck;
+    fs::path phone;
     if (!picture.empty()) {
         const std::string name = picture.stem().string() + "-deck" + picture.extension().string();
         deck = picture.parent_path() / name;
+        const std::string phone_name =
+            picture.stem().string() + "-phone" + picture.extension().string();
+        phone = picture.parent_path() / phone_name;
     }
     ChooserScreen screen(options, host, window, renderer, GameFilesNeeded{});
-    return screen.drive(picture, deck);
+    return screen.drive(picture, deck, phone);
 }
 
 bool run_folder_chooser_until_resolved(

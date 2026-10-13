@@ -274,14 +274,17 @@ app removes the folder (`Runtime::library_uninstall`,
     LANGUAGE and the second is EXPANSIONS and MOD, then the MAPS heading.
     The base-game tile has Total Annihilation's icon, from the program in
     the game folder that describes itself as Total Annihilation,
-    nearest-neighbour and centred in the badge square (the letters "TA"
-    when that program is missing or its icon cannot be read), the name,
+    nearest-neighbour and centred in the badge square. When that program
+    cannot be read, the tile draws the icon the Library ships, the same
+    one for Total Annihilation and the demo. The letters "TA" stay only
+    when that picture cannot be drawn. The tile also has the name,
     the version and, when the inputs name them, the source and the file
     check, and CHANGE… (`library.active.change`) at the bottom right.
     The expansions tile has one pill `library.active.expansion.<id>` for
     each expansion of that game. One that is not copied and that a registry
-    offers has a download arrow beside it, `library.active.expansion.<id>.get`
-    (or `.cancel` or `.retry` while that download is in the queue). The mod tile has a large badge, the name,
+    offers keeps the name and carries the download arrow at the right,
+    inside the pill. The whole pill is the press: the same control asks
+    for the download, cancels it, or tries again. The mod tile has a large badge, the name,
     the version and revision and the author, with Playing as a pill on the
     title's line at the top right, or No Mod with an em dash and "Total
     Annihilation as it was made" and no pill.

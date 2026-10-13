@@ -184,6 +184,30 @@ struct MatchModels;
 struct WorldDrawList;
 class GafFrameCache;
 class RendererHost;
+
+/// Plays the logo and the intro the game starts with, unless a switch skips
+/// them. The window may be null for a headless run. A device lost while a
+/// movie plays is made again before this returns.
+///
+/// @param options the parsed command line, with the mod profile played
+/// @param window the window the movies show in; null for a headless run
+/// @param renderer that window's renderer; null with the window
+/// @param host what made the renderer; null when there is none
+/// @param full_screen Alt+Enter's switch, updated while a movie plays; null when there is none
+void play_intro_movies(
+    const Options& options,
+    SDL_Window* window,
+    SDL_Renderer* renderer,
+    RendererHost* host,
+    FullScreenSwitch* full_screen
+);
+
+/// Reports whether this start will show the setup over the menu. The same
+/// facts the runtime's gate uses once the video driver can be read.
+///
+/// @param options the parsed command line
+/// @return true when the setup will show
+[[nodiscard]] bool setup_shows_over_menu(const Options& options);
 struct FolderOpening;
 struct ModStartGaps;
 
@@ -3972,6 +3996,11 @@ class Runtime final : public menu::Host,
     /// done; leaving another way does not, so it returns.
     void tell_first_run();
 
+    /// Plays the intro that waited for the setup, once the setup will not
+    /// show again, and writes "first-run: done" before it. A start that did
+    /// not wait returns without playing.
+    void play_intro_after_setup();
+
     /// Writes "first-run: not showing" once when the setup stays hidden, and
     /// again when that reason changes.
     ///
@@ -4730,6 +4759,24 @@ class Runtime final : public menu::Host,
     /// Draws the main menu's OA buttons in the window's pixels, over the
     /// scaled picture and under the OA layer's screens.
     void present_menu_icon_buttons();
+
+    /// Forgets that this frame's cursor is presented above the main menu's
+    /// window-pixel buttons.
+    void clear_menu_button_cursor_hold() noexcept;
+
+    /// When the cursor covers a main-menu button that a larger window draws
+    /// again in its own pixels, leaves the cursor out of the picture. The
+    /// picture's button then still matches what was drawn, so the window-pixel
+    /// icon replaces it, and the cursor is presented above that icon.
+    ///
+    /// @return true when the cursor stays out of the picture
+    bool hold_menu_button_cursor();
+
+    /// Tells whether this frame presents the cursor above the main menu's
+    /// window-pixel buttons.
+    ///
+    /// @return true when hold_menu_button_cursor left it out of the picture
+    [[nodiscard]] bool menu_button_cursor_held() const noexcept;
 
     /// Destroys the main menu buttons' window-pixel textures, while the
     /// renderer that made them is still alive.
@@ -14010,6 +14057,11 @@ class Runtime final : public menu::Host,
     void record_typed_key(uint8_t key);
 
     /// Runs the SINGLE.GUI setup and installs its DRDEATH key hook.
+    ///
+    /// Load Game is greyed when the data has no save dialog, Any Mission stays
+    /// hidden when the data has no any-mission screen, and Skirmish is greyed
+    /// when the base game is the Total Annihilation demo (1997). A greyed
+    /// button takes no press and its key does nothing.
     void enter_single_player_panel();
 
     /// Tells whether the game data holds the any-mission screen: NEWGAME.GUI over playanygame4.
@@ -14027,6 +14079,14 @@ class Runtime final : public menu::Host,
     ///
     /// @return true when the layout is present
     [[nodiscard]] bool offers_saved_games() const;
+
+    /// Tells whether Single Player offers Skirmish.
+    ///
+    /// The Total Annihilation demo (1997), when it is the base game, does not.
+    /// A game folder that is not a managed base game does.
+    ///
+    /// @return false only when the mounted base game is the demo
+    [[nodiscard]] bool offers_skirmish() const;
 
     /// Tells whether the game data holds a campaign for a side.
     ///

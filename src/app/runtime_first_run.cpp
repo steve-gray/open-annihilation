@@ -9,6 +9,7 @@
 // the preference when the player finishes or skips. Quit does not.
 
 #include "oa_layer.hpp"
+#include "render_run.hpp"
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "language_state.hpp"
@@ -505,6 +506,12 @@ class FirstRunScreen final : public LayerScreen {
             session_.model.walk = first_run::Walk::setup;
         else
             session_.model.walk = setup_menu_walk();
+        // The welcome, including Show again, has a menu to return to, so the
+        // left button is Skip. A five-step walk keeps the word the pre-game
+        // window chose, or Quit when this is the first start.
+        session_.model.leave = session_.model.walk == first_run::Walk::welcome
+                                   ? first_run::Leave::skip
+                                   : setup_menu_leave();
     }
 
     /// Takes a previewed language's fonts off both stacks, so a setup
@@ -783,7 +790,7 @@ class FirstRunScreen final : public LayerScreen {
     /// @return the revision
     [[nodiscard]] uint64_t revision() const override { return revision_; }
 
-    /// Leaving without Finish or Skip setup writes nothing, so the setup returns.
+    /// Leaving without Finish or Skip writes nothing, so the setup returns.
     void close(bool /*by_key*/) override {
         runtime_.first_run_run_.opened_logged = false;
         runtime_.first_run_run_.opened_step = -1;
@@ -974,11 +981,26 @@ class FirstRunScreen final : public LayerScreen {
     LayerAnswer apply(const first_run::Outcome& outcome) {
         if (outcome.pass)
             return LayerAnswer::pass;
+        const auto stop_menu_copy = [this] {
+            if (session_.model.step != first_run::Step::copying)
+                return;
+            if (!session_.model.copy.running && !session_.model.copy.paused)
+                return;
+            setup_request_cancel();
+            setup_stop_join();
+            if (copy_woke_screen_) {
+                SDL_EnableScreenSaver();
+                copy_woke_screen_ = false;
+            }
+            session_.model.copy.running = false;
+            session_.model.copy.paused = false;
+        };
         bool leave = false;
         switch (outcome.ask) {
         case first_run::Ask::none:
             break;
         case first_run::Ask::skip:
+            stop_menu_copy();
             FirstRunHost::finish(runtime_);
             leave = true;
             break;
@@ -1080,6 +1102,7 @@ class FirstRunScreen final : public LayerScreen {
             session_.focus_ready = false;
             break;
         case first_run::Ask::quit:
+            stop_menu_copy();
             leave = true;
             break;
         }
@@ -1146,6 +1169,9 @@ void FirstRunHost::finish(Runtime& runtime) {
     runtime.preference_values_[std::string(first_run::preference_key)] =
         std::string(first_run::preference_done);
     flush(runtime);
+    // Skip setup and Start playing both end the walk. --first-run shows it
+    // again, so the movies stay until that return will not happen.
+    runtime.play_intro_after_setup();
 }
 
 void FirstRunHost::apply_online(Runtime& runtime, bool online_on) {
@@ -1217,6 +1243,7 @@ void FirstRunHost::retry_download(Runtime& runtime, const first_run::Session& se
 }
 
 void FirstRunHost::tell(Runtime& runtime) {
+    runtime.play_intro_after_setup();
     runtime.log_first_run_gate(true);
     if (runtime.oa_layer_ == nullptr)
         return;
@@ -1269,6 +1296,21 @@ bool FirstRunHost::open_staged(Runtime& runtime, std::string_view token) {
 
 void Runtime::tell_first_run() {
     FirstRunHost::tell(*this);
+}
+
+void Runtime::play_intro_after_setup() {
+    if (!options_.intro_after_setup)
+        return;
+    // 3.1c plays the logo and the intro before the menu is used, while
+    // PlayMovie is set. The setup is that arrival, so the movies wait until
+    // the walk will not show again. A switch that skips them plays nothing
+    // on this start; that is the same skip a start without the setup uses.
+    if (first_run::decide(FirstRunHost::facts_for(*this, true)) == first_run::Hold::show)
+        return;
+    options_.intro_after_setup = false;
+    std::cout << "first-run: done\n" << std::flush;
+    RendererHost* host = render_run_ ? render_run_->host : nullptr;
+    play_intro_movies(options_, sdl_.window, sdl_.renderer, host, &full_screen_switch_);
 }
 
 void Runtime::log_first_run_gate(bool sdl_ready) {

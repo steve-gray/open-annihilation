@@ -15,6 +15,7 @@
 #include "oa/ui/paint/painter.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -35,18 +36,25 @@ namespace text_font = oa::platform::text_font;
 constexpr int32_t kWidth = 1280;
 constexpr int32_t kHeight = 720;
 
-/// A smooth canvas at 1x, drawn with the bundled fonts.
+/// A smooth canvas drawn with the bundled fonts, at a scale of the point size.
 struct Picture {
+    int32_t width{};  ///< canvas pixels
+    int32_t height{}; ///< canvas pixels
+    int32_t points_width{};
+    int32_t points_height{};
     paint::Canvas pixels;
     paint::Painter painter;
     oa::ui::kit::Canvas canvas{};
     oa::ui::kit::Fonts fonts{};
 
-    explicit Picture(text_font::FontStack* modern)
-        : pixels(paint::make_canvas(kWidth, kHeight)), painter(pixels) {
+    Picture(text_font::FontStack* modern, int32_t point_width, int32_t point_height, int32_t scale)
+        : width(std::max(point_width, int32_t{1}) * std::max(scale, int32_t{100}) / 100),
+          height(std::max(point_height, int32_t{1}) * std::max(scale, int32_t{100}) / 100),
+          points_width(point_width), points_height(point_height),
+          pixels(paint::make_canvas(width, height)), painter(pixels) {
         canvas.smooth.painter = &painter;
         canvas.smooth.fonts = modern;
-        canvas.smooth.scale_percent = 100;
+        canvas.smooth.scale_percent = std::max(scale, int32_t{100});
         canvas.fonts = &fonts;
     }
 };
@@ -58,26 +66,29 @@ struct Picture {
 /// @return true when it was written
 bool write_png(const Picture& picture, const std::filesystem::path& path) {
     std::vector<uint8_t> rows;
-    rows.resize(static_cast<std::size_t>(kWidth) * static_cast<std::size_t>(kHeight) * 3);
+    rows.resize(
+        static_cast<std::size_t>(picture.width) * static_cast<std::size_t>(picture.height) * 3
+    );
     constexpr uint8_t kGroundR = 0x2a;
     constexpr uint8_t kGroundG = 0x30;
     constexpr uint8_t kGroundB = 0x24;
-    for (int32_t y = 0; y < kHeight; ++y) {
-        for (int32_t x = 0; x < kWidth; ++x) {
+    for (int32_t y = 0; y < picture.height; ++y) {
+        for (int32_t x = 0; x < picture.width; ++x) {
             const paint::Rgba pixel = paint::pixel_at(picture.pixels, x, y);
             const uint32_t cover = pixel.a;
             const uint32_t keep = 255U - cover;
-            const std::size_t at = (static_cast<std::size_t>(y) * static_cast<std::size_t>(kWidth) +
-                                    static_cast<std::size_t>(x)) *
-                                   3;
+            const std::size_t at =
+                (static_cast<std::size_t>(y) * static_cast<std::size_t>(picture.width) +
+                 static_cast<std::size_t>(x)) *
+                3;
             rows[at] = static_cast<uint8_t>((pixel.r * cover + kGroundR * keep) / 255U);
             rows[at + 1] = static_cast<uint8_t>((pixel.g * cover + kGroundG * keep) / 255U);
             rows[at + 2] = static_cast<uint8_t>((pixel.b * cover + kGroundB * keep) / 255U);
         }
     }
     png::Header header;
-    header.width = static_cast<uint32_t>(kWidth);
-    header.height = static_cast<uint32_t>(kHeight);
+    header.width = static_cast<uint32_t>(picture.width);
+    header.height = static_cast<uint32_t>(picture.height);
     header.bit_depth = 8;
     header.color_type = png::ColorType::rgb;
     std::vector<uint8_t> file;
@@ -259,15 +270,15 @@ bool paint_backing(Picture& picture, const std::filesystem::path& path) {
     const int32_t src_h = static_cast<int32_t>(icon.picture.height);
     if (src_w <= 0 || src_h <= 0)
         return false;
-    const int32_t left = std::max((kWidth - src_w) / 2, 0);
-    const int32_t top = std::max((kHeight - src_h) / 2, 0);
-    for (int32_t y = 0; y < src_h && top + y < kHeight; ++y) {
-        for (int32_t x = 0; x < src_w && left + x < kWidth; ++x) {
+    const int32_t left = std::max((picture.width - src_w) / 2, 0);
+    const int32_t top = std::max((picture.height - src_h) / 2, 0);
+    for (int32_t y = 0; y < src_h && top + y < picture.height; ++y) {
+        for (int32_t x = 0; x < src_w && left + x < picture.width; ++x) {
             const std::size_t from =
                 (static_cast<std::size_t>(y) * icon.picture.width + static_cast<std::size_t>(x)) *
                 4U;
             const std::size_t to =
-                (static_cast<std::size_t>(top + y) * static_cast<std::size_t>(kWidth) +
+                (static_cast<std::size_t>(top + y) * static_cast<std::size_t>(picture.width) +
                  static_cast<std::size_t>(left + x)) *
                 4U;
             picture.pixels.rgba[to] = icon.pixels[from];
@@ -342,6 +353,29 @@ MenuButtons menu_buttons() {
     return buttons;
 }
 
+/// Two OA buttons inside a frame, so the buttons step stays on the canvas.
+///
+/// @param width the frame's width, in points
+/// @param height the frame's height, in points
+/// @return the buttons
+MenuButtons menu_buttons_for(int32_t width, int32_t height) {
+    constexpr int32_t kButton = 48;
+    constexpr int32_t kInset = 12;
+    constexpr int32_t kGap = 12;
+    MenuButtons buttons;
+    const int32_t side = std::min(kButton, std::max(height / 6, int32_t{16}));
+    buttons.settings = {
+        std::max(width - kInset - side, int32_t{0}),
+        std::max(height - kInset - side, int32_t{0}),
+        side,
+        side
+    };
+    buttons.library = {
+        std::max(buttons.settings.x - kGap - side, int32_t{0}), buttons.settings.y, side, side
+    };
+    return buttons;
+}
+
 oa::ui::kit::Frame large_frame() {
     oa::ui::kit::Frame frame;
     frame.area = {0, 0, kWidth, kHeight};
@@ -390,6 +424,7 @@ oa::ui::first_run::Session language_session(bool offline) {
 oa::ui::first_run::Session game_session() {
     oa::ui::first_run::Session session = language_session(false);
     session.model.walk = oa::ui::first_run::Walk::setup;
+    session.model.leave = oa::ui::first_run::Leave::quit;
     session.model.step = oa::ui::first_run::Step::game;
     oa::ui::first_run::GameSource source;
     source.token = "install";
@@ -429,9 +464,60 @@ oa::ui::first_run::Session copying_session(bool checked) {
     return session;
 }
 
-void draw_step(Picture& picture, const oa::ui::first_run::Session& session) {
-    const auto scene = oa::ui::first_run::lay_out(session, large_frame(), &picture.fonts);
+void draw_step(
+    Picture& picture,
+    const oa::ui::first_run::Session& session,
+    const oa::ui::kit::Frame& frame,
+    const renderer::RgbaPicture& icon
+) {
+    picture.canvas.icon = icon;
+    const auto scene = oa::ui::first_run::lay_out(session, frame, &picture.fonts);
     oa::ui::first_run::draw(picture.canvas, scene, session);
+}
+
+/// The visible part of an icon, so the header mark fills its square.
+///
+/// @param icon the decoded file
+/// @return the cropped picture; the whole icon when nothing is transparent
+Icon visible_icon(const Icon& icon) {
+    const uint32_t width = icon.picture.width;
+    const uint32_t height = icon.picture.height;
+    if (width == 0 || height == 0 ||
+        icon.pixels.size() < static_cast<std::size_t>(width) * height * 4U)
+        return icon;
+    uint32_t left = width;
+    uint32_t top = height;
+    uint32_t right = 0;
+    uint32_t bottom = 0;
+    for (uint32_t y = 0; y < height; ++y) {
+        for (uint32_t x = 0; x < width; ++x) {
+            const uint8_t alpha = icon.pixels[(static_cast<std::size_t>(y) * width + x) * 4U + 3U];
+            if (alpha == 0)
+                continue;
+            left = std::min(left, x);
+            top = std::min(top, y);
+            right = std::max(right, x + 1);
+            bottom = std::max(bottom, y + 1);
+        }
+    }
+    if (left >= right || top >= bottom)
+        return icon;
+    Icon part;
+    part.pixels.resize(static_cast<std::size_t>(right - left) * (bottom - top) * 4U);
+    const uint32_t part_width = right - left;
+    for (uint32_t y = top; y < bottom; ++y) {
+        const std::size_t from = (static_cast<std::size_t>(y) * width + left) * 4U;
+        const std::size_t to = static_cast<std::size_t>(y - top) * part_width * 4U;
+        std::copy_n(
+            icon.pixels.begin() + static_cast<std::ptrdiff_t>(from),
+            part_width * 4U,
+            part.pixels.begin() + static_cast<std::ptrdiff_t>(to)
+        );
+    }
+    part.picture.width = part_width;
+    part.picture.height = bottom - top;
+    part.picture.pixels = part.pixels;
+    return part;
 }
 
 } // namespace
@@ -454,29 +540,37 @@ int main(int argc, char** argv) {
         return 1;
     }
     const MeasureHooks measuring(fonts.get());
+    Icon loaded_icon;
+    const bool have_icon = decode_png(branding_file("open-annihilation-256.png"), &loaded_icon);
+    if (!have_icon)
+        std::cerr << "pictures: the app icon could not be read\n";
+    Icon app_icon = have_icon ? visible_icon(loaded_icon) : Icon{};
+    app_icon.picture.pixels = app_icon.pixels;
+    const renderer::RgbaPicture icon = app_icon.picture;
+    const oa::ui::kit::Frame manual = large_frame();
 
     {
-        Picture picture(fonts.get());
-        draw_step(picture, language_session(false));
+        Picture picture(fonts.get(), kWidth, kHeight, 100);
+        draw_step(picture, language_session(false), manual, icon);
         if (!write_png(picture, directory / "welcome.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get());
-        draw_step(picture, language_session(true));
+        Picture picture(fonts.get(), kWidth, kHeight, 100);
+        draw_step(picture, language_session(true), manual, icon);
         if (!write_png(picture, directory / "welcome-offline.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get());
+        Picture picture(fonts.get(), kWidth, kHeight, 100);
         auto session = language_session(false);
         session.model.step = oa::ui::first_run::Step::online;
-        draw_step(picture, session);
+        draw_step(picture, session, manual, icon);
         if (!write_png(picture, directory / "online.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get());
+        Picture picture(fonts.get(), kWidth, kHeight, 100);
         // Letterbox bars are black. A captured menu smaller than the window
         // is centred on them; without one, the fallback covers this fill.
         oa::ui::kit::fill_rect(picture.canvas, {0, 0, kWidth, kHeight}, {0, 0, 0});
@@ -524,26 +618,87 @@ int main(int argc, char** argv) {
         session.model.settings_button = buttons.settings;
         session.model.library_count = 2;
         session.pulse_ms = 400;
-        draw_step(picture, session);
+        draw_step(picture, session, manual, icon);
         if (!write_png(picture, directory / "buttons.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get());
-        draw_step(picture, game_session());
+        Picture picture(fonts.get(), kWidth, kHeight, 100);
+        draw_step(picture, game_session(), manual, icon);
         if (!write_png(picture, directory / "game.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get());
-        draw_step(picture, copying_session(false));
+        Picture picture(fonts.get(), kWidth, kHeight, 100);
+        draw_step(picture, copying_session(false), manual, icon);
         if (!write_png(picture, directory / "copying.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get());
-        draw_step(picture, copying_session(true));
+        Picture picture(fonts.get(), kWidth, kHeight, 100);
+        draw_step(picture, copying_session(true), manual, icon);
         if (!write_png(picture, directory / "check.png"))
+            return 1;
+    }
+
+    // Every step at the sizes a window is checked at, and at twice the density.
+    // Quit is a first start. Skip is a re-run.
+    const struct Size {
+        int32_t width;
+        int32_t height;
+        int32_t scale;
+        const char* folder;
+    } sizes[] = {
+        {640, 480, 100, "640x480"},
+        {1280, 720, 100, "1280x720"},
+        {1344, 838, 100, "1344x838"},
+        {640, 480, 200, "640x480-2x"},
+        {1280, 720, 200, "1280x720-2x"},
+        {1344, 838, 200, "1344x838-2x"},
+    };
+
+    for (const Size& size : sizes) {
+        const std::filesystem::path folder = directory / "frames" / size.folder;
+        std::filesystem::create_directories(folder, error);
+        if (error)
+            return 1;
+        oa::ui::kit::Frame frame;
+        frame.area = {0, 0, size.width, size.height};
+        frame.size_class = oa::ui::kit::size_class_of(size.width, size.height);
+        frame.scale_percent = size.scale;
+        const auto save = [&](const oa::ui::first_run::Session& session, const char* name) {
+            Picture picture(fonts.get(), size.width, size.height, size.scale);
+            draw_step(picture, session, frame, icon);
+            return write_png(picture, folder / name);
+        };
+        oa::ui::first_run::Session skip_language = language_session(false);
+        skip_language.model.leave = oa::ui::first_run::Leave::skip;
+        oa::ui::first_run::Session quit_language = language_session(false);
+        quit_language.model.walk = oa::ui::first_run::Walk::setup;
+        quit_language.model.leave = oa::ui::first_run::Leave::quit;
+        oa::ui::first_run::Session quit_game = game_session();
+        oa::ui::first_run::Session skip_game = game_session();
+        skip_game.model.leave = oa::ui::first_run::Leave::skip;
+        oa::ui::first_run::Session quit_copy = copying_session(false);
+        oa::ui::first_run::Session skip_copy = copying_session(false);
+        skip_copy.model.leave = oa::ui::first_run::Leave::skip;
+        oa::ui::first_run::Session skip_online = language_session(false);
+        skip_online.model.step = oa::ui::first_run::Step::online;
+        skip_online.model.leave = oa::ui::first_run::Leave::skip;
+        oa::ui::first_run::Session quit_online = skip_online;
+        quit_online.model.walk = oa::ui::first_run::Walk::setup;
+        quit_online.model.leave = oa::ui::first_run::Leave::quit;
+        const MenuButtons placed = menu_buttons_for(size.width, size.height);
+        oa::ui::first_run::Session buttons;
+        buttons.model.step = oa::ui::first_run::Step::buttons;
+        buttons.model.library_button = placed.library;
+        buttons.model.settings_button = placed.settings;
+        buttons.model.library_count = 2;
+        if (!save(skip_language, "skip-language.png") ||
+            !save(quit_language, "quit-language.png") || !save(quit_game, "quit-game.png") ||
+            !save(skip_game, "skip-game.png") || !save(quit_copy, "quit-copying.png") ||
+            !save(skip_copy, "skip-copying.png") || !save(skip_online, "skip-online.png") ||
+            !save(quit_online, "quit-online.png") || !save(buttons, "buttons.png"))
             return 1;
     }
     return 0;

@@ -153,12 +153,14 @@ libraries, SD cards included, a Heroic install, a Lutris or Wine prefix in
   says on the main menu where it found it; it remembers it as if you had
   chosen it.
 - **When it finds several**, or none, or the folder you chose before has
-  gone, it asks in its own locator. Places include Home, Downloads and a
-  microSD card, and the games it knows from Steam, Heroic, Lutris and
-  Bottles. The column says what each folder or file is. The D-pad moves, A
-  opens, X chooses the folder, Y filters and B goes back. A trackpad, a
-  finger or the keys do the same. Game Mode does not open the desktop's
-  folder dialog. It remembers your choice.
+  gone, it asks in its own locator. The title says to choose a folder or an
+  installer, and a line says what qualifies. Places include Home, Downloads
+  and a microSD card, and the games it knows from Steam, Heroic, Lutris and
+  Bottles. Each file or folder is one row: an icon, a name and a size,
+  folders first. Typing filters the names, and Y does the same. The D-pad
+  moves, A opens, X chooses the folder and B goes back. A trackpad, a finger
+  or the keys do the same. Game Mode does not open the desktop's folder
+  dialog. It remembers your choice.
 
   ![The locator on a Steam Deck](../images/folder-chooser/deck.png)
 - **To name the folder yourself**, give it as a launch option: in the

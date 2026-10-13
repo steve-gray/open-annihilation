@@ -20,6 +20,7 @@
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "render_state.hpp"
 
+#include "oa/formats/gaf.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/looks.hpp"
@@ -441,8 +442,10 @@ kit::OaButtonMark Runtime::EngineSettingsMenuHost::library_mark(Runtime& runtime
     LibraryHost& shown = runtime.library_host();
     if (!shown.refreshed)
         shown.rebuild(runtime);
-    // The Mods tab's count: every mod it lists, Base Game left out.
-    const std::size_t mods = oa::ui::library::tab_count(shown.model, oa::ui::library::Tab::mods);
+    // Every package the player has added: mods, map packs, language packs
+    // and downloaded expansions. The base game and the built-in languages
+    // are left out, and a map pack counts once.
+    const std::size_t packages = oa::ui::library::added_package_count(shown.model.inputs);
     kit::OaButtonMark mark;
     mark.dot = runtime.library_update_count() > 0;
     // A fetch that has not yet produced a list has no number to show. Once
@@ -454,7 +457,7 @@ kit::OaButtonMark Runtime::EngineSettingsMenuHost::library_mark(Runtime& runtime
         return mark;
     }
     mark.corner = kit::OaButtonCorner::count;
-    mark.count = mods;
+    mark.count = packages;
     return mark;
 }
 
@@ -477,7 +480,7 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
         button_look(host.settings_hovered, host.settings_pressed, covered)
     );
     // The dot stays in the top right while updates can be installed. The
-    // bottom right is the mod count, or the spinner while it is not final.
+    // bottom right is the package count, or the spinner while it is not final.
     // The icon itself, from the shipped square, at this picture's size: no
     // panel and no bevel, clear corners left as the menu. A larger window
     // draws that icon again from a source at least that large
@@ -499,7 +502,7 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
         );
     };
     draw_icon(rect, true, library_state, library_badge);
-    // The Settings button wears neither the dot nor the mod count.
+    // The Settings button wears neither the dot nor the package count.
     draw_icon(beside, false, settings_state, {});
     host.keep_button_drawn(*context->surface, library_state, library_badge, settings_state);
 }
@@ -649,6 +652,77 @@ bool Runtime::EngineSettingsMenuHost::prepare_sharp_button(
     return true;
 }
 
+void Runtime::EngineSettingsMenuHost::copy_presented_menu_buttons(
+    Runtime& runtime,
+    const artless::Surface& presented,
+    artless::Surface& reference,
+    artless::SourceRect covered
+) {
+    if (runtime.sdl_.renderer == nullptr || !button_shown(runtime))
+        return;
+    if (presented.width == 0 || presented.height == 0 || presented.width != reference.width ||
+        presented.height != reference.height || presented.rgb.size() != reference.rgb.size())
+        return;
+    const std::size_t pixels =
+        static_cast<std::size_t>(presented.width) * static_cast<std::size_t>(presented.height);
+    if (presented.rgb.size() < pixels * 3U)
+        return;
+    int output_width = 0;
+    int output_height = 0;
+    if (!SDL_GetRenderOutputSize(runtime.sdl_.renderer, &output_width, &output_height) ||
+        output_width <= 0 || output_height <= 0)
+        return;
+    // A whole-window read is already in the window's pixels. A letterbox
+    // read starts at the picture's origin in that window.
+    int origin_x = 0;
+    int origin_y = 0;
+    if (presented.width != static_cast<uint32_t>(output_width) ||
+        presented.height != static_cast<uint32_t>(output_height)) {
+        SDL_FRect picture{};
+        if (!SDL_GetRenderLogicalPresentationRect(runtime.sdl_.renderer, &picture))
+            return;
+        const int picture_width = static_cast<int>(picture.w);
+        const int picture_height = static_cast<int>(picture.h);
+        if (picture_width <= 0 || picture_height <= 0 ||
+            presented.width != static_cast<uint32_t>(picture_width) ||
+            presented.height != static_cast<uint32_t>(picture_height))
+            return;
+        origin_x = static_cast<int>(picture.x);
+        origin_y = static_cast<int>(picture.y);
+    }
+    const auto copy_one = [&](const oa::ui::display_layout::Rect& window, int32_t source_side) {
+        if (window.width <= 0 || window.height <= 0)
+            return;
+        if (window.width == source_side && window.height == source_side)
+            return;
+        for (int button_row = window.y; button_row < window.y + window.height; ++button_row) {
+            for (int button_column = window.x; button_column < window.x + window.width;
+                 ++button_column) {
+                const int frame_column = button_column - origin_x;
+                const int frame_row = button_row - origin_y;
+                if (frame_column < 0 || frame_row < 0 ||
+                    static_cast<uint32_t>(frame_column) >= reference.width ||
+                    static_cast<uint32_t>(frame_row) >= reference.height)
+                    continue;
+                if (covered.width > 0 && covered.height > 0 && frame_column >= covered.x &&
+                    frame_row >= covered.y && frame_column < covered.x + covered.width &&
+                    frame_row < covered.y + covered.height)
+                    continue;
+                const std::size_t at_pixel =
+                    (static_cast<std::size_t>(frame_row) * reference.width +
+                     static_cast<std::size_t>(frame_column)) *
+                    3U;
+                reference.rgb[at_pixel] = presented.rgb[at_pixel];
+                reference.rgb[at_pixel + 1U] = presented.rgb[at_pixel + 1U];
+                reference.rgb[at_pixel + 2U] = presented.rgb[at_pixel + 2U];
+            }
+        }
+    };
+    const auto windows = runtime.oa_layer().menu_button_windows();
+    copy_one(windows.library, button_rect(runtime).width);
+    copy_one(windows.settings, settings_button_rect(runtime).width);
+}
+
 bool Runtime::EngineSettingsMenuHost::replace_scaled_buttons(
     Runtime& runtime, std::vector<uint8_t>& frame
 ) {
@@ -745,6 +819,61 @@ void Runtime::present_menu_icon_buttons() {
 void Runtime::release_menu_button_textures() noexcept {
     if (engine_settings_menu_)
         engine_settings_menu_->release_sharp_textures();
+}
+
+void Runtime::clear_menu_button_cursor_hold() noexcept {
+    if (engine_settings_menu_)
+        engine_settings_menu_->cursor_above = false;
+}
+
+bool Runtime::menu_button_cursor_held() const noexcept {
+    return engine_settings_menu_ && engine_settings_menu_->cursor_above;
+}
+
+bool Runtime::hold_menu_button_cursor() {
+    if (!engine_settings_menu_ || sdl_.renderer == nullptr || cursor_image_ == nullptr ||
+        surface_.rgb.empty() || !EngineSettingsMenuHost::button_shown(*this))
+        return false;
+    float cursor_x = pointer_x_;
+    float cursor_y = pointer_y_;
+    if (const TouchCursor touch = touch_cursor(); touch.replaces_pointer) {
+        if (!touch.visible)
+            return false;
+        cursor_x = touch.x;
+        cursor_y = touch.y;
+    } else if (!pointer_shows_cursor()) {
+        return false;
+    }
+    const oa::formats::gaf::RenderResult rendered = oa::formats::gaf::render_normal(*cursor_image_);
+    if (!rendered.ok() || !rendered.frame)
+        return false;
+    const oa::formats::gaf::RenderedFrame& sprite = *rendered.frame;
+    const artless::SourceRect cursor{
+        static_cast<int32_t>(cursor_x) - sprite.origin_x,
+        static_cast<int32_t>(cursor_y) - sprite.origin_y,
+        static_cast<int32_t>(sprite.width),
+        static_cast<int32_t>(sprite.height),
+    };
+    const artless::SourceRect library_at = EngineSettingsMenuHost::button_rect(*this);
+    const artless::SourceRect settings_at = EngineSettingsMenuHost::settings_button_rect(*this);
+    const auto overlaps = [](const artless::SourceRect& first, const artless::SourceRect& second) {
+        return first.width > 0 && first.height > 0 && second.width > 0 && second.height > 0 &&
+               first.x < second.x + second.width && second.x < first.x + first.width &&
+               first.y < second.y + second.height && second.y < first.y + first.height;
+    };
+    const bool over_library = overlaps(cursor, library_at);
+    const bool over_settings = overlaps(cursor, settings_at);
+    if (!over_library && !over_settings)
+        return false;
+    const OaLayer::MenuButtonWindows windows = oa_layer().menu_button_windows();
+    const bool library_scaled = over_library && (windows.library.width != library_at.width ||
+                                                 windows.library.height != library_at.height);
+    const bool settings_scaled = over_settings && (windows.settings.width != settings_at.width ||
+                                                   windows.settings.height != settings_at.height);
+    if (!library_scaled && !settings_scaled)
+        return false;
+    engine_settings_menu_->cursor_above = true;
+    return true;
 }
 
 void Runtime::register_engine_settings_button() {

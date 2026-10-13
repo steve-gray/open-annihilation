@@ -85,6 +85,13 @@ enum class Walk : uint8_t {
     setup,   ///< language, the game, copying, online features, the OA buttons
 };
 
+/// What the left footer button does on every step of one walk. The host sets
+/// it for the whole walk. The module does not read the preference.
+enum class Leave : uint8_t {
+    quit, ///< Quit: leave, and do not record the welcome as done
+    skip, ///< Skip: record the welcome as done
+};
+
 /// Where a step sits on its walk's step line, and the catalogue word of its name.
 struct StepPlace {
     int32_t index{1};        ///< from 1
@@ -214,8 +221,12 @@ struct CopyView {
 
 /// What the steps show. The host keeps it current.
 struct Model {
-    Step step{Step::language};                    ///< the step on screen
-    Walk walk{Walk::welcome};                     ///< which step line this walk uses
+    Step step{Step::language}; ///< the step on screen
+    Walk walk{Walk::welcome};  ///< which step line this walk uses
+    /// Quit on a first start that has nothing to return to. Skip on a re-run,
+    /// and on the welcome a player who already has the game sees. The same
+    /// word on every step of the walk.
+    Leave leave{Leave::skip};
     std::vector<Card> cards{};                    ///< the carousel, built-in languages then packs
     int32_t source{-1};                           ///< the chosen source; -1 is none
     std::vector<GameSource> sources{};            ///< the places the game step lists
@@ -247,7 +258,7 @@ struct Session {
 /// What the player asked the host to do.
 enum class Ask : uint8_t {
     none,            ///< the picture may have changed; nothing was asked
-    skip,            ///< Skip setup
+    skip,            ///< Skip: the welcome is done
     back,            ///< Back
     advance,         ///< Next, or Start playing
     pick,            ///< the selected language card
@@ -288,7 +299,7 @@ struct Scene {
     kit::SizeClass sample_class{kit::SizeClass::compact};
 };
 
-/// Skip setup.
+/// The left footer button: Skip, or Quit when the host set Leave::quit.
 inline constexpr kit::ControlId skip_id = 1;
 /// Back.
 inline constexpr kit::ControlId back_id = 2;

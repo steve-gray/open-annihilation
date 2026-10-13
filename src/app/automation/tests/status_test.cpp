@@ -8,12 +8,14 @@
 #include "oa/formats/json.hpp"
 #include "oa/test/check.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 namespace {
@@ -166,14 +168,21 @@ void check_quit() {
 
 /// The same line is written to a file, and flushed there.
 void check_file() {
-    const std::filesystem::path path =
-        std::filesystem::temp_directory_path() / "oa-g53-status-lines.jsonl";
-    std::filesystem::remove(path);
-    automation::StatusStream stream;
-    OA_CHECK(stream.open_file(path));
-    stream.hello("Open Annihilation 0.8.0", 3);
-    stream.finish(0);
-    std::ifstream in(path);
+    // A fixed name in the shared temporary folder collides when two runs
+    // overlap, and removing it while the stream still holds the handle
+    // throws on Windows: the handle does not share delete.
+    const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    const std::filesystem::path path = std::filesystem::temp_directory_path() /
+                                       ("oa-g68-status-lines-" + std::to_string(stamp) + ".jsonl");
+    std::error_code removed;
+    std::filesystem::remove(path, removed);
+    {
+        automation::StatusStream stream;
+        OA_CHECK(stream.open_file(path));
+        stream.hello("Open Annihilation 0.8.0", 3);
+        stream.finish(0);
+    }
+    std::ifstream in(path, std::ios::binary);
     std::string hello;
     std::string exit_line;
     OA_CHECK(static_cast<bool>(std::getline(in, hello)));
@@ -182,7 +191,7 @@ void check_file() {
     OA_CHECK(text(parsed_line(exit_line), "reason") == "quit");
     OA_CHECK(number(parsed_line(exit_line), "code") == 0);
     in.close();
-    std::filesystem::remove(path);
+    std::filesystem::remove(path, removed);
 }
 
 } // namespace

@@ -136,19 +136,6 @@ inline constexpr std::size_t most_expansions = 64;
            id < first_expansion + static_cast<kit::ControlId>(most_expansions);
 }
 
-/// The download arrow beside the first expansion pill. The rest follow in
-/// the same order as the pills.
-inline constexpr kit::ControlId first_expansion_arrow = 14000000;
-
-/// Tells whether a control is an expansion's download arrow.
-///
-/// @param id the control
-/// @return true for an arrow the Active tab names
-[[nodiscard]] constexpr bool expansion_arrow_control(kit::ControlId id) noexcept {
-    return id >= first_expansion_arrow &&
-           id < first_expansion_arrow + static_cast<kit::ControlId>(most_expansions);
-}
-
 /// Tells whether a control is an Active tab From link.
 ///
 /// @param id the control

@@ -19,6 +19,7 @@
 #include "oa/app/game_files_hooks.hpp"
 #include "language_packs.hpp"
 #include "oa/app/user_folder.hpp"
+#include "oa/app/window_icon.hpp"
 #include "oa/data/content_bundles.hpp"
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -30,7 +31,9 @@
 #include "oa/platform/system.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/ui/engine_settings.hpp"
+#include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/canvas.hpp"
+#include "oa/ui/kit/layout.hpp"
 #include "oa/ui/paint/painter.hpp"
 
 #include <SDL3/SDL.h>
@@ -67,6 +70,7 @@ namespace languages = oa::data::languages;
 namespace locale = oa::platform::locale;
 namespace paint = oa::ui::paint;
 namespace preferences = oa::platform::preferences;
+namespace renderer = oa::ui::frontend_renderer;
 namespace settings = oa::ui::engine_settings;
 namespace text_font = oa::platform::text_font;
 
@@ -91,8 +95,10 @@ struct Remembered {
 
 /// What this start tells the menu welcome.
 struct Resume {
-    bool continue_setup{false}; ///< the five-step walk carries on at online
-    bool copied{false};         ///< the copying step finished the copy
+    bool continue_setup{false};                     ///< the five-step walk carries on at online
+    bool copied{false};                             ///< the copying step finished the copy
+    bool leave_set{false};                          ///< leave was chosen for the window that ran
+    first_run::Leave leave{first_run::Leave::quit}; ///< that window's left button
 };
 
 /// The copy, shared by the pre-game window and the menu's copying step.
@@ -819,19 +825,107 @@ std::optional<kit::Key> setup_key(const SDL_Event& event) {
     }
 }
 
-/// The frame the window is laid out in.
+/// The greatest point count whose smooth drawing is no wider than `pixels`.
+///
+/// to_canvas rounds each edge on its own, so floor(pixels * 100 / scale) can
+/// land one pixel past the canvas. The last point that still fits is the one
+/// the footer and the header may use.
+///
+/// @param pixels the pixels the drawing may cover
+/// @param scale the canvas scale, in percent
+/// @return the points, never negative
+int32_t points_fitting(int32_t pixels, int32_t scale) noexcept {
+    if (pixels <= 0 || scale <= 0)
+        return 0;
+    int32_t points =
+        static_cast<int32_t>((static_cast<int64_t>(pixels) * 100) / static_cast<int64_t>(scale));
+    while (points > 0 && kit::to_canvas({0, 0, points, 0}, scale).width > pixels)
+        --points;
+    return points;
+}
+
+/// A point origin whose pixel is `pixel`, or the nearest point that does not
+/// pass it.
+///
+/// @param pixel the pixel the origin should land on
+/// @param scale the canvas scale, in percent
+/// @return the origin, in points
+int32_t origin_at_most(int32_t pixel, int32_t scale) noexcept {
+    if (pixel <= 0 || scale <= 0)
+        return 0;
+    int32_t points =
+        static_cast<int32_t>((static_cast<int64_t>(pixel) * 100) / static_cast<int64_t>(scale));
+    while (kit::to_canvas({points, 0, 0, 0}, scale).x < pixel)
+        ++points;
+    while (points > 0 && kit::to_canvas({points, 0, 0, 0}, scale).x > pixel)
+        --points;
+    return points;
+}
+
+/// Keeps the renderer's safe area as well as the window's. Interactive
+/// content stays inside both. A failed read leaves the window's area.
+///
+/// @param renderer the window's renderer
+/// @param[in,out] viewport the window's pixels and the area kept clear
+void absorb_render_safe(SDL_Renderer* renderer, oa::ui::game_files::Viewport& viewport) {
+    if (renderer == nullptr || viewport.width <= 0 || viewport.height <= 0)
+        return;
+    SDL_Rect safe{};
+    if (!SDL_GetRenderSafeArea(renderer, &safe) || safe.w <= 0 || safe.h <= 0)
+        return;
+    const int32_t left = std::clamp(safe.x, 0, viewport.width);
+    const int32_t top = std::clamp(safe.y, 0, viewport.height);
+    const int32_t right = std::clamp(viewport.width - (safe.x + safe.w), 0, viewport.width);
+    const int32_t bottom = std::clamp(viewport.height - (safe.y + safe.h), 0, viewport.height);
+    viewport.safe.left = std::max(viewport.safe.left, left);
+    viewport.safe.top = std::max(viewport.safe.top, top);
+    viewport.safe.right = std::max(viewport.safe.right, right);
+    viewport.safe.bottom = std::max(viewport.safe.bottom, bottom);
+}
+
+/// The frame the window is laid out in: the safe pixels, at the window's
+/// density, shrunk so the drawing cannot pass the canvas.
+///
+/// @param viewport the window's pixels, density and safe area
+/// @return the frame
 kit::Frame frame_of_window(const oa::ui::game_files::Viewport& viewport) {
-    kit::Viewport points;
-    points.width = viewport.width;
-    points.height = viewport.height;
-    points.density = viewport.px_per_point > 0.F ? viewport.px_per_point : 1.F;
-    const int32_t scale = static_cast<int32_t>(std::lround(points.density * 100.F));
-    points.scale_percent = std::max(scale, int32_t{100});
-    points.safe.left = viewport.safe.left;
-    points.safe.top = viewport.safe.top;
-    points.safe.right = viewport.safe.right;
-    points.safe.bottom = viewport.safe.bottom;
-    return kit::frame_of(points);
+    const float density = viewport.px_per_point > 0.F ? viewport.px_per_point : 1.F;
+    int32_t scale = static_cast<int32_t>(std::lround(static_cast<double>(density) * 100.0));
+    if (scale < 100)
+        scale = 100;
+    int32_t safe_left = std::max(viewport.safe.left, 0);
+    int32_t safe_top = std::max(viewport.safe.top, 0);
+    int32_t safe_right = std::max(viewport.safe.right, 0);
+    int32_t safe_bottom = std::max(viewport.safe.bottom, 0);
+    int32_t inner_width = viewport.width - safe_left - safe_right;
+    int32_t inner_height = viewport.height - safe_top - safe_bottom;
+    if (inner_width < 1 || inner_height < 1) {
+        safe_left = 0;
+        safe_top = 0;
+        safe_right = 0;
+        safe_bottom = 0;
+        inner_width = std::max(viewport.width, 0);
+        inner_height = std::max(viewport.height, 0);
+    }
+    kit::Frame frame;
+    frame.scale_percent = scale;
+    frame.area.x = origin_at_most(safe_left, scale);
+    frame.area.y = origin_at_most(safe_top, scale);
+    frame.area.width = points_fitting(inner_width, scale);
+    frame.area.height = points_fitting(inner_height, scale);
+    kit::Rect drawn = kit::to_canvas(frame.area, scale);
+    const int32_t limit_right = safe_left + inner_width;
+    const int32_t limit_bottom = safe_top + inner_height;
+    while (frame.area.width > 1 && drawn.x + drawn.width > limit_right) {
+        --frame.area.width;
+        drawn = kit::to_canvas(frame.area, scale);
+    }
+    while (frame.area.height > 1 && drawn.y + drawn.height > limit_bottom) {
+        --frame.area.height;
+        drawn = kit::to_canvas(frame.area, scale);
+    }
+    frame.size_class = kit::size_class_of(frame.area.width, frame.area.height);
+    return frame;
 }
 
 /// A canvas pixel as a point of the frame.
@@ -1107,6 +1201,8 @@ void drive_setup_window_check(
         german("Copying Total Annihilation", "Total Annihilation wird kopiert");
         german("All files match", "Alle Dateien stimmen überein");
         german("Not now", "Nicht jetzt");
+        german("Quit", "Beenden");
+        setup_check_expect(shows("Beenden"), "the language step's left button is not Quit");
         click("first-run.language.next");
         drive.phase = SetupWindowDrive::Phase::game;
         return;
@@ -1119,6 +1215,7 @@ void drive_setup_window_check(
             scene.title_text == "Wo ist Total Annihilation?", "the game step's title is not German"
         );
         setup_check_expect(shows("OA kopiert das Spiel einmal"), "the game step is not in German");
+        setup_check_expect(shows("Beenden"), "the game step's left button is not Quit");
         click("first-run.game.next");
         drive.phase = SetupWindowDrive::Phase::copying;
         return;
@@ -1131,6 +1228,7 @@ void drive_setup_window_check(
             "the copying step's title is not German"
         );
         setup_check_expect(shows("Wenn OA anhält"), "the copying step is not in German");
+        setup_check_expect(shows("Beenden"), "the copying step's left button is not Quit");
         drive.phase = SetupWindowDrive::Phase::wait;
         return;
     case SetupWindowDrive::Phase::wait:
@@ -1170,6 +1268,21 @@ void drive_setup_window_check(
     }
 }
 
+/// Stops a copy this window started, and lets the display sleep again.
+///
+/// @param[in,out] session the session
+/// @param[in,out] awake true when this window asked the display to stay awake
+void stop_running_copy(first_run::Session& session, bool& awake) {
+    setup_request_cancel();
+    setup_stop_join();
+    session.model.copy.running = false;
+    session.model.copy.paused = false;
+    if (awake) {
+        SDL_EnableScreenSaver();
+        awake = false;
+    }
+}
+
 } // namespace
 
 bool setup_before_game_due(const Options& options, bool mount_copy) {
@@ -1200,8 +1313,13 @@ SetupBefore run_setup_before_game(
 
     first_run::Session session;
     session.model.walk = first_run::Walk::setup;
-    session.model.step =
-        welcome_is_done(options) ? first_run::Step::game : first_run::Step::language;
+    // Nothing is set up yet: Quit, on every step. A welcome already recorded
+    // as done is a re-run of the copy, so the same button says Skip.
+    const bool again = welcome_is_done(options);
+    session.model.leave = again ? first_run::Leave::skip : first_run::Leave::quit;
+    resume_state().leave = session.model.leave;
+    resume_state().leave_set = true;
+    session.model.step = again ? first_run::Step::game : first_run::Step::language;
     session.model.controller = SDL_HasGamepad();
     fill_cards(session.model, shown.tag);
     session.carousel.selected = 0;
@@ -1281,6 +1399,14 @@ SetupBefore run_setup_before_game(
     RenderState render_state(display.renderer);
     WindowFrame frame(display.renderer, "the setup");
     oa::ui::game_files::Viewport viewport;
+    WindowIcon icon_full;
+    WindowIcon icon_shown;
+    std::string icon_error;
+    if (decode_window_icon(window_icon_png(), icon_full, icon_error))
+        icon_shown = visible_part(icon_full);
+    renderer::RgbaPicture app_icon;
+    if (!icon_shown.pixels.empty())
+        app_icon = {icon_shown.width, icon_shown.height, icon_shown.pixels};
     paint::Canvas pixels;
     bool dirty = true;
     bool awake = false;
@@ -1297,9 +1423,9 @@ SetupBefore run_setup_before_game(
     if (options.check_setup_window &&
         (!SDL_SetWindowSize(display.window, 1280, 720) || !SDL_SyncWindow(display.window)))
         throw std::runtime_error("setup window check: the window did not take 1280x720");
-    kit::Frame room = frame_of_window(viewport);
     if (read_window_viewport(display.window, display.renderer, viewport))
-        room = frame_of_window(viewport);
+        absorb_render_safe(display.renderer, viewport);
+    kit::Frame room = frame_of_window(viewport);
     first_run::Scene scene = relayout(room);
     SetupWindowDrive window_check;
 
@@ -1315,6 +1441,7 @@ SetupBefore run_setup_before_game(
         canvas.smooth.fonts = fonts.get();
         canvas.smooth.scale_percent = room.scale_percent;
         canvas.smooth.origin = {room.area.x, room.area.y};
+        canvas.icon = app_icon;
         first_run::draw(canvas, scene, session);
         // The game step is up while the installer scan finishes. After a
         // moment a bar shows that the list is still being read. No new words.
@@ -1344,10 +1471,14 @@ SetupBefore run_setup_before_game(
         case first_run::Ask::none:
             break;
         case first_run::Ask::skip:
+            if (session.model.step == first_run::Step::copying)
+                stop_running_copy(session, awake);
             write_preference(options, first_run::preference_key, first_run::preference_done);
             ended = SetupBefore::skipped;
             return;
         case first_run::Ask::quit:
+            if (session.model.step == first_run::Step::copying)
+                stop_running_copy(session, awake);
             ended = SetupBefore::quit;
             return;
         case first_run::Ask::back:
@@ -1430,8 +1561,14 @@ SetupBefore run_setup_before_game(
     ended = SetupBefore::not_run;
     bool running = true;
     while (running) {
-        if (read_window_viewport(display.window, display.renderer, viewport)) {
-            room = frame_of_window(viewport);
+        if (read_window_viewport(display.window, display.renderer, viewport))
+            dirty = true;
+        absorb_render_safe(display.renderer, viewport);
+        const kit::Frame fitted = frame_of_window(viewport);
+        if (fitted.area.x != room.area.x || fitted.area.y != room.area.y ||
+            fitted.area.width != room.area.width || fitted.area.height != room.area.height ||
+            fitted.scale_percent != room.scale_percent) {
+            room = fitted;
             dirty = true;
         }
         SDL_Event event;
@@ -1564,6 +1701,12 @@ first_run::Step setup_menu_step() noexcept {
 
 first_run::Walk setup_menu_walk() noexcept {
     return resume_state().continue_setup ? first_run::Walk::setup : first_run::Walk::welcome;
+}
+
+first_run::Leave setup_menu_leave() noexcept {
+    if (resume_state().leave_set)
+        return resume_state().leave;
+    return first_run::Leave::quit;
 }
 
 bool setup_copied_this_start() noexcept {
@@ -1807,7 +1950,18 @@ bool setup_locate_source(SDL_Window* window, const fs::path& user_folder, first_
         if (!pump_until_picked(wait))
             return false;
     } else {
-        SDL_ShowOpenFolderDialog(folder_done, &wait, window, nullptr, false);
+        // The title says which folder qualifies. SDL copies it during Show.
+        const std::string title =
+            std::string(languages::interface_text("Choose the folder that holds totala1.hpi."));
+        const SDL_PropertiesID properties = SDL_CreateProperties();
+        if (properties == 0)
+            return false;
+        (void)SDL_SetStringProperty(properties, SDL_PROP_FILE_DIALOG_TITLE_STRING, title.c_str());
+        if (window != nullptr)
+            (void)SDL_SetPointerProperty(properties, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, window);
+        (void)SDL_SetBooleanProperty(properties, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, false);
+        SDL_ShowFileDialogWithProperties(SDL_FILEDIALOG_OPENFOLDER, folder_done, &wait, properties);
+        SDL_DestroyProperties(properties);
         if (!pump_until_picked(wait))
             return false;
     }

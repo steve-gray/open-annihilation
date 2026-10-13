@@ -338,9 +338,10 @@ inline constexpr std::string_view more_menu = "MORE";
 /// How many updates the Updates tab shows.
 inline constexpr std::string_view update_count_one = "{count} update";
 inline constexpr std::string_view update_count_many = "{count} updates";
-/// How many mods the main menu's Library button says the Mods tab lists.
-inline constexpr std::string_view mod_count_one = "{count} mod";
-inline constexpr std::string_view mod_count_many = "{count} mods";
+/// How many packages the player has added, as the main menu's Library button says.
+/// A package is a mod, a map pack, a language pack or a downloaded expansion.
+inline constexpr std::string_view package_count_one = "{count} package";
+inline constexpr std::string_view package_count_many = "{count} packages";
 
 // The Active tab: the base game, its expansions, the mod being played, the
 // language in use and the installed maps, under one heading each.

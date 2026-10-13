@@ -24,7 +24,10 @@ Id `totala`. This is the base game.
 Id `totala-demo`. Its only file is `TADemo.hpi`, unpacked from the free
 1997 demo installer the game already recognises. The demo takes no
 expansion. Nothing that needs 3.1c is offered while the demo is the base
-game.
+game. On Single Player, Skirmish is greyed out: it takes no press and
+its key does nothing. Load Game stays greyed and Any Mission stays
+hidden. New Campaign, Options and Previous Menu stay available. The
+full game leaves Skirmish available.
 
 ## Expansions
 

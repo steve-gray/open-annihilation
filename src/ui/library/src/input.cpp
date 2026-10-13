@@ -885,21 +885,17 @@ ScreenResult activate(
     }
     if (controls::active_from_control(id))
         return open_map_pack(library, state, id);
-    if (controls::expansion_control(id) || controls::expansion_arrow_control(id)) {
+    if (controls::expansion_control(id)) {
         const ActiveContent face = active_content(library);
-        const bool arrow = controls::expansion_arrow_control(id);
-        const auto index = static_cast<std::size_t>(
-            id - (arrow ? controls::first_expansion_arrow : controls::first_expansion)
-        );
+        const auto index = static_cast<std::size_t>(id - controls::first_expansion);
         if (index >= face.pills.size())
             return {};
         const ExpansionPill& pill = face.pills[index];
-        if (arrow) {
-            if (!pill.arrow || !pill.arrow_enabled)
-                return {};
-        } else if (!pill.enabled) {
+        // The download arrow is drawn inside the pill. GET and RETRY take a
+        // press only while that arrow is on. A copied pill has no arrow.
+        const bool pressable = pill.arrow ? pill.arrow_enabled : pill.enabled;
+        if (!pressable)
             return {};
-        }
         return content_press_result(press_expansion(library, pill.id));
     }
     ScreenResult result = redrawn();

@@ -555,7 +555,14 @@ void Runtime::check_user_folder() {
         drawing.rgb.assign(static_cast<std::size_t>(drawing.width) * drawing.height * 3U, 0);
         settings::draw_notice(drawing, {0, 0, larger.scale}, sized, *fonts, engine_settings_icon());
         apply_gamma_rgb(drawing.rgb.data(), drawing.rgb.size() / 3U, 3);
-        const auto expected = expected_layer_frame(closed_windows[index], drawing, at);
+        auto expected = expected_layer_frame(closed_windows[index], drawing, at);
+        // The closed frame holds the larger icons. Darkening that frame is
+        // not what the window draws: each icon is darkened and blended on
+        // its own, over its window rectangle. Those squares are taken from
+        // the window. The notice covers its own place.
+        EngineSettingsMenuHost::copy_presented_menu_buttons(
+            *this, presented, expected, {at.shown.x, at.shown.y, at.shown.width, at.shown.height}
+        );
         const auto differing = layer_differences(
             presented, expected, window_pointer(oa_layer().view(), kRestingPointer)
         );

@@ -1285,6 +1285,10 @@ void Runtime::present_front_end() {
     // the buttons while a dialog is open.
     if (sharp_menu_buttons)
         present_menu_icon_buttons();
+    // The cursor was left out of the picture so the window-pixel buttons
+    // could replace it. It goes above those buttons.
+    if (menu_button_cursor_held())
+        present_software_cursor(false);
     // Open Annihilation's own screens go over the picture in the window's own
     // pixels, and the software cursor over them (tick_and_draw_cursor left it
     // out of the frame).

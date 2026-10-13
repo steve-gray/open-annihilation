@@ -415,7 +415,9 @@ kit::SetupChromeLook chrome_look(
                                             : std::string(interface_text(kit::step_line_pattern));
     look.step_index = place.index;
     look.step_count = place.count;
-    look.skip = show("Skip setup", language);
+    // One word for the whole walk. The host chooses it. Copying does not
+    // swap in Cancel: Escape still returns to the game step.
+    look.skip = show(session.model.leave == Leave::quit ? "Quit" : "Skip", language);
     look.back = show("Back", language);
     look.next = show("Next", language);
     look.skip_enabled = true;
@@ -423,26 +425,17 @@ kit::SetupChromeLook chrome_look(
     look.next_enabled = next_enabled;
     const Step step = session.model.step;
     if (step == Step::game) {
-        look.skip = show("Quit", language);
-        look.skip_enabled = true;
         look.back_enabled = true;
         look.next = show("Copy the game", language);
         look.next_enabled =
             session.model.source >= 0 &&
             session.model.source < static_cast<int32_t>(session.model.sources.size());
     } else if (step == Step::copying) {
-        look.skip = show("Cancel", language);
         look.back_enabled = false;
-        if (session.model.copy.checked) {
-            look.skip_enabled = false;
-            look.next = show("Continue", language);
-            look.next_enabled = true;
-        } else if (session.model.copy.paused) {
-            look.skip_enabled = true;
+        if (session.model.copy.checked || session.model.copy.paused) {
             look.next = show("Continue", language);
             look.next_enabled = true;
         } else {
-            look.skip_enabled = true;
             look.next = show("Pause", language);
             look.next_enabled = session.model.copy.running;
         }
@@ -1398,8 +1391,8 @@ void lay_buttons(
     const kit::Rect panel{panel_left, panel_top, panel_width, panel_height};
 
     const std::string library_body = show(
-        "Get, update and switch mods, map packs and languages. The number is how many mods you "
-        "have."
+        "Get, update and switch mods, map packs and languages. The number counts every package you "
+        "have added: mods, map packs, language packs and expansions."
     );
     const std::string settings_body = show(
         "Open Annihilation's own settings: controls, graphics, the interface's size, downloads and "
@@ -1525,12 +1518,7 @@ Outcome activate(Session& session, const Scene& scene, kit::ControlId id) {
         return outcome;
     switch (id) {
     case skip_id:
-        if (session.model.step == Step::game)
-            outcome.ask = Ask::quit;
-        else if (session.model.step == Step::copying)
-            outcome.ask = Ask::cancel_copy;
-        else
-            outcome.ask = Ask::skip;
+        outcome.ask = session.model.leave == Leave::quit ? Ask::quit : Ask::skip;
         return outcome;
     case back_id:
         if (session.model.step != Step::language && session.model.step != Step::copying)

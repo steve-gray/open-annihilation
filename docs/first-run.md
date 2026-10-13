@@ -10,11 +10,14 @@ folder with `--game-dir`, sees only the welcome: the language, online
 features, and the two buttons, over the main menu, as 1 of 3, 2 of 3 and
 3 of 3.
 
-**Skip setup** on the language step, or **Start playing** at the end,
-writes `open-annihilation.first-run` as `done`, and the walk does not
-return. **Quit** on the game step leaves without writing that and without
-copying. Closing the window does the same. Closing in the middle of the
-welcome does not write `done`, so the next start shows it again.
+The left footer button says the same word on every step of one walk.
+A first start, when nothing is set up yet, says **Quit**. **Quit** leaves
+without writing `open-annihilation.first-run` and without leaving a copy
+running. Closing the window does the same, so the next start shows the
+walk again. A re-run (Settings › System › Welcome setup, **SHOW AGAIN**)
+and the welcome a player who already has the game sees say **Skip** on
+every step. **Skip**, or **Start playing** at the end, writes
+`open-annihilation.first-run` as `done`, and the walk does not return.
 
 The welcome stays hidden in a headless check, a benchmark, a stage run, a
 run driven with `--fark`, an unattended run, and a run that names
@@ -30,12 +33,17 @@ folder is removed once the copy finishes, so the game is not kept twice.
 
 ## Welcome
 
-![Welcome: the title Welcome to Open Annihilation, Choose your language, and a carousel of languages with English in front, Next at the bottom and Skip setup above.](images/first-run/welcome.png)
+![Welcome: the title Welcome to Open Annihilation, Choose your language, and a carousel of languages with English in front, Next at the bottom and Skip above.](images/first-run/welcome.png)
 
 On the welcome walk the page word is Welcome, the step is WELCOME, and the
-count is 1 of 3. On the five-step walk the page word is Setup, the step is
-LANGUAGE, and the count is 1 of 5. The footer is **Quit**, **Back** and
-**Next**. **Quit** leaves before anything is copied.
+count is 1 of 3. The footer is **Skip**, **Back** and **Next**. On the
+five-step walk the page word is Setup, the step is LANGUAGE, and the count
+is 1 of 5. That footer's left button is **Quit** on a first start and
+**Skip** on a re-run, and the same word stays through the game, the copy
+and online features. The header shows Open Annihilation's app icon. The
+footer buttons are the dialog buttons Settings uses, with the primary
+button on the right, and the header and footer sit inside the window.
+
 The title is "Welcome to Open Annihilation" and the line under it is
 "Choose your language."
 
@@ -46,7 +54,7 @@ downloads are on and that catalogue can be read. A pack that is not
 installed yet wears **Get** and its size. While a built-in language, or a pack already installed, sits in the
 middle, this step speaks that language before it is chosen: the title,
 "Choose your language.", the note and the offline lines under the
-carousel, a download's status, the step line, and **Skip setup**,
+carousel, a download's status, the step line, and **Skip** or **Quit**,
 **Back** and **Next**. Turning to a language the game cannot read yet
 puts those words back in the language in use, and nothing is downloaded
 just to preview one. The other two steps stay in the language in use
@@ -86,7 +94,8 @@ is THE GAME, and the count is 2 of 5. The title is "Where is Total
 Annihilation?". Each row is a place that was found: an install, a GOG
 installer, or the demo installer, with what that place holds. **Locate
 another…** asks for a folder. **Copy the game** is available once a row is
-chosen. **Back** returns to the language. **Quit** leaves.
+chosen. **Back** returns to the language. The left button is the walk's
+**Quit** or **Skip**.
 
 The line under the rows says the copies go to Documents › Open
 Annihilation, and that the installation is left as it is.
@@ -102,10 +111,11 @@ title is "Copying Total Annihilation". The overall bar and one row for
 each bundle show how far the copy has got. Two centred lines say "If OA
 stops, the copy carries on from here next time." and "To Documents › Open
 Annihilation › Games and Expansions". **Pause** holds the copy, and
-**Continue** lets it go on. **Cancel** returns to the game step.
+**Continue** lets it go on. The left button is still the walk's **Quit**
+or **Skip**: it stops the copy and leaves. Escape returns to the game step.
 
 When the copy has been checked, the rows say what the check found, and
-**Continue** goes on to online features. **Cancel** is not available then.
+**Continue** goes on to online features. **Quit** or **Skip** is still there.
 
 ## Online features
 
@@ -132,9 +142,10 @@ install ID off, which forgets an ID a language pack made on the first
 step. Built-in languages, and files you open yourself, keep working either
 way.
 
-**Back** returns to the language. Choosing again and pressing **Next**
+**Back** returns to the language on the welcome, and to the copy on the
+five-step walk. Choosing again and pressing **Next**
 applies the new choice. The walk is not finished until the last step, or
-until **Skip setup**.
+until **Skip**. **Quit** leaves it unfinished.
 
 ## The two buttons
 
@@ -144,7 +155,8 @@ This step has no setup frame. It lies over the real main menu, dimmed
 except a spotlight around both buttons. Two coach marks name them:
 
 1. **Library.** "Get, update and switch mods, map packs and languages. The
-   number is how many mods you have."
+   number counts every package you have added: mods, map packs, language
+   packs and expansions."
 2. **Settings.** "Open Annihilation's own settings: controls, graphics, the
    interface's size, downloads and your files."
 
@@ -155,8 +167,14 @@ adds", then: "The Library is where you get mods, map packs and languages.
 Settings is where you change how Open Annihilation looks and plays.
 Everything else on this menu is the game's own."
 **Back** returns to online features. **Start playing** finishes the walk.
-This step has no **Skip setup**. Escape and Enter do what **Start playing**
+This step has no **Skip** or **Quit**. Escape and Enter do what **Start playing**
 does.
+
+The logo and the intro play after that finish, or after **Skip setup** when
+the walk will not return, and before the menu can be used. They do not play
+between the steps. A switch that skips the movies skips them on this start
+too. A start that does not show the setup plays the movies first, before
+the menu, as it always has.
 
 ## Keys and controllers
 
@@ -193,9 +211,10 @@ step (`language`, `game`, `copying`, `online` or `buttons`) and the
 control. The language cards are `oa.first-run.language.card.` and the tag
 in lower case, with anything else a hyphen (`de`, `en-xa`). The rest are
 `skip`, `back`, `next`, `previous`, `next-card`, `cancel` and `retry` on
-the language step; `skip` (Quit), `back`, `next` (Copy the game), `locate`
-and `source.<index>` on the game step; `skip` (Cancel) and `next` (Pause,
+the language step; `skip`, `back`, `next` (Copy the game), `locate`
+and `source.<index>` on the game step; `skip` and `next` (Pause,
 or Continue once the check has finished) on the copying step; `skip`,
 `back`, `next`, `on` and `not-now` on the online step; and `back` and
-`start` on the buttons. [automation.md](automation.md#the-welcome-setup)
+`start` on the buttons. On every step that has it, `skip` is **Quit** on a
+first start and **Skip** on a re-run. [automation.md](automation.md#the-welcome-setup)
 lists them with the other screens.
