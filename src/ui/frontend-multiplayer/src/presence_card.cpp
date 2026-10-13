@@ -584,6 +584,41 @@ kit::Rect presence_card_place(
     return kit::hover_card_rect(badge, frame, size);
 }
 
+void presence_card_controls(
+    kit::DisplayList& list, kit::Rect card, const kit::HoverCardLook& look
+) {
+    // The hover card is drawn with the Compact metrics at every size class.
+    const kit::Metrics& metrics = kit::compact_metrics;
+    const int32_t padding = metrics.hover_card_padding;
+    const int32_t row_height = metrics.small_line;
+    const bool header = look.mark || !look.title.empty() || !look.aside.empty();
+    int32_t row = card.y + padding + (header ? row_height : 0);
+    const int32_t left = card.x + padding;
+    const int32_t width = std::max(card.width - 2 * padding, int32_t{0});
+    int32_t index = 0;
+    const auto add = [&](std::string words) {
+        kit::Control control;
+        control.id = index + 1;
+        control.rect = {left, row, width, row_height};
+        control.enabled = false;
+        control.focusable = false;
+        control.name = "battleroom.tip.line." + std::to_string(index);
+        control.kind = kit::ControlKind::area;
+        control.text = std::move(words);
+        list.controls.push_back(std::move(control));
+        ++index;
+        row += row_height;
+    };
+    for (const kit::HoverCardRow& entry : look.rows) {
+        if (entry.label.empty())
+            add(entry.value);
+        else
+            add(entry.label + ": " + entry.value);
+    }
+    for (const std::string& text : look.block)
+        add(text);
+}
+
 void presence_card_point(kit::HoverCardLook& look, kit::Rect card, kit::Rect badge) noexcept {
     const int32_t badge_bottom = badge.y + badge.height;
     bool below = card.y >= badge_bottom;

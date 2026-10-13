@@ -166,6 +166,21 @@ presence_card_place(kit::Rect badge, kit::Point size, kit::Rect safe_area, int32
 /// @param badge the badge
 void presence_card_point(kit::HoverCardLook& look, kit::Rect card, kit::Rect badge) noexcept;
 
+/// Names the open tip's lines for automation, in the order the hover card
+/// draws them: each row, then each block line.
+///
+/// A line is a control of kind area that takes no press and no focus, so
+/// the endpoint lists it as a label. Its name is battleroom.tip.line.<n>,
+/// from 0; the endpoint adds oa. Its text is the words drawn on that line,
+/// the row's value, or "<label>: <value>" when the row has a label, already
+/// cut as the card cuts them. The header is not a line. The rectangles are
+/// the rows the card draws, in the same points as `card`.
+///
+/// @param[in,out] list the display list the card is drawn into
+/// @param card the card's rectangle, in the list's points
+/// @param look the hover card drawn there
+void presence_card_controls(kit::DisplayList& list, kit::Rect card, const kit::HoverCardLook& look);
+
 /// The slot that names no badge.
 inline constexpr int32_t presence_card_no_slot = -1;
 
