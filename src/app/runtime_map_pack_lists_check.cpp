@@ -644,9 +644,11 @@ void Runtime::check_map_pack_lists() {
     fs::create_directories(local_mod, made);
     require(!made, "could not make the local mod's folder");
     const std::vector<fs::path> saved_folders = options_.game_folders;
+    const fs::path saved_layered = options_.layered_mod_folder;
     if (options_.game_folders.empty())
         options_.game_folders.push_back(options_.game_dir);
     options_.game_folders.insert(options_.game_folders.begin(), local_mod);
+    options_.layered_mod_folder = local_mod;
     require(plays_mod(), "the local folder is not played as a mod");
     require(played_map_key().empty(), "the local mod has a catalogue key");
     drop_pack_map_fits();
@@ -696,6 +698,7 @@ void Runtime::check_map_pack_lists() {
     );
 
     options_.game_folders = saved_folders;
+    options_.layered_mod_folder = saved_layered;
     drop_pack_map_fits();
     refresh_listed_pack_maps();
     require(!plays_mod(), "the base game is still played as a mod");

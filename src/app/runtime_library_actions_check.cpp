@@ -645,8 +645,8 @@ void Runtime::check_library_install() {
         return state.prompt != nullptr && state.prompt->question().title == title;
     };
     const auto playing = [&](const fs::path& folder) {
-        return options_.game_folders.size() > 1 &&
-               kept_path(options_.game_folders.front()) == kept_path(folder);
+        return !options_.layered_mod_folder.empty() &&
+               kept_path(options_.layered_mod_folder) == kept_path(folder);
     };
 
     load(Screen::main_menu);
@@ -659,7 +659,7 @@ void Runtime::check_library_install() {
         // The check starts afresh: an earlier run's packages and mods go.
         settle();
         require(
-            options_.game_folders.size() <= 1,
+            options_.layered_mod_folder.empty(),
             "an earlier run of the check that stopped left its mod chosen; start it again"
         );
         std::error_code error;
@@ -1652,7 +1652,7 @@ void Runtime::check_library_install() {
             "the last run is watched: run the check on SDL's dummy video driver"
         );
         settle();
-        require(options_.game_folders.size() <= 1, "the last run plays a mod");
+        require(options_.layered_mod_folder.empty(), "the last run plays a mod");
         require(
             revision_in(ridge) == 5 && recorded_from(ridge, kBuiltIn, 2) &&
                 revision_in(kept) == 4 && !install::package_files_waiting(),

@@ -856,7 +856,17 @@ struct RowView {
     /// The captions of the row's buttons or its link, as shown, left to right.
     std::vector<std::string> buttons{};
     std::vector<std::string> button_ids{}; ///< each button's word
-    bool enabled{true};                    ///< its control can be pressed now
+    /// Each button's width, in captions' order. Empty keeps the class's widths.
+    std::vector<int32_t> button_widths{};
+    /// The lock's columns when a real font measures it. 0 keeps the class's lock.
+    int32_t lock_columns{};
+    /// A slider's value box when a real font measures the value wider than the
+    /// class's box. 0 keeps that box.
+    int32_t value_columns{};
+    /// The control and the lock stand on the line under the label, because the
+    /// label does not fit beside them.
+    bool control_below{};
+    bool enabled{true}; ///< its control can be pressed now
 };
 
 /// Reads a row's view from its spec and the model.
@@ -1060,6 +1070,20 @@ void scroll(PlacedRows& placed, int32_t by) noexcept;
 /// @param at the button, from 0 at the left
 /// @return its rectangle; empty past the third
 [[nodiscard]] Rect row_button(const Rect& area, std::size_t at) noexcept;
+
+/// Returns an Off/On switch's width for a caption as wide as `caption_width`.
+///
+/// The class's switch is kept when the caption fits in one half of it. A
+/// wider caption widens both halves, with a few columns of air beside the
+/// words, and the switch stays one piece.
+///
+/// @param caption_width the wider caption's width, in points
+/// @return the switch's width, in points
+[[nodiscard]] inline int32_t switch_width_for(int32_t caption_width) noexcept {
+    constexpr int32_t pad = 4;
+    const int32_t half = std::max(caption_width, int32_t{0});
+    return std::max(compact_metrics.switch_width, (half + pad) * 2 + 2);
+}
 
 /// Returns the button of a buttons row under a point.
 ///

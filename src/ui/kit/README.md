@@ -363,9 +363,9 @@ antialiased at `lround(smooth_text_points * scale)` pixels per em: 12 points
 for the regular font, drawn bold as the game's heavy title, label and value
 font is, and 10 for the small one, so 18 and 15 pixels at 1.5x; tracking is
 `lround(tracking * scale)` pixels. Its capitals are centred on its box's
-height as the game font's are, and a text wider than its box at that size
-steps down a pixel at a time until it fits, to three quarters of its size at
-the least, as the layout measured the box for the game's narrower fonts.
+height as the game font's are. A text wider than its box at that size keeps
+its size; the kit records it (text_fit_records) so a check can name the
+screen. Recording is off in a release build.
 `measure_text` gives the smooth width in points, rounded up. A picture,
 such as the Open Annihilation icon, is drawn filtered, never by the nearest
 pixel. A clip is the clipped rectangle's pixels, and `placed_at` moves the
@@ -597,7 +597,7 @@ covering exactly 15 by 15 pixels from `lround(x * 1.5)`, at even and odd
 points, fills sharing their edges, outlines, raised edges and rules of whole
 pixels, text measured wider than at 1x and narrower than at 2x, drawn
 antialiased with its capitals centred, the regular font bold, a text too
-wide for its box drawn smaller inside it, tracking, a clip that keeps what
+wide for its box drawn at full size and recorded, tracking, a clip that keeps what
 lies outside it, a picture drawn filtered, a mark, a moved origin, and a
 button and a display list drawn through the same functions as on the crisp
 form. Its text checks read the bundled fonts beside the test.

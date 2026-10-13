@@ -3,8 +3,8 @@
 
 // The game's own copy of a base game and its expansions. Files are read from
 // a source (a folder, or a Windows installer) and written under the player's
-// folder, in games/<bundle> and
-// expansions/<base>/<bundle>. Each bundle folder holds a .oa-content record
+// folder, in Games/<bundle> and
+// Expansions/<base>/<bundle>. Each bundle folder holds a .oa-content record
 // of where the files came from and each file's size, modification time and
 // SHA-256. The source is only read. Each start checks a copied bundle against
 // that record: a file whose size and time still match is not read again, and
@@ -32,10 +32,14 @@ namespace oa::app {
 inline constexpr uint64_t content_copy_margin = uint64_t{1024} * 1024;
 /// Bytes read and written at a time while a file is copied.
 inline constexpr uint64_t content_copy_chunk_bytes = uint64_t{1024} * 1024;
-/// The folder of a base game under the player's folder.
-inline constexpr std::string_view managed_games_folder = "games";
-/// The folder of expansions under the player's folder.
-inline constexpr std::string_view managed_expansions_folder = "expansions";
+/// The folder of a base game under the player's folder. Named once, in
+/// content_bundles.
+inline constexpr std::string_view managed_games_folder =
+    oa::data::content_bundles::managed_games_folder;
+/// The folder of expansions under the player's folder. Named once, in
+/// content_bundles.
+inline constexpr std::string_view managed_expansions_folder =
+    oa::data::content_bundles::managed_expansions_folder;
 /// The record written in a bundle folder.
 inline constexpr std::string_view content_record_name =
     oa::data::content_bundles::content_record_name;
@@ -500,7 +504,7 @@ struct CopyRequest {
 
 /// The folder one bundle is stored in.
 ///
-/// A base game is games/<id>. An expansion is expansions/<base>/<id>, using
+/// A base game is Games/<id>. An expansion is Expansions/<base>/<id>, using
 /// the first base game it extends.
 ///
 /// @param user_folder the player's folder

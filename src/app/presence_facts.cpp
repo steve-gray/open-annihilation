@@ -188,14 +188,14 @@ PresenceFacts presence_facts(const Runtime& runtime) {
     if (profile != nullptr) {
         facts.mod =
             PresenceMod{profile->id, profile->name, profile->version, profile->packaging.revision};
-        // The played mod's folder is the first of two or more. The content
-        // service has started with the runtime, so asking for it starts
-        // nothing.
-        const auto& folders = runtime.options_.game_folders;
+        // The played mod's folder is the one this start layered. An expansion
+        // bundle is not that folder, so it is not named as where the mod was
+        // published. The content service has started with the runtime, so
+        // asking for it starts nothing.
         const content::Service* service =
             runtime.content_ ? &const_cast<Runtime&>(runtime).content_service() : nullptr;
-        if (folders.size() > 1)
-            facts.mod_origin = mod_origin(service, folders.front(), *facts.mod);
+        if (!runtime.options_.layered_mod_folder.empty())
+            facts.mod_origin = mod_origin(service, runtime.options_.layered_mod_folder, *facts.mod);
     }
 
     // Whether this machine can fetch content: a downloads folder, which the

@@ -15,6 +15,7 @@
 #include <optional>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 namespace oa::app {
 
@@ -42,6 +43,21 @@ std::string lowered(std::string_view text) {
 std::string utf8(const fs::path& path) {
     const auto text = path.u8string();
     return {text.begin(), text.end()};
+}
+
+/// The folder whose own profile this mount plays.
+///
+/// A layered mod folder carries the profile. With no mod folder, the game
+/// folder does: it is the last folder. An expansion bundle ahead of it is
+/// not a mod.
+///
+/// @param folders the loose roots, highest precedence first; not empty
+/// @param choice the mod folder and the --mod file
+/// @return the folder to read oamod.yaml from
+const fs::path& profile_folder(const std::vector<fs::path>& folders, const ModChoice& choice) {
+    if (!choice.folder.empty())
+        return choice.folder;
+    return folders.back();
 }
 
 /// Trims spaces and tabs from both ends.
@@ -177,14 +193,14 @@ resolve_folder_profile(const std::vector<fs::path>& folders, const ModChoice& ch
     }
     fs::path file = choice.profile_file;
     if (file.empty()) {
-        const auto found = find_mod_profile(folders.front(), error);
+        const auto found = find_mod_profile(profile_folder(folders, choice), error);
         if (!error.empty()) {
             result.errors.push_back(error);
             return result;
         }
         // A folder without a profile, a mod folder among them, plays by
         // 3.1c's own rules; a mod folder's files still layer over the game
-        // folder's.
+        // folder's. An expansion bundle is not that folder.
         if (!found)
             return result;
         file = *found;
@@ -215,7 +231,7 @@ folder_profile_source(const std::vector<fs::path>& folders, const ModChoice& cho
     fs::path file = choice.profile_file;
     if (file.empty()) {
         std::string error;
-        const auto found = find_mod_profile(folders.front(), error);
+        const auto found = find_mod_profile(profile_folder(folders, choice), error);
         if (!found)
             return std::nullopt;
         file = *found;

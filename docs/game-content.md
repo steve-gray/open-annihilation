@@ -3,8 +3,8 @@
 Open Annihilation knows two base games and six expansions. A game uses one
 base game. Each expansion adds to Total Annihilation 3.1c and is left out
 of the demo. A managed copy keeps every bundle in its own folder, under
-the game's documents folder: `games/totala` and `games/totala-demo` for the
-base games, and `expansions/totala/<id>` for each expansion. The names
+the game's documents folder: `Games/totala` and `Games/totala-demo` for the
+base games, and `Expansions/totala/<id>` for each expansion. The names
 below are the names the copy uses. An install may spell the same file in
 any case, or with `\` between the parts; the copy writes these names.
 

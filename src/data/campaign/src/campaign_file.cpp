@@ -1033,6 +1033,19 @@ int32_t campaign_count_files(const CampaignFiles* files) {
     return files->count(files->context, pattern);
 }
 
+namespace {
+
+// True when the packed name list already holds this campaign file. Names
+// compare without case, the way a layered folder treats one path.
+bool campaign_name_already_kept(const char* listed, const char* name) {
+    for (const char* kept = listed; *kept != '\0'; kept += std::strlen(kept) + 1)
+        if (oa::formats::tdf::compare_nocase(kept, name) == 0)
+            return true;
+    return false;
+}
+
+} // namespace
+
 int32_t
 campaign_load_names(const CampaignFiles* files, const char* side, char* out, std::size_t capacity) {
     if (capacity != 0)
@@ -1058,6 +1071,13 @@ campaign_load_names(const CampaignFiles* files, const char* side, char* out, std
     oa::formats::tdf::Document document;
     oa::formats::tdf::document_init(&document);
     for (int32_t left = count; left > 0; --left) {
+        // Loose files come first, then each mount, and equal names keep that
+        // order, so the first copy of a file is the top layer. A lower layer's
+        // copy of the same path is the same campaign.
+        if (campaign_name_already_kept(out, name)) {
+            name += std::strlen(name) + 1;
+            continue;
+        }
         char path[kCampaignPathBytes];
         const CampaignFiles rules = rule_files(files);
         build_variant_path(&rules, path, sizeof(path), kCampsDirectory, name, "tdf");

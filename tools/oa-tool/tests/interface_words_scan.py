@@ -639,13 +639,9 @@ def located_words(
 # Lines the Downloads page looks up after it wraps a hint. They are not
 # literals: break_lines produces them from the paragraph, and the row
 # passes each line to the catalogue.
-WRAPPED_HINTS = (
-    "OA looks for new content and updates in the",
-    "registries' lists. It never installs anything",
-    "until you say so.",
-    "OA looks for new content and updates in the registries' lists. It never installs",
-    "anything until you say so.",
-)
+# Downloads looks the whole hint up, then the kit wraps it. The broken
+# lines are not catalogue keys.
+WRAPPED_HINTS: tuple[str, ...] = ()
 
 MODULES = (
     (

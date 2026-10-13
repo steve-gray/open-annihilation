@@ -135,6 +135,8 @@ inline constexpr std::string_view interface_words[] = {
     "file again.",
     "Your Mods folder has no free folder name for it.",
     "installed",
+    "new",
+    "old",
     "{done} of {total}",
     "{endonym} ({english}) {version} is installed in your Languages folder:",
     "{file} cannot be installed.",
