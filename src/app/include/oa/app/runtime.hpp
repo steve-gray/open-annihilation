@@ -9698,8 +9698,9 @@ class Runtime final : public menu::Host,
     /// Centres the view on the map point under a radar position and stops following a unit.
     ///
     /// The camera goes half the visible battlefield (visible_map_width() and
-    /// visible_map_height(), at the current zoom) up and left of the point; the
-    /// pointer may lie off the radar, and the render clamps the camera to the map.
+    /// visible_map_height(), at the current zoom) up and left of the point, then
+    /// is held within the view's limits (set_camera_position). The pointer may
+    /// lie off the radar.
     ///
     /// @param x canvas column
     /// @param y canvas row
@@ -12784,15 +12785,17 @@ class Runtime final : public menu::Host,
     void center_camera_on_unit(uint16_t id);
 
     /// Centres the view on a point of the map, as a tracking camera follows
-    /// a unit. While the frames draw the view between map pixels, the view
-    /// is placed (place_match_view) with the point at the battlefield's
-    /// middle: on the screen pixels laid from the map's corner, the screen
-    /// pixel the point lies in, so that the view moves by screen pixels,
-    /// finer than a map pixel when zoomed in; exactly where the card moves
-    /// its picture by the rest of a screen pixel (view_shift), and wherever
-    /// the frames draw the view off those pixels. Else the camera is put on
-    /// the whole map pixel half the view before the point's, as the game
-    /// puts it.
+    /// a unit. The place is held within the view's limits first
+    /// (view_within_limits), by the span alone, so a follow stops at the
+    /// limit and a jump to the point does not stay past it. While the frames
+    /// draw the view between map pixels, the view is placed
+    /// (place_match_view) with the point at the battlefield's middle: on
+    /// the screen pixels laid from the map's corner, the screen pixel the
+    /// point lies in, so that the view moves by screen pixels, finer than a
+    /// map pixel when zoomed in; exactly where the card moves its picture
+    /// by the rest of a screen pixel (view_shift), and wherever the frames
+    /// draw the view off those pixels. Else the camera is put on the whole
+    /// map pixel half the view before the point's, as the game puts it.
     ///
     /// @param x the point's column, 16.16 map pixels
     /// @param z the point's row, 16.16 map pixels
@@ -14228,10 +14231,42 @@ class Runtime final : public menu::Host,
 
     /// Moves the local camera, whose view is then drawn on its own map pixel.
     ///
+    /// A jump to a point, the match opening on the Commander, a loaded
+    /// game, Track, an event or the minimap, is held within the view's
+    /// limits (held_camera) by the same rule as a scroll from a view the
+    /// limits have not held: as near the point as those limits allow, and
+    /// no further. At 50% a point on the shown map stays where the jump
+    /// asked. The limits then hold the next view from the view placed, so
+    /// a later scroll cannot return to a place past them. Without a map
+    /// the camera is put where it was asked.
+    ///
     /// @param x camera left edge, whole world units
     /// @param z camera top edge, whole world units
     /// @param flags always 0 from commander placement
     void set_camera_position(int32_t x, int32_t z, uint32_t flags) override;
+
+    /// Returns a view's place held within the limits by the span alone.
+    ///
+    /// The same rule as a scroll from a view the limits have not held
+    /// (held_view, with no earlier centre). None without a shown map, or
+    /// when the battlefield shows no map pixels, so a caller leaves the
+    /// place as it was asked.
+    ///
+    /// @param x the map column at the battlefield's left edge
+    /// @param z the map row at its top edge
+    /// @return the held place, or none when the limits do not apply
+    [[nodiscard]] std::optional<std::array<double, 2>> view_within_limits(double x, double z) const;
+
+    /// Records the view the limits hold the next one from.
+    ///
+    /// Its centre is half the map the battlefield shows past the place, at
+    /// the current zoom. A jump records the view it placed, so the next
+    /// scroll is held from there and not from a view that lay further past
+    /// the limits.
+    ///
+    /// @param x the map column at the battlefield's left edge
+    /// @param z the map row at its top edge
+    void remember_placed_view(double x, double z);
 
     /// Builds the skirmish match from the roster, as the Start click does.
     void apply_skirmish_players() override;
