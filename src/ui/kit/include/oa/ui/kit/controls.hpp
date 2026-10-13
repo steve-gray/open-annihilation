@@ -174,7 +174,8 @@ void add_chip(
 
 /// Returns a pill's width: its text in the small font, with enough padding
 /// that the text starts where the straight section does, and at least the
-/// pill's height so the ends stay semicircles.
+/// pill's height so the ends stay semicircles. An icon adds its square and
+/// a gap before the right end.
 ///
 /// @param fonts the fonts
 /// @param look the pill
@@ -189,9 +190,11 @@ void add_chip(
 }
 
 /// Draws a pill: a small-font word centred on a fully rounded ground about
-/// chip_height high. Playing and active are filled with the accent under
-/// on_accent text. Neutral and inactive are a muted ground (control_hover)
-/// under the text colour. Installed, update and problem use that muted
+/// chip_height high. An icon sits at the right, inside the capsule, and the
+/// word is centred in the room left of it. Playing and active are filled
+/// with the accent under on_accent text. Neutral and inactive are a muted
+/// ground (control_hover) under the text colour. Installed, update and
+/// problem use that muted
 /// ground, with an outline and text in the colour the chips' states use
 /// (the accent, the lock colour, the danger colour). Hover lightens an
 /// accent ground and outlines a muted one; focus outlines the pill in the

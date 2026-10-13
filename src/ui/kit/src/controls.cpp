@@ -823,11 +823,33 @@ int32_t pill_padding() noexcept {
     return std::max(kMetrics.chip_padding, kMetrics.chip_height / 2);
 }
 
+/// The gap between a pill's text and an icon inside it.
+constexpr int32_t kPillIconGap = 2;
+
+/// Returns the side of an icon drawn inside a pill: two points short of the
+/// pill's height, so the icon sits inside the capsule.
+///
+/// @return the side, in points
+int32_t pill_icon_side() noexcept {
+    return std::max(kMetrics.chip_height - 2, int32_t{0});
+}
+
+/// Returns the extra width an icon adds to a pill.
+///
+/// @param look the pill
+/// @return the gap and the icon; 0 when the pill has no icon
+int32_t pill_icon_extra(const PillLook& look) noexcept {
+    if (!look.icon.has_value())
+        return 0;
+    return kPillIconGap + pill_icon_side();
+}
+
 } // namespace
 
 int32_t pill_width(const Fonts& fonts, const PillLook& look) {
     return std::max(
-        text_width(fonts, FontRole::small, look.text) + 2 * pill_padding(), kMetrics.chip_height
+        text_width(fonts, FontRole::small, look.text) + 2 * pill_padding() + pill_icon_extra(look),
+        kMetrics.chip_height
     );
 }
 
@@ -847,9 +869,17 @@ void draw_pill(const Canvas& canvas, const Rect& rect, const PillLook& look) {
     } else {
         fill_round_rect(canvas, rect, radius, colours.ground);
     }
+    Rect words = rect;
+    if (look.icon.has_value()) {
+        const int32_t side = std::min(pill_icon_side(), std::max(rect.height - 2, int32_t{0}));
+        const int32_t icon_x = rect.x + rect.width - 1 - side;
+        const Rect icon{icon_x, rect.y + (rect.height - side) / 2, side, side};
+        words.width = std::max(icon_x - kPillIconGap - rect.x, int32_t{0});
+        draw_state_icon(clipped(canvas, rect), icon, *look.icon, colours.text);
+    }
     // box_text, not line: line draws nothing on the smooth form when the
     // game's fonts are absent, and a pill's words are part of the shape.
-    box_text(clipped(canvas, rect), FontRole::small, look.text, rect, Align::centre, colours.text);
+    box_text(clipped(canvas, rect), FontRole::small, look.text, words, Align::centre, colours.text);
 }
 
 void add_pill(
