@@ -11361,6 +11361,12 @@ class Runtime final : public menu::Host,
     /// choices. Throws std::runtime_error naming what differed.
     void check_first_run();
 
+    /// Opens every Open Annihilation screen in English, German, French,
+    /// Spanish, Italian and Simplified Chinese, at 640x480 and 1280x720.
+    /// Throws std::runtime_error naming each text drawn wider than its box
+    /// or across another text, with the screen, the language and the size.
+    void check_text_fit();
+
     /// Writes the first-run check's registries file before content starts.
     void prepare_first_run_check();
 

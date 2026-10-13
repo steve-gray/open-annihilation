@@ -357,6 +357,7 @@ void draw_boxed_text(
         pen = box.x + (box.width - width) / 2;
     else if (align == Align::right)
         pen = box.x + box.width - width;
+    note_text_fit(shown, width, box.x, box.y, box.width, box.height, pen);
     // A game font's capitals start one row under the pen row.
     const int32_t capital_rows = capitals(fonts, role);
     const int32_t pen_row = box.y + (box.height - capital_rows) / 2 - 1;
@@ -397,5 +398,114 @@ Fonts load_game_fonts(oa::AssetStore& assets) {
     fonts.small_characters = gui_characters(fonts.small.font);
     return fonts;
 }
+
+#if !defined(NDEBUG)
+
+namespace {
+
+/// One text's ink in the units of the draw that made it.
+struct FitInk {
+    int32_t x{};
+    int32_t y{};
+    int32_t width{};
+    int32_t height{};
+};
+
+/// The records and the ink of the paint in progress.
+struct FitState {
+    std::string screen{};
+    std::vector<TextFitRecord> records{};
+    std::vector<FitInk> ink{};
+};
+
+FitState& fit_state() {
+    static FitState state;
+    return state;
+}
+
+/// Tells whether two inks cross, edges that only meet counting as clear.
+bool ink_crosses(const FitInk& left, const FitInk& right) noexcept {
+    return left.x < right.x + right.width && right.x < left.x + left.width &&
+           left.y < right.y + right.height && right.y < left.y + left.height;
+}
+
+} // namespace
+
+void set_text_fit_screen(std::string_view screen) {
+    fit_state().screen = std::string(screen);
+}
+
+void begin_text_fit_frame() {
+    FitState& state = fit_state();
+    state.records.clear();
+    state.ink.clear();
+}
+
+void text_fit_begin_paint() {
+    fit_state().ink.clear();
+}
+
+void note_text_fit(
+    std::string_view text,
+    int32_t text_width,
+    int32_t /*box_x*/,
+    int32_t box_y,
+    int32_t box_width,
+    int32_t box_height,
+    int32_t ink_x
+) {
+    if (text.empty())
+        return;
+    FitState& state = fit_state();
+    const FitInk ink{
+        ink_x, box_y, std::max(text_width, int32_t{0}), std::max(box_height, int32_t{0})
+    };
+    bool across = false;
+    if (ink.width > 0 && ink.height > 0) {
+        for (const FitInk& earlier : state.ink) {
+            if (ink_crosses(ink, earlier)) {
+                across = true;
+                break;
+            }
+        }
+        state.ink.push_back(ink);
+    }
+    const bool wider = box_width < text_width;
+    if (!wider && !across)
+        return;
+    TextFitRecord record;
+    record.screen = state.screen;
+    record.text = std::string(text);
+    record.text_width = text_width;
+    record.box_width = box_width;
+    record.wider = wider;
+    record.across = across;
+    state.records.push_back(std::move(record));
+}
+
+const std::vector<TextFitRecord>& text_fit_records() {
+    return fit_state().records;
+}
+
+#else
+
+void set_text_fit_screen(std::string_view) {
+}
+
+void begin_text_fit_frame() {
+}
+
+void text_fit_begin_paint() {
+}
+
+void note_text_fit(std::string_view, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) {
+}
+
+const std::vector<TextFitRecord>& text_fit_records() {
+    static const std::vector<TextFitRecord> none;
+    return none;
+}
+
+#endif
 
 } // namespace oa::ui::kit

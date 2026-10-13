@@ -413,6 +413,7 @@ const std::vector<FlagCase>& flag_cases() {
         {"--check-language-registry", &Options::check_language_registry, {}},
         {"--check-language-notice", &Options::check_language_notice, {}},
         {"--check-first-run", &Options::check_first_run, {}},
+        {"--check-text-fit", &Options::check_text_fit, {}},
         {"--check-patrol-reclaim", &Options::check_patrol_reclaim, {}},
         {"--check-reclaim-cursor", &Options::check_reclaim_cursor, {}},
         {"--check-build-preview", &Options::check_build_preview, {}},

@@ -24,6 +24,7 @@ inline constexpr std::string_view interface_words[] = {
     "GAME FOLDER",
     "Look through this computer's folders, drives and SD cards.",
     "No folders here.",
+    "OPEN ANNIHILATION",
     "Or find the folder yourself:",
     "PARENT FOLDER",
     "PLAY THIS FOLDER",

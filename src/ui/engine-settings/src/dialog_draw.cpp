@@ -75,7 +75,19 @@ struct Building {
     std::vector<kit::ControlId> section_tab;
     kit::Canvas measure{};      ///< what texts are measured in
     const DialogFonts* fonts{}; ///< the fonts; null to estimate widths
+    /// The dialog's sizes, widened for a real font. Set before the parts are added.
+    layout::Sizes fitted{};
+    bool have_fitted = false; ///< fitted was set for this list
 };
+
+/// Returns the sizes the list is built from.
+///
+/// @param building the list
+/// @param dialog the dialog
+/// @return the fitted sizes, or the class's own
+const layout::Sizes& dialog_sizes(const Building& building, const Dialog& dialog) {
+    return building.have_fitted ? building.fitted : layout::sizes_of(dialog);
+}
 
 /// Returns how wide a text is in one of the dialog's fonts, or at the
 /// estimated width without them.
@@ -257,17 +269,21 @@ kit::HeaderLook dialog_header(const Dialog& dialog) {
 /// @param dialog the dialog
 void add_nav(Building& building, const Dialog& dialog) {
     kit::NavLook nav;
-    const layout::Sizes& sized = layout::sizes_of(dialog);
+    const layout::Sizes& sized = dialog_sizes(building, dialog);
     const int32_t body_height = sized.footer_rule_row - layout::body_top;
     nav.area = {layout::edge, layout::body_top, sized.list_width, body_height};
     nav.rule_column = sized.list_rule_column;
-    if (dialog.kind == DialogKind::engine)
-        nav.divider = layout::list_divider(dialog.size_class);
+    if (dialog.kind == DialogKind::engine) {
+        SourceRect divider = layout::list_divider(dialog.size_class);
+        divider.width = sized.list_item_width - 2 * layout::list_divider_inset;
+        nav.divider = divider;
+    }
     for (const Page page :
          dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller)) {
         const int32_t control = page_control(page);
         kit::NavEntry entry;
         entry.rect = layout::dialog_list_item(dialog, page);
+        entry.rect.width = sized.list_item_width;
         entry.caption = std::string(layout::shown_text(layout::page_name(page)));
         entry.selected = page == dialog.page;
         entry.hovered = dialog.hovered == control || dialog.pressed == control;
@@ -303,10 +319,11 @@ bool inside_rect(const SourceRect& inner, const SourceRect& outer) noexcept {
 /// @param[in,out] building the list
 /// @param dialog the dialog
 void add_registered_nav(Building& building, const Dialog& dialog) {
-    const NavLayout layout = layout_registered_nav(dialog);
+    const NavLayout layout =
+        layout_registered_nav(dialog, building.have_fitted ? &building.fitted : nullptr);
     const int32_t scroll = std::clamp(dialog.nav_scroll, int32_t{0}, layout.limit);
     kit::NavLook nav;
-    const layout::Sizes& sized = layout::sizes_of(dialog);
+    const layout::Sizes& sized = dialog_sizes(building, dialog);
     nav.area = layout.area;
     nav.rule_column = sized.list_rule_column;
     for (const NavPiece& piece : layout.pieces) {
@@ -367,8 +384,9 @@ void add_registered_nav(Building& building, const Dialog& dialog) {
 /// @param[in,out] building the list
 /// @param dialog the dialog
 void add_registered_rows(Building& building, const Dialog& dialog) {
-    const RegisteredContent content = registered_content(dialog);
-    const layout::Sizes& sized = layout::sizes_of(dialog);
+    const RegisteredContent content =
+        registered_content(dialog, building.have_fitted ? &building.fitted : nullptr);
+    const layout::Sizes& sized = dialog_sizes(building, dialog);
     if (dialog.registered_page >= dialog.registered_pages.size())
         return;
     const RegisteredPage& page = dialog.registered_pages[dialog.registered_page];
@@ -457,7 +475,7 @@ void add_list_row(
     const SourceRect& view
 ) {
     kit::DisplayList& list = building.list;
-    const layout::Sizes& sized = layout::sizes_of(dialog);
+    const layout::Sizes& sized = dialog_sizes(building, dialog);
     const SourceRect clip = developer_clip(view);
     const bool header =
         row.kind == layout::ListRowKind::area || row.kind == layout::ListRowKind::hack;
@@ -587,7 +605,7 @@ void add_list_row(
 /// @param open Developer's rows and list (layout::open_rows)
 void add_developer(Building& building, const Dialog& dialog, const layout::ScrolledRows& open) {
     kit::DisplayList& list = building.list;
-    const layout::Sizes& sized = layout::sizes_of(dialog);
+    const layout::Sizes& sized = dialog_sizes(building, dialog);
     const auto hot = [&](int32_t control) {
         return dialog.hovered == control || dialog.pressed == control;
     };
@@ -683,7 +701,7 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
 /// @param open the open section's rows (layout::open_rows)
 void add_section(Building& building, const Dialog& dialog, const layout::ScrolledRows& open) {
     kit::DisplayList& list = building.list;
-    const layout::Sizes& sized = layout::sizes_of(dialog);
+    const layout::Sizes& sized = dialog_sizes(building, dialog);
     const std::string heading =
         dialog.page == Page::registered
             ? registered_heading(dialog)
@@ -703,7 +721,8 @@ void add_section(Building& building, const Dialog& dialog, const layout::Scrolle
         layout::shown_locks(dialog),
         dialog.section_hooks,
         width_in(building.fonts, DialogFont::small),
-        &placed
+        &placed,
+        &sized
     ));
     kit::scroll(placed, layout::developer_page(dialog) ? 0 : open.scroll);
     kit::RowsState state;
@@ -799,7 +818,10 @@ void add_footer(Building& building, const Dialog& dialog) {
         {ok_control, layout::ok_text, "ok"},
     }};
     for (const FooterButton& footer : buttons) {
-        const SourceRect rect = layout::footer_button(footer.control, dialog.size_class);
+        const layout::Sizes& sized = dialog_sizes(building, dialog);
+        const SourceRect rect = footer.control == restore_control
+                                    ? sized.restore_button
+                                    : layout::footer_button(footer.control, dialog.size_class);
         const bool held = dialog.pressed == footer.control && dialog.hovered == footer.control;
         const bool hovered = dialog.hovered == footer.control;
         const std::string caption(layout::shown_text(footer.caption));
@@ -898,7 +920,11 @@ namespace geometry {
 kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts) {
     Building building;
     building.fonts = fonts;
-    const Sizes& sized = sizes_of(dialog);
+    const auto regular = width_in(fonts, DialogFont::regular);
+    const auto small = width_in(fonts, DialogFont::small);
+    building.fitted = fonts != nullptr ? fitted_sizes(dialog, &regular, &small) : sizes_of(dialog);
+    building.have_fitted = true;
+    const Sizes& sized = building.fitted;
     const SourceRect whole{0, 0, sized.dialog_width, sized.dialog_height};
     fill(building.list, whole, kit::colour::panel, {});
     item(building.list, kit::Role::header, {0, 0, sized.dialog_width, header_rule_row + 1}, {})
@@ -908,7 +934,8 @@ kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts) {
         add_registered_nav(building, dialog);
     else
         add_nav(building, dialog);
-    const ScrolledRows open = open_rows(dialog);
+    const ScrolledRows open =
+        open_rows(dialog, fonts != nullptr ? &small : nullptr, &building.fitted);
     add_section(building, dialog, open);
     item(
         building.list,

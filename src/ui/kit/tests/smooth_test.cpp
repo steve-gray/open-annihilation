@@ -181,7 +181,7 @@ std::unique_ptr<text_font::FontStack> bundled_fonts() {
 /// Checks text in the modern fonts: measured at 1.5x it is wider than at 1x
 /// and narrower than at 2x, drawn antialiased in its box with its capitals
 /// centred, the regular font bold and larger than the small one, and a text
-/// too wide for its box drawn smaller so that it fits.
+/// too wide for its box drawn at full size and recorded.
 void text_is_drawn_in_the_modern_fonts() {
     auto fonts = bundled_fonts();
     OA_CHECK(fonts != nullptr);
@@ -244,13 +244,20 @@ void text_is_drawn_in_the_modern_fonts() {
     OA_CHECK(kit::smooth_text_points(kit::FontRole::regular) == 12);
     OA_CHECK(kit::smooth_text_points(kit::FontRole::small) == 10);
 
-    // A text too wide for its box is drawn smaller, inside it.
+    // A text too wide for its box keeps its size and is recorded. The wide
+    // box above drew the same words at this scale; the narrow box draws them
+    // no smaller.
+    kit::begin_text_fit_frame();
+    kit::set_text_fit_screen("smooth");
     Smooth narrow(900, 80, kOneAndAHalf, fonts.get());
     const kit::Rect tight{10, 10, 190, 16};
     kit::box_text(narrow.canvas, kit::FontRole::regular, words, tight, kit::Align::centre, kInk);
     const paint::Box fitted = inked(narrow.pixels);
-    OA_CHECK(fitted.width < widths[1]);
-    OA_CHECK(fitted.x >= 15 && fitted.x + fitted.width <= 15 + 285);
+    OA_CHECK(fitted.width == widths[1]);
+    OA_CHECK(!kit::text_fit_records().empty());
+    OA_CHECK(kit::text_fit_records().back().wider);
+    OA_CHECK(kit::text_fit_records().back().screen == "smooth");
+    OA_CHECK(kit::text_fit_records().back().text == words);
 
     // Tracking spreads the characters: two pixels a point at 1.5x.
     Smooth tracked(900, 80, kOneAndAHalf, fonts.get());

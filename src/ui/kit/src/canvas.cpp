@@ -9,6 +9,7 @@
 #include "oa/ui/kit/canvas.hpp"
 
 #include "oa/platform/text_font.hpp"
+#include "oa/ui/kit/text.hpp"
 #include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/paint/painter.hpp"
@@ -191,13 +192,7 @@ void smooth_text(
     const paint::Box pixels = pixels_of(canvas, box);
     SmoothFace face = smooth_face(canvas, role);
     const int32_t spacing = tracking == 0 ? 0 : pixel_length(canvas, tracking);
-    int32_t width = tracked_line_width(fonts, text, face, spacing);
-    // Three quarters of the size at the least, a half rounded up.
-    const int32_t least = std::max(int32_t{1}, (face.pixel_size * 3 + 2) / 4);
-    while (pixels.width > 0 && width > pixels.width && face.pixel_size > least) {
-        --face.pixel_size;
-        width = tracked_line_width(fonts, text, face, spacing);
-    }
+    const int32_t width = tracked_line_width(fonts, text, face, spacing);
     int32_t pen = pixels.x;
     if (align == Align::centre)
         pen = pixels.x + (pixels.width - width) / 2;
@@ -208,6 +203,8 @@ void smooth_text(
     paint::Painter* painter = painter_of(canvas);
     if (painter == nullptr)
         return;
+    // The face stays at its size. A line wider than its box is recorded, not shrunk.
+    note_text_fit(text, width, pixels.x, pixels.y, pixels.width, pixels.height, pen);
     if (spacing == 0) {
         paint::paint_line(
             *painter,

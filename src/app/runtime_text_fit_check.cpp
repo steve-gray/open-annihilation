@@ -1,0 +1,498 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// --check-text-fit: opens every Open Annihilation screen in English, German,
+// French, Spanish, Italian and Simplified Chinese, at 640x480 and 1280x720.
+// The kit records a text drawn wider than its box or across another text.
+// The check fails naming the screen, the language and the text. The Game
+// files screen and the folder chooser paint through their own painter, which
+// records the same way. A startup notice drawn by the game's own windows is
+// opened too; that painter keeps no record.
+
+#include "folder_chooser_screen.hpp"
+#include "game_files_screen.hpp"
+#include "library_host.hpp"
+#include "oa_layer.hpp"
+
+#include "oa/app/game_directory.hpp"
+#include "oa/app/game_files_import.hpp"
+#include "oa/app/runtime.hpp"
+#include "oa/data/languages/interface_text.hpp"
+#include "oa/platform/preferences.hpp"
+#include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/first_run/first_run.hpp"
+#include "oa/ui/frontend_dialogs.hpp"
+#include "oa/ui/kit/components_more.hpp"
+#include "oa/ui/kit/text.hpp"
+#include "oa/ui/library/library.hpp"
+
+#include <SDL3/SDL.h>
+
+#include <cstdint>
+#include <filesystem>
+#include <iostream>
+#include <memory>
+#include <optional>
+#include <ostream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
+#include <vector>
+
+namespace oa::app {
+namespace {
+
+namespace fs = std::filesystem;
+namespace settings = oa::ui::engine_settings;
+namespace kit = oa::ui::kit;
+namespace library = oa::ui::library;
+namespace first_run = oa::ui::first_run;
+namespace dialogs = oa::ui::frontend_dialogs;
+
+/// Languages the check opens every screen in, in order.
+constexpr std::string_view kLanguages[] = {"en", "de", "fr", "es", "it", "zh-Hans"};
+
+/// Window sizes. 640x480 is the compact settings dialog; 1280x720 is larger.
+constexpr int32_t kWidths[] = {640, 1280};
+constexpr int32_t kHeights[] = {480, 720};
+
+/// How far a settings page is scrolled, in source pixels. The dialog clamps
+/// each one, so the last one draws the foot of a long page.
+constexpr int32_t kScrolls[] = {0, 200, 2000};
+
+/// How many failures the report names before it counts the rest.
+constexpr std::size_t kMostFailures = 40;
+
+/// A long catalogue sentence, so a notice and a question wrap a whole text.
+constexpr std::string_view kLongText =
+    "OA looks for new content and updates in the registries' lists. It never installs anything "
+    "until you say so.";
+
+/// A startup notice's sentence, as the main menu shows it.
+constexpr std::string_view kStartupNotice =
+    "This game includes no skirmish maps, so skirmish is not available.";
+
+/// The window the folder chooser paints on. The check's own window.
+struct FitWindow {
+    SDL_Window* window{};
+    SDL_Renderer* renderer{};
+};
+
+/// Throws when a step of the check cannot run.
+///
+/// @param ok the step passed
+/// @param what what failed
+void require(bool ok, std::string_view what) {
+    if (!ok)
+        throw std::runtime_error("text-fit check: " + std::string(what));
+}
+
+/// Returns a Library tab's name in the check's report.
+///
+/// @param tab the tab
+/// @return the name
+std::string_view tab_word(library::Tab tab) noexcept {
+    switch (tab) {
+    case library::Tab::active:
+        return "active";
+    case library::Tab::mods:
+        return "mods";
+    case library::Tab::maps:
+        return "maps";
+    case library::Tab::languages:
+        return "languages";
+    case library::Tab::updates:
+        return "updates";
+    case library::Tab::registries:
+        return "registries";
+    }
+    return "library";
+}
+
+/// Returns whether a row is a drop-down the check opens.
+///
+/// @param setting the row
+/// @return true for a drop-down
+bool choice_setting(settings::Setting setting) noexcept {
+    switch (setting) {
+    case settings::Setting::max_zoom_out:
+    case settings::Setting::max_zoom_in:
+    case settings::Setting::language:
+    case settings::Setting::pad_gyro:
+    case settings::Setting::pad_prompts:
+    case settings::Setting::zoomed_out_after:
+    case settings::Setting::interface_size:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/// The chooser's window.
+///
+/// @param context a FitWindow
+/// @return the window
+SDL_Window* fit_window(void* context) {
+    return static_cast<FitWindow*>(context)->window;
+}
+
+/// The chooser's renderer.
+///
+/// @param context a FitWindow
+/// @return the renderer
+SDL_Renderer* fit_renderer(void* context) {
+    return static_cast<FitWindow*>(context)->renderer;
+}
+
+/// Ends the Game files screen after the pass that painted it.
+///
+/// @param screen the screen
+void quit_after_paint(void* /*context*/, GameFilesScreen& screen) {
+    screen.request_quit();
+}
+
+/// One failure kept for the report.
+struct FitFailure {
+    std::string line{}; ///< screen, language, size and text
+};
+
+} // namespace
+
+void Runtime::check_text_fit() {
+    require(sdl_.window != nullptr && sdl_.renderer != nullptr, "needs the SDL presenter");
+    require(static_cast<bool>(options_.preferences_file), "needs --preferences-file");
+    set_extension_overlays_aside(true);
+
+    struct PutOverlaysBack {
+        Runtime& runtime;
+
+        ~PutOverlaysBack() { runtime.set_extension_overlays_aside(false); }
+    } put_overlays_back{*this};
+
+    preference_values_[std::string(first_run::preference_key)] =
+        std::string(first_run::preference_done);
+    preferences_dirty_ = true;
+
+    std::vector<FitFailure> failures;
+    std::size_t extra_failures = 0;
+    std::string language = "en";
+    int32_t width = kWidths[0];
+    int32_t height = kHeights[0];
+
+    const auto keep = [&] {
+        for (const kit::TextFitRecord& noted : kit::text_fit_records()) {
+            if (!noted.wider && !noted.across)
+                continue;
+            std::string line = noted.screen;
+            line += " / ";
+            line += language;
+            if (shown_language().tag != language) {
+                line += " (shown as ";
+                line += shown_language().tag;
+                line += ')';
+            }
+            line += " / ";
+            line += std::to_string(width);
+            line += 'x';
+            line += std::to_string(height);
+            line += " / ";
+            line += noted.text;
+            line += noted.wider ? " (wider than its box)" : " (across other text)";
+            bool seen = false;
+            for (const FitFailure& earlier : failures) {
+                if (earlier.line == line)
+                    seen = true;
+            }
+            if (seen)
+                continue;
+            if (failures.size() >= kMostFailures) {
+                ++extra_failures;
+                continue;
+            }
+            failures.push_back(FitFailure{std::move(line)});
+        }
+    };
+
+    const auto paint = [&](std::string_view screen) {
+        kit::set_text_fit_screen(screen);
+        kit::begin_text_fit_frame();
+        bool going = true;
+        run_frame(going);
+        require(going, std::string(screen) + ": a frame ended the run");
+        // The first frame settles the size class. The second is the one read.
+        kit::begin_text_fit_frame();
+        going = true;
+        run_frame(going);
+        require(going, std::string(screen) + ": a frame ended the run");
+        keep();
+    };
+
+    const auto close_covering = [&] {
+        dialogs::reset_dialogs();
+        if (LayerScreen* notice = oa_layer().find(NoticeScreen::screen_name))
+            oa_layer().close(notice);
+        if (LayerScreen* question = oa_layer().find(QuestionScreen::screen_name))
+            oa_layer().close(question);
+        if (LayerScreen* welcome = oa_layer().find("first-run"))
+            oa_layer().close(welcome);
+        close_library();
+        if (engine_settings_dialog() != nullptr)
+            take_settings_screen_action(settings::DialogAction::cancelled);
+        else if (LayerScreen* settings_screen = oa_layer().find("settings"))
+            oa_layer().close(settings_screen);
+    };
+
+    const auto open_menu = [&](settings::Dialog& dialog, int32_t control, std::string_view screen) {
+        const settings::EngineSettings chosen = dialog.chosen;
+        const settings::DownloadsOffer offer = dialog.downloads;
+        const std::vector<settings::InstallIdChoice> chosen_ids = dialog.install_id_chosen;
+        const bool welcome_again = dialog.welcome_again;
+        if (dialog.open_list != settings::no_control)
+            std::ignore = settings::dialog_key(dialog, kit::Key::escape);
+        dialog.focused = control;
+        std::ignore = settings::dialog_key(dialog, kit::Key::space);
+        if (dialog.open_list != settings::no_control) {
+            paint(screen);
+            if (dialog.open_list != settings::no_control)
+                std::ignore = settings::dialog_key(dialog, kit::Key::escape);
+        }
+        dialog.chosen = chosen;
+        dialog.downloads = offer;
+        dialog.install_id_chosen = chosen_ids;
+        dialog.welcome_again = welcome_again;
+        dialog.open_list = settings::no_control;
+    };
+
+    const auto walk_settings = [&](settings::Dialog& dialog, std::string_view prefix) {
+        const auto pages =
+            settings::dialog_pages(dialog.kind, dialog.touch, dialog.game_files, dialog.controller);
+        for (const settings::Page page : pages) {
+            dialog.page = page;
+            dialog.open_list = settings::no_control;
+            dialog.focused = settings::no_control;
+            const std::string page_name =
+                std::string(prefix) + "/" + std::string(settings::page_word(page));
+            for (const int32_t scroll : kScrolls) {
+                dialog.scroll[static_cast<std::size_t>(page)] = scroll;
+                paint(page_name);
+            }
+            const auto rows = settings::page_settings(page);
+            for (std::size_t row_at = 0; row_at < rows.size(); ++row_at) {
+                if (!choice_setting(rows[row_at]))
+                    continue;
+                open_menu(
+                    dialog,
+                    settings::first_row_control + static_cast<int32_t>(row_at),
+                    page_name + "/list"
+                );
+            }
+            if (page == settings::Page::downloads) {
+                for (int32_t row_at = 0; row_at < 4; ++row_at)
+                    open_menu(dialog, settings::first_row_control + row_at, page_name + "/list");
+            }
+        }
+    };
+
+    load(Screen::main_menu);
+    require(screen_ == Screen::main_menu, "the main menu did not open");
+    for (int32_t settle = 0; settle < 3; ++settle) {
+        bool going = true;
+        run_frame(going);
+        require(going, "the main menu ended the run");
+    }
+
+    for (std::size_t size_at = 0; size_at < 2; ++size_at) {
+        width = kWidths[size_at];
+        height = kHeights[size_at];
+        require(
+            SDL_SetWindowSize(sdl_.window, width, height) && SDL_SyncWindow(sdl_.window),
+            "the window did not take " + std::to_string(width) + "x" + std::to_string(height)
+        );
+        apply_output_mode();
+
+        for (const std::string_view choice : kLanguages) {
+            language = std::string(choice);
+            close_covering();
+            preference_values_[std::string(settings::key::language)] = language;
+            preferences_dirty_ = true;
+            oa::platform::preferences::save(preference_path_, preference_values_);
+            set_language_choice(language);
+            paint("main-menu");
+
+            open_engine_settings_from_menu();
+            settings::Dialog* dialog = engine_settings_dialog();
+            require(dialog != nullptr, "Settings did not open");
+            std::ignore = settings::set_touch_controls(*dialog, true);
+            std::ignore = settings::set_controller_section(*dialog, true, true);
+            dialog->game_files = true;
+            settings::DownloadsOffer offer;
+            offer.https_over_http = true;
+            settings::InstallIdRow ident;
+            ident.registry_id = "ridge";
+            ident.registry_name = "Ridge";
+            ident.on = true;
+            ident.id_text = "a1b2";
+            ident.made = true;
+            offer.install_ids.push_back(std::move(ident));
+            settings::set_downloads_offer(*dialog, offer);
+            walk_settings(*dialog, "settings");
+            settings::Dialog& mod_dialog =
+                open_engine_settings_dialog(settings::DialogKind::mod_options);
+            walk_settings(mod_dialog, "mod-options");
+            take_settings_screen_action(settings::DialogAction::cancelled);
+
+            const library::Tab tabs[] = {
+                library::Tab::active,
+                library::Tab::mods,
+                library::Tab::maps,
+                library::Tab::languages,
+                library::Tab::updates,
+                library::Tab::registries
+            };
+            for (const library::Tab tab : tabs) {
+                open_library(tab);
+                require(
+                    oa_layer().find(library_screen_name) != nullptr, "the Library did not open"
+                );
+                LibraryHost& host = library_host();
+                const std::string tab_name = "library/" + std::string(tab_word(tab));
+                for (const int32_t scroll : kScrolls) {
+                    host.state.list_scroll = scroll;
+                    host.state.menu = library::MenuKind::none;
+                    host.state.details_page = false;
+                    library::close_details(host.model);
+                    ++host.model_revision;
+                    paint(tab_name);
+                }
+                host.state.menu = library::MenuKind::filter;
+                ++host.model_revision;
+                paint(tab_name + "/filter");
+                host.state.menu = library::MenuKind::tags;
+                ++host.model_revision;
+                paint(tab_name + "/tags");
+                host.state.menu = library::MenuKind::none;
+                if (!host.model.visible.empty() && host.model.selected) {
+                    library::open_details(host.model);
+                    host.state.details_page = true;
+                    ++host.model_revision;
+                    paint(tab_name + "/details");
+                    library::close_details(host.model);
+                    host.state.details_page = false;
+                }
+            }
+            if (oa_layer().find(library_screen_name) != nullptr) {
+                kit::Question asked;
+                asked.title = "Remove";
+                asked.paragraphs.push_back(kit::Paragraph{std::string(kLongText), false});
+                asked.buttons.push_back(kit::QuestionButton{"CANCEL", false, "cancel"});
+                asked.buttons.push_back(kit::QuestionButton{"OK", true, "ok"});
+                asked.cancel_button = 0;
+                asked.primary_button = 1;
+                oa_layer().push(
+                    std::make_unique<QuestionScreen>(
+                        oa_layer(), Screen::main_menu, std::move(asked), QuestionScreen::Host{}
+                    )
+                );
+                paint("library/question");
+                if (LayerScreen* question = oa_layer().find(QuestionScreen::screen_name))
+                    oa_layer().close(question);
+            }
+            close_library();
+
+            kit::Notice told;
+            told.title = "NOTICE";
+            told.paragraphs.push_back(kit::Paragraph{std::string(kLongText), false});
+            told.open_caption = "OK";
+            told.ok_caption = "OK";
+            oa_layer().push(
+                std::make_unique<NoticeScreen>(
+                    oa_layer(), Screen::main_menu, std::move(told), NoticeScreen::Host{}
+                )
+            );
+            paint("notice");
+            if (LayerScreen* notice = oa_layer().find(NoticeScreen::screen_name))
+                oa_layer().close(notice);
+
+            const std::string_view steps[] = {"language", "online", "buttons"};
+            for (const std::string_view step : steps) {
+                require(open_staged_first_run(step), "the welcome did not open");
+                paint(std::string("first-run/") + std::string(step));
+            }
+            if (LayerScreen* welcome = oa_layer().find("first-run"))
+                oa_layer().close(welcome);
+
+            auto context = screen_context();
+            const std::string startup =
+                std::string(oa::data::languages::interface_text(kStartupNotice));
+            require(
+                dialogs::open_notice(&context, startup, {}, nullptr, nullptr),
+                "a startup notice did not open"
+            );
+            paint("startup-notice");
+            dialogs::reset_dialogs();
+
+            std::error_code here_error;
+            const fs::path here = fs::current_path(here_error);
+            require(!here_error, "the working folder is not known");
+            const fs::path data_folder = here / "text-fit-game-files";
+            const fs::path game_folder = data_folder / "Total Annihilation";
+            std::error_code make_folder;
+            fs::create_directories(game_folder, make_folder);
+            require(!make_folder, "could not make a game files folder");
+
+            const auto run_files = [&](GameFilesEntry entry, std::string_view screen) {
+                GameFilesScreenRequest request;
+                request.window = sdl_.window;
+                request.renderer = sdl_.renderer;
+                request.entry = entry;
+                request.paths = oa::app::game_files::import_paths(game_folder, data_folder);
+                request.version = game_files_version_text();
+                request.preferences_file = options_.preferences_file;
+                request.user_folder = options_.user_folder;
+                request.players_own_profile = false;
+                request.check.pass = quit_after_paint;
+                kit::set_text_fit_screen(screen);
+                kit::begin_text_fit_frame();
+                std::ignore = run_game_files_screen(request);
+                keep();
+                apply_output_mode();
+            };
+            run_files(GameFilesEntry::manage, "game-files/manage");
+            run_files(GameFilesEntry::first_run, "game-files/first-run");
+
+            FitWindow shown{sdl_.window, sdl_.renderer};
+            FolderChooserDisplayHooks hooks;
+            hooks.context = &shown;
+            hooks.window = fit_window;
+            hooks.renderer = fit_renderer;
+            GameFilesNeeded needed;
+            needed.needed = true;
+            needed.chooser = true;
+            std::optional<GameDirectory> chosen_folder;
+            kit::begin_text_fit_frame();
+            std::ignore = run_folder_chooser_until_resolved(options_, hooks, needed, chosen_folder);
+            keep();
+            apply_output_mode();
+            require(!chosen_folder, "the folder chooser kept a folder");
+        }
+    }
+
+    close_covering();
+    if (failures.empty()) {
+        std::cout << "text-fit check: every screen fits in en, de, fr, es, it and zh-Hans"
+                  << " at 640x480 and 1280x720\n";
+        return;
+    }
+    std::string report = "text-fit check: text does not fit:\n";
+    for (const FitFailure& failure : failures) {
+        report += failure.line;
+        report += '\n';
+    }
+    if (extra_failures != 0)
+        report += "and " + std::to_string(extra_failures) + " more\n";
+    throw std::runtime_error(report);
+}
+
+} // namespace oa::app

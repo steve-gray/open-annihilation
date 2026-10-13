@@ -178,9 +178,7 @@ void rule_rect(const Canvas& canvas, const Rect& rect, Colour ink);
 /// The smooth form draws it in the modern fonts, antialiased, at
 /// lround(smooth_text_points * scale) pixels per em, bold as
 /// smooth_text_bold says, its tracking lround(tracking * scale) pixels.
-/// Text wider than the box at that size steps down a pixel at a time until it
-/// fits, to three quarters of its size at the least, as the game font's text
-/// keeps to the boxes the layout measured it into.
+/// Text wider than the box at that size keeps its size and is recorded.
 ///
 /// @param canvas where it is drawn
 /// @param role which font

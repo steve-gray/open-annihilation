@@ -677,11 +677,11 @@ void each_section_shows_its_rows() {
           "Mouse wheel zoom",
           "Scroll to zoom the battlefield in and out.",
           "Maximum zoom out",
-          "As far as the view always went: 1/6 of normal",
-          "size with Full hardware acceleration, else 1/2.",
+          "As far as the view always went: 1/6 of normal size",
+          "with Full hardware acceleration, else 1/2.",
           "Maximum zoom in",
-          "In to 4x normal size at most.",
-          "The wheel, a pinch and a controller stop there.",
+          "In to 4x normal size at most. The wheel, a pinch",
+          "and a controller stop there.",
           "OFF",
           "ON",
           "RESTORE DEFAULTS",
@@ -704,8 +704,8 @@ void each_section_shows_its_rows() {
     parts = settings::dialog_layout(scrolled);
     for (const std::string_view text :
          {"View past the map's edge",
-          "Up to half the battlefield past the map's edges;",
-          "a zoom keeps the ground under the pointer.",
+          "Up to half the battlefield past the map's edges; a",
+          "zoom keeps the ground under the pointer.",
           "Select groups without Alt",
           "A number key selects its group on its own."})
         CHECK(find_part(parts, text, settings::no_control) != nullptr);
@@ -855,15 +855,15 @@ void language_and_text_shows_a_language_five_switches_and_a_size() {
          {"Language & Text",
           "LANGUAGE & TEXT",
           "Language",
-          "The game's own text and unit names, where its",
-          "data has them in the language.",
+          "The game's own text and unit names, where its data",
+          "has them in the language.",
           "System default (English)",
           "Use modern fonts for game text",
-          "Modern fonts for in-game text,",
-          "including internationalization.",
+          "Modern fonts for in-game text, including",
+          "internationalization.",
           "Text size",
-          "The size of game text in the modern fonts.",
-          "Larger sizes are easier to read.",
+          "The size of game text in the modern fonts. Larger",
+          "sizes are easier to read.",
           "80%"})
         CHECK(find_part(parts, text, settings::no_control) != nullptr);
     // The seven are taller than the view by 188 rows: the switches under
@@ -1273,10 +1273,11 @@ void available_languages_at(oa::ui::kit::SizeClass size_class) {
     // Nothing is downloading: the hint is the page's own two lines.
     auto closed = settings::dialog_layout(dialog);
     CHECK(
-        find_part(closed, "The game's own text and unit names, where its", settings::no_control) !=
-        nullptr
+        find_part(
+            closed, "The game's own text and unit names, where its data", settings::no_control
+        ) != nullptr
     );
-    CHECK(find_part(closed, "data has them in the language.", settings::no_control) != nullptr);
+    CHECK(find_part(closed, "has them in the language.", settings::no_control) != nullptr);
     CHECK(find_part(closed, "Downloads, then switches to it.", settings::no_control) == nullptr);
 
     const auto field = geometry::open_rows(dialog).rows.rows[0].control_area;
@@ -1632,8 +1633,8 @@ void text_size_waits_for_the_modern_fonts() {
     for (const std::string_view text :
          {"Text size",
           "Needs modern fonts",
-          "The size of game text in the modern fonts.",
-          "The game's own fonts have fixed sizes.",
+          "The size of game text in the modern fonts. The",
+          "game's own fonts have fixed sizes.",
           "80%"})
         CHECK(find_part(parts, text, settings::no_control) != nullptr);
     CHECK(find_part(parts, "Larger sizes are easier to read.", settings::no_control) == nullptr);
@@ -1666,9 +1667,7 @@ void text_size_waits_for_the_modern_fonts() {
     );
     CHECK(
         find_part(
-            settings::dialog_layout(dialog),
-            "Larger sizes are easier to read.",
-            settings::no_control
+            settings::dialog_layout(dialog), "sizes are easier to read.", settings::no_control
         ) != nullptr
     );
     // A lock the game puts on Text size is kept, whatever the switch.
@@ -2010,16 +2009,18 @@ void the_level_strip_picks_a_level() {
     CHECK(
         find_part(
             settings::dialog_layout(dialog),
-            "Units drawn at 8x and scaled down.",
+            "Units drawn at 8x and scaled down. Needs a fast",
             settings::no_control
         ) != nullptr
     );
     dialog.chosen.anti_aliasing = settings::AntiAliasing::x16;
     const auto demanding = settings::dialog_layout(dialog);
     CHECK(
-        find_part(demanding, "Units drawn at 16x and scaled down.", settings::no_control) != nullptr
+        find_part(
+            demanding, "Units drawn at 16x and scaled down. Needs a fast", settings::no_control
+        ) != nullptr
     );
-    CHECK(find_part(demanding, "Needs a fast CPU.", settings::no_control) != nullptr);
+    CHECK(find_part(demanding, "CPU.", settings::no_control) != nullptr);
     // While frames are drawn in Full the hint says what the level does
     // there, at the factor in use, and never asks for a fast processor.
     settings::AccelerationStatus full = dialog.acceleration;
@@ -2029,12 +2030,12 @@ void the_level_strip_picks_a_level() {
     // The row asks for 16x: four across is fewer than asked, which the
     // second line says.
     CHECK(
-        find_part(in_full, "In Full the card draws 4x4 samples a pixel", settings::no_control) !=
-        nullptr
+        find_part(
+            in_full, "In Full the card draws 4x4 samples a pixel the", settings::no_control
+        ) != nullptr
     );
     CHECK(
-        find_part(in_full, "the most this window allows, scaled down.", settings::no_control) !=
-        nullptr
+        find_part(in_full, "most this window allows, scaled down.", settings::no_control) != nullptr
     );
     CHECK(find_part(in_full, "Needs a fast CPU.", settings::no_control) == nullptr);
     full.full_supersample = 16;
@@ -2042,11 +2043,11 @@ void the_level_strip_picks_a_level() {
     const auto at_sixteen = settings::dialog_layout(dialog);
     CHECK(
         find_part(
-            at_sixteen, "In Full the card draws 16x16 samples a pixel", settings::no_control
+            at_sixteen, "In Full the card draws 16x16 samples a pixel and", settings::no_control
         ) != nullptr
     );
     CHECK(
-        find_part(at_sixteen, "and scales them down for smoother edges.", settings::no_control) !=
+        find_part(at_sixteen, "scales them down for smoother edges.", settings::no_control) !=
         nullptr
     );
     full.full_supersample = 2;
@@ -2054,7 +2055,7 @@ void the_level_strip_picks_a_level() {
     CHECK(
         find_part(
             settings::dialog_layout(dialog),
-            "In Full the card draws 2x2 samples a pixel",
+            "In Full the card draws 2x2 samples a pixel the",
             settings::no_control
         ) != nullptr
     );
@@ -2063,7 +2064,7 @@ void the_level_strip_picks_a_level() {
     CHECK(
         find_part(
             settings::dialog_layout(dialog),
-            "In Full the graphics card draws the view 1:1;",
+            "In Full the graphics card draws the view 1:1; a",
             settings::no_control
         ) != nullptr
     );
@@ -2072,7 +2073,7 @@ void the_level_strip_picks_a_level() {
     CHECK(
         find_part(
             settings::dialog_layout(dialog),
-            "Units drawn at 16x and scaled down.",
+            "Units drawn at 16x and scaled down. Needs a fast",
             settings::no_control
         ) != nullptr
     );
@@ -3174,10 +3175,7 @@ void the_graphics_page_scrolls_its_rows() {
     CHECK(find_part(last, "After zoom", settings::no_control) != nullptr);
     CHECK(find_part(last, "Window frame", settings::no_control) == nullptr);
     CHECK(find_part(last, "Interface size", settings::no_control) == nullptr);
-    CHECK(
-        find_part(last, "Far out on a large map, needs a fast CPU.", settings::no_control) !=
-        nullptr
-    );
+    CHECK(find_part(last, "on a large map, needs a fast CPU.", settings::no_control) != nullptr);
     CHECK(find_part(last, "Needs Dots", settings::no_control) != nullptr);
 
     // Tab from no focus: the first three rows at 0, Hardware acceleration at
@@ -6547,8 +6545,8 @@ void game_files_shows_what_is_installed_the_backups_and_the_folder() {
           "3.1c · Core Contingency · Battle Tactics · music",
           "1.1 GB · 37 GB free on this tablet",
           "Include in device backups",
-          "After restoring this tablet from a backup,",
-          "add the game files again.",
+          "After restoring this tablet from a backup, add",
+          "the game files again.",
           "Where the files are",
           "In the file manager: Open Annihilation ›",
           "Total Annihilation"})
@@ -6971,8 +6969,8 @@ void touch_shows_its_rows_and_their_values() {
     for (const std::string_view text :
          {"TOUCH",
           "One-finger drag",
-          "Automatic: a selection box on a tablet,",
-          "scrolling on a phone.",
+          "Automatic: a selection box on a tablet, scrolling",
+          "on a phone.",
           "Automatic",
           "Box",
           "Scroll",
@@ -6980,8 +6978,8 @@ void touch_shows_its_rows_and_their_values() {
           "How long a finger or button is held for a hold.",
           "350 ms",
           "QUEUE and ADD",
-          "A tapped QUEUE, ADD or x5 stays on",
-          "until it is tapped again.",
+          "A tapped QUEUE, ADD or x5 stays on until it is",
+          "tapped again.",
           "Stay on",
           "One action",
           "Haptics",
@@ -6992,8 +6990,8 @@ void touch_shows_its_rows_and_their_values() {
     parts = settings::dialog_layout(dialog);
     for (const std::string_view text :
          {"Left-handed layout",
-          "The minimap and the thumb controls on the",
-          "right, the orders on the left.",
+          "The minimap and the thumb controls on the right,",
+          "the orders on the left.",
           "Control size",
           "The size of the touch controls; the game's own",
           "screens keep theirs.",
@@ -7022,19 +7020,25 @@ void touch_shows_its_rows_and_their_values() {
     CHECK(click_caption(settings::first_row_control, "Box") == DialogAction::changed);
     CHECK(dialog.chosen.touch_drag == settings::TouchDrag::box);
     CHECK(
-        find_part(settings::dialog_layout(dialog), "A drag draws a selection box;", -1) != nullptr
+        find_part(
+            settings::dialog_layout(dialog), "A drag draws a selection box; two fingers scroll", -1
+        ) != nullptr
     );
     CHECK(click_caption(settings::first_row_control, "Scroll") == DialogAction::changed);
     CHECK(dialog.chosen.touch_drag == settings::TouchDrag::scroll);
     CHECK(
-        find_part(settings::dialog_layout(dialog), "hold, then drag, for a selection box.", -1) !=
-        nullptr
+        find_part(
+            settings::dialog_layout(dialog), "A drag scrolls the map; hold, then drag, for a", -1
+        ) != nullptr
     );
     CHECK(click_caption(settings::first_row_control + 2, "One action") == DialogAction::changed);
     CHECK(dialog.chosen.touch_latches == settings::TouchLatches::one_action);
     CHECK(
-        find_part(settings::dialog_layout(dialog), "after the next order or selection.", -1) !=
-        nullptr
+        find_part(
+            settings::dialog_layout(dialog),
+            "A tapped QUEUE, ADD or x5 turns off after the next",
+            -1
+        ) != nullptr
     );
 
     // The hold delay: ten stops of 50 ms from 250 to 700, each its own value.
@@ -7106,8 +7110,8 @@ void menu_scaling_and_native_density_show_and_change() {
     auto parts = settings::dialog_layout(dialog);
     for (const std::string_view text :
          {"Menu scaling",
-          "The menus fill the window, every pixel",
-          "as wide as the next.",
+          "The menus fill the window, every pixel as wide as",
+          "the next.",
           "Sharp",
           "Whole steps",
           "Unfiltered"})
@@ -7133,13 +7137,17 @@ void menu_scaling_and_native_density_show_and_change() {
     CHECK(dialog.chosen.menu_scaling == settings::MenuScaling::whole_steps);
     CHECK(
         find_part(
-            settings::dialog_layout(dialog), "The largest whole-number scale that fits:", -1
+            settings::dialog_layout(dialog), "The largest whole-number scale that fits: smaller", -1
         ) != nullptr
     );
     CHECK(click_caption("Unfiltered") == DialogAction::changed);
     CHECK(dialog.chosen.menu_scaling == settings::MenuScaling::unfiltered);
     CHECK(
-        find_part(settings::dialog_layout(dialog), "as the game always drew them.", -1) != nullptr
+        find_part(
+            settings::dialog_layout(dialog),
+            "The menus fill the window, unfiltered, as the game",
+            -1
+        ) != nullptr
     );
     // The switch, by a press and by Space.
     const auto density = geometry::open_rows(density_page).rows.rows[5].control_area;
@@ -7210,8 +7218,8 @@ void explosion_flash_shows_and_changes() {
           "Off",
           "Reduced",
           "Full",
-          "Explosions light up the ground as the game",
-          "drew it, or less where a mod asks."})
+          "Explosions light up the ground as the game drew",
+          "it, or less where a mod asks."})
         CHECK(find_part(parts, text, settings::no_control) != nullptr);
 
     // A click on one of the strip's captions picks it, and the hint follows.
@@ -7228,16 +7236,20 @@ void explosion_flash_shows_and_changes() {
     CHECK(dialog.chosen.explosion_flash == settings::ExplosionFlash::reduced);
     parts = settings::dialog_layout(dialog);
     CHECK(
-        find_part(parts, "Explosions light up the ground at half", settings::no_control) != nullptr
+        find_part(
+            parts, "Explosions light up the ground at half strength,", settings::no_control
+        ) != nullptr
     );
-    CHECK(find_part(parts, "strength, or less where a mod asks.", settings::no_control) != nullptr);
+    CHECK(find_part(parts, "or less where a mod asks.", settings::no_control) != nullptr);
     CHECK(click_caption("Off") == DialogAction::changed);
     CHECK(dialog.chosen.explosion_flash == settings::ExplosionFlash::off);
     parts = settings::dialog_layout(dialog);
     CHECK(
-        find_part(parts, "Explosions do not light up the ground,", settings::no_control) != nullptr
+        find_part(
+            parts, "Explosions do not light up the ground, whatever a", settings::no_control
+        ) != nullptr
     );
-    CHECK(find_part(parts, "whatever a mod asks for.", settings::no_control) != nullptr);
+    CHECK(find_part(parts, "mod asks for.", settings::no_control) != nullptr);
     // The keys step it a level at a time.
     dialog.focused = settings::first_row_control + 6;
     CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
@@ -7276,8 +7288,8 @@ void zoomed_out_units_show_and_change() {
           "Rendered",
           "Dots",
           "Icons",
-          "Units are drawn as models at every zoom.",
-          "Far out on a large map, needs a fast CPU.",
+          "Units are drawn as models at every zoom. Far out",
+          "on a large map, needs a fast CPU.",
           "After zoom",
           "Needs Dots",
           "1/6"})
@@ -7300,22 +7312,20 @@ void zoomed_out_units_show_and_change() {
     CHECK(dialog.chosen.zoomed_out_units == settings::ZoomedOutUnits::dots);
     parts = settings::dialog_layout(dialog);
     CHECK(
-        find_part(parts, "Past After zoom, each unit is a dot of its", settings::no_control) !=
-        nullptr
+        find_part(
+            parts, "Past After zoom, each unit is a dot of its owner's", settings::no_control
+        ) != nullptr
     );
-    CHECK(
-        find_part(parts, "owner's colour, framed while selected.", settings::no_control) != nullptr
-    );
+    CHECK(find_part(parts, "colour, framed while selected.", settings::no_control) != nullptr);
     // With Dots, After zoom is free, and its hint names its choice.
     CHECK(find_part(parts, "Needs Dots", settings::no_control) == nullptr);
     CHECK(geometry::open_rows(dialog).rows.rows[8].lock == Lock::none);
     CHECK(
-        find_part(parts, "Dots farther out than 1/6 of normal size.", settings::no_control) !=
-        nullptr
+        find_part(
+            parts, "Dots farther out than 1/6 of normal size. Closer", settings::no_control
+        ) != nullptr
     );
-    CHECK(
-        find_part(parts, "Closer in, units are drawn as models.", settings::no_control) != nullptr
-    );
+    CHECK(find_part(parts, "in, units are drawn as models.", settings::no_control) != nullptr);
     // The keys: Right from Dots reaches no Icons; Left gives Rendered back.
     dialog.focused = settings::first_row_control + 7;
     CHECK(settings::dialog_key(dialog, DialogKey::right) != DialogAction::changed);
@@ -7328,7 +7338,7 @@ void zoomed_out_units_show_and_change() {
     CHECK(
         find_part(
             settings::dialog_layout(dialog),
-            "Dots farther out than 1/8 of normal size.",
+            "Dots farther out than 1/8 of normal size. Closer",
             settings::no_control
         ) != nullptr
     );
@@ -7364,8 +7374,8 @@ void window_frame_shows_and_changes() {
          {"Window frame",
           "Hidden in play",
           "Always shown",
-          "A window hides its title bar and borders",
-          "while a game is played; menus show them."})
+          "A window hides its title bar and borders while a",
+          "game is played; menus show them."})
         CHECK(find_part(parts, text, settings::no_control) != nullptr);
 
     // A click on Always shown picks it, and the hint follows.
@@ -7376,10 +7386,11 @@ void window_frame_shows_and_changes() {
     CHECK(dialog.chosen.window_frame == settings::WindowFrame::always_shown);
     parts = settings::dialog_layout(dialog);
     CHECK(
-        find_part(parts, "A window shows its title bar and borders", settings::no_control) !=
-        nullptr
+        find_part(
+            parts, "A window shows its title bar and borders on every", settings::no_control
+        ) != nullptr
     );
-    CHECK(find_part(parts, "on every screen, a game's included.", settings::no_control) != nullptr);
+    CHECK(find_part(parts, "screen, a game's included.", settings::no_control) != nullptr);
     // The keys step it a way at a time.
     dialog.focused = settings::first_row_control + 1;
     CHECK(settings::dialog_key(dialog, DialogKey::left) == DialogAction::changed);
@@ -7656,7 +7667,10 @@ void controller_shows_its_rows_and_their_values() {
     CHECK(settings::dialog_key(dialog, DialogKey::end) == DialogAction::redraw);
     parts = settings::dialog_layout(dialog);
     for (const std::string_view text :
-         {"QUEUE and ADD", "Stay on", "One action", "A tapped QUEUE, ADD or x5 stays on"})
+         {"QUEUE and ADD",
+          "Stay on",
+          "One action",
+          "A tapped QUEUE, ADD or x5 stays on until it is"})
         CHECK(find_part(parts, text, settings::no_control) != nullptr);
     CHECK(settings::dialog_key(dialog, DialogKey::home) == DialogAction::redraw);
 
@@ -8879,8 +8893,10 @@ void the_larger_classes_show_more_graphics_rows() {
         // The same twelve rows, each at its Compact height: more of them show.
         CHECK(open.rows.rows.size() == compact_rows.rows.rows.size());
         for (std::size_t index = 0; index < open.rows.rows.size(); ++index) {
-            CHECK(open.rows.rows[index].top == compact_rows.rows.rows[index].top);
-            CHECK(open.rows.rows[index].height == compact_rows.rows.rows[index].height);
+            // A wider class wraps a description onto fewer lines, so a row
+            // sits no lower and no taller than it does at Compact.
+            CHECK(open.rows.rows[index].top <= compact_rows.rows.rows[index].top);
+            CHECK(open.rows.rows[index].height <= compact_rows.rows.rows[index].height);
             CHECK(open.rows.rows[index].label.height == compact_rows.rows.rows[index].label.height);
             CHECK(
                 open.rows.rows[index].control_area.height ==
@@ -9279,12 +9295,9 @@ void file_type_hint_when_the_opener_stays() {
     dialog.file_type_kept_hint.clear();
     CHECK(
         geometry::row_hint(dialog, Setting::file_type_registration, 0).text ==
-        "Open these files with the game"
+        "Open these files with the game from your file manager."
     );
-    CHECK(
-        geometry::row_hint(dialog, Setting::file_type_registration, 1).text ==
-        "from your file manager."
-    );
+    CHECK(geometry::row_hint(dialog, Setting::file_type_registration, 1).text.empty());
     CHECK(geometry::row_hint(dialog, Setting::file_type_registration, 2).text.empty());
 }
 

@@ -331,4 +331,54 @@ measured_width(const TextMeasureHooks& hooks, std::string_view text, int32_t pix
 /// @return the height, in canvas pixels
 [[nodiscard]] int32_t measured_line(const TextMeasureHooks& hooks, int32_t pixel_size, bool bold);
 
+/// One text drawn wider than its box, or across another text. A release build
+/// keeps none: recording is off there.
+struct TextFitRecord {
+    std::string screen;   ///< the screen named for this frame
+    std::string text;     ///< the text drawn
+    int32_t text_width{}; ///< how wide the text is, in the box's units
+    int32_t box_width{};  ///< the box's width, in the same units
+    bool wider{};         ///< the text is wider than its box
+    bool across{};        ///< its ink crosses another text drawn in this paint
+};
+
+/// Names the screen later records belong to. The name stays until the next call.
+///
+/// @param screen the screen, as the check should report it
+void set_text_fit_screen(std::string_view screen);
+
+/// Clears the records and this paint's ink. The screen name stays.
+void begin_text_fit_frame();
+
+/// Starts one paint: the ink used to notice text crossing other text is
+/// cleared, and the records stay, so a check can read every text of a screen
+/// after several paints.
+void text_fit_begin_paint();
+
+/// Notes a text drawn in a box. A text wider than the box, or whose ink
+/// crosses another text of this paint, is recorded. Empty text is not.
+/// Release builds record nothing.
+///
+/// @param text the text drawn
+/// @param text_width how wide it is, in the box's units
+/// @param box_x the box's left
+/// @param box_y the box's top
+/// @param box_width the box's width
+/// @param box_height the box's height
+/// @param ink_x the ink's left, after alignment
+void note_text_fit(
+    std::string_view text,
+    int32_t text_width,
+    int32_t box_x,
+    int32_t box_y,
+    int32_t box_width,
+    int32_t box_height,
+    int32_t ink_x
+);
+
+/// The records since begin_text_fit_frame. Empty in a release build.
+///
+/// @return the records
+[[nodiscard]] const std::vector<TextFitRecord>& text_fit_records();
+
 } // namespace oa::ui::kit
