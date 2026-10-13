@@ -35,6 +35,8 @@ class StatusStream {
   public:
 
     StatusStream() = default;
+
+    /// Closes the file and the output the process was started with.
     ~StatusStream();
     StatusStream(const StatusStream&) = delete;
     StatusStream& operator=(const StatusStream&) = delete;
@@ -149,8 +151,14 @@ class StatusStream {
         std::string kind;
     };
 
+    /// Writes one object as a line, with its newline, and flushes it.
+    ///
+    /// A stream with nowhere to write drops the line.
+    ///
+    /// @param json the object, without a newline
     void write_line(std::string_view json);
 
+    /// Closes the output the process was started with.
     void close_inherited() noexcept;
 
     void* writer_context_{};

@@ -13,8 +13,9 @@ process exits 0. The log goes to a scratch folder.
 
 The endpoint is only how the check drives the game. It clicks Single
 Player, Skirmish and Start, then types the developer passphrase and
-+iwin as two input requests, so the first is taken before the second is
-sent.
++IWin. Typed text is taken only while the chat line is open, so each
+line is three requests: Return opens the line, the text follows, and
+Return sends it. Each request is answered once the game has taken it.
 """
 import argparse
 import json
@@ -40,11 +41,13 @@ RUNNER = shlex.split(os.environ.get("OA_TEST_RUNNER", ""))
 # Longer than the imported checks' 120s: loading a skirmish can take that.
 MATCH_TIMEOUT = 600
 STEP_TIMEOUT = 180
+# The win is the next economy checks, then the score screen, then the quit.
+END_TIMEOUT = 90
 # SDL's Return: scancode 40, key code 13.
 RETURN_SCAN = 40
 RETURN_KEY = 13
-PASSPHRASE = "+now Film Chris Include Reload Assert"
-WIN = "+iwin"
+PASSPHRASE = "+Now Film Chris Include Reload Assert"
+WIN = "+IWin"
 
 
 def return_key(down):
@@ -53,10 +56,24 @@ def return_key(down):
             "scancode": RETURN_SCAN, "keycode": RETURN_KEY}
 
 
-def chat_line(text):
-    """Opens chat, types a line and sends it, in one input request."""
-    return [return_key(True), return_key(False), {"kind": "text", "text": text},
-            return_key(True), return_key(False)]
+def taken(client, events, what):
+    """Sends input and raises unless the game took it."""
+    answer = client.request("input", expect_screen="match", events=events)
+    if not answer.get("ok") or not isinstance(answer.get("consumed", {}).get("frame"), int):
+        raise AutomationFailure(f"{what} was answered {answer}")
+    return answer
+
+
+def say(client, text):
+    """Opens the chat line, types one line and sends it.
+
+    A text event is delivered only while the game is taking text. The
+    chat line starts that when Return opens it, so the text is its own
+    request, after that Return has been taken.
+    """
+    taken(client, [return_key(True), return_key(False)], "opening the chat line")
+    taken(client, [{"kind": "text", "text": text}], f"typing {text}")
+    taken(client, [return_key(True), return_key(False)], f"sending {text}")
 
 
 def wait_screen(client, name, timeout):
@@ -119,10 +136,10 @@ class Game:
 
     def wait_end(self):
         try:
-            status = self.process.wait(timeout=STEP_TIMEOUT)
+            status = self.process.wait(timeout=END_TIMEOUT)
         except subprocess.TimeoutExpired:
             self.stop()
-            raise AutomationFailure(f"the game did not end within {STEP_TIMEOUT} s") from None
+            raise AutomationFailure(f"the game did not end within {END_TIMEOUT} s") from None
         self._out.join(timeout=5)
         self._err.join(timeout=5)
         return status
@@ -173,12 +190,8 @@ def check(native, game_dir, workdir):
         wait_screen(client, "skirmish", STEP_TIMEOUT)
         click_control(client, "Start", "skirmish")
         wait_screen(client, "match", MATCH_TIMEOUT)
-        typed = client.request("input", expect_screen="match", events=chat_line(PASSPHRASE))
-        if not typed.get("ok"):
-            raise AutomationFailure(f"the passphrase was answered {typed}")
-        won = client.request("input", expect_screen="match", events=chat_line(WIN))
-        if not won.get("ok"):
-            raise AutomationFailure(f"+iwin was answered {won}")
+        say(client, PASSPHRASE)
+        say(client, WIN)
         status = game.wait_end()
         lines = objects(game.stdout_lines)
         if not lines:

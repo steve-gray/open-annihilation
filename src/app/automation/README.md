@@ -358,18 +358,20 @@ system's sockets elsewhere.
   `--status-file` and `--quit-after-game`, which need no `--fark` and do
   not mark the run remoted.
 - `automation-status` checks the status lines: hello, one screen line and
-  one exit line, each flushed, a game that ended, a player who left, a
-  lost connection, and the same line written to a file.
+  one exit line, each flushed, and a game that ended, whose `game_over`
+  line sits between hello and an exit of 0. It also checks a player who
+  left, a lost connection, and the same line written to a file.
 - `automation-reports` also checks how a match ended for each seat: two
   players, a team, a player who left, and a draw. `game_over` keeps this
   machine's own winner. The ended `match` line carries the shared winner.
   Neither line carries a digest of the match.
 - `native-status-stdout` (`tests/check_native_status.py`) starts a
   skirmish with `--status-stdout` and `--quit-after-game` on SDL's dummy
-  drivers. Standard output is hello, a screen, the match starting,
-  `game_over` with each player's result, and exit with reason
-  `game-ended` and code 0, and nothing else. The process exits 0. The
-  check is not run by this ticket's wave.
+  drivers. Once the chat line is open it types the developer passphrase
+  and `+IWin`, so the local side wins and the process leaves when the
+  score screen shows. Standard output is hello, a screen, the match
+  starting, `game_over` with each player's result, and exit with reason
+  `game-ended` and code 0, and nothing else. The process exits 0.
 - `automation-input` reads the device events of input requests, each kind
   with its fields and their defaults, and refuses those that cannot be
   read: no list, too many events, an unknown kind, missing or out-of-range

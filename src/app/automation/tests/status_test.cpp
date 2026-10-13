@@ -97,8 +97,9 @@ void check_lines() {
     OA_CHECK(number(exit_line, "code") == 7);
 }
 
-/// A game that ended exits 0. A player who left, or lost the connection,
-/// exits 3. A later leave does not replace a game that ended.
+/// A game that ended writes hello, its game_over line and an exit of 0. A
+/// player who left, or lost the connection, exits 3. A later leave does not
+/// replace a game that ended.
 void check_quit() {
     Sink ended;
     automation::StatusStream game;
@@ -114,8 +115,11 @@ void check_quit() {
     OA_CHECK(!game.take_quit());
     game.note_departure(true);
     game.finish(7);
-    OA_CHECK(ended.lines.size() == 2);
-    if (ended.lines.size() == 2) {
+    OA_CHECK(ended.lines.size() == 3);
+    if (ended.lines.size() == 3) {
+        const Json over = parsed_line(ended.lines[1]);
+        OA_CHECK(text(over, "event") == "game_over");
+        OA_CHECK(text(over, "outcome") == "victory");
         const Json exit_line = parsed_line(ended.lines.back());
         OA_CHECK(text(exit_line, "reason") == "game-ended");
         OA_CHECK(number(exit_line, "code") == 0);

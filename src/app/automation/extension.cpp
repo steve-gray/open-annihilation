@@ -88,6 +88,22 @@ void push_quit() {
     (void)SDL_PushEvent(&quit);
 }
 
+/// Tells whether a match is still on screen.
+///
+/// Quitting then asks whether to surrender, and that question pauses the
+/// match, so a game that has ended stays on screen. The score screen, and
+/// a match already left, have no such question.
+///
+/// @param runtime the running game
+/// @return true while the match screen still has its world
+bool match_on_screen(Runtime& runtime) {
+    const CheckHost check = oa::app::check_host(runtime);
+    if (check.screen == nullptr || check.screen(check.context) != screen_id(Screen::match))
+        return false;
+    const AutomationHost host = oa::app::automation_host(runtime);
+    return host.match_world != nullptr && host.match_world(host.context) != nullptr;
+}
+
 /// Tells whether the local player lost the connection.
 ///
 /// reject_reason 6 is the notice "You have lost connection with the game".
@@ -109,7 +125,14 @@ bool connection_lost(Runtime& runtime) {
 }
 
 /// Leaves once --quit-after-game's moment has been reached.
-void leave_if_asked() {
+///
+/// While the match is still on screen the quit waits: the system's quit
+/// would open the surrender question and pause the match.
+///
+/// @param runtime the running game
+void leave_if_asked(Runtime& runtime) {
+    if (match_on_screen(runtime))
+        return;
     if (status_take_quit())
         push_quit();
 }
@@ -151,7 +174,7 @@ void frame(void* /*context*/, Runtime& runtime, FrameStage stage) {
         automation.endpoint.serve(runtime, stage);
     if (!serving && stage == FrameStage::pump)
         report_status_frame(runtime);
-    leave_if_asked();
+    leave_if_asked(runtime);
 }
 
 /// Sends the events of a match's loading, while no frame runs (Extension::load_progress).
@@ -182,8 +205,9 @@ void load_progress(void* /*context*/, Runtime& runtime, const uint8_t* rows, siz
 /// Sends the end of the running match as it is torn down (Extension::match_event).
 ///
 /// A player who leaves before the game has ended is recorded while the
-/// match still exists. --quit-after-game then leaves, at once or once the
-/// score screen has been left.
+/// match still exists. --quit-after-game then leaves once that match is no
+/// longer on screen, and --quit-after-game=after-score once the score
+/// screen has been left.
 ///
 /// @param[in,out] runtime the running game
 /// @param event what happened to the match
@@ -199,7 +223,7 @@ void match_event(void* /*context*/, Runtime& runtime, MatchEvent event) {
         else if (status_following())
             status_on_match_gone();
     }
-    leave_if_asked();
+    leave_if_asked(runtime);
 }
 
 } // namespace
