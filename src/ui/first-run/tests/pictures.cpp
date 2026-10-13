@@ -572,6 +572,34 @@ int main(int argc, char** argv) {
     const oa::ui::kit::Frame manual = large_frame();
 
     {
+        // The pre-game window has no game fonts yet. These three are that
+        // window's language step, with a fixture pack on the carousel.
+        const struct Size {
+            const char* name;
+            int32_t width;
+            int32_t height;
+        } sizes[] = {
+            {"language-compact.png", 640, 480},
+            {"language-regular.png", 960, 540},
+            {"language-large.png", 1280, 720},
+        };
+
+        for (const Size& size : sizes) {
+            Picture picture(fonts.get(), size.width, size.height, 100);
+            picture.canvas.fonts = nullptr;
+            oa::ui::first_run::Session session = language_session(false);
+            session.model.walk = oa::ui::first_run::Walk::setup;
+            session.model.leave = oa::ui::first_run::Leave::quit;
+            oa::ui::kit::Frame frame;
+            frame.area = {0, 0, size.width, size.height};
+            frame.size_class = oa::ui::kit::size_class_of(size.width, size.height);
+            frame.scale_percent = 100;
+            draw_step(picture, session, frame, icon);
+            if (!write_png(picture, directory / size.name))
+                return 1;
+        }
+    }
+    {
         Picture picture(fonts.get(), kWidth, kHeight, 100);
         draw_step(picture, language_session(false), manual, icon);
         if (!write_png(picture, directory / "welcome.png"))

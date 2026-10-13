@@ -275,10 +275,14 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   - A carousel (`draw_carousel`, `carousel_fit`, `carousel_places`,
     `carousel_go`, `carousel_tick`, `carousel_key`, `carousel_command`,
     `carousel_pointer`): cards in a ring. The centre card faces the player.
-    Each step out turns 34°, falls back, shrinks and dims, at 0.7 then 0.3
-    of full opacity, and two cards show on each side. A move takes 0.5 s
-    and eases out. The place at a time is the same however many frames drew
-    it. Reduced motion slides the cards flat. The arrows are the caller's
+    Each step out turns 18°, falls back and shrinks. A card stays fully
+    opaque through two steps, so its name can be read and a floor drawn
+    behind the carousel does not show through the face, and fades out over
+    the third step. Two cards show on each side. A move takes 0.5 s and
+    eases out. The place at a time is the same however many frames drew it.
+    `carousel_settle` puts the centre on the selected card with no move, for
+    the moment the carousel is first shown. Reduced motion slides the cards
+    flat. The arrows are the caller's
     buttons. A pager of one bar a card lights the bar nearest the centre.
     Left and Right move one card, Enter on the centre picks it, a press on
     a side card centres it, and a swipe of 24 points or more moves one

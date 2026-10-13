@@ -243,8 +243,9 @@ class LayerScreen {
         uint8_t button,
         oa::ui::kit::Point at,
         int32_t finger_reach,
-        uint8_t /*clicks*/
+        uint8_t clicks
     ) {
+        static_cast<void>(clicks);
         return pointer(kind, button, at, finger_reach);
     }
 

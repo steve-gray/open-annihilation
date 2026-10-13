@@ -269,7 +269,7 @@ struct PrimaryAction {
 
 /// Returns a map's game name as one word of an automation name: lower case,
 /// every character outside a-z, 0-9 and the hyphen turned into a hyphen
-/// ("isle_of_ashes@archipelago" gives "isle-of-ashes-archipelago"), at most
+/// ("isle_of_ashes\@archipelago" gives "isle-of-ashes-archipelago"), at most
 /// most_word_bytes.
 ///
 /// @param name the game name, in UTF-8

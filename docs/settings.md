@@ -656,8 +656,9 @@ download sends and records.
   and [Registries](downloads.md#registries) explain adding one, mirrors and
   what "not reviewed" means.
 
-During a game RESET and EMPTY are locked ("Locked during a game."). The
-check and the install-ID switch can still change.
+During a game RESET and EMPTY are locked ("Locked during a game", as every
+other locked row says). The check and the install-ID switch can still
+change.
 
 ## Game Content
 

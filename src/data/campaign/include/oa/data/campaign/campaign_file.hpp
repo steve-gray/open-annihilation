@@ -311,7 +311,7 @@ bool campaign_load_mission_info(CampaignFile* file, const CampaignEnv* env, cons
 /// Campaigns select by mission display name. Skirmish and multiplayer sessions
 /// load the named map. A map of the base game keeps its file name as the name
 /// players see, translated when the language is not English. A pack map is
-/// named stem@id; its OTA is read at that name. Players see the name its
+/// named stem\@id; its OTA is read at that name. Players see the name its
 /// installed pack gives it (CampaignEnv::pack_index_name). The OTA's
 /// missionname is used only when the index has no entry, and another
 /// language's own key still comes first. A pack map that gives no title, or

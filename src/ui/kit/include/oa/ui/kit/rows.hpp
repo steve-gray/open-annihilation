@@ -1018,7 +1018,10 @@ struct PlacedRows {
 /// right, the label ending label_gap short of it. A locked row's lock,
 /// lock_width wide, stands label_gap left of such a control, or at the label
 /// line's right for any other row, or in the control's place when the row's
-/// hint is its status. A link stands alone at the label line's left, as wide
+/// hint is its status. A value row's value shares its label's line, or, when
+/// the view says the control stands below, the next line, ending label_gap
+/// before the lock where there is one, else before the button. A link
+/// stands alone at the label line's left, as wide
 /// as the line or its control width, and short of its lock. The hint lines
 /// follow hint_gap under the label line, small_line each, tall_hint_line_gap
 /// more between lines while tall. A slider's track and value, slider_gap
