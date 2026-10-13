@@ -118,7 +118,7 @@ constexpr uint32_t build_abort_events = 0xa;     // cancel_event | target_lost_e
 constexpr uint32_t repair_step_event = 0x8;
 constexpr uint32_t target_attacked_event = 0x10; // the guarded unit took a hit
 constexpr uint32_t guard_wait_events = 0x18;
-constexpr uint32_t get_built_wake = 0x8000; // ? a builder worked on the frame
+constexpr uint32_t get_built_wake = 0x8000; // build progress was applied to the frame
 constexpr uint32_t weapon_out_of_range_events =
     0x3000; // 0x1000: a weapon could not reach; 0x2000 ?
 constexpr uint32_t chase_wake_events = 0x40e0;
@@ -1540,13 +1540,23 @@ class TickHost::GroundMissions {
     ///     building), 0 (restart after each unit or a lost frame), 5 (done:
     ///     cancelled or count used up) or 7 (invalid).
     uint32_t building_build();
-    /// Runs one step of GetBuilt: an unfinished unit waits for its builders and
-    /// decays while none works on it. Once finished it takes on its factory's
-    /// queued moves and patrols, standing orders and squad, or parks when there
-    /// are none.
+    /// Runs one step of GetBuilt: an unfinished unit waits, then loses build
+    /// progress while no builder is applying work. Once finished it takes on
+    /// its factory's queued moves and patrols, standing orders and squad, or
+    /// parks when there are none.
+    ///
+    /// The opening wait is 300 ticks and the next is 30. After that, 11 ticks
+    /// with no construction wake take one step of build progress, and that
+    /// 11-tick wait repeats. A construction wake waits 30 ticks instead and
+    /// does not decay. Ordering a builder, and turning it into its build
+    /// stance, do not raise the wake; applying build progress does, including
+    /// a step that adds no progress. Reclaiming the frame, or repairing a
+    /// finished unit, does not raise it either.
     ///
     /// @return 1 (next phase), 2 (keep waiting), 5 (done: finished) or
     ///     7 (invalid).
+    /// @quirk The 300-tick wait is only the opening one. Later progress
+    ///     restarts the 30-tick wait, not the 300.
     uint32_t get_built();
     /// Runs one step of BeCarried: a transported unit keeps its weapons free and
     /// waits.

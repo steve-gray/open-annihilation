@@ -16,7 +16,7 @@
         "additionalProperties": false,
         "required": ["kind", "id", "downloads"],
         "properties": {
-          "kind": { "enum": ["oalang", "oamap", "oamod"] },
+          "kind": { "enum": ["oalang", "oamap", "oamod", "expansion"] },
           "id": { "type": "string", "minLength": 1, "maxLength": 64 },
           "downloads": { "type": "integer", "minimum": 0 }
         }

@@ -116,6 +116,10 @@ Every document in the repository, by what you want to do.
 - [maps/oamap-standard.md](maps/oamap-standard.md): the OAMAP standard, the
   format of a map pack's manifest (`oamap.yaml`) and its rules: the index,
   map names, what a pack holds and how a map fits.
+- [expansions/oaexp-standard.md](expansions/oaexp-standard.md): the OAEXP
+  standard, the format of an expansion package (`oaexp.yaml` inside a
+  `.oaexp`) and its rules: the built-in expansion it names, and the files
+  it may carry.
 
 ## Developing
 

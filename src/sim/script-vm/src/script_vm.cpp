@@ -1068,6 +1068,12 @@ bool Vm::set_static(std::size_t index, int32_t value) noexcept {
     return true;
 }
 
+int32_t Vm::turn_speed(uint32_t piece, uint32_t axis) const noexcept {
+    if (axis >= piece_axis_count || static_cast<std::size_t>(piece) >= program_.piece_count)
+        return 0;
+    return motions_[static_cast<std::size_t>(piece) * piece_axis_count + axis].turn_speed;
+}
+
 int32_t find_script(std::span<const char* const> script_names, const char* name) noexcept {
     if (name == nullptr)
         return -1;
