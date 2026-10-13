@@ -366,6 +366,9 @@ struct SquareDraw {
 
 /// A GAF frame drawn at a place on the battlefield.
 struct SpriteDraw {
+    /// The rendered frame. Its width, height and origin are the ones
+    /// `render_normal` produced, so a layer that reaches past the frame
+    /// record is drawn with that canvas, not with the record's box.
     const oa::formats::gaf::RenderedFrame* frame{};
     /// Where the frame's origin lies, in map pixels from the scene's first,
     /// raised by its height (place_world_point): the point the game's

@@ -3,8 +3,8 @@
 This portable C++20 component reads the pointer-based GAF animation structure
 used by Total Annihilation 3.1c. It preserves sequence and frame metadata,
 decodes raw and row-compressed palette indices with an explicit write coverage
-mask, and composites normal recursive layers using the game's hotspot and
-clipping relationship.
+mask, and composites normal recursive layers using the game's hotspot
+relationship, keeping every layer that reaches past the frame.
 
 ## Behaviour
 
@@ -15,11 +15,19 @@ clipping relationship.
 - A frame's duration is the low 16 bits of the second word of its frame-list
   item (sequence offset 44 + frame × 8).
 - Normal drawing draws simple raw/compressed frames, subtracts signed origins
-  from the target hotspot, and recursively visits layers. It selects special
-  rendering for a child whose own byte at offset 11 is nonzero.
+  from the point the frame is drawn at, and recursively visits layers. It
+  selects special rendering for a child whose own byte at offset 11 is
+  nonzero.
+- A composite frame is drawn onto a canvas that covers the frame's rectangle
+  and every layer's. The rendered origin moves with any rows or columns added
+  above or to the left, so drawing the result at the same point puts every
+  layer where drawing that layer at the point would. A layer that fits inside
+  the frame leaves the rendered size, origin and pixels unchanged. The canvas
+  keeps the frame limits: each side fits the width and height fields, and the
+  pixels stay within one frame's pixel limit.
 - Raw frames skip the transparency key; compressed frames are drawn by row
-  commands.
-- Source and destination rectangles are clipped together.
+  commands. A copy onto the rendered frame is clipped to that canvas. Callers
+  draw a rendered frame with its own width, height and origin.
 
 `parse` keeps every simple frame's decoded pixels and coverage by default.
 With `PixelData::checked` it decodes and checks them all the same, so a file
