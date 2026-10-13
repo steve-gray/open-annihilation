@@ -7,6 +7,7 @@
 
 
 
+
 [,]
 	{
 	de=,;
@@ -903,22 +904,6 @@
 	it=Base;
 	}
 
-[Base Game]
-	{
-	de=Grundspiel;
-	fr=Jeu de base;
-	es=Juego base;
-	it=Gioco di base;
-	}
-
-[Base Game (Disable Mods)]
-	{
-	de=Grundspiel (Mods ausschalten);
-	fr=Jeu de base (désactiver les mods);
-	es=Juego base (desactivar mods);
-	it=Gioco di base (disattiva i mod);
-	}
-
 [Base game]
 	{
 	de=Grundspiel;
@@ -1039,14 +1024,6 @@
 	it=Sala di battaglia · Nessun mod;
 	}
 
-[Battle room · Total Annihilation 3.1c]
-	{
-	de=Gefechtsraum · Total Annihilation 3.1c;
-	fr=Salle de bataille · Total Annihilation 3.1c;
-	es=Sala de batalla · Total Annihilation 3.1c;
-	it=Sala di battaglia · Total Annihilation 3.1c;
-	}
-
 [Battle room · playing {mod}]
 	{
 	de=Gefechtsraum · spielt {mod};
@@ -1085,14 +1062,6 @@
 	fr=Cadre;
 	es=Marco;
 	it=Riquadro;
-	}
-
-[Browse…]
-	{
-	de=Durchsuchen…;
-	fr=Parcourir…;
-	es=Explorar…;
-	it=Sfoglia…;
 	}
 
 [Build Preview]
@@ -1645,30 +1614,6 @@
 	fr=Choisis-le avec JOUER dans la Bibliothèque pour y jouer.;
 	es=Elígelo con JUGAR AHORA en la Biblioteca para jugarlo.;
 	it=Sceglilo con GIOCA ORA nella Biblioteca per giocarlo.;
-	}
-
-[Choose the folder in the system's own window.]
-	{
-	de=Wähle den Ordner im eigenen Fenster des Systems.;
-	fr=Choisis le dossier dans la fenêtre du système.;
-	es=Elige la carpeta en la ventana del sistema.;
-	it=Scegli la cartella nella finestra del sistema.;
-	}
-
-[Choose the folder its installer is in, usually Downloads.]
-	{
-	de=Wähle den Ordner, in dem sein Installationsprogramm liegt, meist Downloads.;
-	fr=Choisis le dossier de son installateur, en général Téléchargements.;
-	es=Elige la carpeta de su instalador, normalmente Descargas.;
-	it=Scegli la cartella del suo installer, di solito Download.;
-	}
-
-[Choose the folder that holds totala1.hpi, or the folder that holds the installer of the Total Annihilation demo (1997).]
-	{
-	de=Wähle den Ordner mit totala1.hpi oder den Ordner mit dem Installationsprogramm der Total Annihilation-Demo (1997).;
-	fr=Choisis le dossier qui contient totala1.hpi, ou celui qui contient l'installateur de la démo Total Annihilation (1997).;
-	es=Elige la carpeta que contiene totala1.hpi, o la carpeta que contiene el instalador de la demo de Total Annihilation (1997).;
-	it=Scegli la cartella che contiene totala1.hpi, o la cartella che contiene l'installer della demo di Total Annihilation (1997).;
 	}
 
 [Choose the folder that holds totala1.hpi.]
@@ -2949,14 +2894,6 @@
 	fr=FICHIERS DU JEU;
 	es=ARCHIVOS DEL JUEGO;
 	it=FILE DI GIOCO;
-	}
-
-[GAME FOLDER]
-	{
-	de=SPIELORDNER;
-	fr=DOSSIER DU JEU;
-	es=CARPETA DEL JUEGO;
-	it=CARTELLA DI GIOCO;
 	}
 
 [GAME FOLDER FOUND]
@@ -4527,14 +4464,6 @@
 	it=Bloccato durante una partita. Scegli il mod dal menu principale.;
 	}
 
-[Look through this computer's folders, drives and SD cards.]
-	{
-	de=Sieh die Ordner, Laufwerke und SD-Karten dieses Computers durch.;
-	fr=Parcours les dossiers, lecteurs et cartes SD de cet ordinateur.;
-	es=Revisa las carpetas, unidades y tarjetas SD de este ordenador.;
-	it=Sfoglia le cartelle, le unità e le schede SD di questo computer.;
-	}
-
 [Looking at the file]
 	{
 	de=Datei wird angesehen;
@@ -5279,14 +5208,6 @@
 	it=Non ci sono pacchetti di mappe installati.;
 	}
 
-[No mod: the game as it was made]
-	{
-	de=Kein Mod: das Spiel, wie es gemacht wurde;
-	fr=Aucun mod : le jeu tel qu'il a été fait;
-	es=Sin mod: el juego tal como se hizo;
-	it=Nessun mod: il gioco come è stato fatto;
-	}
-
 [No oamod.yaml present]
 	{
 	de=Kein oamod.yaml vorhanden;
@@ -5919,14 +5840,6 @@
 	it=Finestra delle opzioni;
 	}
 
-[Or find the folder yourself:]
-	{
-	de=Oder such den Ordner selbst:;
-	fr=Ou trouve le dossier toi-même :;
-	es=O encuentra la carpeta tú mismo:;
-	it=Oppure trova tu la cartella:;
-	}
-
 [Order: tap to arm it, then tap where it goes; tap again to take it back.]
 	{
 	de=Befehl: tippe, um ihn zu wählen, dann tippe, wohin er geht. Tippe noch einmal, um ihn zurückzunehmen.;
@@ -5997,14 +5910,6 @@
 	fr=Jusqu'à ce que toute la carte tienne dans la vue.;
 	es=Hasta que el mapa entero quepa en la vista.;
 	it=Fino a che l'intera mappa entra nella vista.;
-	}
-
-[PARENT FOLDER]
-	{
-	de=ÜBERGEORDNETER ORDNER;
-	fr=DOSSIER PARENT;
-	es=CARPETA SUPERIOR;
-	it=CARTELLA SUPERIORE;
 	}
 
 [PATROL]
@@ -6085,14 +5990,6 @@
 	fr=JOUER;
 	es=JUGAR AHORA;
 	it=GIOCA ORA;
-	}
-
-[PLAY THIS FOLDER]
-	{
-	de=DIESEN ORDNER SPIELEN;
-	fr=JOUER CE DOSSIER;
-	es=JUGAR ESTA CARPETA;
-	it=GIOCA QUESTA CARTELLA;
 	}
 
 [PLAYERS]
@@ -6309,14 +6206,6 @@
 	fr=FILE : le prochain ordre choisi est mis en file après les ordres de la sélection.;
 	es=COLA: la siguiente orden elegida se encola tras las órdenes de la selección.;
 	it=CODA: l'ordine scelto dopo viene messo in coda agli ordini della selezione.;
-	}
-
-[QUIT]
-	{
-	de=BEENDEN;
-	fr=QUITTER;
-	es=SALIR;
-	it=ESCI;
 	}
 
 [RECLAIM]
@@ -7479,14 +7368,6 @@
 	it=Schermaglia · Nessun mod;
 	}
 
-[Skirmish · Total Annihilation 3.1c]
-	{
-	de=Gefecht · Total Annihilation 3.1c;
-	fr=Escarmouche · Total Annihilation 3.1c;
-	es=Escaramuza · Total Annihilation 3.1c;
-	it=Schermaglia · Total Annihilation 3.1c;
-	}
-
 [Skirmish · playing {mod}]
 	{
 	de=Gefecht · spielt {mod};
@@ -8623,14 +8504,6 @@
 	it=Questo file;
 	}
 
-[This folder can be played: {folder}]
-	{
-	de=Dieser Ordner lässt sich spielen: {folder};
-	fr=Ce dossier peut être joué : {folder};
-	es=Esta carpeta se puede jugar: {folder};
-	it=Questa cartella si può giocare: {folder};
-	}
-
 [This folder does not hold a Total Annihilation installation]
 	{
 	de=Dieser Ordner enthält keine Installation von Total Annihilation;
@@ -8775,14 +8648,6 @@
 	it=Total Annihilation 3.1c;
 	}
 
-[Total Annihilation 3.1c as it was made, with no mod]
-	{
-	de=Total Annihilation 3.1c, wie es gemacht wurde, ohne Mod;
-	fr=Total Annihilation 3.1c tel qu'il a été fait, sans mod;
-	es=Total Annihilation 3.1c tal como se hizo, sin mod;
-	it=Total Annihilation 3.1c come è stato fatto, senza mod;
-	}
-
 [Total Annihilation demo]
 	{
 	de=Demo von Total Annihilation;
@@ -8797,22 +8662,6 @@
 	fr=Démo de Total Annihilation (1997);
 	es=Demo de Total Annihilation (1997);
 	it=Demo di Total Annihilation (1997);
-	}
-
-[Total Annihilation is on this computer in more than one place. Choose the one to play.]
-	{
-	de=Total Annihilation liegt auf diesem Computer an mehr als einem Ort. Wähl den, der gespielt wird.;
-	fr=Total Annihilation est sur cet ordinateur à plus d'un endroit. Choisis celui à jouer.;
-	es=Total Annihilation está en este ordenador en más de un sitio. Elige cuál jugar.;
-	it=Total Annihilation è su questo computer in più di un posto. Scegli quale giocare.;
-	}
-
-[Total Annihilation was found on this computer. Play it, or choose another folder.]
-	{
-	de=Total Annihilation wurde auf diesem Computer gefunden. Spiel es, oder wähl einen anderen Ordner.;
-	fr=Total Annihilation a été trouvé sur cet ordinateur. Joue-le, ou choisis un autre dossier.;
-	es=Se encontró Total Annihilation en este ordenador. Juega, o elige otra carpeta.;
-	it=Total Annihilation è stato trovato su questo computer. Giocalo, o scegli un'altra cartella.;
 	}
 
 [Total Annihilation: Commander Pack. Recognised by its size. The game is read out of it; nothing is installed.]
@@ -9253,14 +9102,6 @@
 	fr=Utiliser des polices modernes pour le texte du jeu;
 	es=Usar fuentes modernas para el texto del juego;
 	it=Usa font moderni per il testo di gioco;
-	}
-
-[Use the desktop's folder dialog]
-	{
-	de=Den Ordnerdialog des Schreibtischs verwenden;
-	fr=Utiliser le dialogue de dossier du bureau;
-	es=Usar el diálogo de carpeta del escritorio;
-	it=Usa la finestra delle cartelle della scrivania;
 	}
 
 [Use the system picker…]
