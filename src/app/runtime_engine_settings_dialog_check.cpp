@@ -1709,9 +1709,11 @@ void Runtime::check_engine_settings_dialog() {
                        state.mod_folders.end();
             };
             const auto game_folders = options_.game_folders;
+            const fs::path saved_layered = options_.layered_mod_folder;
             const fs::path game_folder =
                 game_folders.empty() ? options_.game_dir : game_folders.back();
             options_.game_folders = {mod_folder, game_folder};
+            options_.layered_mod_folder = mod_folder;
             load_engine_settings();
             require(
                 state.playing_mod_folder == picked && engine_settings().mod_folder == picked &&
@@ -1766,6 +1768,7 @@ void Runtime::check_engine_settings_dialog() {
             soft_restart_requested_ = false;
             exit_requested_ = false;
             options_.game_folders = game_folders;
+            options_.layered_mod_folder = saved_layered;
             load_engine_settings();
             library_now();
             require(
@@ -1805,9 +1808,11 @@ void Runtime::check_engine_settings_dialog() {
         // Developer Mode's overrides under the folder's own id.
         {
             const auto game_folders = options_.game_folders;
+            const fs::path saved_layered = options_.layered_mod_folder;
             const fs::path game_folder =
                 game_folders.empty() ? options_.game_dir : game_folders.back();
             options_.game_folders = {empty_folder, game_folder};
+            options_.layered_mod_folder = empty_folder;
             load_engine_settings();
             require(
                 mod_profile() == nullptr && state.profile_id == folder_overrides_id(empty_folder) &&
@@ -1817,6 +1822,7 @@ void Runtime::check_engine_settings_dialog() {
                 "overrides' id"
             );
             options_.game_folders = game_folders;
+            options_.layered_mod_folder = saved_layered;
             load_engine_settings();
         }
         // The settings as the check found them.

@@ -207,10 +207,11 @@ struct ResolvedSprite {
         return {named, 0};
     }
     const auto* fields = std::get_if<ui::gui_layout::ButtonFields>(&gadget.fields);
-    // The first panel draw skips BUTTONS0/stagebuttn for a button with the
-    // checkbox or text_list attribute.
-    constexpr uint32_t skip_default_button_gaf =
-        ui::gui_layout::attribute::checkbox | ui::gui_layout::attribute::text_list;
+    // A checkbox is filled as a bevel, with no BUTTONS0 frame. A hold button
+    // (text_list) that has no sequence of its own, such as NEWGAME's Arm and
+    // Core, still takes BUTTONS0: its normal frame while it is up, the next
+    // frame while it is down.
+    constexpr uint32_t skip_default_button_gaf = ui::gui_layout::attribute::checkbox;
     if ((static_cast<uint32_t>(gadget.common.attributes) & skip_default_button_gaf) != 0)
         return {};
     std::string fallback_name = "BUTTONS0";

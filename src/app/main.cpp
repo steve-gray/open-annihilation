@@ -890,6 +890,13 @@ int run_once(
     options.game_folders = game_directory->folders;
     if (options.game_folders.empty())
         options.game_folders = {options.game_dir};
+    options.layered_mod_folder.clear();
+    if (!game_directory->mod_folder.empty()) {
+        std::error_code absolute_error;
+        const fs::path absolute = fs::absolute(game_directory->mod_folder, absolute_error);
+        options.layered_mod_folder =
+            (absolute_error ? game_directory->mod_folder : absolute).lexically_normal();
+    }
     options.mod_profile = game_directory->profile;
     // --archive names the archives and skips the inspection; a --mod
     // profile still sets the layout the data is read by.
@@ -911,14 +918,11 @@ int run_once(
         // Its limits size the game's tables from the start, and its
         // rules reach every match.
         report_mod_profile(*options.mod_profile, game_directory->profile_warnings, std::cout);
-    } else if (
-        options.game_folders.size() > 1 &&
-        (game_directory->source != GameDirectorySource::managed || game_directory->mod_layered)
-    ) {
-        // A composed mount's extra folders are expansion bundles. Only a mod
-        // folder, which is layered first, is reported when it has no profile.
+    } else if (!options.layered_mod_folder.empty()) {
+        // Expansion bundles add folders and are not a mod. Only the mod
+        // folder is reported when it has no profile.
         std::cout << "open-annihilation: the mod folder "
-                  << path_to_utf8(options.game_folders.front())
+                  << path_to_utf8(options.layered_mod_folder)
                   << " holds no oamod.yaml; its files are layered over the game folder, "
                      "which plays by 3.1c's own rules\n";
     }

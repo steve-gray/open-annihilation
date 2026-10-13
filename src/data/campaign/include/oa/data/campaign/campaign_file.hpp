@@ -487,7 +487,9 @@ int32_t campaign_count_files(const CampaignFiles* files);
 /// Lists the campaigns of a side, NUL-separated.
 ///
 /// camps\*.TDF is counted, listed without extensions and sorted by name, then each is
-/// loaded; names whose HEADER campaignside is `side` or "ALL" are kept.
+/// loaded; names whose HEADER campaignside is `side` or "ALL" are kept. A name
+/// already kept, compared without case, is the same campaign file from a lower
+/// layer and is left out. The first copy is the top layer.
 ///
 /// @param files file services
 /// @param side side name
