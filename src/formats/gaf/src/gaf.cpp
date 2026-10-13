@@ -544,8 +544,99 @@ struct RangedPixels {
     return true;
 }
 
+/// Where a frame's top left corner sits on the canvas, in pixels.
+struct Corner {
+    int32_t x = 0;
+    int32_t y = 0;
+};
+
+/// Returns where `child` is drawn inside a parent whose top left is `parent`.
+///
+/// The child's top left is the parent's hotspot minus the child's origin.
+///
+/// @param parent canvas column and row of the parent's top left
+/// @param parent_frame the parent
+/// @param child the layer
+/// @return the child's top left, in canvas pixels
+[[nodiscard]] Corner
+child_corner(Corner parent, const Frame& parent_frame, const Frame& child) noexcept {
+    return {
+        parent.x + static_cast<int32_t>(parent_frame.origin_x) -
+            static_cast<int32_t>(child.origin_x),
+        parent.y + static_cast<int32_t>(parent_frame.origin_y) -
+            static_cast<int32_t>(child.origin_y)
+    };
+}
+
+/// The canvas a frame and its layers need: the union of their rectangles.
+struct CanvasExtent {
+    int64_t min_x = 0;
+    int64_t min_y = 0;
+    int64_t max_x = 0; ///< column just past the rightmost pixel
+    int64_t max_y = 0; ///< row just past the bottom pixel
+    bool any = false;
+};
+
+/// Includes one rectangle in `extent`. A rectangle with no pixels adds nothing.
+///
+/// @param[in,out] extent the union so far
+/// @param left column of the rectangle's left edge
+/// @param top row of the rectangle's top edge
+/// @param width columns; zero or less adds nothing
+/// @param height rows; zero or less adds nothing
+void include_rect(
+    CanvasExtent& extent, int64_t left, int64_t top, int64_t width, int64_t height
+) noexcept {
+    if (width <= 0 || height <= 0)
+        return;
+    const int64_t right = left + width;
+    const int64_t bottom = top + height;
+    if (!extent.any) {
+        extent.min_x = left;
+        extent.min_y = top;
+        extent.max_x = right;
+        extent.max_y = bottom;
+        extent.any = true;
+        return;
+    }
+    extent.min_x = std::min(extent.min_x, left);
+    extent.min_y = std::min(extent.min_y, top);
+    extent.max_x = std::max(extent.max_x, right);
+    extent.max_y = std::max(extent.max_y, bottom);
+}
+
+/// Measures the canvas that holds `source` and every layer, placed as they are drawn.
+///
+/// @param source the frame, its top left at `corner`
+/// @param corner canvas column and row of `source`'s top left before the canvas is shifted
+/// @param[in,out] extent the union
+/// @param[out] error why it failed
+/// @param depth nesting depth of `source`, from 1
+/// @return false when the layers nest deeper than the limit, or a frame's
+///     layer count does not match its layers
+[[nodiscard]] bool measure_canvas(
+    const Frame& source, Corner corner, CanvasExtent& extent, Error& error, std::size_t depth
+) {
+    if (depth > limit::nesting_depth) {
+        error = {ErrorCode::nesting_limit, 0, "GAF render nesting exceeds limit"};
+        return false;
+    }
+    include_rect(extent, corner.x, corner.y, source.width, source.height);
+    if (source.layers.empty())
+        return true;
+    if (source.layer_count != source.layers.size()) {
+        error = {ErrorCode::frame_limit, 0, "GAF model layer count does not match layers"};
+        return false;
+    }
+    for (const auto& layer : source.layers) {
+        if (!measure_canvas(layer, child_corner(corner, source, layer), extent, error, depth + 1))
+            return false;
+    }
+    return true;
+}
+
 /// Draws a frame and its layers into `destination` with its top left corner
-/// at (`left`, `top`), clipped to it.
+/// at (`left`, `top`), clipped to the canvas.
 ///
 /// @param source the frame
 /// @param[in,out] destination the canvas
@@ -583,11 +674,8 @@ struct RangedPixels {
                 };
                 return false;
             }
-            const auto child_left =
-                left + static_cast<int32_t>(source.origin_x) - static_cast<int32_t>(layer.origin_x);
-            const auto child_top =
-                top + static_cast<int32_t>(source.origin_y) - static_cast<int32_t>(layer.origin_y);
-            if (!render_into(layer, destination, child_left, child_top, error, depth + 1, ranged))
+            const Corner child = child_corner({left, top}, source, layer);
+            if (!render_into(layer, destination, child.x, child.y, error, depth + 1, ranged))
                 return false;
         }
         return true;
@@ -636,30 +724,82 @@ struct RangedPixels {
     return true;
 }
 
-/// Renders a frame and its layers onto a canvas of the frame's size.
+/// Returns whether `value` fits in an int16.
+///
+/// @param value the number
+/// @return true when it is between the int16 limits, inclusive
+[[nodiscard]] bool fits_int16(int64_t value) noexcept {
+    return value >= std::numeric_limits<int16_t>::min() &&
+           value <= std::numeric_limits<int16_t>::max();
+}
+
+/// Returns whether `value` fits in an int32.
+///
+/// @param value the number
+/// @return true when it is between the int32 limits, inclusive
+[[nodiscard]] bool fits_int32(int64_t value) noexcept {
+    return value >= std::numeric_limits<int32_t>::min() &&
+           value <= std::numeric_limits<int32_t>::max();
+}
+
+/// Renders a frame and its layers onto a canvas that covers the frame and every layer.
+///
+/// The frame's origin moves by the columns and rows added above and to the
+/// left, so drawing the result at the same point puts every layer where
+/// drawing that layer at the point would. A frame whose layers fit inside it
+/// keeps its size, origin and pixels. The canvas stays within the frame limits.
 ///
 /// @param frame the frame
 /// @param ranged where a simple frame without its pixels reads them; null
 ///     when every simple frame holds its own
-/// @return the pixels and coverage, or the first error
+/// @return the pixels, coverage, size and origin, or the first error
 [[nodiscard]] RenderResult render_frame(const Frame& frame, RangedPixels* ranged) {
-    const auto pixel_count = static_cast<std::size_t>(frame.width) * frame.height;
-    if (pixel_count > limit::pixels_per_frame) {
+    CanvasExtent extent;
+    Error error;
+    if (!measure_canvas(frame, {0, 0}, extent, error, 1))
+        return {std::nullopt, std::move(error)};
+    const int64_t span_x = extent.any ? extent.max_x - extent.min_x : 0;
+    const int64_t span_y = extent.any ? extent.max_y - extent.min_y : 0;
+    const uint64_t pixel_count = static_cast<uint64_t>(span_x) * static_cast<uint64_t>(span_y);
+    // The drawn frame keeps the same limits as a frame record: each side fits
+    // the width and height fields, and the pixels fit in one frame.
+    if (span_x < 0 || span_y < 0 || span_x > std::numeric_limits<uint16_t>::max() ||
+        span_y > std::numeric_limits<uint16_t>::max() || pixel_count > limit::pixels_per_frame) {
         return {std::nullopt, Error{ErrorCode::pixel_limit, 0, "GAF render pixels exceed limit"}};
     }
+    // Growing past the top or the left shifts the origin by the same amount.
+    const int64_t shift_x = extent.any ? -extent.min_x : 0;
+    const int64_t shift_y = extent.any ? -extent.min_y : 0;
+    const int64_t origin_x = static_cast<int64_t>(frame.origin_x) + shift_x;
+    const int64_t origin_y = static_cast<int64_t>(frame.origin_y) + shift_y;
+    if (!fits_int32(shift_x) || !fits_int32(shift_y) || !fits_int16(origin_x) ||
+        !fits_int16(origin_y)) {
+        return {std::nullopt, Error{ErrorCode::pixel_limit, 0, "GAF render pixels exceed limit"}};
+    }
+    const auto width = static_cast<uint16_t>(span_x);
+    const auto height = static_cast<uint16_t>(span_y);
+    const auto pixels = static_cast<std::size_t>(pixel_count);
     RenderedFrame rendered{
-        frame.width,
-        frame.height,
-        frame.origin_x,
-        frame.origin_y,
+        width,
+        height,
+        static_cast<int16_t>(origin_x),
+        static_cast<int16_t>(origin_y),
         frame.transparency_index,
-        std::vector<uint8_t>(pixel_count, frame.transparency_index),
-        std::vector<uint8_t>(pixel_count, 0)
+        std::vector<uint8_t>(pixels, frame.transparency_index),
+        std::vector<uint8_t>(pixels, 0)
     };
-    Error error;
     // A top-level frame's own special-render flag is ignored; only a child's
-    // flag selects special rendering.
-    if (!render_into(frame, rendered, 0, 0, error, 1, ranged))
+    // flag selects special rendering. The root rectangle sits at the shift:
+    // how far the canvas grew past the frame's top or left.
+    if (!render_into(
+            frame,
+            rendered,
+            static_cast<int32_t>(shift_x),
+            static_cast<int32_t>(shift_y),
+            error,
+            1,
+            ranged
+        ))
         return {std::nullopt, std::move(error)};
     return {std::move(rendered), std::nullopt};
 }

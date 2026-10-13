@@ -210,9 +210,17 @@ struct ReadHooks {
 };
 
 struct RenderedFrame {
+    /// Drawn width, in pixels. The frame record's width when every layer fits
+    /// inside it, and wider when a layer reaches past its left or right edge.
     uint16_t width = 0;
+    /// Drawn height, in pixels. The frame record's height when every layer
+    /// fits inside it, and taller when a layer reaches past its top or bottom.
     uint16_t height = 0;
+    /// Hotspot column. The frame record's origin when every layer fits inside
+    /// it; moved with the canvas when a layer reaches past the top or the
+    /// left, so drawing the frame at one point keeps every layer there.
     int16_t origin_x = 0;
+    /// Hotspot row, moved with the canvas as origin_x is.
     int16_t origin_y = 0;
     uint8_t transparency_index = 0;
     std::vector<uint8_t> pixels;
@@ -269,14 +277,21 @@ struct RenderResult {
 
 /// Renders a frame and its layers as the game draws them normally.
 ///
-/// Layers are drawn recursively into a frame-sized palette-index canvas with
-/// signed origins subtracted from the parent's hotspot and clipped to it. The
-/// frame's own special-render flag is ignored, as 3.1c ignores it when it
-/// draws a frame.
+/// Layers are drawn recursively. A layer's top left is its parent's hotspot
+/// minus the layer's own origin, so the layer lands where drawing that layer
+/// at the frame's point would. The canvas covers the frame's rectangle and
+/// every layer's. Its origin is the frame's, moved by however far the canvas
+/// grew past the frame's top and left, so drawing the result at the same
+/// point puts every layer where it was. A frame whose layers fit inside it
+/// keeps its size, its origin and its pixels. The canvas still has to fit in
+/// one frame: each side in the width and height fields, and no more than
+/// limit::pixels_per_frame pixels. The frame's own special-render flag is
+/// ignored, as 3.1c ignores it when it draws a frame.
 ///
 /// @param frame parsed frame
-/// @return pixels and coverage, or unsupported_special_render when a child
-///         needs special blending
+/// @return pixels, coverage, size and origin, or unsupported_special_render
+///     when a child needs special blending, or pixel_limit when the canvas
+///     exceeds the frame limits
 [[nodiscard]] RenderResult render_normal(const Frame& frame);
 
 /// Renders a frame of a checked parse as render_normal renders it decoded,
@@ -290,9 +305,9 @@ struct RenderResult {
 ///
 /// @param frame parsed frame, as `parse` gives it with PixelData::checked
 /// @param reader where the file's bytes are read from
-/// @return the pixels and coverage render_normal gives for the frame
-///     decoded; unreadable when a read fails, or the error `parse` gives for
-///     bytes that do not decode
+/// @return the pixels, coverage, size and origin render_normal gives for the
+///     frame decoded; unreadable when a read fails, or the error `parse`
+///     gives for bytes that do not decode
 [[nodiscard]] RenderResult render_ranged(const Frame& frame, const ReadHooks& reader);
 
 /// Returns the bytes `parse` keeps for a frame's decoded pixels and coverage,
