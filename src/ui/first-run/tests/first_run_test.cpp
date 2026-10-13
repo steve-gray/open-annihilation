@@ -673,6 +673,173 @@ void check_leave_word() {
     }
 }
 
+/// The y of the first item whose text is `words`, or -1.
+int32_t line_y(const oa::ui::first_run::Scene& scene, std::string_view words) {
+    for (const oa::ui::kit::Item& item : scene.list.items) {
+        if (item.text == words)
+            return item.rect.y;
+    }
+    return -1;
+}
+
+/// A finished copy reads 100%, lists only the bundles it holds, and counts down.
+void check_copying_layout() {
+    oa::ui::kit::Frame frame;
+    frame.area = {0, 0, 1280, 720};
+    frame.size_class = oa::ui::kit::SizeClass::large;
+
+    Session session;
+    session.model.walk = Walk::setup;
+    session.model.leave = Leave::quit;
+    session.model.step = Step::copying;
+    session.model.copy.from = "GOG";
+    session.model.copy.overall = "38 of 38 · 100%";
+    session.model.copy.done = 1000;
+    session.model.copy.whole = 1000;
+    session.model.copy.checked = true;
+    session.model.copy.verdict = "All files match";
+    session.copy_continue_ms = 3000;
+
+    oa::ui::first_run::CopyBundle base;
+    base.name = "Total Annihilation";
+    base.file = "rev31.gp3";
+    base.amount = "All files match";
+    base.done = 1000;
+    base.whole = 1000;
+    base.phase = oa::ui::first_run::CopyPhase::done;
+    oa::ui::first_run::CopyBundle music;
+    music.name = "Music";
+    music.file = "music/9.mp3";
+    music.amount = "17 of 18 tracks";
+    music.done = 1000;
+    music.whole = 1000;
+    music.phase = oa::ui::first_run::CopyPhase::done;
+    music.note = true;
+    session.model.copy.bundles.push_back(std::move(base));
+    session.model.copy.bundles.push_back(std::move(music));
+
+    const auto finished = oa::ui::first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(next_caption(finished) == "Continue · 3");
+    OA_CHECK(shows_line(finished, "38 of 38 · 100%"));
+    OA_CHECK(shows_line(finished, "All files match"));
+    OA_CHECK(shows_line(finished, "17 of 18 tracks"));
+    OA_CHECK(!shows_line(finished, "music/9.mp3"));
+    OA_CHECK(!shows_line(finished, "rev31.gp3"));
+    OA_CHECK(!shows_line(finished, "Total Annihilation demo"));
+    const int32_t overall_y = line_y(finished, "38 of 38 · 100%");
+    const int32_t verdict_y = line_y(finished, "All files match");
+    OA_CHECK(overall_y >= 0 && verdict_y > overall_y);
+    bool panel = false;
+    bool rule = false;
+    int32_t panel_width = 0;
+    for (const oa::ui::kit::Item& item : finished.list.items) {
+        if (item.role == oa::ui::kit::Role::fill && item.colour == oa::ui::kit::colour::list) {
+            panel = true;
+            panel_width = item.rect.width;
+        }
+        if (item.role == oa::ui::kit::Role::bevel && item.colour == oa::ui::kit::colour::edge_light)
+            OA_CHECK(item.rect.width == panel_width || panel_width == 0);
+        if (item.role == oa::ui::kit::Role::rule)
+            rule = true;
+    }
+    OA_CHECK(panel);
+    OA_CHECK(rule);
+    bool inner_bar = false;
+    for (const oa::ui::kit::Item& item : finished.list.items) {
+        if (item.role != oa::ui::kit::Role::progress || item.rect.height != 6)
+            continue;
+        inner_bar = item.rect.width == panel_width - 2 * oa::ui::kit::compact_metrics.padding;
+    }
+    OA_CHECK(inner_bar);
+    bool tracks_hint = false;
+    for (const oa::ui::kit::Item& item : finished.list.items) {
+        if (item.text == "17 of 18 tracks")
+            tracks_hint = item.colour == oa::ui::kit::colour::hint;
+    }
+    OA_CHECK(tracks_hint);
+
+    session.model.copy.checked = false;
+    session.model.copy.running = true;
+    session.model.copy.verdict.clear();
+    session.copy_continue_ms = -1;
+    session.model.copy.overall = "12 of 38 · 31%";
+    session.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::copying;
+    session.model.copy.bundles.front().file = "rev31.gp3";
+    const auto running = oa::ui::first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(next_caption(running) == "Pause");
+    OA_CHECK(shows_line(running, "rev31.gp3"));
+    OA_CHECK(!shows_line(running, "music/9.mp3"));
+
+    session.model.copy.checked = true;
+    session.model.copy.running = false;
+    session.model.copy.hashing = false;
+    session.model.copy.paused = false;
+    session.model.copy.verdict = "All files match";
+    session.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::done;
+    session.copy_continue_armed = true;
+    session.copy_continue_stopped = false;
+    session.copy_continue_ms = -1;
+    oa::ui::first_run::tick(session, 16);
+    OA_CHECK(session.copy_continue_ms == oa::ui::first_run::copy_continue_wait_ms);
+    oa::ui::first_run::tick(session, 1000);
+    OA_CHECK(session.copy_continue_ms == oa::ui::first_run::copy_continue_wait_ms - 1000);
+    const auto counting = oa::ui::first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(next_caption(counting) == "Continue · 2");
+
+    std::ignore = oa::ui::first_run::pointer(
+        session, counting, oa::ui::first_run::PointerKind::move, {20, 20}, 0, 1
+    );
+    OA_CHECK(session.copy_continue_ms == oa::ui::first_run::copy_continue_wait_ms - 1000);
+    Session wheeled = session;
+    std::ignore = oa::ui::first_run::wheel(wheeled, counting, 1.F);
+    OA_CHECK(wheeled.copy_continue_stopped);
+    Session pressed = session;
+    std::ignore = oa::ui::first_run::pointer(
+        pressed, counting, oa::ui::first_run::PointerKind::down, {4, 4}, 0, 1
+    );
+    OA_CHECK(pressed.copy_continue_stopped);
+    std::ignore = oa::ui::first_run::key(session, counting, oa::ui::kit::Key::tab);
+    OA_CHECK(session.copy_continue_stopped);
+    OA_CHECK(session.copy_continue_ms < 0);
+    oa::ui::first_run::tick(session, 1000);
+    OA_CHECK(session.copy_continue_ms < 0);
+
+    Session differing = session;
+    differing.copy_continue_stopped = false;
+    differing.copy_continue_armed = true;
+    differing.copy_continue_ms = -1;
+    differing.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::differ;
+    oa::ui::first_run::tick(differing, 16);
+    OA_CHECK(differing.copy_continue_ms < 0);
+
+    Session waiting = session;
+    waiting.copy_continue_stopped = false;
+    waiting.copy_continue_armed = false;
+    waiting.copy_continue_ms = -1;
+    waiting.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::done;
+    oa::ui::first_run::tick(waiting, 16);
+    OA_CHECK(waiting.copy_continue_ms < 0);
+
+    oa::ui::kit::Frame narrow;
+    narrow.area = {0, 0, 640, 480};
+    narrow.size_class = oa::ui::kit::size_class_of(640, 480);
+    Session crowded = session;
+    crowded.copy_continue_ms = 3000;
+    crowded.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::done;
+    const auto small = oa::ui::first_run::lay_out(crowded, narrow, nullptr);
+    const oa::ui::kit::Control* skip =
+        oa::ui::kit::control_of(small.list, oa::ui::first_run::skip_id);
+    const oa::ui::kit::Control* back =
+        oa::ui::kit::control_of(small.list, oa::ui::first_run::back_id);
+    const oa::ui::kit::Control* next =
+        oa::ui::kit::control_of(small.list, oa::ui::first_run::next_id);
+    OA_CHECK(skip != nullptr && back != nullptr && next != nullptr);
+    OA_CHECK(next->text == "Continue · 3");
+    OA_CHECK(!meets(skip->rect, back->rect));
+    OA_CHECK(!meets(back->rect, next->rect));
+    OA_CHECK(!meets(skip->rect, next->rect));
+}
+
 } // namespace
 
 int main() {
@@ -685,6 +852,7 @@ int main() {
     check_wrap_click_and_buttons();
     check_lookup();
     check_leave_word();
+    check_copying_layout();
     check_centred_language();
     return oa::test::check_exit_status();
 }

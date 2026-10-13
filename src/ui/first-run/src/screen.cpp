@@ -434,6 +434,11 @@ kit::SetupChromeLook chrome_look(
         look.back_enabled = false;
         if (session.model.copy.checked || session.model.copy.paused) {
             look.next = show("Continue", language);
+            if (session.model.copy.checked && session.copy_continue_ms > 0) {
+                const int32_t seconds = (session.copy_continue_ms + 999) / 1000;
+                look.next += " · ";
+                look.next += std::to_string(seconds);
+            }
             look.next_enabled = true;
         } else {
             look.next = show("Pause", language);
@@ -1204,9 +1209,7 @@ void lay_copying(
     scene.title = {left, row, column, kTitle};
     row += kTitle + 4;
     std::string subtitle;
-    if (copy.checked && !copy.verdict.empty())
-        subtitle = copy.verdict;
-    else if (!copy.from.empty()) {
+    if (!copy.from.empty()) {
         subtitle = show("From {place}…");
         const std::string token = "{place}";
         const auto at = subtitle.find(token);
@@ -1243,42 +1246,89 @@ void lay_copying(
     }
     row += 4;
     kit::add_progress(scene.list, {left, row, column, 8}, copy.done, copy.whole);
-    row += 16;
-
-    for (const CopyBundle& bundle : copy.bundles) {
+    row += 12;
+    if (copy.checked && !copy.verdict.empty()) {
         add_text(
             scene.list,
             {left, row, column, kit::compact_metrics.regular_line},
-            bundle.name,
+            copy.verdict,
             kit::FontRole::regular,
             kit::colour::text
         );
         row += kit::compact_metrics.regular_line;
-        if (!bundle.file.empty()) {
+    }
+    row += 8;
+
+    if (!copy.bundles.empty()) {
+        const int32_t pad = kit::compact_metrics.padding;
+        const int32_t inner_left = left + pad;
+        const int32_t inner_width = std::max(column - 2 * pad, int32_t{1});
+        const std::size_t panel_at = scene.list.items.size();
+        kit::Item panel;
+        panel.role = kit::Role::fill;
+        panel.rect = {left, row, column, 0};
+        panel.colour = kit::colour::list;
+        scene.list.items.push_back(panel);
+        kit::Item edge;
+        edge.role = kit::Role::bevel;
+        edge.rect = panel.rect;
+        edge.colour = kit::colour::edge_light;
+        scene.list.items.push_back(edge);
+
+        int32_t y = row + pad;
+        const auto count = static_cast<int32_t>(copy.bundles.size());
+        for (int32_t index = 0; index < count; ++index) {
+            const CopyBundle& bundle = copy.bundles[static_cast<std::size_t>(index)];
             add_text(
                 scene.list,
-                {left, row, column, kit::compact_metrics.small_line},
-                bundle.file,
-                kit::FontRole::small,
-                kit::colour::hint
+                {inner_left, y, inner_width, kit::compact_metrics.regular_line},
+                bundle.name,
+                kit::FontRole::regular,
+                kit::colour::text
             );
-            row += kit::compact_metrics.small_line;
-        }
-        kit::add_progress(
-            scene.list, {left, row, std::max(column / 2, int32_t{80}), 6}, bundle.done, bundle.whole
-        );
-        row += 8;
-        if (!bundle.amount.empty()) {
-            add_text(
-                scene.list,
-                {left, row, column, kit::compact_metrics.small_line},
-                bundle.amount,
-                kit::FontRole::small,
-                kit::colour::quiet
+            y += kit::compact_metrics.regular_line;
+            if (bundle.phase == CopyPhase::copying && !bundle.file.empty()) {
+                add_text(
+                    scene.list,
+                    {inner_left, y, inner_width, kit::compact_metrics.small_line},
+                    bundle.file,
+                    kit::FontRole::small,
+                    kit::colour::hint
+                );
+                y += kit::compact_metrics.small_line;
+            }
+            y += 4;
+            kit::add_progress(
+                scene.list, {inner_left, y, inner_width, 6}, bundle.done, bundle.whole
             );
-            row += kit::compact_metrics.small_line;
+            y += 10;
+            if (!bundle.amount.empty()) {
+                const kit::Colour ink = bundle.phase == CopyPhase::differ ? kit::colour::lock
+                                        : bundle.note                     ? kit::colour::hint
+                                                                          : kit::colour::quiet;
+                add_text(
+                    scene.list,
+                    {inner_left, y, inner_width, kit::compact_metrics.small_line},
+                    bundle.amount,
+                    kit::FontRole::small,
+                    ink
+                );
+                y += kit::compact_metrics.small_line;
+            }
+            if (index + 1 < count) {
+                y += 8;
+                kit::Item rule;
+                rule.role = kit::Role::rule;
+                rule.rect = {inner_left, y, inner_width, 1};
+                rule.colour = kit::colour::rule;
+                scene.list.items.push_back(std::move(rule));
+                y += 9;
+            }
         }
-        row += 8;
+        y += pad;
+        scene.list.items[panel_at].rect.height = y - row;
+        scene.list.items[panel_at + 1].rect.height = y - row;
+        row = y + 8;
     }
 
     add_paragraph(
@@ -1677,11 +1727,54 @@ void dim_around(
     }
 }
 
+/// True when the copy has been checked, matches, and is not still running.
+bool copy_is_clear(const CopyView& copy) noexcept {
+    if (!copy.checked || copy.running || copy.hashing || copy.paused || copy.verdict.empty())
+        return false;
+    for (const CopyBundle& bundle : copy.bundles) {
+        if (bundle.phase == CopyPhase::differ)
+            return false;
+    }
+    return true;
+}
+
 } // namespace
 
 void tick(Session& session, uint32_t dt_ms) noexcept {
     kit::carousel_tick(session.carousel, dt_ms);
     session.pulse_ms += dt_ms;
+    if (session.model.step != Step::copying || session.copy_continue_stopped)
+        return;
+    const CopyView& copy = session.model.copy;
+    if (copy.running || copy.hashing)
+        session.copy_continue_armed = true;
+    if (!copy_is_clear(copy)) {
+        session.copy_continue_ms = -1;
+        return;
+    }
+    if (!session.copy_continue_armed)
+        return;
+    if (session.copy_continue_ms < 0) {
+        session.copy_continue_ms = copy_continue_wait_ms;
+        return;
+    }
+    const uint32_t left = static_cast<uint32_t>(session.copy_continue_ms);
+    const uint32_t gap = dt_ms > left ? left : dt_ms;
+    session.copy_continue_ms -= static_cast<int32_t>(gap);
+}
+
+bool stop_copy_continue(Session& session) noexcept {
+    if (session.model.step != Step::copying || session.copy_continue_ms < 0)
+        return false;
+    session.copy_continue_stopped = true;
+    session.copy_continue_ms = -1;
+    return true;
+}
+
+void reset_copy_continue(Session& session) noexcept {
+    session.copy_continue_ms = -1;
+    session.copy_continue_armed = false;
+    session.copy_continue_stopped = false;
 }
 
 void ensure_focus(Session& session, const kit::DisplayList& list) {
@@ -1742,6 +1835,7 @@ Outcome pointer(
     uint8_t clicks
 ) {
     Outcome outcome;
+    const bool stopped = kind != PointerKind::move && stop_copy_continue(session);
     if (session.model.step == Step::language && !scene.places.empty()) {
         const kit::PointerPhase phase = kind == PointerKind::move   ? kit::PointerPhase::move
                                         : kind == PointerKind::down ? kit::PointerPhase::down
@@ -1777,13 +1871,15 @@ Outcome pointer(
     }
     if (pressed.result == kit::PointerResult::activated)
         return activate(session, scene, pressed.control);
-    if (pressed.result == kit::PointerResult::redraw)
+    if (pressed.result == kit::PointerResult::redraw || stopped)
         outcome.redraw = true;
     return outcome;
 }
 
 Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
     Outcome outcome;
+    if (stop_copy_continue(session))
+        outcome.redraw = true;
     // On the last step both keys finish the walk, even when Back has the focus.
     if (session.model.step == Step::buttons &&
         (pressed == kit::Key::escape || pressed == kit::Key::enter)) {
@@ -1846,6 +1942,8 @@ Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
 
 Outcome wheel(Session& session, const Scene& /*scene*/, float notches) {
     Outcome outcome;
+    if (notches != 0.F && stop_copy_continue(session))
+        outcome.redraw = true;
     if (session.model.step != Step::language || session.carousel.count <= 1 || notches == 0.F)
         return outcome;
     // A turn away from the player is the previous card. One card does not move.

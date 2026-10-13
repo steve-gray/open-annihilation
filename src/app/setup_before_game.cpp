@@ -587,6 +587,7 @@ void note_progress(CopyJob& job, const CopyProgress& progress) {
                 continue;
             earlier.phase = first_run::CopyPhase::done;
             earlier.done = earlier.whole;
+            earlier.file.clear();
         }
         first_run::CopyBundle& row = view.bundles[static_cast<std::size_t>(current)];
         row.phase = first_run::CopyPhase::copying;
@@ -618,11 +619,23 @@ bool on_copy_check(uint32_t done, uint32_t total, void* context) {
     return !job->stop.load();
 }
 
-/// One bundle row for each bundle the table names that the copy may write.
-void prime_bundles(CopyJob& job, std::span<const bundles::Bundle> table) {
+/// One row for each bundle this source holds. A bundle with no matched file
+/// is left off, so the list does not show a bar for it.
+void prime_bundles(
+    CopyJob& job,
+    std::span<const bundles::Bundle> table,
+    std::span<const first_run::SourceChip> chips
+) {
     job.view.bundles.clear();
     job.bundle_ids.clear();
     for (const bundles::Bundle& bundle : table) {
+        bool held = false;
+        for (const first_run::SourceChip& chip : chips) {
+            if (chip.held && chip.name == bundle.english_name)
+                held = true;
+        }
+        if (!held)
+            continue;
         first_run::CopyBundle row;
         row.name = std::string(bundle.english_name);
         row.whole = 1000;
@@ -632,15 +645,30 @@ void prime_bundles(CopyJob& job, std::span<const bundles::Bundle> table) {
     }
 }
 
-/// Marks every row from the check and sets the verdict.
+/// Adds two counts, stopping at the greatest uint32_t.
+uint32_t add_count(uint32_t left, uint32_t right) noexcept {
+    constexpr uint32_t kLimit = 0xffffffffu;
+    if (left > kLimit - right)
+        return kLimit;
+    return left + right;
+}
+
+/// Marks every listed row from the check and sets the verdict.
+///
+/// The overall count is the files those rows take. A file the source does
+/// not hold is not one of them. A music bundle that only lacks a track is a
+/// note, not a difference.
 void apply_check(first_run::CopyView& view, const ContentCheck& check, bool finished) {
     uint32_t differ = 0;
+    uint32_t taken = 0;
+    uint32_t done_files = 0;
+    CopyJob& job = copy_job();
     const auto rows = static_cast<int32_t>(view.bundles.size());
     for (int32_t index = 0; index < rows; ++index) {
         first_run::CopyBundle& row = view.bundles[static_cast<std::size_t>(index)];
         const ContentBundleCheck* found = nullptr;
-        const std::string id = index < static_cast<int32_t>(copy_job().bundle_ids.size())
-                                   ? copy_job().bundle_ids[static_cast<std::size_t>(index)]
+        const std::string id = index < static_cast<int32_t>(job.bundle_ids.size())
+                                   ? job.bundle_ids[static_cast<std::size_t>(index)]
                                    : std::string{};
         for (const ContentBundleCheck& bundle : check.bundles) {
             if (bundle.id == id || bundle.english_name == row.name)
@@ -649,6 +677,17 @@ void apply_check(first_run::CopyView& view, const ContentCheck& check, bool fini
         if (found == nullptr)
             continue;
         row.amount = content_bundle_line(*found);
+        row.note = found->id == "music" && found->files_not_in_source > 0 &&
+                   found->files_differ == 0 && found->files_not_in_source <= found->file_count;
+        const uint32_t absent = found->files_not_in_source > found->file_count
+                                    ? found->file_count
+                                    : found->files_not_in_source;
+        const uint32_t row_taken = found->file_count - absent;
+        const uint32_t row_differ =
+            found->files_differ > row_taken ? row_taken : found->files_differ;
+        taken = add_count(taken, row_taken);
+        done_files = add_count(done_files, row_taken - row_differ);
+        row.file.clear();
         if (found->files_differ == 0) {
             row.phase = first_run::CopyPhase::done;
             row.done = row.whole;
@@ -668,7 +707,20 @@ void apply_check(first_run::CopyView& view, const ContentCheck& check, bool fini
     }
     view.verdict = content_match_line(differ);
     view.checked = true;
-    view.done = view.whole;
+    if (taken > 0) {
+        const CopyFileCount tally = copy_file_count(done_files, taken, 0);
+        job.files_done = tally.done;
+        job.files_total = tally.total;
+        if (differ == 0 || view.whole <= 0)
+            view.done = view.whole;
+        else
+            view.done = static_cast<int32_t>(
+                (static_cast<uint64_t>(tally.done) * static_cast<uint64_t>(view.whole)) /
+                tally.total
+            );
+    } else {
+        view.done = view.whole;
+    }
 }
 
 /// Opens the chosen place.
@@ -1318,8 +1370,10 @@ SetupBefore run_setup_before_game(
         case first_run::Ask::back:
             if (session.model.step == first_run::Step::game)
                 session.model.step = first_run::Step::language;
-            else if (session.model.step == first_run::Step::online)
+            else if (session.model.step == first_run::Step::online) {
                 session.model.step = first_run::Step::copying;
+                first_run::reset_copy_continue(session);
+            }
             session.focus_ready = false;
             break;
         case first_run::Ask::advance:
@@ -1333,6 +1387,8 @@ SetupBefore run_setup_before_game(
             } else if (session.model.step == first_run::Step::game) {
                 if (setup_begin_copy(user, session.model)) {
                     session.model.step = first_run::Step::copying;
+                    first_run::reset_copy_continue(session);
+                    session.copy_continue_armed = true;
                     session.focus_ready = false;
                     if (!awake) {
                         SDL_DisableScreenSaver();
@@ -1365,6 +1421,7 @@ SetupBefore run_setup_before_game(
             session.model.copy.running = false;
             session.model.copy.paused = false;
             session.model.step = first_run::Step::game;
+            first_run::reset_copy_continue(session);
             session.focus_ready = false;
             if (awake) {
                 SDL_EnableScreenSaver();
@@ -1394,6 +1451,7 @@ SetupBefore run_setup_before_game(
             room = fitted;
             dirty = true;
         }
+        const int32_t continue_before = session.copy_continue_ms;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
@@ -1409,6 +1467,8 @@ SetupBefore run_setup_before_game(
                 continue;
             }
             if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+                if (first_run::stop_copy_continue(session))
+                    dirty = true;
                 kit::Key pressed = kit::Key::info;
                 bool mapped = true;
                 switch (event.gbutton.button) {
@@ -1480,6 +1540,15 @@ SetupBefore run_setup_before_game(
             dt = static_cast<uint32_t>(std::min<uint64_t>(now - last_ticks, 1000ULL));
         last_ticks = now;
         first_run::tick(session, dt);
+        if (session.copy_continue_ms != continue_before)
+            dirty = true;
+        if (session.model.step == first_run::Step::copying && session.copy_continue_ms == 0) {
+            session.copy_continue_ms = -1;
+            session.copy_continue_stopped = true;
+            first_run::Outcome advance;
+            advance.ask = first_run::Ask::advance;
+            handle(advance);
+        }
         if (dirty) {
             scene = relayout(room);
             present();
@@ -1602,7 +1671,8 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
     job.files_total = 0;
     const std::span<const bundles::Bundle> table =
         fixture ? copy_check_bundles() : bundles::bundles();
-    prime_bundles(job, table);
+    const first_run::GameSource& chosen_row = model.sources[static_cast<std::size_t>(model.source)];
+    prime_bundles(job, table, chosen_row.chips);
     const Remembered copy = *chosen;
     job.worker = std::thread([copy, user_folder] {
         CopyJob& held = copy_job();
@@ -1648,6 +1718,8 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
             held.view.bytes_landed = true;
             held.view.hashing = true;
             held.view.running = true;
+            for (first_run::CopyBundle& row : held.view.bundles)
+                row.file.clear();
             held.view.check_done = 0;
             held.view.check_total = 0;
             held.changed = true;
