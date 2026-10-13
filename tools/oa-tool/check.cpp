@@ -16,6 +16,7 @@
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/base/sha256.hpp"
 #include "oa/data/content_bundles.hpp"
+#include "oa/data/content_bundles/expansion_package.hpp"
 #include "oa/data/languages/language_pack.hpp"
 #include "oa/data/map_pack/manifest.hpp"
 #include "oa/data/mod_profile.hpp"
@@ -502,6 +503,8 @@ void append_content_notes(
     const install::PackageKind& kind,
     std::vector<std::string>& warnings
 ) {
+    if (kind.name == "expansion")
+        return;
     if (kind.name == "oamod") {
         const std::optional<mod_profile::Resolution> resolved = catalogue_resolution(package);
         if (!resolved)
@@ -725,6 +728,23 @@ void copy_object_members(json::JsonWriter& writer, std::string_view text) {
     }
 }
 
+/// Writes an expansion's extends, needs and author after the shared facts.
+///
+/// @param package the opened package
+/// @param[in,out] writer the object
+void describe_expansion(const install::Package& package, json::JsonWriter& writer) {
+    namespace bundles = oa::data::content_bundles;
+    const std::vector<uint8_t> bytes = read_packaged_manifest(package);
+    bundles::ExpansionManifest manifest;
+    if (!bundles::read_expansion_manifest(bytes, manifest, nullptr))
+        return;
+    writer.key("extends");
+    write_strings(writer, manifest.extends);
+    writer.key("needs");
+    write_strings(writer, manifest.needs);
+    write_text(writer, "author", manifest.author.name);
+}
+
 /// Writes the report and returns the exit code.
 ///
 /// @param file the package's path
@@ -834,6 +854,8 @@ int report(
             write_oalang_language(language, writer);
         } else if (oamap)
             copy_object_members(writer, facts.text());
+        else if (kind != nullptr && kind->name == "expansion")
+            describe_expansion(*package, writer);
     }
     writer.end_object();
 
@@ -961,6 +983,10 @@ int run_check(std::span<const std::string> arguments, Output& output) {
     const install::PackageKind* kind = install::kind_for_file(file);
     if (package != nullptr && package->kind != nullptr)
         kind = package->kind;
+    if (kind != nullptr && kind->name == "expansion" && game_dir != nullptr) {
+        report_usage(output, "option '--game-dir' is not for an expansion");
+        return exit_usage;
+    }
     const bool accepted_map = package != nullptr && kind != nullptr && kind->name == "oamap";
     if (accepted_map && game_dir == nullptr) {
         report_usage(output, "option '--game-dir' is required for a map pack");

@@ -9,6 +9,7 @@
 
 
 
+
 ["{title}" was saved with {name}, which is off.]
 	{
 	de="{title}" wurde mit {name} gespeichert, und das ist aus.;
@@ -2513,6 +2514,22 @@
 	it=LIMITI DEL MOTORE;
 	}
 
+[EXPANSION INSTALLED]
+	{
+	de=EXPANSION INSTALLIERT;
+	fr=EXTENSION INSTALLÉE;
+	es=EXPANSIÓN INSTALADA;
+	it=ESPANSIONE INSTALLATA;
+	}
+
+[EXPANSION NOT INSTALLED]
+	{
+	de=EXPANSION NICHT INSTALLIERT;
+	fr=EXTENSION NON INSTALLÉE;
+	es=EXPANSIÓN NO INSTALADA;
+	it=ESPANSIONE NON INSTALLATA;
+	}
+
 [EXPANSIONS]
 	{
 	de=ERWEITERUNGEN;
@@ -3609,6 +3626,14 @@
 	it=INSTALLATO;
 	}
 
+[INSTALLING EXPANSION]
+	{
+	de=EXPANSION WIRD INSTALLIERT;
+	fr=INSTALLATION DE L'EXTENSION;
+	es=INSTALANDO LA EXPANSIÓN;
+	it=INSTALLAZIONE DELL'ESPANSIONE;
+	}
+
 [INSTALLING LANGUAGE]
 	{
 	de=SPRACHE WIRD INSTALLIERT;
@@ -3801,6 +3826,14 @@
 	it=ID di installazione;
 	}
 
+[Install the expansion {name}?]
+	{
+	de=Die Expansion {name} installieren?;
+	fr=Installer l'extension {name} ?;
+	es=¿Instalar la expansión {name}?;
+	it=Installare l'espansione {name}?;
+	}
+
 [Install the language {endonym} ({english})?]
 	{
 	de=Die Sprache {endonym} ({english}) installieren?;
@@ -3977,6 +4010,14 @@
 	it=Non contiene language.yaml.;
 	}
 
+[It holds no oaexp.yaml at its top, or in a single folder at its top.]
+	{
+	de=Es enthält kein oaexp.yaml ganz oben oder in einem einzelnen Ordner ganz oben.;
+	fr=Il ne contient pas d'oaexp.yaml à sa racine, ni dans un seul dossier à sa racine.;
+	es=No contiene oaexp.yaml en su nivel superior, ni en una sola carpeta en su nivel superior.;
+	it=Non contiene oaexp.yaml in cima, né in una sola cartella in cima.;
+	}
+
 [It holds no oamap.yaml at its top, or in a single folder at its top.]
 	{
 	de=Es enthält kein oamap.yaml ganz oben oder in einem einzelnen Ordner ganz oben.;
@@ -4039,6 +4080,14 @@
 	fr=Ce n'est pas une archive zip.;
 	es=No es un archivo zip.;
 	it=Non è un archivio zip.;
+	}
+
+[It is not one of the game's expansions.]
+	{
+	de=Sie ist keine Expansion des Spiels.;
+	fr=Ce n'est pas une extension du jeu.;
+	es=No es una de las expansiones del juego.;
+	it=Non è una delle espansioni del gioco.;
 	}
 
 [It is removed at the next start of Open Annihilation.]
@@ -4263,6 +4312,22 @@
 	fr=Son profil de mod ne peut pas être utilisé :;
 	es=Su perfil de mod no se puede usar:;
 	it=Il suo profilo di mod non si può usare:;
+	}
+
+[Its oaexp.yaml has errors.]
+	{
+	de=Sein oaexp.yaml hat Fehler.;
+	fr=Son oaexp.yaml a des erreurs.;
+	es=Su oaexp.yaml tiene errores.;
+	it=Il suo oaexp.yaml ha errori.;
+	}
+
+[Its oaexp.yaml is larger than 256 KiB.]
+	{
+	de=Sein oaexp.yaml ist größer als 256 KiB.;
+	fr=Son oaexp.yaml dépasse 256 KiB.;
+	es=Su oaexp.yaml supera los 256 KiB.;
+	it=Il suo oaexp.yaml supera i 256 KiB.;
 	}
 
 [Its oamap.yaml has errors:]
@@ -8193,6 +8258,22 @@
 	it=Il download non è riuscito;
 	}
 
+[The expansion holds {name}, which it does not have.]
+	{
+	de=Die Expansion enthält {name}, das sie nicht hat.;
+	fr=L'extension contient {name}, qu'elle n'a pas.;
+	es=La expansión contiene {name}, que no tiene.;
+	it=L'espansione contiene {name}, che non ha.;
+	}
+
+[The expansion is missing {name}.]
+	{
+	de=Der Expansion fehlt {name}.;
+	fr=Il manque {name} à l'extension.;
+	es=A la expansión le falta {name}.;
+	it=All'espansione manca {name}.;
+	}
+
 [The file manager could not open it.]
 	{
 	de=Der Dateimanager konnte es nicht öffnen.;
@@ -8207,6 +8288,14 @@
 	fr=Le sélecteur de fichiers ne s'est pas ouvert;
 	es=El selector de archivos no se abrió;
 	it=Il selettore di file non si è aperto;
+	}
+
+[The file {name} is not the expansion's file.]
+	{
+	de=Die Datei {name} ist nicht die Datei der Expansion.;
+	fr=Le fichier {name} n'est pas le fichier de l'extension.;
+	es=El archivo {name} no es el archivo de la expansión.;
+	it=Il file {name} non è il file dell'espansione.;
 	}
 
 [The files of {title} {version} were installed again.]
@@ -11439,6 +11528,14 @@
 	fr={name} de {installed} est installé. Le remplacer par {name} de {new} ? Celui de {installed} est gardé, et RESTAURER le ramène.;
 	es={name} de {installed} está instalado. ¿Reemplazarlo por {name} de {new}? El de {installed} se conserva, y REVERTIR lo trae de vuelta.;
 	it={name} da {installed} è installato. Sostituirlo con {name} da {new}? Quello da {installed} viene tenuto, e RIPRISTINA lo riporta.;
+	}
+
+[{name} is installed. Turn it on in the Library.]
+	{
+	de={name} ist installiert. Schalte sie in der Bibliothek ein.;
+	fr={name} est installée. Active-la dans la Bibliothèque.;
+	es={name} está instalada. Actívala en la Biblioteca.;
+	it={name} è installata. Attivala nella Biblioteca.;
 	}
 
 [{name} is not copied, so this save cannot be loaded with it.]

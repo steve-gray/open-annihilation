@@ -12,7 +12,7 @@
 add_library(oa-app-package-install src/package.cpp src/names.cpp src/plan_oamod.cpp src/plan_oamap.cpp
   src/plan_oalang.cpp src/change.cpp src/unpack.cpp src/files.cpp src/inbox.cpp src/prompts.cpp
   src/handoff.cpp src/kinds.cpp src/prompts_oamod.cpp src/prompts_oamap.cpp src/prompts_oalang.cpp
-  src/origin.cpp)
+  src/prompts_oaexp.cpp src/plan_oaexp.cpp src/origin.cpp)
 add_library(oa::app::package_install ALIAS oa-app-package-install)
 target_include_directories(oa-app-package-install PUBLIC include)
 target_compile_features(oa-app-package-install PUBLIC cxx_std_20)
@@ -103,4 +103,12 @@ if(BUILD_TESTING)
   add_test(NAME app-package-install-oalang COMMAND oa-app-package-install-oalang-test
     "${oa_pseudo_pack}")
   set_tests_properties(app-package-install-oalang PROPERTIES TIMEOUT 60)
+  # An expansion: the built-in table refuses the fixture and writes nothing;
+  # the test table installs it, a reinstall drops a stray file, uninstall
+  # leaves a sibling, and a link in the expansion's place is left alone.
+  add_executable(oa-app-package-install-oaexp-test tests/oaexp_test.cpp)
+  target_link_libraries(oa-app-package-install-oaexp-test PRIVATE oa-app-package-install
+    oa-data-content-bundles oa-formats-zip oa-base-sha256 ZLIB::ZLIB oa-test-support oa-options)
+  add_test(NAME app-package-install-oaexp COMMAND oa-app-package-install-oaexp-test)
+  set_tests_properties(app-package-install-oaexp PROPERTIES TIMEOUT 30)
 endif()
