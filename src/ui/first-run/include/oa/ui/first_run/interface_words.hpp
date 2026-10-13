@@ -88,7 +88,6 @@ inline constexpr std::string_view interface_words[] = {
     "Where is Total Annihilation?",
     "Your install ID",
     "about {seconds} seconds left",
-    "no {name}",
     "not added",
     "of",
     "{done} of {total} · {percent}%",

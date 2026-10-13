@@ -9,9 +9,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstdlib>
 #include <deque>
 #include <fstream>
+#include <limits>
 #include <system_error>
 #include <utility>
 
@@ -677,6 +679,96 @@ std::string path_under_home(const fs::path& home, const fs::path& folder) {
     if (tail.empty() || tail.starts_with(".."))
         return shown.generic_string();
     return "~/" + tail;
+}
+
+bool drop_folder_name(std::string_view name) noexcept {
+    return same_name(name, "Downloads") || same_name(name, "Desktop") ||
+           same_name(name, "Documents");
+}
+
+bool offer_as_installation(
+    std::string_view folder_name, bool holds_archive, bool holds_installer_file, bool home_itself
+) noexcept {
+    if (home_itself || !holds_archive || holds_installer_file || drop_folder_name(folder_name))
+        return false;
+    return true;
+}
+
+SetupFolderOffer offer_from_folder(
+    const fs::path& folder,
+    bool (*is_installer)(const fs::path& file, uint64_t size, void* context),
+    void* context
+) {
+    SetupFolderOffer offer;
+    std::error_code failure;
+    if (!fs::is_directory(folder, failure) || failure)
+        return offer;
+    fs::directory_iterator entry(folder, fs::directory_options::skip_permission_denied, failure);
+    if (failure)
+        return offer;
+    bool holds_archive = false;
+    std::size_t seen = 0;
+    for (; !failure && entry != fs::directory_iterator(); entry.increment(failure)) {
+        if (++seen > prefix_entries_limit)
+            break;
+        std::error_code kind;
+        if (!entry->is_regular_file(kind) || kind)
+            continue;
+        const fs::path path = entry->path();
+        if (same_name(name_of(path), game_archive_name))
+            holds_archive = true;
+        if (is_installer == nullptr)
+            continue;
+        const uintmax_t bytes = fs::file_size(path, kind);
+        if (kind || bytes > static_cast<uintmax_t>(std::numeric_limits<uint64_t>::max()))
+            continue;
+        if (is_installer(path, static_cast<uint64_t>(bytes), context))
+            offer.installers.push_back(path);
+    }
+    bool home_itself = false;
+    const fs::path house = home_folder();
+    if (!house.empty()) {
+        std::error_code same;
+        home_itself = fs::equivalent(folder, house, same) && !same;
+    }
+    offer.folder_offered = offer_as_installation(
+        name_of(folder), holds_archive, !offer.installers.empty(), home_itself
+    );
+    return offer;
+}
+
+namespace {
+
+/// The rank of a place's kind. An installer and an installation outrank a loose folder, and
+/// neither outranks the other.
+///
+/// @param place the kind
+/// @return 1 for an installer or an installation, 0 for a loose folder
+int place_rank(SetupPlace place) noexcept {
+    return place == SetupPlace::loose ? 0 : 1;
+}
+
+} // namespace
+
+std::vector<SetupSource> rank_setup_sources(std::vector<SetupSource> found) {
+    std::vector<SetupSource> kept;
+    kept.reserve(found.size());
+    for (SetupSource& source : found) {
+        if (source.place != SetupPlace::loose)
+            kept.push_back(std::move(source));
+    }
+    std::stable_sort(
+        kept.begin(), kept.end(), [](const SetupSource& left, const SetupSource& right) {
+            if (left.bundle_count != right.bundle_count)
+                return left.bundle_count > right.bundle_count;
+            if (left.base_rank != right.base_rank)
+                return left.base_rank > right.base_rank;
+            if (left.expansion_count != right.expansion_count)
+                return left.expansion_count > right.expansion_count;
+            return place_rank(left.place) > place_rank(right.place);
+        }
+    );
+    return kept;
 }
 
 } // namespace oa::platform::game_installs

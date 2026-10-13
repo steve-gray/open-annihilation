@@ -210,4 +210,70 @@ struct LocatorFacts {
 [[nodiscard]] std::string
 path_under_home(const std::filesystem::path& home, const std::filesystem::path& folder);
 
+/// What kind of place a setup source is. A loose folder is not offered.
+enum class SetupPlace : uint8_t {
+    installation, ///< a folder that is a game installation
+    installer,    ///< an installer file
+    loose,        ///< a folder of loose files
+};
+
+/// The facts the setup ranks a place by. The caller fills them from what the place holds.
+struct SetupSource {
+    std::string token{};                 ///< the caller's name for this place
+    SetupPlace place{SetupPlace::loose}; ///< which kind of place
+    int bundle_count{};                  ///< how many built-in bundles it holds
+    /// 2 when it holds the base game, 1 when it holds only the demo, 0 otherwise.
+    int base_rank{};
+    int expansion_count{}; ///< how many of those bundles are expansions
+};
+
+/// Tells whether a folder's name is one a player keeps loose files in: Downloads, Desktop or
+/// Documents, ASCII letters regardless of case.
+///
+/// @param name the folder's own name, not its path
+/// @return true for those three names
+[[nodiscard]] bool drop_folder_name(std::string_view name) noexcept;
+
+/// Tells whether a folder is offered as a game installation.
+///
+/// The home folder, a drop folder, a folder with no game archive, and a folder that also holds
+/// an installer file are not. The installer files are listed on their own.
+///
+/// @param folder_name the folder's own name
+/// @param holds_archive it holds the game's archive
+/// @param holds_installer_file it holds an installer file
+/// @param home_itself it is the home folder
+/// @return true when the folder itself is a row
+[[nodiscard]] bool offer_as_installation(
+    std::string_view folder_name, bool holds_archive, bool holds_installer_file, bool home_itself
+) noexcept;
+
+/// What a folder contributes to the setup's list.
+struct SetupFolderOffer {
+    bool folder_offered{};                           ///< the folder itself is an installation
+    std::vector<std::filesystem::path> installers{}; ///< installer files directly inside it
+};
+
+/// Lists the installer files directly in a folder, and whether the folder itself is an
+/// installation. `is_installer` says which regular files are installers; null treats none as
+/// one. At most prefix_entries_limit entries are read. Subfolders are not opened.
+///
+/// @param folder the folder
+/// @param is_installer which files are installers; null when the caller has none
+/// @param context passed to `is_installer`
+/// @return the offer; a folder that cannot be read offers nothing
+[[nodiscard]] SetupFolderOffer offer_from_folder(
+    const std::filesystem::path& folder,
+    bool (*is_installer)(const std::filesystem::path& file, uint64_t size, void* context),
+    void* context
+);
+
+/// Drops loose places and orders the rest. More bundles come first, then a higher base rank,
+/// then more expansions, then an installer or an installation ahead of a loose place. Equal
+/// places keep the order they were given. The first place is the one to preselect.
+///
+/// @param found the places, loose ones included
+/// @return the places to list, fullest first
+[[nodiscard]] std::vector<SetupSource> rank_setup_sources(std::vector<SetupSource> found);
+
 } // namespace oa::platform::game_installs

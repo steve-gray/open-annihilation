@@ -87,15 +87,24 @@ so language packs stay offline." The built-in languages still switch.
 
 ## The game
 
-![The game: Where is Total Annihilation?, one source row, Locate another, and Copy the game.](images/first-run/game.png)
+![The game: Where is Total Annihilation?, two installer rows with the fuller one selected, Locate another, and Copy the game.](images/first-run/game.png)
 
-This step is only on the five-step walk. The page word is Setup, the step
-is THE GAME, and the count is 2 of 5. The title is "Where is Total
-Annihilation?". Each row is a place that was found: an install, a GOG
-installer, or the demo installer, with what that place holds. **Locate
-another…** asks for a folder. **Copy the game** is available once a row is
-chosen. **Back** returns to the language. The left button is the walk's
-**Quit** or **Skip**.
+This step is only on the five-step walk, and it is the second step.
+Language comes first. A start that will show these steps does not ask for
+a folder before them: no system folder dialog, no folder locator, and no
+Game files screen.
+
+The page word is Setup, the step is THE GAME, and the count is 2 of 5.
+The title is "Where is Total Annihilation?". The column is as wide as
+Settings. Each row is a place that was found: an installer or an
+installation, never a folder of loose files such as Downloads. When a
+folder was only searched for installers, those installers are the rows.
+The fullest place is selected. A row names the file or the folder, the
+path shortened under the home folder, and the bundles that place holds.
+It does not name a bundle the place lacks. **Locate another…** asks for a
+folder. **Copy the game** is available once a row is chosen. **Back**
+returns to the language. The left button is the walk's **Quit** or
+**Skip**.
 
 The line under the rows says the copies go to Documents › Open
 Annihilation, and that the installation is left as it is.
