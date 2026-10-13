@@ -6,7 +6,9 @@
 // drive_c, and a Windows installer supplies the same reads. Blocks are
 // shared where the volume can do that; otherwise the bytes are copied. A
 // stopped copy is continued from the bytes already written. The source is
-// only read.
+// only read. The setup's scan recognises a published installer from its
+// size, its name and a hash of its first and last megabyte; the copy and
+// the installer check still read every byte.
 #include "oa/app/content_copy.hpp"
 #include "oa/app/disk_image_source.hpp"
 
@@ -15,6 +17,7 @@
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/platform/file_clone.hpp"
 #include "oa/platform/files.hpp"
+#include "oa/platform/game_installs.hpp"
 #include "oa/platform/preferences.hpp"
 
 #include <algorithm>
@@ -50,6 +53,8 @@ namespace fs = std::filesystem;
 constexpr int k_search_depth = 8;
 constexpr std::size_t k_visit_limit = 20000;
 constexpr std::size_t k_file_limit = 100000;
+
+[[nodiscard]] bool folder_is_not_searched(const fs::path& folder);
 
 constexpr int64_t k_check_time = 1600000000;
 
@@ -381,6 +386,11 @@ find_named_directory(const fs::path& start, std::string_view wanted, int max_dep
                     break;
                 continue;
             }
+            if (folder_is_not_searched(child)) {
+                if (failure)
+                    break;
+                continue;
+            }
             if (folded_equal(path_to_utf8(child.filename()), wanted))
                 return child;
             if (current.depth + 1 < max_depth)
@@ -430,7 +440,8 @@ find_named_directory(const fs::path& start, std::string_view wanted, int max_dep
             std::error_code status_error;
             const fs::file_status status = it->symlink_status(status_error);
             it.increment(failure);
-            if (!status_error && !fs::is_symlink(status) && fs::is_directory(status))
+            if (!status_error && !fs::is_symlink(status) && fs::is_directory(status) &&
+                !folder_is_not_searched(child))
                 pending.push_back(Level{child, current.depth + 1});
             if (failure)
                 break;
@@ -500,7 +511,7 @@ list_tree(const fs::path& root, std::vector<ContentSourceFile>& files, std::stri
                 continue;
             }
             if (fs::is_directory(status)) {
-                if (current.depth + 1 < k_search_depth)
+                if (current.depth + 1 < k_search_depth && !folder_is_not_searched(child))
                     pending.push_back(Level{child, current.depth + 1});
             } else if (fs::is_regular_file(status)) {
                 ContentSourceFile listed;
@@ -1061,6 +1072,178 @@ void stop_after_one_file(void* context, const CopyProgress& progress) {
     return false;
 }
 
+/// A folder whose name cannot hold the game is not walked while a root is sought.
+///
+/// @param folder the folder
+/// @return true when a search leaves it unopened
+[[nodiscard]] bool folder_is_not_searched(const fs::path& folder) {
+    return oa::platform::game_installs::folder_cannot_hold_game(path_to_utf8(folder.filename()));
+}
+
+/// Bytes hashed from each end of a published installer. A file shorter than
+/// this contributes only its own bytes, once.
+constexpr uint64_t k_installer_end_bytes = uint64_t{1024} * 1024;
+
+/// One published installer the setup can name without reading the archive.
+/// The digest is the SHA-256 of the first megabyte followed by the last.
+struct PublishedListing {
+    uint64_t size{};
+    oa::base::sha256::Digest ends{};
+    std::span<const std::string_view> absent{};
+};
+
+/// Copy names the Windows Commander Pack installer does not hold.
+constexpr std::string_view k_windows_installer_absent[]{"TADemo.hpi"};
+/// Copy names the macOS Commander Pack installer does not hold.
+constexpr std::string_view k_macos_installer_absent[]{
+    "TADemo.hpi",
+    "music/0.mp3",
+    "music/13.mp3",
+    "afark.ufo",
+    "aflea.ufo",
+    "ascarab.ufo",
+    "cormabm.ufo",
+    "cornecro.ufo",
+    "corplas.ufo",
+};
+/// Copy names the older-Mac Commander Pack disk image does not hold.
+constexpr std::string_view k_older_mac_installer_absent[]{
+    "TADemo.hpi",
+    "afark.ufo",
+    "aflea.ufo",
+    "ascarab.ufo",
+    "cormabm.ufo",
+    "cornecro.ufo",
+    "corplas.ufo",
+};
+
+/// The three published installers, keyed by the size in the known-installer table.
+constexpr PublishedListing k_published_listings[]{
+    PublishedListing{
+        1093885504,
+        oa::base::sha256::parse_hex(
+            "287ea8b5533b405f929299dbcb381e688af5cd16613f65f388b1363badd00d92"
+        )
+            .value(),
+        k_windows_installer_absent,
+    },
+    PublishedListing{
+        2559350261,
+        oa::base::sha256::parse_hex(
+            "a539de6828a04e0b6458787be7b646d23293c39eb31162004179189e0aad5656"
+        )
+            .value(),
+        k_macos_installer_absent,
+    },
+    PublishedListing{
+        1144736288,
+        oa::base::sha256::parse_hex(
+            "ec4b57fb6079b349460cde5e52a7b6d485808bc8d94cd62f06ea2eba1ed3b19c"
+        )
+            .value(),
+        k_older_mac_installer_absent,
+    },
+};
+
+/// Finds the listing of an installer size.
+///
+/// @param size the file's size
+/// @return the listing, or null
+[[nodiscard]] const PublishedListing* published_listing(uint64_t size) noexcept {
+    for (const PublishedListing& listing : k_published_listings) {
+        if (listing.size == size)
+            return &listing;
+    }
+    return nullptr;
+}
+
+/// Moves a stream to a byte offset from the start.
+///
+/// @param file the stream
+/// @param offset the offset
+/// @return true when the stream is there
+[[nodiscard]] bool seek_set(std::FILE* file, uint64_t offset) noexcept {
+#if defined(_WIN32)
+    return _fseeki64(file, static_cast<__int64>(offset), SEEK_SET) == 0;
+#else
+    if (offset > static_cast<uint64_t>(std::numeric_limits<off_t>::max()))
+        return false;
+    return ::fseeko(file, static_cast<off_t>(offset), SEEK_SET) == 0;
+#endif
+}
+
+/// Reads a count of bytes, or fails when the stream ends first.
+///
+/// @param file the stream
+/// @param data where the bytes are stored
+/// @param count how many
+/// @return true when every byte was read
+[[nodiscard]] bool read_exact(std::FILE* file, uint8_t* data, std::size_t count) noexcept {
+    std::size_t got = 0;
+    while (got < count) {
+        const std::size_t piece = std::fread(data + got, 1, count - got, file);
+        if (piece == 0)
+            return false;
+        got += piece;
+    }
+    return true;
+}
+
+/// Hashes the first megabyte of a file and, when the file is longer, the last.
+///
+/// @param file the file
+/// @param size its size
+/// @param[out] digest the hash
+/// @param[out] error why the file could not be read; may be null
+/// @return true when `digest` is that hash
+[[nodiscard]] bool hash_installer_ends(
+    const fs::path& file, uint64_t size, oa::base::sha256::Digest& digest, std::string* error
+) {
+    OwnedFile opened(oa::platform::open_file(file, "rb"));
+    if (opened.file == nullptr) {
+        set_error(error, "the file could not be read");
+        return false;
+    }
+    const uint64_t head = std::min(size, k_installer_end_bytes);
+    const uint64_t tail = size > k_installer_end_bytes ? std::min(size, k_installer_end_bytes) : 0;
+    const uint64_t longest = std::max(head, tail);
+    std::vector<uint8_t> buffer(static_cast<std::size_t>(longest));
+    if (head > 0 && !read_exact(opened.file, buffer.data(), static_cast<std::size_t>(head))) {
+        set_error(error, "the file could not be read");
+        return false;
+    }
+    oa::base::sha256::Hasher hasher;
+    oa::base::sha256::update(
+        hasher, std::span<const uint8_t>(buffer.data(), static_cast<std::size_t>(head))
+    );
+    if (tail > 0) {
+        if (!seek_set(opened.file, size - tail) ||
+            !read_exact(opened.file, buffer.data(), static_cast<std::size_t>(tail))) {
+            set_error(error, "the file could not be read");
+            return false;
+        }
+        oa::base::sha256::update(
+            hasher, std::span<const uint8_t>(buffer.data(), static_cast<std::size_t>(tail))
+        );
+    }
+    digest = oa::base::sha256::finish(hasher);
+    return true;
+}
+
+/// Tells whether a copy name is one the installer does not hold.
+///
+/// @param absent the names
+/// @param copy_name the bundle's copy name
+/// @return true when the installer does not hold it
+[[nodiscard]] bool
+copy_name_absent(std::span<const std::string_view> absent, std::string_view copy_name) noexcept {
+    for (const std::string_view name : absent) {
+        if (folded_equal(name, copy_name))
+            return true;
+    }
+    return false;
+}
+
 } // namespace
 
 std::string_view unattended_copy_refusal() noexcept {
@@ -1289,6 +1472,84 @@ bool describe_source(
             described.bundles.push_back(std::string(bundle.id));
     }
     return true;
+}
+
+bool is_published_installer_name(const fs::path& file, const bundles::Installer& installer) {
+    return folded_equal(path_to_utf8(file.filename()), installer.file_name);
+}
+
+std::span<const std::string_view> installer_not_held(const bundles::Installer& installer) noexcept {
+    const PublishedListing* listing = published_listing(installer.size);
+    if (listing == nullptr)
+        return {};
+    return listing->absent;
+}
+
+bool describe_published_holdings(
+    const bundles::Installer& installer, SourceDescription& described
+) {
+    described = {};
+    const PublishedListing* listing = published_listing(installer.size);
+    if (listing == nullptr)
+        return false;
+    for (const bundles::Bundle& bundle : bundles::bundles()) {
+        bool held = false;
+        for (const bundles::ContentFile& file : bundle.files) {
+            if (copy_name_absent(listing->absent, file.copy_name)) {
+                MissingContentFile missing;
+                missing.bundle_id = std::string(bundle.id);
+                missing.copy_name = std::string(file.copy_name);
+                described.missing.push_back(std::move(missing));
+                continue;
+            }
+            MatchedContentFile matched;
+            matched.bundle_id = std::string(bundle.id);
+            matched.copy_name = std::string(file.copy_name);
+            matched.source_name = matched.copy_name;
+            matched.size = file.size;
+            add_bytes(described.bytes_to_copy, matched.size);
+            described.matched.push_back(std::move(matched));
+            held = true;
+        }
+        if (held)
+            described.bundles.push_back(std::string(bundle.id));
+    }
+    return true;
+}
+
+bool describe_published_installer(
+    const fs::path& file, SourceDescription& described, std::string* error
+) {
+    described = {};
+    std::error_code failure;
+    if (!fs::is_regular_file(file, failure) || failure) {
+        set_error(error, "the file could not be read");
+        return false;
+    }
+    const auto raw_size = fs::file_size(file, failure);
+    if (failure) {
+        set_error(error, "the file could not be read");
+        return false;
+    }
+    const uint64_t size = narrow_size(raw_size);
+    const bundles::Installer* installer = bundles::find_installer(size);
+    if (installer == nullptr || !is_published_installer_name(file, *installer)) {
+        set_error(error, "the file is not a known installer");
+        return false;
+    }
+    const PublishedListing* listing = published_listing(size);
+    if (listing == nullptr) {
+        set_error(error, "the file is not a known installer");
+        return false;
+    }
+    oa::base::sha256::Digest ends;
+    if (!hash_installer_ends(file, size, ends, error))
+        return false;
+    if (ends != listing->ends) {
+        set_error(error, "the file is not a known installer");
+        return false;
+    }
+    return describe_published_holdings(*installer, described);
 }
 
 bool managed_base_present(const fs::path& user_folder, std::span<const bundles::Bundle> table) {

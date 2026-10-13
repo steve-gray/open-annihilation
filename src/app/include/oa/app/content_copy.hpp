@@ -408,6 +408,48 @@ struct SourceDescription {
     std::string* error
 );
 
+/// Tells whether a file's name is the installer's published name. ASCII
+/// letters are compared regardless of case.
+///
+/// @param file the file
+/// @param installer a known installer
+/// @return true when the file's name is the published name
+[[nodiscard]] bool is_published_installer_name(
+    const std::filesystem::path& file, const oa::data::content_bundles::Installer& installer
+);
+
+/// Copy names a published installer does not hold. Empty when this installer
+/// has no listing kept for the setup's scan.
+///
+/// @param installer a known installer
+/// @return the names, in the order they are stored
+[[nodiscard]] std::span<const std::string_view>
+installer_not_held(const oa::data::content_bundles::Installer& installer) noexcept;
+
+/// Describes what a published installer holds, from the bundle table and the
+/// names that installer does not hold. No file is read.
+///
+/// @param installer a known installer
+/// @param[out] described the description, replaced; empty when this installer
+///        has no listing
+/// @return true when `described` is that installer's listing
+[[nodiscard]] bool describe_published_holdings(
+    const oa::data::content_bundles::Installer& installer, SourceDescription& described
+);
+
+/// Describes a known installer from its size, its published name and a hash
+/// of its first and last megabyte. The archive is not listed and the rest
+/// of the file is not read. The description is what that published installer
+/// holds. Copying and the installer check still read every byte.
+///
+/// @param file the installer
+/// @param[out] described the description, replaced
+/// @param[out] error why the file is not that installer; may be null
+/// @return true when the file is a published installer
+[[nodiscard]] bool describe_published_installer(
+    const std::filesystem::path& file, SourceDescription& described, std::string* error
+);
+
 /// Free space reported for a folder.
 struct FreeSpace {
     /// Free bytes. Ignored unless `known`.

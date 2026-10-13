@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <span>
 #include <sstream>
@@ -952,6 +953,109 @@ void test_finished_copy_counts_taken(const fs::path& scratch) {
     OA_CHECK(oa::app::copy_file_percent({tally.done, tally.total}) == 100);
 }
 
+void test_published_installer_listing() {
+    struct Expect {
+        uint64_t size{};
+        uint64_t bytes{};
+        std::vector<std::string> bundles{};
+        std::vector<std::string> absent{};
+    };
+
+    const Expect rows[]{
+        Expect{
+            1093885504,
+            1049464781,
+            {"totala",
+             "campaign",
+             "core-contingency",
+             "battle-tactics",
+             "music",
+             "cavedog-units",
+             "cavedog-tilesets"},
+            {"TADemo.hpi"},
+        },
+        Expect{
+            2559350261,
+            1040584696,
+            {"totala",
+             "campaign",
+             "core-contingency",
+             "battle-tactics",
+             "music",
+             "cavedog-tilesets"},
+            {"TADemo.hpi",
+             "music/0.mp3",
+             "music/13.mp3",
+             "afark.ufo",
+             "aflea.ufo",
+             "ascarab.ufo",
+             "cormabm.ufo",
+             "cornecro.ufo",
+             "corplas.ufo"},
+        },
+        Expect{
+            1144736288,
+            1049223122,
+            {"totala",
+             "campaign",
+             "core-contingency",
+             "battle-tactics",
+             "music",
+             "cavedog-tilesets"},
+            {"TADemo.hpi",
+             "afark.ufo",
+             "aflea.ufo",
+             "ascarab.ufo",
+             "cormabm.ufo",
+             "cornecro.ufo",
+             "corplas.ufo"},
+        },
+    };
+    for (const Expect& row : rows) {
+        const auto* installer = oa::data::content_bundles::find_installer(row.size);
+        OA_CHECK(installer != nullptr);
+        if (installer == nullptr)
+            continue;
+        oa::app::SourceDescription described;
+        OA_CHECK(oa::app::describe_published_holdings(*installer, described));
+        OA_CHECK(described.bytes_to_copy == row.bytes);
+        OA_CHECK(described.bundles == row.bundles);
+        const std::span<const std::string_view> absent = oa::app::installer_not_held(*installer);
+        OA_CHECK(absent.size() == row.absent.size());
+        for (std::size_t index = 0; index < absent.size() && index < row.absent.size(); ++index)
+            OA_CHECK(absent[index] == row.absent[index]);
+        OA_CHECK(oa::app::is_published_installer_name(fs::path(installer->file_name), *installer));
+        OA_CHECK(!oa::app::is_published_installer_name(fs::path("notes.txt"), *installer));
+    }
+}
+
+void test_published_installer_rejects_other_bytes(const fs::path& scratch) {
+    const auto* installer = oa::data::content_bundles::find_installer(1093885504);
+    OA_CHECK(installer != nullptr);
+    if (installer == nullptr)
+        return;
+    fs::create_directories(scratch);
+    const fs::path file = scratch / std::string(installer->file_name);
+    {
+        std::ofstream created(file, std::ios::binary);
+        OA_CHECK(static_cast<bool>(created));
+    }
+    std::error_code failure;
+    fs::resize_file(file, static_cast<uintmax_t>(installer->size), failure);
+    OA_CHECK(!failure);
+    oa::app::SourceDescription described;
+    std::string error;
+    OA_CHECK(!oa::app::describe_published_installer(file, described, &error));
+    OA_CHECK(described.bundles.empty());
+    OA_CHECK(!error.empty());
+
+    const fs::path small = scratch / "short" / std::string(installer->file_name);
+    fs::create_directories(small.parent_path());
+    place_file(small, "not-the-installer");
+    OA_CHECK(!oa::app::describe_published_installer(small, described, &error));
+    OA_CHECK(described.bundles.empty());
+}
+
 } // namespace
 
 int main() {
@@ -970,6 +1074,8 @@ int main() {
     test_content_difference(scratch / "G03-difference");
     test_sibling_and_absent(scratch / "G26-music");
     test_finished_copy_counts_taken(scratch / "G59-count");
+    test_published_installer_listing();
+    test_published_installer_rejects_other_bytes(scratch / "G71-published");
     each_regular_file(scratch, unlock_one);
     std::error_code ignored;
     fs::remove_all(scratch, ignored);

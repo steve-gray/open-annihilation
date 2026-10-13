@@ -245,6 +245,8 @@ class Search {
     }
 
     /// Searches a Wine prefix's drive_c to prefix_search_depth for folders holding the archive.
+    /// drive_c's windows and users folders, and any folder that cannot hold the game, are
+    /// left unopened.
     ///
     /// @param drive the prefix's drive_c
     /// @param source who keeps the prefix
@@ -270,6 +272,8 @@ class Search {
                                           return same_name(name_of(subfolder), name);
                                       }
                                   ))
+                    continue;
+                if (folder_cannot_hold_game(name_of(subfolder)))
                     continue;
                 waiting.emplace_back(std::move(subfolder), depth + 1);
             }
@@ -419,6 +423,33 @@ void add_subfolders(std::vector<fs::path>& drives, const fs::path& folder) {
 #endif
 
 } // namespace
+
+bool folder_cannot_hold_game(std::string_view name) noexcept {
+    static constexpr std::array<std::string_view, 17> skipped{
+        "Library",
+        "node_modules",
+        ".git",
+        ".svn",
+        ".hg",
+        "Caches",
+        "Cache",
+        "Pictures",
+        "Movies",
+        ".Trash",
+        "$RECYCLE.BIN",
+        "System Volume Information",
+        "__MACOSX",
+        ".npm",
+        ".cache",
+        "DerivedData",
+        "Pods",
+    };
+    for (const std::string_view skipped_name : skipped) {
+        if (same_name(name, skipped_name))
+            return true;
+    }
+    return false;
+}
 
 SearchRoots search_roots_under(const fs::path& home) {
     return roots_with(home, home / ".local" / "share", home / ".config");

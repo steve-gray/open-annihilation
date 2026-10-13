@@ -114,8 +114,8 @@ struct SearchRoots {
 /// Reads only within the bounds above; unreadable places are skipped.
 ///
 /// A prefix is searched below its drive_c to prefix_search_depth, leaving out drive_c's
-/// windows and users folders and every link to a folder, and not below a folder that holds
-/// the archive.
+/// windows and users folders, every folder named by folder_cannot_hold_game, and every
+/// link to a folder, and not below a folder that holds the archive.
 ///
 /// @param roots the places looked in
 /// @return the folders found, in that order
@@ -134,6 +134,15 @@ struct SearchRoots {
 /// @param folder the folder
 /// @return true when it holds the archive as a file; false when it does not or cannot be read
 [[nodiscard]] bool holds_game_archive(const std::filesystem::path& folder);
+
+/// Tells whether a folder's name is one that cannot hold the game, so a search
+/// does not walk into it. ASCII letters are compared regardless of case.
+/// Applications, Downloads, Documents, Desktop, a game's own folders and a
+/// wrapper whose name ends in .app are not named here.
+///
+/// @param name the folder's own name, not a path
+/// @return true when a search should leave the folder unopened
+[[nodiscard]] bool folder_cannot_hold_game(std::string_view name) noexcept;
 
 /// Returns the player's home folder: HOME, or USERPROFILE on Windows.
 ///

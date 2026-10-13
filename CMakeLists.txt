@@ -338,7 +338,7 @@ add_library(oa::app::game_files ALIAS oa-app-game-files)
 target_link_libraries(oa-app-game-files PUBLIC oa-app-headers oa-app-game-directory oa-app-mod-profile
   oa-base-threads oa-data-content-bundles PRIVATE oa-formats-zip oa-formats-inno-setup oa-formats-udif
   oa-formats-hfsplus oa-formats-xar oa-formats-cpio oa-base-sha256 oa-platform-preferences
-  oa-platform-shims oa-options)
+  oa-platform-shims oa-platform-game-installs oa-options)
 # The player's own folder: where it is, the folders it holds, a folder for
 # each mod in Saves, Screenshots, Films and Recordings, the one-time moves
 # of saved games from beside the preferences file and loose in Saves, and of

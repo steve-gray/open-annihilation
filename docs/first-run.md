@@ -116,10 +116,11 @@ installation, never a folder of loose files such as Downloads. When a
 folder was only searched for installers, those installers are the rows.
 The fullest place is selected. A row names the file or the folder, the
 path shortened under the home folder, and the bundles that place holds.
-It does not name a bundle the place lacks. **Locate another…** asks for a
-folder. **Copy the game** is available once a row is chosen. **Back**
-returns to the language. The left button is the walk's **Quit** or
-**Skip**.
+It does not name a bundle the place lacks. The list is ready when the
+step opens. Copying still checks each file as it reads it. **Locate
+another…** asks for a folder. **Copy the game** is available once a row
+is chosen. **Back** returns to the language. The left button is the
+walk's **Quit** or **Skip**.
 
 The line under the rows says the copies go to Documents › Open
 Annihilation, and that the installation is left as it is.

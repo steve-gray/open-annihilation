@@ -45,8 +45,11 @@ one the step selects.
   - each `install_path` of Heroic's `gog_store/installed.json`;
   - each Lutris prefix's `drive_c`, then each Bottles bottle's, searched
     `prefix_search_depth` (4) folders deep, leaving out drive_c's `windows`
-    and `users` folders and every link to a folder, and not below a folder
-    that holds the archive.
+    and `users` folders, every folder `folder_cannot_hold_game` names
+    (Library, caches, picture and film folders, source-control and package
+    folders, and the like), and every link to a folder, and not below a
+    folder that holds the archive. A wrapper such as `Game.app` is still
+    walked, so a game under `drive_c` inside it is found.
 
   Each folder is returned once, by its canonical path, marked removable when
   it lies under a removable drive's mount, and at most `most_candidates` (32)
@@ -93,7 +96,9 @@ manifest), `~/.steam/steam` as a link to the same Steam, a Flatpak Steam with
 no library list, Heroic native and Flatpak (another game's folder, a folder
 also found in Steam, a relative path, a list cut short), a Lutris prefix
 with copies of the archive where the search never looks, and a Bottles
-bottle with the game four folders below `drive_c`. It checks what is found,
+bottle with the game four folders below `drive_c`. A further prefix leaves
+a game inside `Library` unfound and still finds one under `Game.app`. It
+checks what is found,
 in what order, each folder once, the removable mark, `TOTALA1.HPI` in any
 case and the `most_candidates` limit; and it feeds each reader well-formed
 and malformed text (cut short, an extra close, a key with no value, too deep,
