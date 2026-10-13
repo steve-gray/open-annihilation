@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // What each kind of package asks of the running game. A kind is named in
-// one branch of each function: a mod package (oamod), a map pack (oamap)
-// and a language pack (oalang).
+// one branch of each function: a mod package (oamod), a map pack (oamap),
+// a language pack (oalang) and an expansion. An expansion is copied by
+// install_oaexp; these hooks are not its install.
 
 #include "map_packs.hpp"
 #include "package_paths.hpp"
@@ -79,6 +80,8 @@ bool Runtime::package_target_in_use(
     // open, and nothing waits for the run to end.
     if (kind.name == "oalang")
         return false;
+    if (kind.name == "expansion")
+        return false;
     return false;
 }
 
@@ -88,6 +91,8 @@ bool Runtime::package_offers_play(const package_install::PackageKind& kind) cons
     if (kind.name == "oamap")
         return false;
     if (kind.name == "oalang")
+        return false;
+    if (kind.name == "expansion")
         return false;
     return false;
 }
@@ -103,6 +108,10 @@ void Runtime::package_changed(const package_install::PackageKind& kind, const fs
     // catalogue and the font faces are replaced in place.
     if (kind.name == "oalang")
         reload_language_packs();
+    // An expansion's files are read with the content copy, not as a package
+    // the Library lists.
+    if (kind.name == "expansion")
+        return;
 }
 
 package_install::PackageOptions
@@ -123,6 +132,9 @@ Runtime::package_options(const package_install::PackageKind& kind) const {
     }
     // A language pack's hooks read the package themselves and need no context.
     if (kind.name == "oalang")
+        return options;
+    // An expansion's manifest reader uses the built-in table and no context.
+    if (kind.name == "expansion")
         return options;
     return options;
 }

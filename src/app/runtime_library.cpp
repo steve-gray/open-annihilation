@@ -130,6 +130,10 @@ library::Kind kind_of(data::catalogue::Kind kind) noexcept {
         return library::Kind::map_pack;
     case data::catalogue::Kind::oalang:
         return library::Kind::language;
+    case data::catalogue::Kind::expansion:
+        // The caller lists an expansion on downloadable_expansions and does
+        // not build a Library row for it.
+        return library::Kind::mod;
     }
     return library::Kind::mod;
 }
@@ -1267,6 +1271,19 @@ library::Inputs Runtime::library_inputs() {
             if (entry.package == nullptr)
                 continue;
             const data::catalogue::Package& package = *entry.package;
+            if (package.kind == data::catalogue::Kind::expansion) {
+                library::DownloadableExpansion offered;
+                offered.id = package.id;
+                offered.registry = entry.registry;
+                offered.name = package.name;
+                offered.version = package.version;
+                offered.file = package.file;
+                offered.sha256 = package.sha256;
+                offered.size = package.size;
+                offered.extends = package.extends;
+                inputs.downloadable_expansions.push_back(std::move(offered));
+                continue;
+            }
             library::Listing listing;
             listing.registry = entry.registry;
             listing.kind = kind_of(package.kind);

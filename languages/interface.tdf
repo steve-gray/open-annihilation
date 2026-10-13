@@ -12671,3 +12671,99 @@
 	es=No se pudo copiar el juego.;
 	it=Non è stato possibile copiare il gioco.;
 	}
+
+[INSTALLING EXPANSION]
+	{
+	de=EXPANSION WIRD INSTALLIERT;
+	fr=INSTALLATION DE L'EXTENSION;
+	es=INSTALANDO LA EXPANSIÓN;
+	it=INSTALLAZIONE DELL'ESPANSIONE;
+	}
+
+[EXPANSION INSTALLED]
+	{
+	de=EXPANSION INSTALLIERT;
+	fr=EXTENSION INSTALLÉE;
+	es=EXPANSIÓN INSTALADA;
+	it=ESPANSIONE INSTALLATA;
+	}
+
+[EXPANSION NOT INSTALLED]
+	{
+	de=EXPANSION NICHT INSTALLIERT;
+	fr=EXTENSION NON INSTALLÉE;
+	es=EXPANSIÓN NO INSTALADA;
+	it=ESPANSIONE NON INSTALLATA;
+	}
+
+[{name} is installed. Turn it on in the Library.]
+	{
+	de={name} ist installiert. Schalte sie in der Bibliothek ein.;
+	fr={name} est installée. Active-la dans la Bibliothèque.;
+	es={name} está instalada. Actívala en la Biblioteca.;
+	it={name} è installata. Attivala nella Biblioteca.;
+	}
+
+[Install the expansion {name}?]
+	{
+	de=Die Expansion {name} installieren?;
+	fr=Installer l'extension {name} ?;
+	es=¿Instalar la expansión {name}?;
+	it=Installare l'espansione {name}?;
+	}
+
+[It holds no oaexp.yaml at its top, or in a single folder at its top.]
+	{
+	de=Es enthält kein oaexp.yaml ganz oben oder in einem einzelnen Ordner ganz oben.;
+	fr=Il ne contient pas d'oaexp.yaml à sa racine, ni dans un seul dossier à sa racine.;
+	es=No contiene oaexp.yaml en su nivel superior, ni en una sola carpeta en su nivel superior.;
+	it=Non contiene oaexp.yaml in cima, né in una sola cartella in cima.;
+	}
+
+[Its oaexp.yaml has errors.]
+	{
+	de=Sein oaexp.yaml hat Fehler.;
+	fr=Son oaexp.yaml a des erreurs.;
+	es=Su oaexp.yaml tiene errores.;
+	it=Il suo oaexp.yaml ha errori.;
+	}
+
+[Its oaexp.yaml is larger than 256 KiB.]
+	{
+	de=Sein oaexp.yaml ist größer als 256 KiB.;
+	fr=Son oaexp.yaml dépasse 256 KiB.;
+	es=Su oaexp.yaml supera los 256 KiB.;
+	it=Il suo oaexp.yaml supera i 256 KiB.;
+	}
+
+[The expansion holds {name}, which it does not have.]
+	{
+	de=Die Expansion enthält {name}, das sie nicht hat.;
+	fr=L'extension contient {name}, qu'elle n'a pas.;
+	es=La expansión contiene {name}, que no tiene.;
+	it=L'espansione contiene {name}, che non ha.;
+	}
+
+[The expansion is missing {name}.]
+	{
+	de=Der Expansion fehlt {name}.;
+	fr=Il manque {name} à l'extension.;
+	es=A la expansión le falta {name}.;
+	it=All'espansione manca {name}.;
+	}
+
+[The file {name} is not the expansion's file.]
+	{
+	de=Die Datei {name} ist nicht die Datei der Expansion.;
+	fr=Le fichier {name} n'est pas le fichier de l'extension.;
+	es=El archivo {name} no es el archivo de la expansión.;
+	it=Il file {name} non è il file dell'espansione.;
+	}
+
+[It is not one of the game's expansions.]
+	{
+	de=Sie ist keine Expansion des Spiels.;
+	fr=Ce n'est pas une extension du jeu.;
+	es=No es una de las expansiones del juego.;
+	it=Non è una delle espansioni del gioco.;
+	}

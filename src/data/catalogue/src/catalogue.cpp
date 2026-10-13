@@ -87,7 +87,7 @@ bool members_unique(const json::Json& value) {
     return true;
 }
 
-/// Reads `kind` as one of the three package kinds.
+/// Reads `kind` as one of the package kinds.
 bool parse_kind(std::string_view text, Kind& kind) noexcept {
     if (text == "oalang") {
         kind = Kind::oalang;
@@ -99,6 +99,10 @@ bool parse_kind(std::string_view text, Kind& kind) noexcept {
     }
     if (text == "oamap") {
         kind = Kind::oamap;
+        return true;
+    }
+    if (text == "expansion") {
+        kind = Kind::expansion;
         return true;
     }
     return false;
@@ -130,7 +134,7 @@ bool file_named(std::string_view file, const sha::Digest& digest, Kind kind) {
     const auto hex = sha::to_hex(digest);
     std::string expected(hex.data(), hex.size());
     expected += '.';
-    expected += kind_name(kind);
+    expected += package_extension(kind);
     return last_segment(file) == expected;
 }
 
@@ -623,6 +627,38 @@ bool read_language(const json::Json& value, Package& package, std::string& reaso
     return true;
 }
 
+/// Reads an expansion's id and the base games it extends.
+///
+/// The id is a built-in expansion. `extends` is that expansion's list, in
+/// order. A missing list is the same refusal as a different one.
+///
+/// @param value the package object
+/// @param[in,out] package the package; its id is already set
+/// @param[out] reason the first broken rule
+/// @return true when the id is an expansion and extends is its list
+bool read_expansion_lists(const json::Json& value, Package& package, std::string& reason) {
+    const bundles::Bundle* bundle = bundles::find_bundle(package.id);
+    if (bundle == nullptr || bundle->kind != bundles::Kind::expansion) {
+        reason = "id \"" + package.id + "\" is not an expansion";
+        return false;
+    }
+    const json::Json* list = value.find("extends");
+    if (list == nullptr || list->type() != json::JsonType::array ||
+        list->elements().size() != bundle->extends.size()) {
+        reason = "extends is not the expansion's list";
+        return false;
+    }
+    for (std::size_t index = 0; index < bundle->extends.size(); ++index) {
+        const std::string* text = list->elements()[index].string();
+        if (text == nullptr || *text != bundle->extends[index]) {
+            reason = "extends is not the expansion's list";
+            return false;
+        }
+        package.extends.push_back(*text);
+    }
+    return true;
+}
+
 /// Reads one package. The first broken rule is the reason the entry is left out.
 bool read_package(const json::Json& value, Package& package, std::string& reason) {
     if (value.type() != json::JsonType::object) {
@@ -684,7 +720,7 @@ bool read_package(const json::Json& value, Package& package, std::string& reason
         return false;
     }
     package.file = *file_text;
-    if (kind == Kind::oamod) {
+    if (kind == Kind::oamod || kind == Kind::expansion) {
         if (!require_text(value, "version", 1, 32, package.version, reason))
             return false;
     } else if (!optional_text(value, "version", 1, 32, package.version, reason)) {
@@ -762,6 +798,8 @@ bool read_package(const json::Json& value, Package& package, std::string& reason
             package.maps.push_back(std::move(entry));
         }
     }
+    if (kind == Kind::expansion && !read_expansion_lists(value, package, reason))
+        return false;
     return true;
 }
 

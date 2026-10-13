@@ -38,15 +38,16 @@ inline constexpr std::size_t max_problems = 100;
 
 /// Which kind of package an entry offers.
 enum class Kind : uint8_t {
-    oalang, ///< a language pack
-    oamod,  ///< a mod
-    oamap,  ///< a map pack
+    oalang,    ///< a language pack
+    oamod,     ///< a mod
+    oamap,     ///< a map pack
+    expansion, ///< an expansion package
 };
 
-/// The kind as the catalogue writes it, and as the package file's extension.
+/// The kind as the catalogue writes it.
 ///
 /// @param kind the kind
-/// @return `oalang`, `oamod` or `oamap`; never null
+/// @return `oalang`, `oamod`, `oamap` or `expansion`; never null
 [[nodiscard]] inline const char* kind_name(Kind kind) noexcept {
     switch (kind) {
     case Kind::oalang:
@@ -55,8 +56,23 @@ enum class Kind : uint8_t {
         return "oamod";
     case Kind::oamap:
         return "oamap";
+    case Kind::expansion:
+        return "expansion";
     }
     return "";
+}
+
+/// The package file's extension, without the dot.
+///
+/// An expansion's catalogue kind is `expansion` and its file ends `.oaexp`.
+/// Every other kind's file ends with the kind's own name.
+///
+/// @param kind the kind
+/// @return `oalang`, `oamod`, `oamap` or `oaexp`; never null
+[[nodiscard]] inline const char* package_extension(Kind kind) noexcept {
+    if (kind == Kind::expansion)
+        return "oaexp";
+    return kind_name(kind);
 }
 
 /// One map inside a map pack, as the catalogue lists it.
@@ -114,6 +130,9 @@ struct Package {
     /// Expansions that must be on, as `requiredExpansions` names them.
     /// Empty when the entry omits the key, and empty when it names none.
     std::vector<std::string> required_expansions;
+    /// Base games an expansion extends, in the table's order. Empty for
+    /// every other kind.
+    std::vector<std::string> extends;
     std::vector<MapEntry> maps; ///< a map pack's maps; empty for every other kind
 };
 
@@ -163,10 +182,10 @@ read_catalogue(std::span<const uint8_t> bytes, Catalogue& out, std::string* erro
 
 /// Reports whether a package key is the key for its kind.
 ///
-/// A mod or a map pack uses lower-case kebab-case of 1 to 64 bytes: words of
-/// `a`-`z` and `0`-`9` joined by single hyphens. A language pack uses a
-/// language tag of 2 to 35 bytes: letters, then hyphen-joined parts of
-/// letters and digits. No key contains an at sign.
+/// A mod, a map pack or an expansion uses lower-case kebab-case of 1 to 64
+/// bytes: words of `a`-`z` and `0`-`9` joined by single hyphens. A language
+/// pack uses a language tag of 2 to 35 bytes: letters, then hyphen-joined
+/// parts of letters and digits. No key contains an at sign.
 ///
 /// @param kind the package's kind
 /// @param text the key

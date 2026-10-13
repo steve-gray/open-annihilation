@@ -859,6 +859,62 @@ void test_content_needs() {
     );
 }
 
+/// An expansion entry. The file's last segment ends `.oaexp`.
+///
+/// @param id the package id
+/// @param with_version true to name version "1"
+/// @param tail extra JSON members, without a leading comma; empty to add none
+/// @return one package object
+std::string expansion_entry(std::string_view id, bool with_version, std::string_view tail) {
+    const std::string hash = hex_of(std::string("expansion/") + std::string(id));
+    std::string json = "{\"kind\":\"expansion\",\"id\":\"";
+    json += id;
+    json += "\",\"name\":\"Cavedog units\"";
+    if (with_version)
+        json += ",\"version\":\"1\"";
+    json += ",\"release\":1,\"size\":4,\"sha256\":\"";
+    json += hash;
+    json += "\",\"file\":\"/v1/p/";
+    json += hash;
+    json += ".oaexp\"";
+    if (!tail.empty()) {
+        json += ',';
+        json += tail;
+    }
+    json += '}';
+    return json;
+}
+
+void test_expansion() {
+    const std::string accepted = expansion_entry("cavedog-units", true, "\"extends\":[\"totala\"]");
+    const auto out = read_ok(catalogue_of(accepted));
+    OA_CHECK(out.packages.size() == 1);
+    OA_CHECK(out.problems.empty());
+    if (!out.packages.empty()) {
+        const catalogue::Package& package = out.packages[0];
+        OA_CHECK(package.kind == catalogue::Kind::expansion);
+        OA_CHECK(std::string(catalogue::kind_name(package.kind)) == "expansion");
+        OA_CHECK(std::string(catalogue::package_extension(package.kind)) == "oaexp");
+        OA_CHECK(package.id == "cavedog-units");
+        OA_CHECK(package.version == "1");
+        OA_CHECK(package.extends == std::vector<std::string>{"totala"});
+        OA_CHECK(
+            package.file.size() >= 6 &&
+            package.file.compare(package.file.size() - 6, 6, ".oaexp") == 0
+        );
+    }
+    skips_one(expansion_entry("cavedog-units", true, "\"extends\":[\"totala-demo\"]"), "extends");
+    skips_one(expansion_entry("ridge", true, "\"extends\":[\"totala\"]"), "not an expansion");
+    std::string wrong_suffix = expansion_entry("cavedog-units", true, "\"extends\":[\"totala\"]");
+    const auto suffix = wrong_suffix.rfind(".oaexp");
+    OA_CHECK(suffix != std::string::npos);
+    if (suffix != std::string::npos)
+        wrong_suffix.replace(suffix, 6, ".expansion");
+    skips_one(wrong_suffix, "file not named");
+    skips_one(expansion_entry("cavedog-units", false, "\"extends\":[\"totala\"]"), "version");
+    skips_one(expansion_entry("cavedog-units", true, {}), "extends");
+}
+
 } // namespace
 
 int main() {
@@ -871,5 +927,6 @@ int main() {
     test_utc_time();
     test_published();
     test_content_needs();
+    test_expansion();
     return oa::test::check_exit_status();
 }

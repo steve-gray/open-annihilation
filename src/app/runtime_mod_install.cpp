@@ -6,8 +6,9 @@
 // prompt in the settings dialog's look, a question screen of the OA layer,
 // its files unpacked a budget a frame with the progress shown, put in place,
 // and what came of it told; a change
-// to the mod played waits for the run to end. A catalogue map pack, and a
-// catalogue language pack, ask nothing and show nothing, including while
+// to the mod played waits for the run to end. A catalogue map pack, a
+// catalogue language pack and a catalogue expansion ask nothing and show
+// nothing, including while
 // Settings or a notice show and once the main menu has settled; in a run
 // nobody watches a language pack still installs, and a map pack while the
 // map browser is the top screen or GET MAP shows over the battle room. A
@@ -37,6 +38,7 @@
 #include "oa/app/package_install/handoff.hpp"
 #include "oa/app/package_install/inbox.hpp"
 #include "oa/app/package_install/oamod.hpp"
+#include "oa/app/package_install/oaexp.hpp"
 #include "oa/app/package_install/prompts.hpp"
 #include "oa/app/platform_hooks.hpp"
 #include "oa/app/runtime.hpp"
@@ -858,6 +860,59 @@ void Runtime::tell_mod_installs() {
         const fs::path root = user_folder_ / std::string(kind.root_folder);
         state.incoming = state.package->incoming;
         state.incoming.origin = state.origin;
+        // An expansion is not unpacked by the generic installer. Its files
+        // are the built-in table's, copied with the .oa-content record. A
+        // catalogue install shows nothing. A file the player opened is told
+        // once it is in place, and is not asked first.
+        if (kind.name == "expansion") {
+            install::Problem problem{};
+            fs::path installed;
+            const std::string_view registry_id = state.origin.kind == install::OriginKind::catalogue
+                                                     ? std::string_view(state.origin.registry)
+                                                     : std::string_view{};
+            const bool placed = install::oaexp::install_oaexp(
+                readable, user_folder_, registry_id, &installed, problem
+            );
+            if (!placed) {
+                log_line(
+                    name + ": " + install::refusal_text(kind, problem) +
+                    (problem.detail.empty() ? "" : " (" + problem.detail + ")")
+                );
+                for (const auto& line : problem.lines)
+                    log_line(name + ": " + line);
+                state.report(
+                    *this,
+                    install::OutcomeResult::refused,
+                    install::refusal_text(kind, problem),
+                    problem.lines
+                );
+                if (!state.finish_quietly(*this)) {
+                    state.stage = ModInstallState::Stage::telling;
+                    state.show(
+                        *this,
+                        install::refused_prompt(kind, state.package->file_name, problem, false)
+                    );
+                }
+                state.finish_package();
+                return;
+            }
+            log_line(name + ": installed in " + path_to_utf8(installed));
+            state.report(*this, install::OutcomeResult::installed);
+            state.told_folder = installed;
+            if (!state.finish_quietly(*this)) {
+                if (state.origin.kind == install::OriginKind::catalogue) {
+                    state.hide(*this);
+                    state.stage = ModInstallState::Stage::idle;
+                } else {
+                    state.stage = ModInstallState::Stage::telling;
+                    state.show(
+                        *this, install::installed_prompt(kind, state.incoming, installed, false)
+                    );
+                }
+            }
+            state.finish_package();
+            return;
+        }
         state.plan = kind.plan(state.incoming, install::folder_hooks(kind, root));
         switch (state.plan.kind) {
         case install::PlanKind::install:
@@ -985,6 +1040,26 @@ void Runtime::tell_mod_installs() {
         begin_package(*opened_file);
         return true;
     };
+    // A catalogue expansion asks nothing. It is copied with no prompt while
+    // Settings or a notice show, and in a run nobody watches. A match still
+    // waits.
+    const auto take_catalogue_expansion = [&]() -> bool {
+        if (state.stage != ModInstallState::Stage::idle || state.prompt != nullptr)
+            return false;
+        const auto next = install::next_package_file();
+        if (!next)
+            return false;
+        const install::PackageKind* waiting_kind = install::kind_for_file(next->file);
+        if (waiting_kind == nullptr || waiting_kind->name != "expansion" ||
+            next->origin.kind != install::OriginKind::catalogue)
+            return false;
+        const auto opened_file = install::take_package_file();
+        if (!opened_file)
+            return false;
+        state.quiet = true;
+        begin_package(*opened_file);
+        return true;
+    };
     // A mod the player chose in the Library starts as catalogue_mod_may_start
     // says: on the main menu and also while the Library is the top screen
     // over it, Settings under it included. Any other package waits for the
@@ -1053,13 +1128,15 @@ void Runtime::tell_mod_installs() {
     if (!settled) {
         state.settled_frames = 0;
         // Nothing starts while a match loads or runs. A catalogue map pack
-        // or language pack otherwise installs here, with no prompt; every
-        // other package waits.
+        // language pack or expansion otherwise installs here, with no
+        // prompt; every other package waits.
         if (match_ != nullptr || screen_ == Screen::loading || screen_ == Screen::match)
             return;
         if (state.stage != ModInstallState::Stage::idle || state.prompt != nullptr)
             return;
         if (take_catalogue_language())
+            return;
+        if (take_catalogue_expansion())
             return;
         if (nobody_watches) {
             if (library_on_top())
@@ -1086,13 +1163,16 @@ void Runtime::tell_mod_installs() {
     if (++state.settled_frames < kPromptMenuFrames || engine_settings_fonts() == nullptr)
         return;
     // A run nobody watches leaves the packages waiting for one someone does,
-    // except a catalogue language pack, which asks nothing; a catalogue map
-    // pack while the player is getting one, which installs with no prompt;
+    // except a catalogue language pack and a catalogue expansion, which ask
+    // nothing; a catalogue map pack while the player is getting one, which
+    // installs with no prompt;
     // and a mod chosen in the Library while the Library is the top screen,
     // which asks and installs as it does for a player watching, the folders
     // its changes drop going a step a frame there too.
     if (nobody_watches) {
         if (take_catalogue_language())
+            return;
+        if (take_catalogue_expansion())
             return;
         if (getting_map_pack() && take_catalogue_map())
             return;
@@ -1150,10 +1230,13 @@ void Runtime::tell_mod_installs() {
         state.next_handoff_ms = now + kHandoffPollMs;
         take_handed_mod_files();
     }
-    // A catalogue language pack, and a catalogue map pack that asks nothing,
-    // install here with nothing shown, as they do off this menu. A map pack
-    // whose plan asks is put back for the take below, which shows the question.
+    // A catalogue language pack, a catalogue expansion, and a catalogue map
+    // pack that asks nothing, install here with nothing shown, as they do
+    // off this menu. A map pack whose plan asks is put back for the take
+    // below, which shows the question.
     if (take_catalogue_language())
+        return;
+    if (take_catalogue_expansion())
         return;
     if (take_catalogue_map())
         return;
