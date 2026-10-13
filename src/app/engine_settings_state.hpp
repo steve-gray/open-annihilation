@@ -211,12 +211,12 @@ struct Runtime::EngineSettingsState {
 
     /// Returns the screen sizes the display the window is on offers
     /// (offered_screen_sizes), from the floor the profile's display rules
-    /// set: the options' Screen Size list, and the settings' Screen size
-    /// after Desktop. In full screen where full screen switches the
-    /// display's mode (run_full_screen_method), the display's modes; else
-    /// the sizes that fit its desktop, as a window or as a frame scaled to
-    /// the screen. Without a window, the primary display's for the way the
-    /// next start shows them (start_use).
+    /// set: the options' Screen Size list, the settings' Screen size after
+    /// Desktop, and the battle room's RES column. In full screen, the
+    /// display's modes, including on a desktop that scales its frame and
+    /// cannot switch the output's mode. In a window, the sizes that fit the
+    /// desktop. Without a window, the primary display's for the way the next
+    /// start shows them (start_use).
     ///
     /// @param runtime the runtime
     /// @return the sizes, the narrower first; never empty

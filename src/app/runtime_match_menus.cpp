@@ -1057,6 +1057,51 @@ void append_merged_records(
         fields->loaded_total_gadgets = static_cast<int16_t>(layout.gadgets.size() - 1U);
 }
 
+/// Copies VISUALS.GUI's screen-size controls onto an in-match visuals layout.
+///
+/// VISUALRT.GUI draws none. They sit in the gap under the shadows control,
+/// in the column's own coordinates; the merge then places them beside the tabs.
+///
+/// @param sub the in-match visuals layout, root first
+/// @param visuals VISUALS.GUI, which draws the controls
+void append_screen_size_controls(
+    oa::ui::gui_layout::Layout& sub, const oa::ui::gui_layout::Layout& visuals
+) {
+    struct Place {
+        const char* name;
+        int16_t x;
+        int16_t y;
+        int16_t width;
+        int16_t height;
+    };
+
+    // BSHADOWS ends at 172 and RESTORE starts at 269. The three controls
+    // from VISUALS.GUI fill that gap, kept narrow enough for the column.
+    constexpr Place places[] = {
+        {"VIDTEXT", 13, 180, 120, 14},
+        {"VIDVAL", 13, 196, 118, 13},
+        {"VIDSLDR", 13, 212, 120, 16},
+    };
+    for (const Place& place : places) {
+        const auto found = std::find_if(
+            visuals.gadgets.begin(),
+            visuals.gadgets.end(),
+            [&](const oa::ui::gui_layout::Gadget& gadget) {
+                return gadget.common.name == place.name;
+            }
+        );
+        if (found == visuals.gadgets.end())
+            continue;
+        auto gadget = *found;
+        gadget.common.x = place.x;
+        gadget.common.y = place.y;
+        gadget.common.width = place.width;
+        gadget.common.height = place.height;
+        gadget.common.active = 1;
+        sub.gadgets.push_back(std::move(gadget));
+    }
+}
+
 /// Copies `rect` of an RGB image into a new picture of the rect's size;
 /// pixels outside the image stay black.
 ///
@@ -2790,6 +2835,21 @@ void Runtime::activate_pause_gadget(std::string_view name) {
                 status_ = "options panel unavailable: " + std::string(error.what());
                 return;
             }
+            // The in-match visuals column has no screen-size control of its
+            // own. The three from VISUALS.GUI are the same control, listed
+            // and applied by the same path as the settings.
+            if (which == ui::OptionsPanel::visuals) {
+                try {
+                    auto visuals = oa::ui::gui_layout::parse(
+                        assets_.read(oa::data::defs::gui_path("VISUALS.GUI")).bytes,
+                        oa::ui::gui_layout::game_translation_lookup()
+                    );
+                    if (visuals.ok() && visuals.layout)
+                        append_screen_size_controls(sub, *visuals.layout);
+                } catch (const std::exception&) {
+                    // The column still opens; it draws no screen-size control.
+                }
+            }
             if (!load_match_hud_layout(oa::data::defs::gui_path(kPreferencesLayout)))
                 return;
             widget_gaf_frames_.clear();
@@ -3780,12 +3840,11 @@ void Runtime::toggle_graphics_flag(uint16_t mask, std::string_view key) {
 }
 
 void Runtime::show_screen_size_in_options() {
-    // Outside a match the options' Screen Size opens on the size the screen
-    // is shown at, which DisplaymodeWidth and DisplaymodeHeight then hold:
-    // a window's own size, shown as Custom where the display offers no
-    // such size; without a window, the size the setting plays at.
-    if (match_menu_session().options.in_game)
-        return;
+    // The options' Screen Size opens on the size the screen is shown at,
+    // which DisplaymodeWidth and DisplaymodeHeight then hold: a window's
+    // own size, shown as Custom where the display offers no such size;
+    // without a window, the size the setting plays at. In a match as well
+    // as outside one.
     auto size = EngineSettingsState::screen_size_now(*this);
     if (size == oa::ui::engine_settings::desktop_screen_size)
         size = EngineSettingsState::screen_size_in_effect(
@@ -3827,20 +3886,21 @@ void Runtime::bind_options_context() {
     context.host.save_options = [](void* host) {
         auto& runtime = *static_cast<Runtime*>(host);
         // RESTORE sets the Screen size setting back to its default, and a
-        // Screen Size the player moved to sets it to that size, each applied
-        // at once; in a match the Screen Size is hidden.
+        // Screen Size the player moved to sets it to that size. Each is
+        // applied when the options close with OK, in a match as well as
+        // outside one. Moving the slider only stores the size shown.
         const auto& options = match_menu_session().options;
         const auto& entry = options.snapshot;
         const auto& preferences = runtime.preferences_;
         const bool moved = preferences.display_width != entry.display_width ||
                            preferences.display_height != entry.display_height;
-        if (!options.in_game && options.screen_size_restored)
+        if (options.screen_size_restored)
             EngineSettingsState::take_screen_size(
                 runtime,
                 oa::ui::engine_settings::default_settings(EngineSettingsState::inputs(runtime))
                     .screen_size
             );
-        else if (!options.in_game && moved)
+        else if (moved)
             EngineSettingsState::take_screen_size(
                 runtime,
                 {static_cast<uint16_t>(preferences.display_width),
