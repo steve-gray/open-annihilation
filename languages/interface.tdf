@@ -2168,6 +2168,38 @@
 	it=Sviluppatore;
 	}
 
+[Different from the host: a file does not match.]
+	{
+	de=Anders als beim Gastgeber: eine Datei stimmt nicht.;
+	fr=Pas comme chez l'hôte : un fichier ne correspond pas.;
+	es=Distinto del anfitrión: un archivo no coincide.;
+	it=Diverso dall'host: un file non corrisponde.;
+	}
+
+[Different from the host: another base game ({name}).]
+	{
+	de=Anders als beim Gastgeber: ein anderes Grundspiel ({name}).;
+	fr=Pas comme chez l'hôte : un autre jeu de base ({name}).;
+	es=Distinto del anfitrión: otro juego base ({name}).;
+	it=Diverso dall'host: un altro gioco di base ({name}).;
+	}
+
+[Different from the host: no {name}.]
+	{
+	de=Anders als beim Gastgeber: kein {name}.;
+	fr=Pas comme chez l'hôte : pas de {name}.;
+	es=Distinto del anfitrión: sin {name}.;
+	it=Diverso dall'host: niente {name}.;
+	}
+
+[Different from the host: {name} is on.]
+	{
+	de=Anders als beim Gastgeber: {name} ist an.;
+	fr=Pas comme chez l'hôte : {name} est activé.;
+	es=Distinto del anfitrión: {name} está activado.;
+	it=Diverso dall'host: {name} è attivo.;
+	}
+
 [Difficulty Names]
 	{
 	de=Schwierigkeitsnamen;
@@ -2542,6 +2574,14 @@
 	fr=Chaque partie des écrans propres à OA, dans chacun de ses états, à cette taille.;
 	es=Cada parte de las pantallas propias de OA, en cada uno de sus estados, a este tamaño.;
 	it=Ogni parte delle schermate proprie di OA, in ciascuno dei suoi stati, a questa dimensione.;
+	}
+
+[Expansions]
+	{
+	de=Erweiterungen;
+	fr=Extensions;
+	es=Expansiones;
+	it=Espansioni;
 	}
 
 [Expansions, extra maps and mods are added beside what is there; nothing already there is replaced.]
@@ -8206,6 +8246,30 @@
 	fr=Le dossier {tag} ne contient pas cette langue. Le remplacer par {endonym} ({english}) depuis {file} ? Il est gardé, et peut être ramené.;
 	es=La carpeta {tag} no contiene este idioma. ¿Reemplazarla por {endonym} ({english}) de {file}? Se conserva y se puede traer de vuelta.;
 	it=La cartella {tag} non contiene questa lingua. Sostituirla con {endonym} ({english}) da {file}? Viene tenuta e si può riportare.;
+	}
+
+[The game cannot start until the content matches.]
+	{
+	de=Das Spiel kann erst starten, wenn der Inhalt übereinstimmt.;
+	fr=La partie ne peut pas commencer tant que le contenu ne correspond pas.;
+	es=La partida no puede empezar hasta que el contenido coincida.;
+	it=La partita non può iniziare finché il contenuto non coincide.;
+	}
+
+[The game cannot start until the host turns it on, or {player} turns it off.]
+	{
+	de=Das Spiel kann erst starten, wenn der Gastgeber es einschaltet oder {player} es ausschaltet.;
+	fr=La partie ne peut pas commencer tant que l'hôte ne l'active pas, ou que {player} ne le désactive pas.;
+	es=La partida no puede empezar hasta que el anfitrión lo active, o {player} lo desactive.;
+	it=La partita non può iniziare finché l'host non lo attiva, o {player} non lo disattiva.;
+	}
+
+[The game cannot start until {player} turns it on, or the host turns it off.]
+	{
+	de=Das Spiel kann erst starten, wenn {player} es einschaltet oder der Gastgeber es ausschaltet.;
+	fr=La partie ne peut pas commencer tant que {player} ne l'active pas, ou que l'hôte ne le désactive pas.;
+	es=La partida no puede empezar hasta que {player} lo active, o el anfitrión lo desactive.;
+	it=La partita non può iniziare finché {player} non lo attiva, o l'host non lo disattiva.;
 	}
 
 [The game is shown in {name}. Choose another language in Settings › Language first, then uninstall it.]
