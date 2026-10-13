@@ -447,20 +447,30 @@ oa::ui::first_run::Session copying_session(bool checked) {
     session.model.copy.whole = 1000;
     session.model.copy.running = !checked;
     session.model.copy.checked = checked;
-    session.model.copy.overall = checked ? "400 of 400 · 100%" : "120 of 400 · 30%";
+    session.model.copy.overall = checked ? "38 of 38 · 100%" : "12 of 38 · 31%";
     if (!checked)
         session.model.copy.remaining = "about 40 seconds left";
     oa::ui::first_run::CopyBundle bundle;
     bundle.name = "Total Annihilation";
     bundle.file = checked ? std::string{} : std::string("totala1.hpi");
-    bundle.amount = checked ? "All files match" : "30%";
+    bundle.amount = checked ? "All files match" : "31%";
     bundle.done = session.model.copy.done;
     bundle.whole = 1000;
     bundle.phase =
         checked ? oa::ui::first_run::CopyPhase::done : oa::ui::first_run::CopyPhase::copying;
     session.model.copy.bundles.push_back(std::move(bundle));
-    if (checked)
+    if (checked) {
+        oa::ui::first_run::CopyBundle music;
+        music.name = "Music";
+        music.amount = "17 of 18 tracks";
+        music.done = 1000;
+        music.whole = 1000;
+        music.phase = oa::ui::first_run::CopyPhase::done;
+        music.note = true;
+        session.model.copy.bundles.push_back(std::move(music));
         session.model.copy.verdict = "All files match";
+        session.copy_continue_ms = 3000;
+    }
     return session;
 }
 
