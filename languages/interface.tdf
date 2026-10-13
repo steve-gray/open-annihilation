@@ -282,6 +282,14 @@
 	it=Una mappa nel pacchetto non è adatta al gioco di base.;
 	}
 
+[A middle click pans the view towards the pointer until you click or press a key.]
+	{
+	de=Ein Mittelklick schwenkt die Ansicht zum Zeiger, bis du klickst oder eine Taste drückst.;
+	fr=Un clic du milieu fait défiler la vue vers le pointeur, jusqu'à ce que tu cliques ou appuies sur une touche.;
+	es=Un clic con el botón central desplaza la vista hacia el puntero hasta que haces clic o pulsas una tecla.;
+	it=Un clic centrale sposta la vista verso il puntatore finché non fai clic o premi un tasto.;
+	}
+
 [A number key selects its group on its own.]
 	{
 	de=Eine Zifferntaste wählt ihre Gruppe von allein.;
@@ -1608,6 +1616,14 @@
 	fr=Vérification…;
 	es=Comprobando…;
 	it=Controllo…;
+	}
+
+[Checking… {percent}%]
+	{
+	de=Prüfen… {percent} %;
+	fr=Vérification… {percent} %;
+	es=Comprobando… {percent} %;
+	it=Controllo… {percent} %;
 	}
 
 [Choose PLAY NOW to play it, or choose it later with PLAY NOW in the Library.]
@@ -5064,6 +5080,14 @@
 	fr=Rayon d'aimantation de l'extracteur;
 	es=Radio de ajuste del extractor de metal;
 	it=Raggio di aggancio dell'estrattore;
+	}
+
+[Middle-click pans]
+	{
+	de=Mittelklick schwenkt;
+	fr=Le clic du milieu fait défiler;
+	es=El clic central desplaza;
+	it=Il clic centrale sposta;
 	}
 
 [Minus]
@@ -12368,4 +12392,220 @@
 	fr=✓;
 	es=✓;
 	it=✓;
+	}
+
+[Setup]
+	{
+	de=Einrichtung;
+	fr=Préparation;
+	es=Preparación;
+	it=Preparazione;
+	}
+
+[THE GAME]
+	{
+	de=DAS SPIEL;
+	fr=LE JEU;
+	es=EL JUEGO;
+	it=IL GIOCO;
+	}
+
+[COPYING]
+	{
+	de=KOPIEREN;
+	fr=COPIE;
+	es=COPIA;
+	it=COPIA;
+	}
+
+[Quit]
+	{
+	de=Beenden;
+	fr=Quitter;
+	es=Salir;
+	it=Esci;
+	}
+
+[Copy the game]
+	{
+	de=Spiel kopieren;
+	fr=Copier le jeu;
+	es=Copiar el juego;
+	it=Copia il gioco;
+	}
+
+[Pause]
+	{
+	de=Pause;
+	fr=Pause;
+	es=Pausa;
+	it=Pausa;
+	}
+
+[Continue]
+	{
+	de=Weiter;
+	fr=Continuer;
+	es=Continuar;
+	it=Continua;
+	}
+
+[Locate another…]
+	{
+	de=Anderen Ort suchen…;
+	fr=Chercher ailleurs…;
+	es=Buscar en otro sitio…;
+	it=Cerca altrove…;
+	}
+
+[Where is Total Annihilation?]
+	{
+	de=Wo ist Total Annihilation?;
+	fr=Où est Total Annihilation ?;
+	es=¿Dónde está Total Annihilation?;
+	it=Dov'è Total Annihilation?;
+	}
+
+[OA copies the game once. The installation is left as it is.]
+	{
+	de=OA kopiert das Spiel einmal. Die Installation bleibt, wie sie ist.;
+	fr=OA copie le jeu une fois. L'installation reste telle quelle.;
+	es=OA copia el juego una vez. La instalación se queda como está.;
+	it=OA copia il gioco una volta. L'installazione resta com'è.;
+	}
+
+[Copying Total Annihilation]
+	{
+	de=Total Annihilation wird kopiert;
+	fr=Copie de Total Annihilation;
+	es=Copiando Total Annihilation;
+	it=Copia di Total Annihilation;
+	}
+
+[Nothing is installed and your files are not changed.]
+	{
+	de=Es wird nichts installiert und deine Dateien bleiben unverändert.;
+	fr=Rien n'est installé et tes fichiers ne changent pas.;
+	es=No se instala nada y tus archivos no cambian.;
+	it=Non si installa niente e i tuoi file non cambiano.;
+	}
+
+[If OA stops, the copy carries on from here next time.]
+	{
+	de=Wenn OA anhält, geht die Kopie beim nächsten Mal von hier weiter.;
+	fr=Si OA s'arrête, la copie reprend d'ici la prochaine fois.;
+	es=Si OA se detiene, la copia sigue desde aquí la próxima vez.;
+	it=Se OA si ferma, la copia riprende da qui la prossima volta.;
+	}
+
+[Copies go to Documents › Open Annihilation]
+	{
+	de=Die Kopien liegen in Documents › Open Annihilation;
+	fr=Les copies vont dans Documents › Open Annihilation;
+	es=Las copias van a Documents › Open Annihilation;
+	it=Le copie vanno in Documents › Open Annihilation;
+	}
+
+[To Documents › Open Annihilation › Games and Expansions]
+	{
+	de=Nach Documents › Open Annihilation › Games und Expansions;
+	fr=Vers Documents › Open Annihilation › Games et Expansions;
+	es=A Documents › Open Annihilation › Games y Expansions;
+	it=In Documents › Open Annihilation › Games ed Expansions;
+	}
+
+[A continues. B goes back.]
+	{
+	de=A macht weiter. B geht zurück.;
+	fr=A continue. B revient en arrière.;
+	es=A sigue. B vuelve atrás.;
+	it=A continua. B torna indietro.;
+	}
+
+[Game Content]
+	{
+	de=Spielinhalt;
+	fr=Contenu du jeu;
+	es=Contenido del juego;
+	it=Contenuto del gioco;
+	}
+
+[GAME CONTENT]
+	{
+	de=SPIELINHALT;
+	fr=CONTENU DU JEU;
+	es=CONTENIDO DEL JUEGO;
+	it=CONTENUTO DEL GIOCO;
+	}
+
+[Check again]
+	{
+	de=Erneut prüfen;
+	fr=Vérifier encore;
+	es=Comprobar otra vez;
+	it=Controlla di nuovo;
+	}
+
+[Copy again from…]
+	{
+	de=Erneut kopieren von…;
+	fr=Copier encore depuis…;
+	es=Copiar otra vez desde…;
+	it=Copia di nuovo da…;
+	}
+
+[Open folder]
+	{
+	de=Ordner öffnen;
+	fr=Ouvrir le dossier;
+	es=Abrir carpeta;
+	it=Apri cartella;
+	}
+
+[OA plays from its own copy in Documents › Open Annihilation. The installation is not used or changed.]
+	{
+	de=OA spielt aus seiner eigenen Kopie in Documents › Open Annihilation. Die Installation wird nicht benutzt und nicht verändert.;
+	fr=OA joue depuis sa propre copie dans Documents › Open Annihilation. L'installation n'est ni utilisée ni modifiée.;
+	es=OA juega desde su propia copia en Documents › Open Annihilation. La instalación no se usa ni se cambia.;
+	it=OA gioca dalla sua copia in Documents › Open Annihilation. L'installazione non si usa e non si cambia.;
+	}
+
+[not added]
+	{
+	de=nicht hinzugefügt;
+	fr=pas ajouté;
+	es=no añadido;
+	it=non aggiunto;
+	}
+
+[{done} of {total} · {percent}%]
+	{
+	de={done} von {total} · {percent} %;
+	fr={done} sur {total} · {percent} %;
+	es={done} de {total} · {percent} %;
+	it={done} di {total} · {percent} %;
+	}
+
+[about {seconds} seconds left]
+	{
+	de=noch etwa {seconds} Sekunden;
+	fr=encore environ {seconds} secondes;
+	es=quedan unos {seconds} segundos;
+	it=circa {seconds} secondi;
+	}
+
+[From {place}…]
+	{
+	de=Von {place}…;
+	fr=Depuis {place}…;
+	es=Desde {place}…;
+	it=Da {place}…;
+	}
+
+[no {name}]
+	{
+	de=kein {name};
+	fr=pas de {name};
+	es=sin {name};
+	it=niente {name};
 	}

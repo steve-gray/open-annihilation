@@ -12,6 +12,7 @@
 #include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/kit/chrome.hpp"
 #include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/rows.hpp"
 #include "oa/ui/kit/text.hpp"
@@ -745,6 +746,27 @@ void add_section(Building& building, const Dialog& dialog, const layout::Scrolle
     kit::add_rows(rows, placed, state);
     for (kit::Item& added : rows.items)
         list.items.push_back(std::move(added));
+    // A bundle being copied draws its bar in the row's own padding, so the
+    // next row is not pushed down and the page can be drawn while the copy runs.
+    if (dialog.page == Page::game_content) {
+        for (std::size_t index = 0; index < dialog.game_content.size(); ++index) {
+            const GameContentRow& bundle = dialog.game_content[index];
+            if (bundle.bar_done < 0)
+                continue;
+            const std::size_t row_index = index + 1;
+            if (row_index >= placed.rows.size())
+                continue;
+            const kit::PlacedRow& placed_row = placed.rows[row_index];
+            const int32_t bar_width = std::min(int32_t{220}, sized.content_width);
+            kit::add_progress(
+                list,
+                {sized.content_left, placed_row.top + placed_row.height - 8, bar_width, 6},
+                bundle.bar_done,
+                bundle.bar_whole > 0 ? bundle.bar_whole : 1
+            );
+            list.items.back().clip = sized.view_clip;
+        }
+    }
     // Tab stops on the rows that take a change, top to bottom.
     building.section_tab = rows.tab_order;
     // A row's control lies across its row, at the control's own line, so

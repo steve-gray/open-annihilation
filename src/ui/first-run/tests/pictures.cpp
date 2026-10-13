@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Writes the manual's four pictures of the first-run setup. Not a test.
+// Writes the manual's pictures of the first-run setup. Not a test.
 // Usage: oa-ui-first-run-pictures DIRECTORY
 
 #include "oa/ui/first_run/first_run.hpp"
@@ -431,6 +431,48 @@ oa::ui::first_run::Session language_session(bool offline) {
     return session;
 }
 
+oa::ui::first_run::Session game_session() {
+    oa::ui::first_run::Session session = language_session(false);
+    session.model.walk = oa::ui::first_run::Walk::setup;
+    session.model.step = oa::ui::first_run::Step::game;
+    oa::ui::first_run::GameSource source;
+    source.token = "install";
+    source.title = "Total Annihilation";
+    source.detail = "3.1c";
+    source.mark = oa::ui::first_run::SourceMark::folder;
+    source.footnote = "1.1 GB · 40 GB free";
+    source.chips.push_back({"Total Annihilation", true});
+    source.chips.push_back({"Core Contingency", true});
+    session.model.sources.push_back(std::move(source));
+    session.model.source = 0;
+    return session;
+}
+
+oa::ui::first_run::Session copying_session(bool checked) {
+    oa::ui::first_run::Session session = game_session();
+    session.model.step = oa::ui::first_run::Step::copying;
+    session.model.copy.from = "Total Annihilation";
+    session.model.copy.done = checked ? 1000 : 300;
+    session.model.copy.whole = 1000;
+    session.model.copy.running = !checked;
+    session.model.copy.checked = checked;
+    session.model.copy.overall = checked ? "400 of 400 · 100%" : "120 of 400 · 30%";
+    if (!checked)
+        session.model.copy.remaining = "about 40 seconds left";
+    oa::ui::first_run::CopyBundle bundle;
+    bundle.name = "Total Annihilation";
+    bundle.file = checked ? std::string{} : std::string("totala1.hpi");
+    bundle.amount = checked ? "All files match" : "30%";
+    bundle.done = session.model.copy.done;
+    bundle.whole = 1000;
+    bundle.phase =
+        checked ? oa::ui::first_run::CopyPhase::done : oa::ui::first_run::CopyPhase::copying;
+    session.model.copy.bundles.push_back(std::move(bundle));
+    if (checked)
+        session.model.copy.verdict = "All files match";
+    return session;
+}
+
 void draw_step(Picture& picture, const oa::ui::first_run::Session& session) {
     const auto scene = oa::ui::first_run::lay_out(session, large_frame(), &picture.fonts);
     oa::ui::first_run::draw(picture.canvas, scene, session);
@@ -530,6 +572,24 @@ int main(int argc, char** argv) {
         session.pulse_ms = 400;
         draw_step(picture, session);
         if (!write_png(picture, directory / "buttons.png"))
+            return 1;
+    }
+    {
+        Picture picture(fonts.get());
+        draw_step(picture, game_session());
+        if (!write_png(picture, directory / "game.png"))
+            return 1;
+    }
+    {
+        Picture picture(fonts.get());
+        draw_step(picture, copying_session(false));
+        if (!write_png(picture, directory / "copying.png"))
+            return 1;
+    }
+    {
+        Picture picture(fonts.get());
+        draw_step(picture, copying_session(true));
+        if (!write_png(picture, directory / "check.png"))
             return 1;
     }
     return 0;

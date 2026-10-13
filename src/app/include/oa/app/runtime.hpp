@@ -8,6 +8,7 @@
 #include "director_presentation.hpp"
 #include "extension.hpp"
 #include "frame_pacing.hpp"
+#include "middle_pan.hpp"
 #include "full_screen.hpp"
 #include "match_model_draws.hpp"
 #include "megamap_state.hpp"
@@ -7427,6 +7428,13 @@ class Runtime final : public menu::Host,
     /// @return true when its rows changed
     bool refresh_settings_languages(oa::ui::engine_settings::Dialog& dialog);
 
+    /// Brings Game Content up to date. A copy and a check run on their own
+    /// threads; this reads how far they have got. The dialog stays open.
+    ///
+    /// @param dialog the open dialog
+    /// @return true when its rows changed, or while a copy or a check is running
+    bool refresh_game_content(oa::ui::engine_settings::Dialog& dialog);
+
     /// Reads the catalogues into the available languages when they have changed.
     void note_catalogue_languages();
 
@@ -10033,12 +10041,19 @@ class Runtime final : public menu::Host,
     /// there. The settings dialog's ease about the centre keeps the follow,
     /// in play and under a menu, with the unit at the centre on every frame,
     /// and so for a unit in the map's corner, past the map's edges. A
-    /// scroll and moving the view from the minimap end the follow. Returns
+    /// scroll and moving the view from the minimap end the follow. A middle
+    /// click then pans toward the pointer, a left click ends that pan without
+    /// an order, and Home ends another without its command. Returns
     /// to the skirmish menu; throws std::runtime_error on a failure.
     /// [runtime_tracking_zoom_check.cpp]
     ///
     /// @param group the navigation check's group: all, zoom, or a window's zoom group
     void check_tracking_zoom(NavigationGroup group);
+
+    /// Checks a middle click pans the view toward the pointer, and that the
+    /// click and the key which end it give no order and run no command.
+    /// Throws std::runtime_error on a failure. The match is already running.
+    void check_middle_pan();
 
     /// Checks that every frame of a zoom keeps the map point under the
     /// pointer there, on the game's screen.
@@ -11566,6 +11581,11 @@ class Runtime final : public menu::Host,
     /// choices. Throws std::runtime_error naming what differed.
     void check_first_run();
 
+    /// Walks language, the game and the copy in the pre-game window, then
+    /// checks the online step over the main menu. Throws std::runtime_error
+    /// naming what differed.
+    void check_setup_window();
+
     /// Opens every Open Annihilation screen in English, German, French,
     /// Spanish, Italian and Simplified Chinese, at 640x480 and 1280x720.
     /// Throws std::runtime_error naming each text drawn wider than its box
@@ -13028,6 +13048,36 @@ class Runtime final : public menu::Host,
     /// @param way_z -1 up, 1 down, 0 neither; held to that range
     /// @param step screen pixels the frame scrolls, at or above 0
     void scroll_match_view(int32_t way_x, int32_t way_z, double step);
+
+    /// Scrolls the view by a screen distance this frame, through the same
+    /// limits as any scroll (held_view, View past the map's edge). A
+    /// distance other than zero stops tracking a unit, though the view is
+    /// already at its limit and stays as it is.
+    ///
+    /// @param screen_dx screen points to the right
+    /// @param screen_dy screen points downward
+    void scroll_match_view_by(double screen_dx, double screen_dy);
+
+    /// Takes a gesture for a middle-click pan, when one is running or a
+    /// middle press might start one.
+    ///
+    /// On the battlefield a middle click, or a middle press that moves,
+    /// starts the pan (middle_pan_). Another button, the wheel, a key or
+    /// the window losing focus ends it, and that press or key is consumed:
+    /// the matching button release is consumed too, so it gives no order.
+    /// The pointer moving only updates the pan.
+    ///
+    /// @param event the SDL event
+    /// @return true when the event must not reach the rest of the game
+    bool middle_pan_take(const SDL_Event& event);
+
+    /// Draws the pan's anchor, and an arrow at the pointer once it has left
+    /// the anchor. Both stay on the screen where the gesture put them.
+    void draw_middle_pan_marks();
+
+    /// Tells whether the pointer has left the anchor far enough to show the
+    /// pan's direction instead of the usual cursor.
+    [[nodiscard]] bool middle_pan_shows_direction() const;
 
     /// Returns the camera as the next frame draws it: held within the
     /// view's limits (held_camera), which let the view go past the map's
@@ -15728,6 +15778,15 @@ class Runtime final : public menu::Host,
     /// other screen has shown and the match's screen has kept its size.
     /// Until then the screen's edges do not scroll the camera.
     bool match_pointer_known_ = false;
+    /// A middle-click pan: idle, a click still deciding, or a drag. The
+    /// anchor is a screen point.
+    middle_pan::State middle_pan_{};
+    /// The button whose press ended a pan. Its release is consumed too, so a
+    /// left press cannot give its order when the button comes up. Zero is none.
+    uint8_t middle_pan_swallow_button_{0};
+    /// The key that ended a pan also types a character. That character is
+    /// dropped, then this clears.
+    bool middle_pan_drop_text_{false};
     float pointer_x_ = 0;
     float pointer_y_ = 0;
     oa::formats::gaf::Archive cursor_gaf_{};

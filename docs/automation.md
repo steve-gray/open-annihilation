@@ -196,6 +196,7 @@ centre would land on the line between Off and On.
 | A drop-down's item, while open | `oa.settings.<row>.<value>` | check box, checked on the choice |
 | A slider | `oa.settings.<row>` | slider; its text the value shown |
 | A row's own button (MANAGE…) | `oa.settings.<row>.<button>`, as `oa.settings.game-files-summary.manage` | button |
+| Game Content's buttons | `oa.settings.content-check.check-again`, `oa.settings.content-copy.copy-again`, `oa.settings.content-open.open-folder` | button. The section's entry is `oa.settings.nav.game-content`. While a bundle is being copied, that bundle's row offers Cancel as `oa.settings.<id>.cancel-copy` |
 | Your files' buttons, on System | `oa.settings.user-folder.saves`, `.screenshots`, `.mods` | button |
 | File Type Registration, on System on Windows, Linux and macOS | `oa.settings.file-type-registration` (the heading); `oa.settings.file-type-oamod`, `oa.settings.file-type-oamap`, `oa.settings.file-type-oalang`, `oa.settings.file-type-oareg` | the heading a label; each switch as a switch |
 | File types, on System on iOS | `oa.settings.file-types` | label |
@@ -395,15 +396,23 @@ on, as it ends with ` DEV MODE` while Developer Mode is:
 
 ## The welcome setup
 
-The welcome at the first main menu is the screen `first-run`. Its controls
-are listed as `oa.first-run.<step>.<control>`, with `<step>` one of
-`language`, `online` and `buttons`:
+The welcome at the first main menu is the screen `first-run`. A start
+that still has to copy the game uses the same screen for five steps, and
+`<step>` is then `language`, `game`, `copying`, `online` and `buttons`.
+A player who already has the game uses `language`, `online` and `buttons`.
+Controls are listed as `oa.first-run.<step>.<control>`:
 
 | Control | Name |
 |---|---|
 | Skip setup | `oa.first-run.language.skip`, `oa.first-run.online.skip` |
-| Back | `oa.first-run.language.back`, `oa.first-run.online.back`, `oa.first-run.buttons.back` |
+| Quit, on the game step | `oa.first-run.game.skip` |
+| Cancel, on the copying step | `oa.first-run.copying.skip` |
+| Back | `oa.first-run.language.back`, `oa.first-run.game.back`, `oa.first-run.online.back`, `oa.first-run.buttons.back` |
 | Next | `oa.first-run.language.next`, `oa.first-run.online.next` |
+| Copy the game | `oa.first-run.game.next` |
+| Pause, or Continue once the check has finished | `oa.first-run.copying.next` |
+| Locate another… | `oa.first-run.game.locate` |
+| A source row | `oa.first-run.game.source.<index>`, from 0 |
 | A language card | `oa.first-run.language.card.<tag>`, the tag in lower case and anything else a hyphen (`de`, `en-xa`) |
 | The carousel's arrows | `oa.first-run.language.previous`, `oa.first-run.language.next-card` |
 | Cancel download, Retry | `oa.first-run.language.cancel`, `oa.first-run.language.retry` |
@@ -421,11 +430,14 @@ welcome otherwise:
 
 ```
 first-run language
+first-run game
+first-run copying
 first-run online
 first-run buttons
 ```
 
-The log answers `stage: first-run language` (or `online`, or `buttons`).
+The log answers `stage: first-run language` (or `game`, `copying`,
+`online`, or `buttons`).
 On its own the welcome logs `first-run: showing step language` when that
 step opens, and `first-run: not showing:` with `done`, `headless check`,
 `preferences file`, `benchmark`, `stage`, `fark` or `unattended` when it

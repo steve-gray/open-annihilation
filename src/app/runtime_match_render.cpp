@@ -2245,6 +2245,7 @@ void Runtime::render_match_surface() {
     draw_chat_entry();
     paint_on(PaintLayer::battlefield);
     draw_whiteboard(painted);
+    draw_middle_pan_marks();
     draw_commander_placement();
     draw_match_kill_board();
     // Then the status strip over the bottom of the battlefield. The panels'
