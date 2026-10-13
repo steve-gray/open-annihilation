@@ -94,6 +94,11 @@ struct Runtime::EngineSettingsMenuHost {
     SharpButton library_sharp{};
     SharpButton settings_sharp{};
 
+    /// The pointer's cursor covers a button this frame draws again in the
+    /// window's pixels. The cursor is left out of the picture, which would
+    /// hide that draw, and presented above the button.
+    bool cursor_above{};
+
     EngineSettingsMenuHost() = default;
     EngineSettingsMenuHost(const EngineSettingsMenuHost&) = delete;
     EngineSettingsMenuHost& operator=(const EngineSettingsMenuHost&) = delete;

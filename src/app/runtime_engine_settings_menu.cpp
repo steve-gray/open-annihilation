@@ -20,6 +20,7 @@
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "render_state.hpp"
 
+#include "oa/formats/gaf.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/looks.hpp"
@@ -816,6 +817,61 @@ void Runtime::present_menu_icon_buttons() {
 void Runtime::release_menu_button_textures() noexcept {
     if (engine_settings_menu_)
         engine_settings_menu_->release_sharp_textures();
+}
+
+void Runtime::clear_menu_button_cursor_hold() noexcept {
+    if (engine_settings_menu_)
+        engine_settings_menu_->cursor_above = false;
+}
+
+bool Runtime::menu_button_cursor_held() const noexcept {
+    return engine_settings_menu_ && engine_settings_menu_->cursor_above;
+}
+
+bool Runtime::hold_menu_button_cursor() {
+    if (!engine_settings_menu_ || sdl_.renderer == nullptr || cursor_image_ == nullptr ||
+        surface_.rgb.empty() || !EngineSettingsMenuHost::button_shown(*this))
+        return false;
+    float cursor_x = pointer_x_;
+    float cursor_y = pointer_y_;
+    if (const TouchCursor touch = touch_cursor(); touch.replaces_pointer) {
+        if (!touch.visible)
+            return false;
+        cursor_x = touch.x;
+        cursor_y = touch.y;
+    } else if (!pointer_shows_cursor()) {
+        return false;
+    }
+    const oa::formats::gaf::RenderResult rendered = oa::formats::gaf::render_normal(*cursor_image_);
+    if (!rendered.ok() || !rendered.frame)
+        return false;
+    const oa::formats::gaf::RenderedFrame& sprite = *rendered.frame;
+    const artless::SourceRect cursor{
+        static_cast<int32_t>(cursor_x) - sprite.origin_x,
+        static_cast<int32_t>(cursor_y) - sprite.origin_y,
+        static_cast<int32_t>(sprite.width),
+        static_cast<int32_t>(sprite.height),
+    };
+    const artless::SourceRect library_at = EngineSettingsMenuHost::button_rect(*this);
+    const artless::SourceRect settings_at = EngineSettingsMenuHost::settings_button_rect(*this);
+    const auto overlaps = [](const artless::SourceRect& first, const artless::SourceRect& second) {
+        return first.width > 0 && first.height > 0 && second.width > 0 && second.height > 0 &&
+               first.x < second.x + second.width && second.x < first.x + first.width &&
+               first.y < second.y + second.height && second.y < first.y + first.height;
+    };
+    const bool over_library = overlaps(cursor, library_at);
+    const bool over_settings = overlaps(cursor, settings_at);
+    if (!over_library && !over_settings)
+        return false;
+    const OaLayer::MenuButtonWindows windows = oa_layer().menu_button_windows();
+    const bool library_scaled = over_library && (windows.library.width != library_at.width ||
+                                                 windows.library.height != library_at.height);
+    const bool settings_scaled = over_settings && (windows.settings.width != settings_at.width ||
+                                                   windows.settings.height != settings_at.height);
+    if (!library_scaled && !settings_scaled)
+        return false;
+    engine_settings_menu_->cursor_above = true;
+    return true;
 }
 
 void Runtime::register_engine_settings_button() {
