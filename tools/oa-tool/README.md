@@ -169,6 +169,11 @@ that array does not hold. The comparison reads
 Each module that looks a text up exports it in its `interface_words` list;
 the command only joins those lists.
 
+`tools-oa-tool-interface-catalogue` reads `languages/interface.tdf` into
+the interface catalogue and checks that German, French, Spanish and
+Italian each cover that same list, that a German lookup returns German,
+and that placeholders, numbers and product names are kept.
+
 ## Limitations
 
 The archive commands take no options. `pack` takes `--out`, `--force` and,

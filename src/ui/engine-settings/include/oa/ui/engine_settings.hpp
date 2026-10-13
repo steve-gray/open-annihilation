@@ -62,6 +62,19 @@ inline constexpr std::string_view mod_directory = "open-annihilation.mod-directo
 /// folder; the Library lists it while it is still a folder. Absent for
 /// none (EngineSettings::picked_mod_folder).
 inline constexpr std::string_view picked_mod_directory = "open-annihilation.picked-mod-directory";
+/// The base game the player plays: "totala" or "totala-demo"
+/// (the content choice). Absent, or any other text, the choice is totala
+/// with every copied expansion of it on.
+inline constexpr std::string_view base_game = "open-annihilation.base-game";
+/// The expansions that are on for one base game. The base game's id completes
+/// it, as "open-annihilation.expansions.totala": their ids separated by
+/// commas, in the built-in order. Empty means none are on. Absent, every
+/// copied expansion of that game is on.
+inline constexpr std::string_view expansions_prefix = "open-annihilation.expansions.";
+/// "required-expansion" when a mod was cleared because an expansion it needs
+/// went off (the content choice). Absent, no such note is waiting. The
+/// sentence is chosen from this token.
+inline constexpr std::string_view content_note = "open-annihilation.content-note";
 /// "off", "basic" or "full" (EngineSettings::hardware_acceleration). A
 /// whole number reads as the On and Off switch the setting was before: 1
 /// or any number above 0 is "full", 0 or below "off".
@@ -169,6 +182,11 @@ inline constexpr std::string_view file_type_oalang = "open-annihilation.file-typ
 /// "on" or "off" (EngineSettings::file_type_oareg). Absent, or any text
 /// other than off, the game opens registry files.
 inline constexpr std::string_view file_type_oareg = "open-annihilation.file-types.oareg";
+static_assert(base_game.find('|') == std::string_view::npos);
+static_assert(base_game.find('\\') == std::string_view::npos);
+static_assert(expansions_prefix.find('|') == std::string_view::npos);
+static_assert(expansions_prefix.back() == '.');
+static_assert(content_note.find('|') == std::string_view::npos);
 } // namespace key
 
 /// Tells whether two tags are the same, ignoring ASCII case and reading '_' as '-'.
