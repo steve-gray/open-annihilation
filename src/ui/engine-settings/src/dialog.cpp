@@ -2817,12 +2817,7 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
                     no_control,
                 }
             );
-            // Downloads' RESET and EMPTY say the sentence with its stop.
-            // Every other lock keeps the words the dialog has always used.
-            const std::string_view lock_line = row.downloads >= 0 && row.lock == Lock::in_game
-                                                   ? std::string_view("Locked during a game.")
-                                                   : layout::lock_text(row.lock);
-            row_text(text_area, lock_line, DialogFont::small);
+            row_text(text_area, layout::lock_text(row.lock), DialogFont::small);
         }
         for (std::size_t line = 0; line < row.hint_lines && line < view.hints.size(); ++line)
             if (!view.hints[line].empty())
