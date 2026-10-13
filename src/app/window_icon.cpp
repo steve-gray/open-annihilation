@@ -38,7 +38,7 @@ void ignore_warning(void*, const char*) {
 
 } // namespace
 
-bool decode_window_icon(std::span<const uint8_t> png, WindowIcon& icon, std::string& error) {
+bool decode_rgba_icon(std::span<const uint8_t> png, WindowIcon& icon, std::string& error) {
     namespace png_format = oa::formats::png;
     icon = WindowIcon{};
     error.clear();
@@ -56,9 +56,8 @@ bool decode_window_icon(std::span<const uint8_t> png, WindowIcon& icon, std::str
         error = "not an 8-bit RGBA image";
         return false;
     }
-    if (header.width != window_icon_size || header.height != window_icon_size) {
-        error = "not " + std::to_string(window_icon_size) + " by " +
-                std::to_string(window_icon_size) + " pixels";
+    if (header.width == 0 || header.height == 0) {
+        error = "the image has no pixels";
         return false;
     }
     const std::size_t row = png_format::row_bytes(header, {});
@@ -72,6 +71,18 @@ bool decode_window_icon(std::span<const uint8_t> png, WindowIcon& icon, std::str
     icon.width = header.width;
     icon.height = header.height;
     icon.pixels = std::move(pixels);
+    return true;
+}
+
+bool decode_window_icon(std::span<const uint8_t> png, WindowIcon& icon, std::string& error) {
+    if (!decode_rgba_icon(png, icon, error))
+        return false;
+    if (icon.width != window_icon_size || icon.height != window_icon_size) {
+        icon = WindowIcon{};
+        error = "not " + std::to_string(window_icon_size) + " by " +
+                std::to_string(window_icon_size) + " pixels";
+        return false;
+    }
     return true;
 }
 

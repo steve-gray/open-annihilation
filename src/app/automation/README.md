@@ -4,9 +4,12 @@ The automation endpoint: a service on this machine's loopback address
 through which a program on the same machine drives the game and reads
 what it shows and holds, in the automation protocol. It is `oa-game`'s
 extension `oa-app-automation`, which the engine builds and registers in
-every build, after network play's. Without `--fark` it does nothing.
-[docs/automation.md](../../../docs/automation.md) describes it for those who
-write a program that drives the game.
+every build, after network play's. Without `--fark` it opens no socket.
+`--status-stdout`, `--status-file` and `--quit-after-game` report the
+same events with no socket
+([docs/multiplayer/status.md](../../../docs/multiplayer/status.md)).
+[docs/automation.md](../../../docs/automation.md) describes the endpoint
+for those who write a program that drives the game.
 
 ## The options
 
@@ -16,6 +19,10 @@ write a program that drives the game.
                            (127.0.0.1:0), lets the system choose
 --fark-file PATH           where the address and token are written; by default
                            automation.json in the folder of the preferences file
+--status-stdout            the same events, as JSON lines on standard output
+--status-file PATH         the same lines, in a file
+--quit-after-game          leave once the game has ended; =after-score waits
+                           until the player leaves the score screen
 ```
 
 - Only the command line turns the endpoint on; no preference, environment
@@ -34,6 +41,10 @@ write a program that drives the game.
   controls the run (`option_effect::remote_controlled`): the main loop
   runs every frame while the window is inactive, so the endpoint is
   served, and the battle room's engine line ends in ` REMOTED`.
+  `--status-stdout`, `--status-file` and `--quit-after-game` do not set
+  that effect, so the battle room line does not gain ` REMOTED`. While
+  any of them is on, the extension asks the main loop to keep running
+  while the window is inactive, so the lines keep coming.
 
 As the first runtime starts, the endpoint listens and writes its file,
 first beside it and then renamed over it, with only its owner allowed to
@@ -305,7 +316,8 @@ text in a code page that is not UTF-8 comes out so: the four bytes of
 | File | Holds |
 |---|---|
 | `extension.cpp` | the hooks and `oa_extension_init_automation` |
-| `options.cpp` | `--fark`, `--fark-address` and `--fark-file`, their checks, the options a run with the endpoint refuses |
+| `options.cpp` | `--fark`, `--fark-address`, `--fark-file`, `--status-stdout`, `--status-file` and `--quit-after-game`, their checks, the options a run with the endpoint refuses |
+| `status.cpp` | the status lines: hello, the events and one exit line (`oa-app-automation-status`) |
 | `token.cpp` | the token and its comparison |
 | `endpoint.cpp` | the listener, the connections, the handshake, the order of requests, the answers waiting to be written |
 | `requests.cpp` | the table of operations and their handlers, and the work done each time the endpoint is served |
@@ -342,7 +354,24 @@ system's sockets elsewhere.
 - `automation-options` parses `--fark`, `--fark-address` and `--fark-file`
   through `oa-game`'s command line, with the addresses and combinations it
   refuses and the engine options a run with the endpoint cannot be used
-  with, and checks the token.
+  with, and checks the token. It also parses `--status-stdout`,
+  `--status-file` and `--quit-after-game`, which need no `--fark` and do
+  not mark the run remoted.
+- `automation-status` checks the status lines: hello, one screen line and
+  one exit line, each flushed, and a game that ended, whose `game_over`
+  line sits between hello and an exit of 0. It also checks a player who
+  left, a lost connection, and the same line written to a file.
+- `automation-reports` also checks how a match ended for each seat: two
+  players, a team, a player who left, and a draw. `game_over` keeps this
+  machine's own winner. The ended `match` line carries the shared winner.
+  Neither line carries a digest of the match.
+- `native-status-stdout` (`tests/check_native_status.py`) starts a
+  skirmish with `--status-stdout` and `--quit-after-game` on SDL's dummy
+  drivers. Once the chat line is open it types the developer passphrase
+  and `+IWin`, so the local side wins and the process leaves when the
+  score screen shows. Standard output is hello, a screen, the match
+  starting, `game_over` with each player's result, and exit with reason
+  `game-ended` and code 0, and nothing else. The process exits 0.
 - `automation-input` reads the device events of input requests, each kind
   with its fields and their defaults, and refuses those that cannot be
   read: no list, too many events, an unknown kind, missing or out-of-range

@@ -129,6 +129,7 @@ void Runtime::forget_render_textures() {
     // The accelerated presentation makes its own again as it draws.
     free_accelerated_presentation();
     frontend_texture_.reset();
+    release_menu_button_textures();
     output_texture_w_ = 0;
     output_texture_h_ = 0;
     if (indexed_output_.texture != nullptr)

@@ -372,6 +372,29 @@ void draw_oa_button(
     const Canvas& canvas, int32_t side, OaButtonState state, const OaButtonMark& mark
 );
 
+/// The shipped icons' clear corners follow a quarter circle of this radius,
+/// in 256ths of the icon's side.
+inline constexpr int32_t menu_icon_corner_256 = 56;
+
+/// Draws an OA button as the icon itself, on the main menu's picture and in
+/// the window. There is no panel and no bevel: the icon fills the square,
+/// filtered from its own pixels, and its clear corners stay clear. Hover
+/// and keyboard focus draw a ring in the accent that follows that corner;
+/// a press draws the ring in the held accent and shifts the icon down and
+/// right by one point. The dot and the badge are drawn as draw_oa_button
+/// draws them, and the badge does not move when pressed. Nothing is drawn
+/// when the side is 0 or less, or when the canvas has neither a painter
+/// nor a picture.
+///
+/// @param canvas where it is drawn; its icon is the button's
+/// @param side the square's side, in points
+/// @param state how it looks
+/// @param focused a ring is drawn at rest, as for keyboard focus
+/// @param mark the dot and the bottom-right badge
+void draw_menu_icon_button(
+    const Canvas& canvas, int32_t side, OaButtonState state, bool focused, const OaButtonMark& mark
+);
+
 /// Draws the OA mark alone at the canvas's origin: the icon filling the
 /// square, or without one the mark the OA button shows at rest. A side of
 /// 0 or less draws nothing.

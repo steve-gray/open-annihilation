@@ -4719,6 +4719,22 @@ class Runtime final : public menu::Host,
     /// overlays, drawn into the main menu's picture.
     void register_engine_settings_button();
 
+    /// When the window shows the main menu's OA buttons larger than the
+    /// picture's squares, copies the frame with those squares put back to
+    /// the menu. The icons are drawn by present_menu_icon_buttons.
+    ///
+    /// @param[out] frame the copy, when this returns true
+    /// @return true when frame holds that copy
+    bool replace_menu_button_pixels(std::vector<uint8_t>& frame);
+
+    /// Draws the main menu's OA buttons in the window's pixels, over the
+    /// scaled picture and under the OA layer's screens.
+    void present_menu_icon_buttons();
+
+    /// Destroys the main menu buttons' window-pixel textures, while the
+    /// renderer that made them is still alive.
+    void release_menu_button_textures() noexcept;
+
     /// Opens the dialog over the darkened main menu, as the OA layer's
     /// settings screen.
     void open_engine_settings_from_menu();

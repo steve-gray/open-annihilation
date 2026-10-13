@@ -24,6 +24,12 @@ and from the other two, at the same size:
   open-annihilation-settings-256.png
   open-annihilation-mods-256.png
 
+and a 512-pixel picture of each source, for a button larger than 256 pixels:
+
+  open-annihilation-512.png
+  open-annihilation-settings-512.png
+  open-annihilation-mods-512.png
+
 sips scales an icon and iconutil packs the .icns; both come with macOS, so
 making the icons needs macOS. The .ico is packed here. The files it makes
 are committed; run it again when an icon changes.
@@ -55,6 +61,9 @@ ICO = BRANDING / "open-annihilation.ico"
 WINDOW_ICON = BRANDING / "open-annihilation-256.png"
 SETTINGS_WINDOW_ICON = BRANDING / "open-annihilation-settings-256.png"
 MODS_WINDOW_ICON = BRANDING / "open-annihilation-mods-256.png"
+APP_LARGE_ICON = BRANDING / "open-annihilation-512.png"
+SETTINGS_LARGE_ICON = BRANDING / "open-annihilation-settings-512.png"
+MODS_LARGE_ICON = BRANDING / "open-annihilation-mods-512.png"
 # The three sources, and the 256-pixel pictures made from them.
 SOURCE_ICONS = (ICON, SETTINGS_ICON, MODS_ICON)
 WINDOW_ICONS = (
@@ -62,9 +71,16 @@ WINDOW_ICONS = (
     (SETTINGS_ICON, SETTINGS_WINDOW_ICON),
     (MODS_ICON, MODS_WINDOW_ICON),
 )
+# The 512-pixel pictures, for a button the 256-pixel one cannot fill sharply.
+LARGE_ICONS = (
+    (ICON, APP_LARGE_ICON),
+    (SETTINGS_ICON, SETTINGS_LARGE_ICON),
+    (MODS_ICON, MODS_LARGE_ICON),
+)
 # The icon's size, in pixels, square.
 ICON_SIZE = 1024
 WINDOW_ICON_SIZE = 256
+LARGE_ICON_SIZE = 512
 # The sizes Windows picks among for the executable, its windows and its
 # taskbar button at the usual display scales.
 ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
@@ -322,6 +338,17 @@ def check():
                     problems.append(problem)
         except IconError as error:
             problems.append(str(error))
+    for _, path in LARGE_ICONS:
+        try:
+            data = read_file(path)
+            if png_size(data, path.name) != (LARGE_ICON_SIZE, LARGE_ICON_SIZE):
+                problems.append(f"{path.name}: not {LARGE_ICON_SIZE}x{LARGE_ICON_SIZE}")
+            else:
+                problem = corner_clear(data, path.name)
+                if problem:
+                    problems.append(problem)
+        except IconError as error:
+            problems.append(str(error))
     try:
         sizes = tuple(sorted(ico_images(read_file(ICO), ICO.name)))
         if sizes != ICO_SIZES:
@@ -368,7 +395,7 @@ def ico_file(images):
 
 
 def make():
-    """Makes the .icns, the .ico and the three 256-pixel icons; returns the exit status."""
+    """Makes the .icns, the .ico, the 256-pixel icons and the 512-pixel icons; returns the exit status."""
     for tool in ("sips", "iconutil"):
         if shutil.which(tool) is None:
             print(f"make_icons: {tool} is missing; the icons are made on macOS", file=sys.stderr)
@@ -401,6 +428,8 @@ def make():
             WINDOW_ICON.write_bytes(images[WINDOW_ICON_SIZE])
             scaled(SETTINGS_ICON, WINDOW_ICON_SIZE, SETTINGS_WINDOW_ICON)
             scaled(MODS_ICON, WINDOW_ICON_SIZE, MODS_WINDOW_ICON)
+            for source, out in LARGE_ICONS:
+                scaled(source, LARGE_ICON_SIZE, out)
         except subprocess.CalledProcessError as error:
             output = (error.stderr or b"").decode(errors="replace").strip()
             print(f"make_icons: {' '.join(error.cmd)} failed: {output}", file=sys.stderr)
@@ -409,7 +438,8 @@ def make():
     for problem in problems:
         print(f"make_icons: {problem}", file=sys.stderr)
     if not problems:
-        for path in (ICNS, ICO, WINDOW_ICON, SETTINGS_WINDOW_ICON, MODS_WINDOW_ICON):
+        for path in (ICNS, ICO, WINDOW_ICON, SETTINGS_WINDOW_ICON, MODS_WINDOW_ICON,
+                     APP_LARGE_ICON, SETTINGS_LARGE_ICON, MODS_LARGE_ICON):
             print(f"make_icons: wrote {path.relative_to(ROOT)}")
     return 1 if problems else 0
 

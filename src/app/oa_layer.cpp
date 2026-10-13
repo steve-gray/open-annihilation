@@ -2689,17 +2689,21 @@ LayerDrawing OaLayer::draw_screen(
     return drawing;
 }
 
-void OaLayer::darken_front_end(renderer::Surface& frame) const {
+uint32_t OaLayer::front_darkenings() const {
     const LayerView seen = view();
     if (seen.match)
-        return;
-    const auto darkenings =
+        return 0;
+    return static_cast<uint32_t>(
         std::count_if(screens_.begin(), screens_.end(), [&seen](const auto& screen) {
             return darkens(*screen) && !empty_rect(screen->placement(seen).shown);
-        });
+        })
+    );
+}
+
+void OaLayer::darken_front_end(renderer::Surface& frame) const {
     // A blend of the frame itself, in 256ths, for each: the same picture the
-    // window shows at every size.
-    darken(frame, static_cast<uint32_t>(darkenings), kit::menu_backdrop_opacity);
+    // window shows at every size. A match is left as it is.
+    darken(frame, front_darkenings(), kit::menu_backdrop_opacity);
 }
 
 void OaLayer::compose_front_end(renderer::Surface& frame) const {

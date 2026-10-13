@@ -375,14 +375,15 @@ if(BUILD_TESTING)
   target_link_libraries(oa-app-view-rules-test PRIVATE oa-app-view-rules oa-test-support oa-options)
   add_test(NAME app-view-rules COMMAND oa-app-view-rules-test)
 endif()
-# The game's three icons at 256 by 256 pixels (branding/, made by
-# tools/make_icons.py), each embedded as a PNG file. The app icon is the
+# The game's three icons (branding/, made by tools/make_icons.py), each
+# embedded as a PNG file. The 256-pixel pictures: the app icon is the
 # window icon, decoded when the window opens, and the badge of every OA
 # dialog and notice but Settings and the Library. The settings icon, the
 # plates over two gears, is what the Settings button, the in-game menu's
 # OA button and the Settings dialog's header draw. The mods icon, the
 # plates over drive bays, is what the Library button and the Library's
-# header draw.
+# header draw. The 512-pixel settings and mods pictures are what the main
+# menu's buttons draw when the window shows them larger than 256 pixels.
 set(oa_window_icon_png "${CMAKE_CURRENT_SOURCE_DIR}/branding/open-annihilation-256.png")
 set(oa_window_icon_source "${CMAKE_CURRENT_BINARY_DIR}/generated/window_icon_png.cpp")
 add_custom_command(OUTPUT "${oa_window_icon_source}"
@@ -409,8 +410,27 @@ add_custom_command(OUTPUT "${oa_mods_icon_source}"
   DEPENDS "${oa_mods_icon_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
   COMMENT "Embedding the mods icon"
   VERBATIM)
+set(oa_settings_icon_512_png "${CMAKE_CURRENT_SOURCE_DIR}/branding/open-annihilation-settings-512.png")
+set(oa_settings_icon_512_source "${CMAKE_CURRENT_BINARY_DIR}/generated/settings_icon_512_png.cpp")
+add_custom_command(OUTPUT "${oa_settings_icon_512_source}"
+  COMMAND ${CMAKE_COMMAND} "-DINPUT=${oa_settings_icon_512_png}" "-DOUTPUT=${oa_settings_icon_512_source}"
+    -DFUNCTION=settings_icon_512_png
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  DEPENDS "${oa_settings_icon_512_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  COMMENT "Embedding the 512-pixel settings icon"
+  VERBATIM)
+set(oa_mods_icon_512_png "${CMAKE_CURRENT_SOURCE_DIR}/branding/open-annihilation-mods-512.png")
+set(oa_mods_icon_512_source "${CMAKE_CURRENT_BINARY_DIR}/generated/mods_icon_512_png.cpp")
+add_custom_command(OUTPUT "${oa_mods_icon_512_source}"
+  COMMAND ${CMAKE_COMMAND} "-DINPUT=${oa_mods_icon_512_png}" "-DOUTPUT=${oa_mods_icon_512_source}"
+    -DFUNCTION=mods_icon_512_png
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  DEPENDS "${oa_mods_icon_512_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  COMMENT "Embedding the 512-pixel mods icon"
+  VERBATIM)
 add_library(oa-app-window-icon src/app/window_icon.cpp "${oa_window_icon_source}"
-  "${oa_settings_icon_source}" "${oa_mods_icon_source}")
+  "${oa_settings_icon_source}" "${oa_mods_icon_source}"
+  "${oa_settings_icon_512_source}" "${oa_mods_icon_512_source}")
 add_library(oa::app::window_icon ALIAS oa-app-window-icon)
 target_link_libraries(oa-app-window-icon PUBLIC oa-app-headers PRIVATE oa-formats-png oa-options)
 # The Full tier's fog of war on the card (full_fog.hpp): the fog grid's

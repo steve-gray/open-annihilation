@@ -62,4 +62,10 @@ void send_loading_events(Endpoint& endpoint, std::span<const uint8_t> rows);
 /// @param[in,out] endpoint the endpoint, bound to the running game
 void send_match_gone(Endpoint& endpoint);
 
+/// Sends one frame's events to the status stream, when a launcher is
+/// following and the endpoint is not serving them itself.
+///
+/// @param[in,out] runtime the running game
+void report_status_frame(Runtime& runtime);
+
 } // namespace oa::app::automation

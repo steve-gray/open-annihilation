@@ -568,7 +568,7 @@ runtime goes).
   for the rows the Library shows, never while a match runs. The host's
   destructor stops it and joins it within a second, a fetch included.
 - **The dot and the count.** The main menu's OA button wears the kit's
-  attention dot (`kit::draw_oa_button`) while `library_update_count` is
+  attention dot (`kit::draw_menu_icon_button`) while `library_update_count` is
   above 0: the updates the Library's last model counts as installable, so
   the dot shows from the first frame the cached catalogue offers one. Its
   bottom-right badge is the number of mods that model lists (the Mods tab's

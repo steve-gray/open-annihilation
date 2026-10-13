@@ -621,28 +621,39 @@ void Runtime::check_engine_settings_in_menu() {
     const kit::OaButtonMark library_badge = EngineSettingsMenuHost::library_mark(*this);
     const auto button_at_top = frame();
     main_menu_overlay_ = false;
-    const auto draw_library =
-        [&](renderer::Surface& target, const artless::SourceRect& at, settings::ButtonLook look) {
-            kit::draw_oa_button(
-                {&target, {at.x, at.y, 1}, fonts, bays},
-                at.width,
-                static_cast<kit::OaButtonState>(look),
-                library_badge
-            );
-        };
+    // The full shipped square, the same one the menu draws. The visible part
+    // above is what the dialog's header and the in-match button still use.
+    const auto square_of = [&](bool mods) {
+        artless::RgbaPicture picture;
+        if (const WindowIcon* icon = host.icon_for(mods, settings::menu_button_side))
+            picture = {icon->width, icon->height, icon->pixels};
+        return picture;
+    };
+    const artless::RgbaPicture library_square = square_of(true);
+    const artless::RgbaPicture settings_square = square_of(false);
+    require(
+        artless::picture_drawable(library_square) && artless::picture_drawable(settings_square),
+        "a menu button has no full icon to show"
+    );
+    const auto draw_menu_button = [&](renderer::Surface& target,
+                                      const artless::SourceRect& at,
+                                      const artless::RgbaPicture& icon,
+                                      settings::ButtonLook look,
+                                      const kit::OaButtonMark& mark) {
+        kit::draw_menu_icon_button(
+            {&target, {at.x, at.y, 1}, fonts, icon},
+            at.width,
+            static_cast<kit::OaButtonState>(look),
+            false,
+            mark
+        );
+    };
     // The frame shows the two buttons at the bottom, in these looks.
     const auto expect_buttons =
         [&](settings::ButtonLook look, settings::ButtonLook settings_look, std::string_view what) {
             auto expected = button_at_top;
-            draw_library(expected, bottom, look);
-            settings::draw_oa_button(
-                expected,
-                {settings_bottom.x, settings_bottom.y, 1},
-                settings_bottom.width,
-                settings_look,
-                *fonts,
-                gears
-            );
+            draw_menu_button(expected, bottom, library_square, look, library_badge);
+            draw_menu_button(expected, settings_bottom, settings_square, settings_look, {});
             require(differing_pixels(frame(), expected, top_pair) == 0, what);
         };
     const auto expect_button = [&](settings::ButtonLook look, std::string_view what) {
@@ -656,15 +667,8 @@ void Runtime::check_engine_settings_in_menu() {
     snapshot("engine-settings-menu", idle);
     {
         auto expected = idle;
-        draw_library(expected, top, settings::ButtonLook::idle);
-        settings::draw_oa_button(
-            expected,
-            {settings_top.x, settings_top.y, 1},
-            settings_top.width,
-            settings::ButtonLook::idle,
-            *fonts,
-            gears
-        );
+        draw_menu_button(expected, top, library_square, settings::ButtonLook::idle, library_badge);
+        draw_menu_button(expected, settings_top, settings_square, settings::ButtonLook::idle, {});
         require(
             differing_pixels(button_at_top, expected, bottom_pair) == 0,
             "under an extension's overlay the buttons are not drawn at 520,12 and 580,12"
