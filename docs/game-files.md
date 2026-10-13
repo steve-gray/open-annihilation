@@ -4,7 +4,11 @@ On a phone or a tablet (see [the installation guide](installation/ios.md)),
 Open Annihilation keeps its own copy of your Total Annihilation files, in
 its own storage. When it starts without a game folder it can play, it opens
 the **Game files** screen, which brings the files in for you. On macOS,
-Windows and Linux the screen never opens. The first start you are there
+Windows and Linux the screen never opens: the game folder is asked for with
+the system's folder chooser, and the built-in locator is for Steam Deck
+Game Mode and for a Linux desktop whose folder dialog is not there. The
+phone's **Choose folder** and **Choose installer** use the system's document
+picker. The first start you are there
 for, when you have not named a folder with `--game-dir`, copies the known
 game files from the installation already in use into `Games` and
 `Expansions` inside your Open Annihilation folder. That installation is

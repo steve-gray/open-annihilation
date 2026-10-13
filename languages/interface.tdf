@@ -202,6 +202,14 @@
 	it=A;
 	}
 
+[A folder that holds totala1.hpi, or a Commander Pack or the 1997 demo installer.]
+	{
+	de=Ein Ordner, der totala1.hpi enthält, oder ein Commander Pack oder das Demo-Installationsprogramm von 1997.;
+	fr=Un dossier qui contient totala1.hpi, ou un Commander Pack ou l'installateur de la démo de 1997.;
+	es=Una carpeta que contiene totala1.hpi, o un Commander Pack o el instalador de la demo de 1997.;
+	it=Una cartella che contiene totala1.hpi, o un Commander Pack o l'installer della demo del 1997.;
+	}
+
 [A dark backdrop under each chat line.]
 	{
 	de=Ein dunkler Hintergrund unter jeder Chatzeile.;
@@ -1634,6 +1642,14 @@
 	it=Scegli GIOCA ORA per giocarlo, o sceglilo più tardi con GIOCA ORA nella Biblioteca.;
 	}
 
+[Choose a folder or an installer]
+	{
+	de=Wähle einen Ordner oder ein Installationsprogramm;
+	fr=Choisis un dossier ou un installateur;
+	es=Elige una carpeta o un instalador;
+	it=Scegli una cartella o un installer;
+	}
+
 [Choose a map]
 	{
 	de=Wähle eine Karte;
@@ -1658,6 +1674,14 @@
 	it=Sceglilo con GIOCA ORA nella Biblioteca per giocarlo.;
 	}
 
+[Choose the Total Annihilation demo installer (1997).]
+	{
+	de=Wähle das Installationsprogramm der Total Annihilation-Demo (1997).;
+	fr=Choisis l'installateur de la démo Total Annihilation (1997).;
+	es=Elige el instalador de la demo de Total Annihilation (1997).;
+	it=Scegli l'installer della demo di Total Annihilation (1997).;
+	}
+
 [Choose the folder that holds totala1.hpi.]
 	{
 	de=Wähle den Ordner, der totala1.hpi enthält.;
@@ -1680,14 +1704,6 @@
 	fr=Choisis l'installateur de la démo Total Annihilation (1997). Le jeu le reconnaît, ne l'exécute jamais et décompresse ses {size} de données de jeu.;
 	es=Elige el instalador de la demo de Total Annihilation (1997). El juego lo reconoce, nunca lo ejecuta y desempaqueta sus {size} de datos de juego.;
 	it=Scegli l'installer della demo di Total Annihilation (1997). Il gioco lo riconosce, non lo esegue mai e scompatta i suoi {size} di dati di gioco.;
-	}
-
-[Choose your Total Annihilation folder]
-	{
-	de=Wähle deinen Total Annihilation-Ordner;
-	fr=Choisis ton dossier Total Annihilation;
-	es=Elige tu carpeta de Total Annihilation;
-	it=Scegli la tua cartella di Total Annihilation;
 	}
 
 [Choose your language.]
@@ -4690,14 +4706,6 @@
 	it=Caricamento anteprima;
 	}
 
-[Locate the game]
-	{
-	de=Spiel finden;
-	fr=Localiser le jeu;
-	es=Localizar el juego;
-	it=Individua il gioco;
-	}
-
 [Locked during a game]
 	{
 	de=Während einer Partie gesperrt;
@@ -5226,14 +5234,6 @@
 	it=N/D;
 	}
 
-[NAME]
-	{
-	de=NAME;
-	fr=NOM;
-	es=NOMBRE;
-	it=NOME;
-	}
-
 [NEXT PAGE]
 	{
 	de=NÄCHSTE SEITE;
@@ -5512,6 +5512,14 @@
 	fr=Aucun pack de cartes n'est installé.;
 	es=No hay paquetes de mapas instalados.;
 	it=Non ci sono pacchetti di mappe installati.;
+	}
+
+[No names match.]
+	{
+	de=Kein Name passt.;
+	fr=Aucun nom ne correspond.;
+	es=Ningún nombre coincide.;
+	it=Nessun nome corrisponde.;
 	}
 
 [No oamod.yaml present]
@@ -9824,14 +9832,6 @@
 	fr=BIENVENUE;
 	es=BIENVENIDO;
 	it=BENVENUTO;
-	}
-
-[WHAT IT IS]
-	{
-	de=WAS ES IST;
-	fr=CE QUE C'EST;
-	es=QUÉ ES;
-	it=COS'È;
 	}
 
 [WHY]

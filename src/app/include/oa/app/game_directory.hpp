@@ -318,13 +318,15 @@ struct GameDirectory {
 /// the stored folder while it is still usable (neither when `choose`), else
 /// the one usable folder found on this machine (request.found) when no stored
 /// folder has gone, else the folder dialog until the user picks a usable
-/// folder. Where the in-engine locator is offered (request.chooser_offered,
-/// with `needed`), it opens instead of the dialog (`needed` says so, with the
-/// usable folders found). On the desktop the system's dialog stays available
-/// as a button (dialog_offered). In Steam's Game Mode (request.chooser_first)
-/// that button is absent, and the dialog is not opened. A build with no
-/// dialog offers none. Where the locator is not offered, a desktop whose
-/// dialog works resolves as before, including when the dialog cannot open.
+/// folder. On macOS, Windows and a Linux desktop whose dialog opens, that
+/// dialog is the ask. The in-engine locator (request.chooser_offered, with
+/// `needed`) opens instead only in Steam's Game Mode (request.chooser_first),
+/// in a build with no dialog, and when the dialog cannot open: `needed` then
+/// says so, with the usable folders found. In Game Mode dialog_offered stays
+/// false, so the locator's system-picker button is absent. A dialog that
+/// cannot open fills dialog_problem and leaves dialog_offered false. Where
+/// the locator is not offered, a desktop whose dialog works resolves as
+/// before, including when the dialog cannot open.
 /// An unattended run
 /// never opens the dialog: without --game-dir it takes a usable platform
 /// default, else a usable stored folder. --game-dir is inspected too, unless
@@ -539,8 +541,9 @@ void remember_content_choice(
 /// not unattended and names no folder carries the folders found on this
 /// machine (oa::platform::game_installs::find_candidates); the in-engine
 /// chooser is offered when `needed` is given and folder_chooser_offered()
-/// says so, and comes before the dialog in Steam's Game Mode
-/// (oa::platform::running_in_steam_game_mode).
+/// says so. The system's dialog asks on macOS, Windows and Linux; the
+/// chooser comes before that dialog only in Steam's Game Mode
+/// (oa::platform::running_in_steam_game_mode), or when the dialog cannot open.
 ///
 /// @param options parsed command line
 /// @param[out] needed non-null: the Game files screen may be offered, and is

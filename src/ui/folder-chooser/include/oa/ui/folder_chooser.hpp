@@ -44,7 +44,7 @@ struct ChildFile {
 
 /// What a folder or a file is, for the locator's column and its side panel.
 struct SourceAccount {
-    std::string what{};                 ///< the column: "folder", "GOG installer (macOS)"
+    std::string what{};                 ///< what it is: "folder", "GOG installer (macOS)"
     std::string title{};                ///< the side panel's heading
     std::string account{};              ///< the side panel's paragraph; empty for a plain file
     std::vector<std::string> bundles{}; ///< the bundles it holds, in table order
@@ -79,7 +79,7 @@ struct SourceAccount {
 /// One row of the folder being looked at.
 struct Entry {
     std::string name{};                 ///< the file or folder name, UTF-8
-    std::string what{};                 ///< the column
+    std::string what{};                 ///< what it is, for the side panel
     std::string size_label{};           ///< "2.4 GB"; empty when there is nothing to say
     std::string title{};                ///< the side panel's heading
     std::string account{};              ///< the side panel's paragraph
@@ -194,8 +194,29 @@ enum class Key : uint8_t {
     filter,    ///< the filter (Y)
 };
 
-/// Lays the locator out: the sidebar of places, the folder's rows with what each one is,
-/// the side panel of the selection, and the buttons or, on a Steam Deck, the pad hints.
+/// Puts folders before files, then orders names with A–Z folded, then the name as written.
+///
+/// @param a one row
+/// @param b the other row
+/// @return true when `a` is shown before `b`
+[[nodiscard]] bool entry_before(const Entry& a, const Entry& b);
+
+/// Sorts rows with entry_before. Rows that compare equal keep their order.
+///
+/// @param[in,out] entries the rows
+void order_entries(std::vector<Entry>& entries);
+
+/// Tells whether a name matches a filter. An empty filter matches every name. The match folds
+/// A–Z and looks in the name only.
+///
+/// @param name the file or folder name
+/// @param filter the text typed; empty for none
+/// @return true when the name matches
+[[nodiscard]] bool name_matches(std::string_view name, std::string_view filter);
+
+/// Lays the locator out: a title and a line saying what to choose, the sidebar of places, the
+/// folder's rows (an icon, a name and a size), the side panel of the selection, and the buttons
+/// or, on a Steam Deck, the pad hints.
 /// Every control is at least 44 points high. The rows scroll; the sidebar, the panel and
 /// the buttons stay put.
 ///

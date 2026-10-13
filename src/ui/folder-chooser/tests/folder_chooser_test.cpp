@@ -805,6 +805,83 @@ void check_digests(const char* file) {
     OA_CHECK(lines == compared && recorded.size() == compared);
 }
 
+/// Folders come before files, names fold A–Z, and a filter matches the name only.
+/// The layout says what to choose and shows the filter, the file's mark and its size.
+void check_order_and_filter() {
+    chooser::Entry file;
+    file.name = "zeta.txt";
+    file.size_label = "12 B";
+    chooser::Entry folder;
+    folder.name = "Alpha";
+    folder.directory = true;
+    chooser::Entry later;
+    later.name = "beta";
+    std::vector<chooser::Entry> rows{file, later, folder};
+    chooser::order_entries(rows);
+    OA_CHECK(rows.size() == 3);
+    OA_CHECK(rows[0].name == "Alpha" && rows[0].directory);
+    OA_CHECK(rows[1].name == "beta");
+    OA_CHECK(rows[2].name == "zeta.txt");
+
+    chooser::Entry upper;
+    upper.name = "Notes";
+    chooser::Entry lower;
+    lower.name = "notes";
+    std::vector<chooser::Entry> ties{upper, lower};
+    chooser::order_entries(ties);
+    OA_CHECK(ties[0].name == "Notes" && ties[1].name == "notes");
+    OA_CHECK(chooser::entry_before(folder, file));
+    OA_CHECK(!chooser::entry_before(file, folder));
+
+    OA_CHECK(chooser::name_matches("Total Annihilation", ""));
+    OA_CHECK(chooser::name_matches("Total Annihilation", "total"));
+    OA_CHECK(chooser::name_matches("Notes", "notes"));
+    OA_CHECK(!chooser::name_matches("commander.pkg", "total"));
+
+    const chooser::Layout shown = chooser::lay_out(sample(false), {}, desktop_viewport(), {});
+    bool title = false;
+    bool qualify = false;
+    bool file_glyph = false;
+    bool folder_glyph = false;
+    bool size_shown = false;
+    for (const kit::Item& part : shown.paint.list.items) {
+        if (part.role == kit::Role::icon && part.glyph == kit::Glyph::file)
+            file_glyph = true;
+        if (part.role == kit::Role::icon && part.glyph == kit::Glyph::folder)
+            folder_glyph = true;
+        for (const std::string& line : part.lines) {
+            if (line.find("Choose a folder or an installer") != std::string::npos)
+                title = true;
+            if (line.find("totala1.hpi") != std::string::npos)
+                qualify = true;
+            if (line == "2.4 GB")
+                size_shown = true;
+        }
+    }
+    OA_CHECK(title);
+    OA_CHECK(qualify);
+    OA_CHECK(file_glyph);
+    OA_CHECK(folder_glyph);
+    OA_CHECK(size_shown);
+
+    chooser::Model filtered = sample(false);
+    filtered.filter = "commander";
+    filtered.entries.clear();
+    const chooser::Layout narrowed = chooser::lay_out(filtered, {}, desktop_viewport(), {});
+    bool filter_shown = false;
+    bool none = false;
+    for (const kit::Item& part : narrowed.paint.list.items) {
+        for (const std::string& line : part.lines) {
+            if (line.find("Filter: commander") != std::string::npos)
+                filter_shown = true;
+            if (line == "No names match.")
+                none = true;
+        }
+    }
+    OA_CHECK(filter_shown);
+    OA_CHECK(none);
+}
+
 } // namespace
 
 /// Runs the checks, or with --write-digests prints the digests of every case's layouts.
@@ -821,5 +898,6 @@ int main(int argc, char** argv) {
     check_recognition();
     check_places_and_form();
     check_selection();
+    check_order_and_filter();
     return oa::test::check_exit_status();
 }

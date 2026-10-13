@@ -1763,11 +1763,30 @@ void SDLCALL installer_chosen(void* userdata, const char* const* filelist, int) 
 DemoInstallerPick pick_installer_file(SDL_Window* window) {
     DemoInstallerPick pick;
     FileWait wait;
-    const SDL_DialogFileFilter filters[] = {
+    SDL_DialogFileFilter filters[] = {
         {"Installer", "exe;bin"},
         {"All files", "*"},
     };
-    SDL_ShowOpenFileDialog(installer_chosen, &wait, window, filters, 2, nullptr, false);
+    // The title says which file qualifies. The filters and the title stay
+    // alive through Show; SDL copies them then.
+    const std::string title = std::string(
+        oa::data::languages::interface_text("Choose the Total Annihilation demo installer (1997).")
+    );
+    const SDL_PropertiesID properties = SDL_CreateProperties();
+    if (properties == 0) {
+        const char* reason = SDL_GetError();
+        if (reason != nullptr)
+            pick.error = reason;
+        return pick;
+    }
+    (void)SDL_SetStringProperty(properties, SDL_PROP_FILE_DIALOG_TITLE_STRING, title.c_str());
+    (void)SDL_SetPointerProperty(properties, SDL_PROP_FILE_DIALOG_FILTERS_POINTER, filters);
+    (void)SDL_SetNumberProperty(properties, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, 2);
+    if (window != nullptr)
+        (void)SDL_SetPointerProperty(properties, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, window);
+    (void)SDL_SetBooleanProperty(properties, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, false);
+    SDL_ShowFileDialogWithProperties(SDL_FILEDIALOG_OPENFILE, installer_chosen, &wait, properties);
+    SDL_DestroyProperties(properties);
     while (!wait.done.load(std::memory_order_acquire)) {
         SDL_PumpEvents();
         SDL_Delay(kFileDialogPollMs);

@@ -1624,7 +1624,18 @@ bool setup_locate_source(SDL_Window* window, const fs::path& user_folder, first_
         if (!pump_until_picked(wait))
             return false;
     } else {
-        SDL_ShowOpenFolderDialog(folder_done, &wait, window, nullptr, false);
+        // The title says which folder qualifies. SDL copies it during Show.
+        const std::string title =
+            std::string(languages::interface_text("Choose the folder that holds totala1.hpi."));
+        const SDL_PropertiesID properties = SDL_CreateProperties();
+        if (properties == 0)
+            return false;
+        (void)SDL_SetStringProperty(properties, SDL_PROP_FILE_DIALOG_TITLE_STRING, title.c_str());
+        if (window != nullptr)
+            (void)SDL_SetPointerProperty(properties, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, window);
+        (void)SDL_SetBooleanProperty(properties, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, false);
+        SDL_ShowFileDialogWithProperties(SDL_FILEDIALOG_OPENFOLDER, folder_done, &wait, properties);
+        SDL_DestroyProperties(properties);
         if (!pump_until_picked(wait))
             return false;
     }
