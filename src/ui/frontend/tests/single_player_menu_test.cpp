@@ -19,6 +19,17 @@ const Control* prepared(const char* name, SinglePlayerOffers offers) {
     return panel_control(panel, name);
 }
 
+// Whether SINGLE.GUI itself shows the control, before any offers.
+bool laid_out_active(const char* name) {
+    const auto layout = load_gui("single.gui");
+    if (!layout)
+        return false;
+    static Panel panel;
+    panel_load_layout(panel, *layout);
+    const Control* control = panel_control(panel, name);
+    return control != nullptr && control->active != 0;
+}
+
 } // namespace
 
 // The full game offers every entry of Single Player.
@@ -30,7 +41,9 @@ OA_GAME_DATA_TEST(single_player_menu_offers_skirmish_for_the_full_game) {
     OA_CHECK(skirmish->grayed == 0);
     OA_CHECK(skirmish->active != 0);
     OA_CHECK(prepared("LoadGame", full)->grayed == 0);
-    OA_CHECK(prepared("AnyMsn", full)->active != 0);
+    // Any Mission stays as SINGLE.GUI has it: the full game's offers do not
+    // change it.
+    OA_CHECK((prepared("AnyMsn", full)->active != 0) == laid_out_active("AnyMsn"));
     OA_CHECK(prepared("NewCamp", full)->grayed == 0);
     OA_CHECK(prepared("Options", full)->grayed == 0);
     OA_CHECK(prepared("PrevMenu", full)->grayed == 0);
