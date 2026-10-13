@@ -692,6 +692,13 @@ void every_component_at_every_class_and_scale(text_font::FontStack* modern) {
         expect(
             smooth_setup.second > setup.second, "the setup chrome at 150% is not larger than at 1x"
         );
+        chrome.next_style = kit::ButtonStyle::plain;
+        const auto setup_plain = crisp_draw(280, 62, [&](const kit::Canvas& canvas) {
+            kit::draw_setup_chrome(canvas, chrome);
+        });
+        states_differ(
+            "a plain right-hand button matches an accent one", setup.first, setup_plain.first
+        );
 
         kit::ChoiceCardLook choice;
         choice.title = "Ridge pack";

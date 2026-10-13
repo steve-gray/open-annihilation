@@ -472,6 +472,7 @@ kit::SetupChromeLook chrome_look(
         look.back_enabled = false;
         if (session.model.copy.checked || session.model.copy.paused) {
             look.next = show("Continue", language);
+            look.next_style = kit::ButtonStyle::accent;
             if (session.model.copy.checked && session.copy_continue_ms > 0) {
                 const int32_t seconds = (session.copy_continue_ms + 999) / 1000;
                 look.next += " · ";
@@ -480,6 +481,7 @@ kit::SetupChromeLook chrome_look(
             look.next_enabled = true;
         } else {
             look.next = show("Pause", language);
+            look.next_style = kit::ButtonStyle::plain;
             look.next_enabled = session.model.copy.running;
         }
     }
@@ -1108,6 +1110,21 @@ std::string_view source_badge(SourceMark mark) noexcept {
     return "FOLDER";
 }
 
+/// Returns a footer button's width: button_width, or the caption with the
+/// same inset the footer's buttons keep either side of the word.
+///
+/// @param fonts the fonts; null uses button_width
+/// @param caption the button's words
+/// @return the width, in points
+int32_t footer_button_width(const kit::Fonts* fonts, std::string_view caption) {
+    int32_t text = 0;
+    if (fonts != nullptr)
+        text = kit::text_width(*fonts, kit::FontRole::small, caption);
+    return std::max(
+        kit::compact_metrics.button_width, text + 2 * kit::compact_metrics.choice_text_inset
+    );
+}
+
 /// A chip's width: the pill's own measure, or the estimate when the fonts are not there.
 ///
 /// @param fonts the fonts; null estimates
@@ -1236,7 +1253,7 @@ void lay_game(
         for (const ChipSpot& spot : spots) {
             kit::PillLook pill;
             pill.text = spot.text;
-            pill.state = kit::PillState::active;
+            pill.state = card.chosen ? kit::PillState::active : kit::PillState::neutral;
             kit::add_pill(
                 scene.list,
                 {text_left + spot.x, chips_y + spot.y, spot.width, chip_h},
@@ -1262,15 +1279,20 @@ void lay_game(
         row += card_h + metrics.padding;
     }
 
+    const std::string locate = show("Locate another…");
     const int32_t button_height = kit::compact_metrics.button_height;
-    const kit::Rect locate_rect{left, row, std::min(column, int32_t{220}), button_height};
+    const int32_t locate_w =
+        std::min(footer_button_width(fonts, locate), std::max(column, int32_t{1}));
+    const kit::Rect locate_rect{
+        left + std::max((column - locate_w) / 2, int32_t{0}), row, locate_w, button_height
+    };
     add_button(
         scene.list,
         order,
         locate_rect,
         locate_id,
         control_name(Step::game, "locate"),
-        show("Locate another…"),
+        locate,
         true,
         kit::ButtonStyle::plain
     );
@@ -1399,34 +1421,44 @@ void lay_copying(
                 kit::colour::text
             );
             y += kit::compact_metrics.regular_line;
-            if (bundle.phase == CopyPhase::copying && !bundle.file.empty()) {
+            // The line under the name stays for the whole copy, so a bundle
+            // that finishes does not pull the rows under it up. While the
+            // bundle copies it is the file's name. Once the bundle is done
+            // it is the result, and the file's name is not shown again.
+            const bool copying_file = bundle.phase == CopyPhase::copying;
+            const std::string& detail = copying_file ? bundle.file : bundle.amount;
+            const kit::Colour detail_ink = copying_file                        ? kit::colour::hint
+                                           : bundle.phase == CopyPhase::differ ? kit::colour::lock
+                                           : bundle.note                       ? kit::colour::hint
+                                                                               : kit::colour::quiet;
+            if (!detail.empty()) {
                 add_text(
                     scene.list,
                     {inner_left, y, inner_width, kit::compact_metrics.small_line},
-                    bundle.file,
+                    detail,
                     kit::FontRole::small,
-                    kit::colour::hint
+                    detail_ink
                 );
-                y += kit::compact_metrics.small_line;
             }
+            y += kit::compact_metrics.small_line;
             y += 4;
             kit::add_progress(
                 scene.list, {inner_left, y, inner_width, 6}, bundle.done, bundle.whole
             );
             y += 10;
-            if (!bundle.amount.empty()) {
-                const kit::Colour ink = bundle.phase == CopyPhase::differ ? kit::colour::lock
-                                        : bundle.note                     ? kit::colour::hint
-                                                                          : kit::colour::quiet;
+            // The amount under the bar is the live count while the file
+            // copies. The same height stays once the result has moved up,
+            // so the row does not change height.
+            if (copying_file && !bundle.amount.empty()) {
                 add_text(
                     scene.list,
                     {inner_left, y, inner_width, kit::compact_metrics.small_line},
                     bundle.amount,
                     kit::FontRole::small,
-                    ink
+                    bundle.note ? kit::colour::hint : kit::colour::quiet
                 );
-                y += kit::compact_metrics.small_line;
             }
+            y += kit::compact_metrics.small_line;
             if (index + 1 < count) {
                 y += 8;
                 kit::Item rule;

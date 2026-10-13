@@ -746,8 +746,36 @@ void check_game_column() {
                 item.rect.x + item.rect.width <= second->rect.x + second->rect.width &&
                 item.rect.y + item.rect.height <= second->rect.y + second->rect.height;
             OA_CHECK(in_first || in_second);
+            const auto* pill = std::get_if<oa::ui::kit::PillLook>(&item.look);
+            OA_CHECK(pill != nullptr);
+            if (pill == nullptr)
+                continue;
+            if (in_first)
+                OA_CHECK(pill->state == oa::ui::kit::PillState::active);
+            if (in_second)
+                OA_CHECK(pill->state == oa::ui::kit::PillState::neutral);
         }
+        const oa::ui::kit::Control* locate =
+            oa::ui::kit::control_of(scene.list, oa::ui::first_run::locate_id);
+        OA_CHECK(locate != nullptr);
+        if (locate == nullptr)
+            continue;
+        OA_CHECK(locate->rect.height == oa::ui::kit::compact_metrics.button_height);
+        OA_CHECK(locate->rect.y == second->rect.y + second->rect.height + metrics.padding);
+        OA_CHECK(locate->rect.width == oa::ui::kit::compact_metrics.button_width);
+        OA_CHECK(locate->rect.x == first->rect.x + (column - locate->rect.width) / 2);
     }
+}
+
+/// The right-hand button's style on a laid-out step, or plain when the chrome is absent.
+oa::ui::kit::ButtonStyle next_style(const oa::ui::first_run::Scene& scene) {
+    for (const oa::ui::kit::Item& item : scene.list.items) {
+        if (item.role != oa::ui::kit::Role::setup_chrome)
+            continue;
+        if (const auto* look = std::get_if<oa::ui::kit::SetupChromeLook>(&item.look))
+            return look->next_style;
+    }
+    return oa::ui::kit::ButtonStyle::plain;
 }
 
 /// The y of the first item whose text is `words`, or -1.
@@ -797,6 +825,7 @@ void check_copying_layout() {
 
     const auto finished = oa::ui::first_run::lay_out(session, frame, nullptr);
     OA_CHECK(next_caption(finished) == "Continue · 3");
+    OA_CHECK(next_style(finished) == oa::ui::kit::ButtonStyle::accent);
     OA_CHECK(shows_line(finished, "38 of 38 · 100%"));
     OA_CHECK(shows_line(finished, "All files match"));
     OA_CHECK(shows_line(finished, "17 of 18 tracks"));
@@ -844,6 +873,7 @@ void check_copying_layout() {
     session.model.copy.bundles.front().file = "rev31.gp3";
     const auto running = oa::ui::first_run::lay_out(session, frame, nullptr);
     OA_CHECK(next_caption(running) == "Pause");
+    OA_CHECK(next_style(running) == oa::ui::kit::ButtonStyle::plain);
     OA_CHECK(shows_line(running, "rev31.gp3"));
     OA_CHECK(!shows_line(running, "music/9.mp3"));
 
@@ -915,6 +945,59 @@ void check_copying_layout() {
     OA_CHECK(!meets(skip->rect, back->rect));
     OA_CHECK(!meets(back->rect, next->rect));
     OA_CHECK(!meets(skip->rect, next->rect));
+}
+
+/// A bundle's row stays the same height when its file line becomes the result.
+void bundle_row_keeps_its_height() {
+    oa::ui::kit::Frame frame;
+    frame.area = {0, 0, 1280, 720};
+    frame.size_class = oa::ui::kit::SizeClass::large;
+
+    Session session;
+    session.model.walk = Walk::setup;
+    session.model.leave = Leave::quit;
+    session.model.step = Step::copying;
+    session.model.copy.running = true;
+    session.model.copy.checked = false;
+    oa::ui::first_run::CopyBundle base;
+    base.name = "Total Annihilation";
+    base.file = "rev31.gp3";
+    base.amount = "31%";
+    base.done = 300;
+    base.whole = 1000;
+    base.phase = oa::ui::first_run::CopyPhase::copying;
+    oa::ui::first_run::CopyBundle music;
+    music.name = "Music";
+    music.amount = "17 of 18 tracks";
+    music.done = 1000;
+    music.whole = 1000;
+    music.phase = oa::ui::first_run::CopyPhase::done;
+    music.note = true;
+    session.model.copy.bundles.push_back(std::move(base));
+    session.model.copy.bundles.push_back(std::move(music));
+
+    const auto copying = oa::ui::first_run::lay_out(session, frame, nullptr);
+    session.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::done;
+    session.model.copy.bundles.front().amount = "All files match";
+    session.model.copy.bundles.front().file = "rev31.gp3";
+    const auto done = oa::ui::first_run::lay_out(session, frame, nullptr);
+
+    const int32_t copying_base = line_y(copying, "Total Annihilation");
+    const int32_t copying_music = line_y(copying, "Music");
+    const int32_t done_base = line_y(done, "Total Annihilation");
+    const int32_t done_music = line_y(done, "Music");
+    OA_CHECK(copying_base >= 0 && done_base >= 0);
+    OA_CHECK(copying_music - copying_base == done_music - done_base);
+    OA_CHECK(
+        line_y(copying, "rev31.gp3") == copying_base + oa::ui::kit::compact_metrics.regular_line
+    );
+    OA_CHECK(
+        line_y(done, "All files match") == done_base + oa::ui::kit::compact_metrics.regular_line
+    );
+    OA_CHECK(shows_line(copying, "31%"));
+    OA_CHECK(shows_line(done, "All files match"));
+    OA_CHECK(!shows_line(done, "rev31.gp3"));
+    OA_CHECK(!shows_line(done, "31%"));
 }
 
 /// The band the step's words share, matching the screen's own band.
@@ -1038,6 +1121,7 @@ int main() {
     check_lookup();
     check_leave_word();
     check_copying_layout();
+    bundle_row_keeps_its_height();
     check_centred_language();
     check_game_column();
     check_language_floor_and_note();

@@ -172,10 +172,10 @@ void add_chip(
 
 // ---- Pills ----
 
-/// Returns a pill's width: its text in the small font, with enough padding
-/// that the text starts where the straight section does, and at least the
-/// pill's height so the ends stay semicircles. An icon adds its square and
-/// a gap before the right end.
+/// Returns a pill's width: its text in the small font, the semicircle at
+/// each end, and chip_padding more so the word stays clear of the border,
+/// and at least the pill's height so an empty pill stays a circle. An icon
+/// adds its square and a gap before the right end.
 ///
 /// @param fonts the fonts
 /// @param look the pill

@@ -815,12 +815,20 @@ PillColours pill_colours(const PillLook& look) noexcept {
     return colours;
 }
 
-/// Returns the padding either side of a pill's text: half its height, and
-/// at least chip_padding, so the words start on the straight section.
+/// Returns the padding either side of a pill's word, in points.
 ///
+/// Each end is a semicircle of half the pill's height. A word then keeps
+/// chip_padding clear of that curve, 4 points at 1x, and the points scale
+/// with the interface. An empty pill has no word, so the padding is only
+/// the semicircle and the pill stays a circle.
+///
+/// @param look the pill
 /// @return the padding, in points
-int32_t pill_padding() noexcept {
-    return std::max(kMetrics.chip_padding, kMetrics.chip_height / 2);
+int32_t pill_padding(const PillLook& look) noexcept {
+    const int32_t curve = kMetrics.chip_height / 2;
+    if (look.text.empty())
+        return curve;
+    return curve + kMetrics.chip_padding;
 }
 
 /// The gap between a pill's text and an icon inside it.
@@ -848,7 +856,8 @@ int32_t pill_icon_extra(const PillLook& look) noexcept {
 
 int32_t pill_width(const Fonts& fonts, const PillLook& look) {
     return std::max(
-        text_width(fonts, FontRole::small, look.text) + 2 * pill_padding() + pill_icon_extra(look),
+        text_width(fonts, FontRole::small, look.text) + 2 * pill_padding(look) +
+            pill_icon_extra(look),
         kMetrics.chip_height
     );
 }
@@ -859,7 +868,7 @@ int32_t pill_width_of(const Canvas& canvas, const PillLook& look) {
         words = text_width(*canvas.fonts, FontRole::small, look.text);
     if (words < 0)
         words = 0;
-    return std::max(words + 2 * pill_padding() + pill_icon_extra(look), kMetrics.chip_height);
+    return std::max(words + 2 * pill_padding(look) + pill_icon_extra(look), kMetrics.chip_height);
 }
 
 void draw_pill(const Canvas& canvas, const Rect& rect, const PillLook& look) {
