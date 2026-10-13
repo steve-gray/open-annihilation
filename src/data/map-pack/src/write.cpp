@@ -96,6 +96,18 @@ std::string write_manifest(const Manifest& manifest) {
         for (const std::string& tag : manifest.tags)
             line(out, 1, "- " + quoted(tag));
     }
+    const bool only_totala =
+        manifest.supported_games.size() == 1 && manifest.supported_games[0] == "totala";
+    if (!manifest.supported_games.empty() && !only_totala) {
+        line(out, 0, "supportedGames:");
+        for (const std::string& id : manifest.supported_games)
+            line(out, 1, "- " + quoted(id));
+    }
+    if (!manifest.required_expansions.empty()) {
+        line(out, 0, "requiredExpansions:");
+        for (const std::string& id : manifest.required_expansions)
+            line(out, 1, "- " + quoted(id));
+    }
     line(out, 0, "author:");
     field(out, 1, "name", quoted(manifest.author.name));
     if (!manifest.author.email.empty())

@@ -144,6 +144,12 @@ struct Listing {
     /// The day this release was published, `YYYY-MM-DD` as the catalogue
     /// writes it; empty when the catalogue names none.
     std::string published{};
+    /// Base games the package runs with. Empty until a catalogue carries the
+    /// keys; a catalogue listing does not fill these.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty until a catalogue carries the keys,
+    /// and empty when a filled package names none.
+    std::vector<std::string> required_expansions{};
 };
 
 /// The version a package keeps from before its last update.
@@ -176,6 +182,10 @@ struct Installed {
     /// A mod folder with no oamod.yaml, which layers over the game folder
     /// and plays by the game's own rules: its status line says so.
     bool without_manifest{};
+    /// Base games the installed package runs with, from its manifest.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty when the manifest names none.
+    std::vector<std::string> required_expansions{};
 };
 
 /// A newer release of an installed package, in the same registry.
@@ -284,6 +294,10 @@ struct InstalledMaps {
     std::string key{};
     /// Where it came from; empty for the player's own, and when `key` is empty.
     std::string registry{};
+    /// Base games the pack's maps run with, from its manifest.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty when the manifest names none.
+    std::vector<std::string> required_expansions{};
 };
 
 /// Everything the Library is built from.

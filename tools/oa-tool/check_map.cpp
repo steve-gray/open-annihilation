@@ -198,6 +198,36 @@ void write_line(Output& output, std::string_view key, std::string_view text) {
     output.out << key << ": " << text << '\n';
 }
 
+/// Writes a list of ids, including an empty one, as a JSON array.
+///
+/// Text mode writes the array on one line, the way tags are written.
+///
+/// @param key the fact's name
+/// @param ids the ids
+/// @param json the object; null writes text
+/// @param[in,out] output receives the text when `json` is null
+void write_id_list(
+    std::string_view key,
+    const std::vector<std::string>& ids,
+    json::JsonWriter* json,
+    Output& output
+) {
+    json::JsonWriter array;
+    array.begin_array();
+    for (const std::string& id : ids)
+        array.string(id);
+    array.end_array();
+    if (json == nullptr) {
+        output.out << key << ": " << array.text() << '\n';
+        return;
+    }
+    json->key(key);
+    json->begin_array();
+    for (const std::string& id : ids)
+        json->string(id);
+    json->end_array();
+}
+
 /// Reads oamap.yaml from a pack through the streamed reader.
 ///
 /// @param pack the pack
@@ -579,6 +609,8 @@ bool describe_oamap(
             json->end_array();
         }
     }
+    write_id_list("supportedGames", manifest.supported_games, json, output);
+    write_id_list("requiredExpansions", manifest.required_expansions, json, output);
     write_requires(manifest, json, output);
     write_packaging(manifest, json, output);
     return true;

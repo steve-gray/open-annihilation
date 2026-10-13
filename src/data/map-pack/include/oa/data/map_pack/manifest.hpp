@@ -84,6 +84,10 @@ struct Manifest {
     /// The engine requirement, as written. Empty when the manifest has none.
     /// Reading the manifest does not ask whether this build meets it.
     std::string requires_engine{};
+    /// Base games the pack's maps run with. totala when supportedGames is omitted.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty when the manifest names none.
+    std::vector<std::string> required_expansions{};
     std::vector<MapEntry> maps{}; ///< the maps, in the order written
 };
 
@@ -107,8 +111,10 @@ struct Problem {
 ///
 /// Collects every broken rule. A document that is not the strict YAML of a
 /// mod profile is one problem. `homepage`, `tags` and `requires.engine`
-/// follow the shared package-key rules. An engine requirement this build
-/// does not meet is still read.
+/// follow the shared package-key rules. supportedGames and
+/// requiredExpansions name built-in base games and expansions. An omitted
+/// supportedGames means totala, including when requires.base is ta-3.1c.
+/// An engine requirement this build does not meet is still read.
 ///
 /// @param bytes the manifest's bytes
 /// @param use whether a map entry must be a complete packed index
@@ -126,8 +132,9 @@ struct Problem {
 ///
 /// Keys are written in a fixed order, with two-space indentation. Every
 /// string is double-quoted. A description or a preview that is empty is left
-/// out, and so are an empty homepage, an empty tag list and an empty engine
-/// requirement. One file path is written per line.
+/// out, and so are an empty homepage, an empty tag list, an empty engine
+/// requirement, supportedGames that is only totala, and an empty
+/// requiredExpansions. One file path is written per line.
 ///
 /// @param manifest the manifest
 /// @return its text, ending in a line break

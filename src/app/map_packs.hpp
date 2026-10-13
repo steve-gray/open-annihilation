@@ -37,6 +37,10 @@ struct PackMap {
     std::filesystem::path folder{};   ///< the pack's folder
     std::filesystem::path preview{};  ///< the preview file; empty when the map has none
     std::vector<std::string> files{}; ///< the paths the map loads from the pack
+    /// Base games the pack's maps run with, copied from the pack manifest.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on, copied from the pack manifest.
+    std::vector<std::string> required_expansions{};
 };
 
 /// The map packs in a Maps folder.

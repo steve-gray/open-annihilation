@@ -95,6 +95,10 @@ struct ModProfile {
     std::vector<std::string> tags{};
     /// The engine requirement as written; empty when the profile has none.
     std::string requires_engine{};
+    /// Base games the mod runs with. totala when the profile omits supportedGames.
+    std::vector<std::string> supported_games{"totala"};
+    /// Expansions that must be on. Empty when the profile names none.
+    std::vector<std::string> required_expansions{};
     Author author{};
     Packaging packaging{};
     Identity identity{};

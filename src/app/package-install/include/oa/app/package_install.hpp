@@ -255,6 +255,11 @@ struct InstalledPackage {
     /// The manifest's description, as written; empty when it has none or the
     /// kind's manifest gives none.
     std::string description{};
+    /// Base games the package runs with, from its manifest. totala when a
+    /// mod's list cannot be read.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty when the manifest names none.
+    std::vector<std::string> required_expansions{};
 };
 
 /// Tells whether two reads of a folder found the same: kind, id, version

@@ -49,6 +49,10 @@ struct InstalledPackage {
     bool has_backup = false;      ///< the folder keeps an earlier copy
     std::string backup_version{}; ///< that copy's version; empty when it has none
     int64_t backup_revision{};    ///< that copy's revision; 0 when unknown
+    /// Base games the package runs with, from its manifest.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty when the manifest names none.
+    std::vector<std::string> required_expansions{};
 };
 
 /// How an installed package relates to the catalogues in effect.
