@@ -1023,7 +1023,10 @@ void bind_boundaries() {
     lobby.launch_link = state.launch_link;
     lobby.rules = state.rules;
     lobby.lobby_buttons = state.lobby_buttons;
-    lobby.option_4 = state.launch_link.block != nullptr && state.launch_link.block->tournament != 0;
+    // A tournament lock is the host's. A joiner takes a seat, not the host's rules.
+    const auto* linked_block = state.launch_link.block;
+    lobby.option_4 =
+        linked_block != nullptr && linked_block->hosting != 0 && linked_block->tournament != 0;
     if (state.units.loaded) {
         lobby.units = state.units.units.data();
         lobby.unit_count = static_cast<int32_t>(state.units.units.size());
@@ -3109,14 +3112,22 @@ void apply_game_list_action(ScreenContext* ctx, ConnectAction action) {
 
 /// Creates the game NEWMULTI accepted and opens the battle room.
 ///
+/// A direct game that reached NEWMULTI is marked entering, including a launch
+/// that hosts at once and never types its names through OK. The battle room
+/// reports that arrival. A direct game that cannot be created is refused.
+///
 /// @param ctx Screen context of the running frontend.
 void host_new_game(ScreenContext* ctx) {
     auto& state = ui();
     if (connect_host(state.lobby, state.connect)) {
         state.in_lobby = false;
+        if (g_direct.stage == DirectStage::new_game)
+            g_direct.stage = DirectStage::entering;
         app::screen_request(ctx, kScreenBattleroom);
     } else {
         state.message = "The game could not be created.";
+        if (g_direct.stage == DirectStage::new_game)
+            fail_direct_game("The game could not be created.");
     }
 }
 

@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The 3.1c command line's network play switches -e -h -n -p -t, and the
+// The 3.1c command line's network play switches -c -e -h -n -p -t, and the
 // setup request -y asks for (enable_netsetup). Network play does not take
-// -c or -y: unhandled, they stop the parse as reserved letters.
+// -y: unhandled, it stops the parse as a reserved letter.
 // launch_switch_handler returns
 // the handler oa::app::command_line::parse hands them to; the parse applies
-// the intro skip -n asks for.
+// the intro skip -c and -n ask for.
 #pragma once
 
 #include "oa/app/command_line.hpp"
@@ -14,6 +14,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace oa::app::netgame::launch {
 
@@ -44,9 +45,18 @@ struct LaunchSwitches {
     uint8_t netsetup{};                                     // -y
     uint8_t send_pacing_set{};                              // -p seen with an argument
     int32_t send_pacing{};                                  // sends per second, -p
-    // The game's launch block: -n, -n1:<address>, -h and -h<name> write it
+    // The game's launch block: -c, -n, -n1:<address>, -h and -h<name> write it
     // and a launching extension fills it.
     LaunchBlock block{};
+    // "-c FILE" names TA Forever's INI. The file is read once the other
+    // switches are known, so a switch beside it can override one field.
+    bool ini_seen = false;
+    std::string ini_path{};
+    // "-h" stored a session name. A launch file does not replace that name.
+    bool session_from_switch = false;
+    // "-n" stored a connection type or an address. A launch file does not
+    // replace those. An ignored type, such as "-n5", sets neither.
+    bool connection_from_switch = false;
     int32_t connection_type_copy{};
     char host_game_name_copy[kTextBytes]{};     // each -h name appends
     char connection_address_copy[kTextBytes]{}; // each address appends
@@ -58,17 +68,22 @@ struct LaunchSwitches {
 /// the next token, which is then not parsed as a switch. Its reset sets
 /// net_timeout_seconds to kDefaultNetTimeoutSeconds and send_error_percent to
 /// 0. The letters it takes:
+///  - "-c <file>" stores the path of TA Forever's INI (ini_path). A separate
+///    path that is missing, empty or starts with '-' is consumed and the path
+///    is left empty. The file is read later.
 ///  - "-e <percent>" stores the send-error percentage; outside 0..100 or an
 ///    argument starting with '-' stores 0.
 ///  - "-h<name>" hosts under the name (set_host_game); a separate name that is
 ///    missing, empty or starts with '-' is consumed and nothing is stored.
+///    A stored name sets session_from_switch.
 ///  - "-n<type>[:<address>]" stores the connection type (set_connection_type)
-///    and, for type 1, the address after ':' (set_connection_address).
+///    and, for type 1, the address after ':' (set_connection_address). A
+///    stored type or address sets connection_from_switch.
 ///  - "-p <n>" stores sends per second, kPacingFromDash for a '-' argument.
 ///  - "-t <seconds>" stores the net timeout; outside 30..300 or an argument
 ///    starting with '-' stores kDefaultNetTimeoutSeconds.
-/// "-n" also asks the parse to skip the intro, with or without an argument.
-/// "-c" and "-y" are not taken.
+/// "-c" and "-n" also ask the parse to skip the intro, with or without an
+/// argument. "-y" is not taken.
 ///
 /// @param switches Receives the parsed values; must outlive the handler.
 /// @return A handler for oa::app::command_line::parse whose context is `switches`.

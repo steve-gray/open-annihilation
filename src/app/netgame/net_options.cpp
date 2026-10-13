@@ -7,17 +7,37 @@
 
 #include "oa/app/app.hpp"
 #include "oa/app/game_directory.hpp"
+#include "oa/base/text.hpp"
 #include "oa/core/game_state.h"
 #include "oa/netgame/dplay.hpp"
 
 #include <array>
 #include <charconv>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace oa::app {
 namespace {
+
+using netgame::LaunchPlan;
+using netgame::LaunchRefusal;
+using netgame::LaunchRole;
+using netgame::read_launch_file;
+
+/// The refusal the last check_options kept.
+///
+/// The combined option table's context is not these options, and a unit test
+/// parses a context of its own, so the message is kept here until parsing
+/// raises it outside the hook.
+///
+/// @return the message, empty when the file was accepted
+std::string& held_launch_refusal() {
+    static std::string held;
+    return held;
+}
 
 /// Parses a UDP port number.
 ///
@@ -64,7 +84,9 @@ NetgameContext& context_of(void* context) {
 /// runs only in a headless run; without it the run would sit in the menus),
 /// --check-host-not-found an unattended run that skips the intro,
 /// --check-recording-hook an unattended headless run that skips the intro,
-/// --host and --join a run that skips the intro. A missing or malformed value throws
+/// --host, --join and --launch a run that skips the intro, and
+/// --list-content the same for a content list. --json is taken only beside
+/// --list-content. A missing or malformed value throws
 /// std::runtime_error.
 ///
 /// @param context The NetgameContext whose options receive the value.
@@ -86,10 +108,20 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
     else if (argument == "--check-host-not-found") {
         result.check_host_not_found = true;
         effects |= option_effect::unattended | option_effect::skip_intro;
-    } else if (argument == "--dplay-port")
+    } else if (argument == "--dplay-port") {
         result.dplay_port = parse_port(value());
-    else if (argument == "--dplay-guid")
+        result.cli_dplay_port = true;
+    } else if (argument == "--dplay-guid") {
         result.dplay_guid = parse_guid(value());
+        result.cli_dplay_guid = true;
+    } else if (argument == "--launch") {
+        result.launch_yaml = std::string(value());
+        effects |= option_effect::skip_intro;
+    } else if (argument == "--list-content") {
+        result.list_content = true;
+        effects |= option_effect::skip_intro;
+    } else if (argument == "--json")
+        result.json_requested = true;
     else if (argument == "--play-demo")
         result.play_demo = path_from_utf8(value());
     else if (argument == "--check-recording-hook") {
@@ -106,13 +138,16 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
         if (kind == Kind::join)
             game.address = std::string(value());
         effects |= option_effect::skip_intro;
-    } else if (argument == "--player-name")
+    } else if (argument == "--player-name") {
         result.direct_game.player_name = std::string(value());
-    else if (argument == "--game-name")
+        result.cli_player_name = true;
+    } else if (argument == "--game-name") {
         result.direct_game.game_name = std::string(value());
-    else if (argument == "--game-password")
+        result.cli_game_name = true;
+    } else if (argument == "--game-password") {
         result.direct_game.password = std::string(value());
-    else if (argument == "--net-record")
+        result.cli_password = true;
+    } else if (argument == "--net-record")
         result.net_record = path_from_utf8(value());
     else if (argument == "--replay-viewer")
         result.replay_viewer = true;
@@ -126,29 +161,186 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
     return true;
 }
 
+/// Copies text into a launch field, or refuses when it does not fit.
+///
+/// The message names the field and the limit. It does not repeat the text,
+/// so a password is never written out.
+///
+/// @param field the field, including room for a terminating NUL
+/// @param text the text
+/// @param source the launch file's name
+/// @param name the setting's name
+void store_launch_text(
+    std::span<char> field, std::string_view text, std::string_view source, std::string_view name
+) {
+    if (field.empty() || text.size() >= field.size()) {
+        const auto limit = field.empty() ? std::size_t{0} : field.size() - 1;
+        throw LaunchRefusal(
+            std::string(source) + ": " + std::string(name) + ": is longer than " +
+            std::to_string(limit) + " characters"
+        );
+    }
+    oa::base::text::copy_terminated(field, text);
+}
+
+/// Reads a launch file into the context, then puts the command line's own fields back.
+///
+/// --host, --join, --player-name, --game-name, --game-password, --dplay-guid,
+/// --dplay-port, "-h" and "-n" each keep the field they named. The password
+/// is stored and not written out.
+///
+/// @param[in,out] netgame the context the file and the command line share
+void apply_launch_file(NetgameContext& netgame) {
+    namespace nl = oa::app::netgame::launch;
+    using Kind = oa::ui::frontend_multiplayer::DirectGame::Kind;
+    auto& options = netgame.options;
+    auto& switches = netgame.launch;
+    const bool yaml = !options.launch_yaml.empty();
+    const std::string path = yaml ? options.launch_yaml : switches.ini_path;
+    const LaunchPlan plan = read_launch_file(path, yaml);
+
+    const Kind cli_kind = options.direct_game.kind;
+    const std::string cli_address = options.direct_game.address;
+    const std::string cli_player = options.direct_game.player_name;
+    const std::string cli_game = options.direct_game.game_name;
+    const std::string cli_password = options.direct_game.password;
+    const bool cli_player_set = options.cli_player_name;
+    const bool cli_game_set = options.cli_game_name;
+    const bool cli_password_set = options.cli_password;
+    const auto cli_port = options.dplay_port;
+    const auto cli_guid = options.dplay_guid;
+    const bool from_session = switches.session_from_switch;
+    const std::string saved_session(switches.block.session_name);
+    const uint32_t saved_hosting = switches.block.hosting;
+    const bool from_connection = switches.connection_from_switch;
+    const int32_t saved_type = switches.block.connection_type;
+    const std::string saved_address(switches.block.address);
+
+    switches.block = plan.block;
+    if (from_session)
+        store_launch_text(switches.block.session_name, saved_session, plan.source, "session");
+    if (from_connection) {
+        switches.block.connection_type = saved_type;
+        store_launch_text(switches.block.address, saved_address, plan.source, "address");
+    }
+
+    if (cli_kind == Kind::host) {
+        options.direct_game.kind = Kind::host;
+        options.direct_game.address.clear();
+        switches.block.hosting = 1;
+    } else if (cli_kind == Kind::join) {
+        options.direct_game.kind = Kind::join;
+        options.direct_game.address = cli_address;
+        switches.block.hosting = 0;
+        if (!from_connection)
+            store_launch_text(switches.block.address, cli_address, plan.source, "game.address");
+    } else if (from_session) {
+        options.direct_game.kind = Kind::host;
+        options.direct_game.address.clear();
+        switches.block.hosting = saved_hosting;
+    } else if (plan.role == LaunchRole::host || plan.ini) {
+        options.direct_game.kind = Kind::host;
+        options.direct_game.address.clear();
+        switches.block.hosting = 1;
+        if (!from_connection)
+            switches.block.connection_type = nl::connection_type::tcpip;
+    } else if (plan.role == LaunchRole::join) {
+        options.direct_game.kind = Kind::join;
+        options.direct_game.address = plan.address;
+        switches.block.hosting = 0;
+        if (!from_connection) {
+            switches.block.connection_type = nl::connection_type::tcpip;
+            store_launch_text(switches.block.address, plan.address, plan.source, "game.address");
+        }
+    } else {
+        throw LaunchRefusal(plan.source + ": game.role: expected host or join");
+    }
+
+    if (cli_game_set) {
+        options.direct_game.game_name = cli_game;
+        store_launch_text(switches.block.session_name, cli_game, plan.source, "game.name");
+    } else if (from_session) {
+        options.direct_game.game_name = saved_session;
+    } else {
+        options.direct_game.game_name = plan.game_name;
+    }
+
+    if (cli_player_set) {
+        options.direct_game.player_name = cli_player;
+        store_launch_text(switches.block.user_name, cli_player, plan.source, "game.player");
+    } else {
+        options.direct_game.player_name = plan.player_name;
+    }
+
+    if (cli_password_set) {
+        options.direct_game.password = cli_password;
+        store_launch_text(switches.block.password, cli_password, plan.source, "game.password");
+    } else {
+        options.direct_game.password = plan.password;
+    }
+
+    if (options.cli_dplay_port)
+        options.dplay_port = cli_port;
+    else
+        options.dplay_port = plan.dplay_port;
+    if (options.cli_dplay_guid)
+        options.dplay_guid = cli_guid;
+    else
+        options.dplay_guid = plan.dplay_guid;
+
+    options.launch_content = plan.content;
+    options.launch_status = plan.status;
+    options.launch_from_file = true;
+    options.launch_source = plan.source;
+}
+
 /// Checks the network game options as a whole (Extension::check_options).
 ///
-/// --player-name, --game-name and --game-password need --host or --join; a
-/// game to host or join has the frontend open multiplayer over TCP/IP at
-/// once, whatever connection "-n" named. A refused combination throws
-/// std::runtime_error.
+/// A launch file is read here, after the long options and the game switches,
+/// and each field the command line named is put back. --player-name,
+/// --game-name and --game-password need --host or --join, or a launch file
+/// that hosts or joins. A game to host or join has the frontend open
+/// multiplayer over TCP/IP at once, whatever connection "-n" named.
+/// --list-content needs --json, and --json needs --list-content. A refused
+/// combination throws std::runtime_error. A launch file that cannot be used
+/// is kept, and raise_launch_refusal raises it after the hook returns.
 ///
 /// @param context The NetgameContext whose options are checked.
 void check_options(void* context) {
     auto& netgame = context_of(context);
-    const auto& game = netgame.options.direct_game;
-    if (game.kind == oa::ui::frontend_multiplayer::DirectGame::Kind::none) {
-        if (!game.player_name.empty())
-            throw std::runtime_error("--player-name needs --host or --join");
-        if (!game.game_name.empty())
-            throw std::runtime_error("--game-name needs --host or --join");
-        if (!game.password.empty())
-            throw std::runtime_error("--game-password needs --host or --join");
-        return;
+    auto& options = netgame.options;
+    options.launch_refusal.clear();
+    held_launch_refusal().clear();
+    try {
+        if (options.list_content && !options.json_requested)
+            throw std::runtime_error("--list-content needs --json");
+        if (options.json_requested && !options.list_content)
+            throw std::runtime_error("--json needs --list-content");
+        if (netgame.launch.ini_seen && !options.launch_yaml.empty())
+            throw LaunchRefusal(
+                options.launch_yaml + ": the file: a launch file and -c cannot both be given"
+            );
+        if (netgame.launch.ini_seen && netgame.launch.ini_path.empty())
+            throw LaunchRefusal("-c: the file: -c needs a file");
+        if (netgame.launch.ini_seen || !options.launch_yaml.empty())
+            apply_launch_file(netgame);
+        const auto& game = options.direct_game;
+        if (game.kind == oa::ui::frontend_multiplayer::DirectGame::Kind::none) {
+            if (!game.player_name.empty())
+                throw std::runtime_error("--player-name needs --host or --join");
+            if (!game.game_name.empty())
+                throw std::runtime_error("--game-name needs --host or --join");
+            if (!game.password.empty())
+                throw std::runtime_error("--game-password needs --host or --join");
+            return;
+        }
+        oa::app::netgame::launch::set_connection_type(
+            netgame.launch, oa::app::netgame::launch::connection_type::tcpip
+        );
+    } catch (const LaunchRefusal& refusal) {
+        options.launch_refusal = refusal.what();
+        held_launch_refusal() = options.launch_refusal;
     }
-    oa::app::netgame::launch::set_connection_type(
-        netgame.launch, oa::app::netgame::launch::connection_type::tcpip
-    );
 }
 
 /// Returns the handler of the 3.1c network switches (Extension::switch_handler).
@@ -170,13 +362,13 @@ const char* text(void* /*context*/, ExtensionText which) {
         return "[--check-recording-hook] ";
     case ExtensionText::usage_runs:
         return "[--host | --join ADDRESS] [--player-name NAME] [--game-name NAME] "
-               "[--game-password PASSWORD] "
+               "[--game-password PASSWORD] [--launch FILE] [--list-content --json] "
                "[--net-loopback-check TICKS] [--net-loopback-watcher] [--net-loopback-computer] "
                "[--check-host-not-found] [--dplay-port PORT] [--dplay-guid GUID] "
                "[--play-demo FILE.tad] "
                "[--demo-unit-table strict|ignore] [--net-record FILE] [--replay-viewer] ";
     case ExtensionText::usage_switches:
-        return "-t SECONDS -n TYPE[:ADDRESS] -hNAME ";
+        return "-c FILE -t SECONDS -n TYPE[:ADDRESS] -hNAME ";
     case ExtensionText::usage_note:
         return "";
     case ExtensionText::register_switch:
@@ -251,6 +443,14 @@ void match_game(void* context, oa::Game& game) {
 
 } // namespace
 
+void raise_launch_refusal() {
+    if (held_launch_refusal().empty())
+        return;
+    const std::string refusal = std::move(held_launch_refusal());
+    held_launch_refusal().clear();
+    throw netgame::LaunchRefusal(refusal);
+}
+
 NetgameContext& netgame_context() {
     static NetgameContext context{};
     return context;
@@ -260,6 +460,31 @@ void register_frontend_state_queries(ScreenRegistry* registry) noexcept {
     namespace query = oa::netgame::frontend::query;
     (void)query_register(registry, query::init_score_reporting, query_score_reporting, nullptr);
     (void)query_register(registry, query::transport_kind, query_transport_kind, nullptr);
+}
+
+void adopt_launch_run(Options& options) {
+    auto& net = netgame_context().options;
+    if (!net.launch_from_file)
+        return;
+    if (net.launch_content.named && options.content.empty()) {
+        std::string text = net.launch_content.base_game;
+        if (!net.launch_content.expansions.empty()) {
+            if (!text.empty())
+                text.push_back(':');
+            for (std::size_t at = 0; at < net.launch_content.expansions.size(); ++at) {
+                if (at != 0)
+                    text.push_back(',');
+                text += net.launch_content.expansions[at];
+            }
+        }
+        if (!text.empty()) {
+            options.content = std::move(text);
+            net.launch_content_applied = true;
+        }
+    }
+    if (!net.launch_content.mod.empty() && options.mod_file.empty() && options.mod_dir.empty() &&
+        !options.base_game)
+        net.launch_mod_pending = true;
 }
 
 void fill_option_hooks(Extension& table, NetgameContext& context) {

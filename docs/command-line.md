@@ -67,6 +67,52 @@ derive it.
 opened from the multiplayer screens uses it too.
 See [which games are listed](multiplayer/application-guid.md).
 
+## `-c FILE`
+
+`-c FILE` hosts a network game from the settings file TA Forever already
+writes. The battle room opens on that file's map and rules, the connection
+is TCP/IP, and the intro is skipped. The file's keys stay as TA Forever
+writes them. The schema is in
+[Launch files](multiplayer/launch-file.md).
+
+`-c` needs a file. `-c` and `--launch` cannot both be given. An option
+beside `-c` replaces the matching field: `--join ADDRESS` joins instead
+of hosting, and `--player-name`, `--game-name`, `--game-password`,
+`--dplay-guid`, `--dplay-port`, `-h` and `-n` replace what they name. The
+password is never written to the log.
+
+A file the game cannot use ends the game before a window opens, with
+status 2 and one line naming the file, the field and why.
+
+## `--launch FILE`
+
+`--launch FILE` hosts or joins from Open Annihilation's own launch file.
+`--launch -` reads that file from standard input. The battle room opens
+with the map, the rules, the content and the seat the file names. The
+file begins with `oalaunch: 1`. The full schema and an example are in
+[Launch files](multiplayer/launch-file.md).
+
+An option beside the file replaces the matching field, in either order.
+`--host` and `--join` choose the role. A file that does not say which
+needs one of them. A launch that names content plays this run with that
+base game, those expansions and that mod. If this player does not have
+them, the game ends before a window opens and the line says which.
+
+A file the game cannot use ends the game before a window opens, with
+status 2 and one line naming the file, the field and why. The password
+is never part of that line and is never written to the log.
+
+## `--list-content --json`
+
+`--list-content --json` prints the installed maps, mods and expansions as
+one JSON object and exits with status 0. It does not open a window. Each
+map has its shown name, key, player count and size. Each mod and expansion
+has its id and name. The shape is in
+[Launch files](multiplayer/launch-file.md).
+
+`--list-content` without `--json`, or `--json` without `--list-content`,
+is refused.
+
 ## `--status-stdout`, `--status-file` and `--quit-after-game`
 
 `--status-stdout` writes what the game is doing, and how it ended for

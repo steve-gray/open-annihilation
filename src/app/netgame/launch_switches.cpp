@@ -69,12 +69,24 @@ const char* argument(const cl::SwitchArguments* arguments) noexcept {
 /// @param letter Lower-case switch letter.
 /// @param arguments Text after the letter and the following tokens.
 /// @param[out] effects Gains switch_effect_skip_intro for -n.
-/// @return 1 when the letter is one of -e -h -n -p -t, else 0.
+/// @return 1 when the letter is one of -c -e -h -n -p -t, else 0.
 int take_switch(
     void* context, char letter, const cl::SwitchArguments* arguments, uint32_t* effects
 ) noexcept {
     LaunchSwitches& switches = *static_cast<LaunchSwitches*>(context);
     switch (letter) {
+    case 'c': {
+        const char* path = arguments->attached;
+        if (*path == '\0') {
+            path = arguments->next_token(arguments->tokens);
+            if (path == nullptr || *path == '\0' || *path == '-')
+                path = nullptr;
+        }
+        switches.ini_seen = true;
+        switches.ini_path = path != nullptr ? path : "";
+        *effects |= cl::switch_effect_skip_intro;
+        return 1;
+    }
     case 'e': {
         const char* value = argument(arguments);
         if (value != nullptr && *value != '\0') {
@@ -93,6 +105,7 @@ int take_switch(
                 return 1;
         }
         set_host_game(switches, 1, name);
+        switches.session_from_switch = true;
         return 1;
     }
     case 'n': {
@@ -100,9 +113,17 @@ int take_switch(
         if (value != nullptr && *value != '\0' && *value != '-') {
             const char* colon = std::strchr(value, ':');
             const int32_t type = decode_int(value);
-            if (type == kAddressedConnectionType && colon != nullptr)
+            bool stored = false;
+            if (type == kAddressedConnectionType && colon != nullptr) {
                 set_connection_address(switches, colon + 1);
-            set_connection_type(switches, type);
+                stored = true;
+            }
+            if (type >= kFirstConnectionType && type <= kLastConnectionType) {
+                set_connection_type(switches, type);
+                stored = true;
+            }
+            if (stored)
+                switches.connection_from_switch = true;
         }
         *effects |= cl::switch_effect_skip_intro;
         return 1;

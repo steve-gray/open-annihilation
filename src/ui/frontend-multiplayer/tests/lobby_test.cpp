@@ -76,6 +76,7 @@ void sound(void*, const char* name) {
 // texts of the joins it asked for that failed.
 oa::ui::frontend_multiplayer::launch::LaunchBlock launch_block{};
 bool active_launch = false;
+bool refuse_map = false;
 std::vector<std::string> failed_joins;
 std::string saved_address;
 int32_t address_saves = 0;
@@ -113,6 +114,7 @@ mp::LaunchLink launch_link() {
 void reset_launch() {
     launch_block = oa::ui::frontend_multiplayer::launch::LaunchBlock{};
     active_launch = false;
+    refuse_map = false;
     failed_joins.clear();
     saved_address.clear();
     address_saves = 0;
@@ -127,6 +129,8 @@ const char* name(void*) {
 }
 
 bool select_map(void*, const char* value) {
+    if (refuse_map || value == nullptr)
+        return false;
     map_name = value;
     return true;
 }
@@ -192,7 +196,7 @@ struct Fixture {
         mp::lobby_reset(lobby, *game);
         if (online != nullptr) {
             lobby.launch_link = *online;
-            lobby.option_4 = online->block != nullptr && online->block->tournament != 0;
+            lobby.option_4 = host && online->block != nullptr && online->block->tournament != 0;
         }
         lobby.net = mp::loopback_lobby_net(loopback);
         lobby.services = test_services();
@@ -5752,12 +5756,20 @@ void test_launch_screens(const oa::AssetStore& assets) {
     if (!load_gui(assets, "newmulti.gui", newmulti))
         return;
     std::snprintf(launch_block.user_name, sizeof launch_block.user_name, "%s", "Ghost_Commander");
+    std::snprintf(
+        launch_block.session_name, sizeof launch_block.session_name, "%s", "Example game"
+    );
     game->frontend_pending_signal = 0;
     mp::new_game_open(lobby, state, newmulti);
     expect(
         std::strcmp(mp::lobby_nickname(*game), "Ghost_Commander") == 0 &&
             mp::panel_text(newmulti, "NICKNAME") == "Ghost_Commander",
         "the launch's user name is the nickname"
+    );
+    expect(
+        std::strcmp(mp::lobby_game_name(*game), "Example game") == 0 &&
+            mp::panel_text(newmulti, "GAMENAME") == "Example game",
+        "the launch's session name is the game name"
     );
     expect(
         state.host_at_once && game->frontend_pending_signal == 0x11,
@@ -5837,15 +5849,60 @@ void test_launch_battleroom(const oa::ui::gui_layout::Layout& lounge) {
         expect(map_name == "Acid Pools", "the host plays the launch's map");
     }
     map_name = "Coast To Coast";
+    refuse_map = true;
+    last_message.clear();
+    {
+        Fixture missed(lounge, &link);
+        expect(
+            mp::local_info(missed.lobby).map_name[0] == '\0',
+            "a launch map that is not installed is not another map"
+        );
+        expect(
+            last_message.find("Could not find") != std::string::npos, "the missing map is reported"
+        );
+    }
+    refuse_map = false;
+    map_name = "Coast To Coast";
     std::snprintf(
         launch_block.provider_label, sizeof launch_block.provider_label, "%s", "TwelveLetter"
     );
     {
         Fixture f(lounge, &link, false);
+        const auto& joined = mp::local_info(f.lobby);
         expect(map_name == "Coast To Coast", "a joiner leaves the map to the host");
+        expect(
+            joined.side == 1 && mp::lobby_player_team(mp::local_player(f.lobby)) == 1,
+            "a joiner takes the launch's side and team"
+        );
+        expect(joined.metal_hundreds == 10, "a joiner leaves the metal");
+        expect(
+            (joined.options & mp::option::commander_mask) != mp::option::commander_deathmatch,
+            "a joiner leaves the commander rule"
+        );
         expect(
             mp::panel_text(f.panel, "PREVMENU") == "Previous Menu",
             "a long label leaves the caption"
+        );
+    }
+    {
+        reset_launch();
+        active_launch = true;
+        launch_block.player_limit = 4;
+        auto game = std::make_unique<oa::Game>();
+        mp::Lobby lobby{};
+        mp::LoopbackNet loopback{};
+        mp::loopback_reset(loopback);
+        mp::lobby_reset(lobby, *game);
+        lobby.net = mp::loopback_lobby_net(loopback);
+        bind_services(lobby);
+        bind_maps(lobby);
+        lobby.local_version_major = 3;
+        lobby.launch_link = launch_link();
+        mp::ConnectState state{};
+        loopback.opened = true;
+        expect(
+            mp::connect_host(lobby, state) && mp::lobby_session_players(*game) == 4,
+            "the launch's player limit caps the session"
         );
     }
     // Without an active launch nothing applies.

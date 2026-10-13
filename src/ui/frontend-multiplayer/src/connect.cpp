@@ -739,12 +739,22 @@ ConnectAction game_list_handle_event(Lobby& lobby, ConnectState& state, Panel& p
 void new_game_open(Lobby& lobby, ConnectState& state, Panel& panel) noexcept {
     auto& game = *lobby.game;
     state.host_at_once = false;
-    // An active launch names the player.
-    if (lobby_launch_block_active(lobby) && launch_block(lobby).user_name[0] != '\0') {
-        const auto& block = launch_block(lobby);
-        copy_field(
-            lobby_nickname(game), kNicknameCopyBytes, bounded(block.user_name, kLaunchNicknameLimit)
-        );
+    // An active launch names the player and the game. The game name is what the
+    // battle room reports; the entry keeps 16 characters, as GAMENAME does.
+    if (lobby_launch_block_active(lobby)) {
+        const auto& launched = launch_block(lobby);
+        if (launched.user_name[0] != '\0') {
+            copy_field(
+                lobby_nickname(game),
+                kNicknameCopyBytes,
+                bounded(launched.user_name, kLaunchNicknameLimit)
+            );
+        }
+        if (launched.session_name[0] != '\0') {
+            copy_field(
+                lobby_game_name(game), 0x11, bounded(launched.session_name, kNameEntryBytes)
+            );
+        }
     }
     if (lobby_nickname(game)[0] == '\0' && state.settings.user_name != nullptr) {
         char name[0x11] = "";
