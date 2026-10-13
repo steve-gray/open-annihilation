@@ -294,8 +294,6 @@ void Match::spawn_corpse(sim::unit_spawn::Slot& slot, uint8_t wreck_level, bool 
     if (ground <= static_cast<int32_t>(static_cast<uint8_t>(world.game.sea_level)) &&
         placed != nullptr) {
         if ((def->flags & OA_UNIT_DEF_FLAG_IS_FEATURE) == 0) {
-            // Sideways motion left in a reused slot is not part of the sink.
-            placed->model.velocity.x = 0;
             placed->model.velocity.z = 0;
             placed->model.velocity.y = sim::feature_runtime::wreck_sink_speed;
         }

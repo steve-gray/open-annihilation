@@ -510,9 +510,6 @@ PlacedFeature* place_feature(
         record->cell_z = cell_z;
         record->model.position =
             position != nullptr ? *position : feature_center(world, cell_x, cell_z, *def);
-        // A slot freed mid-descent still holds that fall. The next feature
-        // starts still; a remnant puts its own fall back after this returns.
-        record->model.velocity = {};
         if (orientation == nullptr)
             std::memset(record->orientation, 0, sizeof(record->orientation));
         else
@@ -574,20 +571,17 @@ void replace_with_remnant(
         place_feature(world, host, index, next, nullptr, nullptr, no_player);
         return;
     }
-    // The freed record keeps its bytes. Position, facing and fall are copied
-    // out because the next placement clears the slot's motion.
+    // The freed record keeps its bytes; its position and orientation seed the remnant.
     const auto* record = feature_record(world, plot->feature_record);
     if (record == nullptr)
         return;
     if ((record->state & state_reclaimed) != 0)
         next = reclamate_feature(*def);
     const auto position = record->model.position;
-    const auto fall = record->model.velocity;
     int16_t orientation[3];
     std::memcpy(orientation, record->orientation, sizeof(orientation));
     clear_plot_feature(world, host, index, false);
-    if (auto* placed = place_feature(world, host, index, next, &position, orientation, no_player))
-        placed->model.velocity = fall;
+    place_feature(world, host, index, next, &position, orientation, no_player);
 }
 
 void start_feature_sequence(
