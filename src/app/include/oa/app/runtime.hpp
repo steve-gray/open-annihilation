@@ -10285,7 +10285,9 @@ class Runtime final : public menu::Host,
 
     /// Selects a squad (digit; shift joins it to the selection), then plays SelectSquad.
     ///
-    /// Its CTRL_F members are left out while it also holds an armed unit.
+    /// Its CTRL_F members are left out while it also holds an armed unit. When the
+    /// squad is already exactly the selection, the view moves to the group's centre
+    /// and tracking stops.
     ///
     /// @param squad squad number, 1 through 9
     /// @param add true to add to the selection
@@ -15151,7 +15153,6 @@ class Runtime final : public menu::Host,
     oa::formats::gaf::Archive logo_textures_{};
     const oa::formats::gaf::Sequence* logo_sequence_ = nullptr;
     Screen options_parent_ = Screen::main_menu;
-    int squad_double_tap_ = 0;
     oa::ui::hud::KillBoard kill_board_{};
     // The message log's random numbers (message_hooks), never the match's.
     PresentationRandom message_random_{};

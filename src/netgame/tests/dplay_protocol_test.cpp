@@ -1126,6 +1126,100 @@ void name_server_and_player_change_messages_round_trip() {
     CHECK(!decode_player_name_image(names, sizeof names - 1, &name_view));
 }
 
+/// Hosts a game under one application GUID.
+///
+/// @param host Machine hosting.
+/// @param application Application GUID the session description carries.
+/// @return True when the host is up.
+bool host_under(Node* host, const Guid& application) {
+    SessionDesc desc{};
+    desc.flags = session_flag::migrate_host;
+    std::memcpy(desc.application_guid, application.bytes, 16);
+    desc.max_players = 8;
+    uint32_t player = 0;
+    return engine_host(&host->engine, desc, "Game", "", 0) == result::ok &&
+           engine_create_player(&host->engine, "host", "host", nullptr, 0, 0, &player) ==
+               result::ok;
+}
+
+/// Searches and reports whether exactly one game came back.
+///
+/// @param joiner Machine searching.
+/// @param application Application GUID the search asks for.
+/// @return True when one game is listed.
+bool finds_one_game(Node* joiner, const Guid& application) {
+    if (engine_enum_sessions(&joiner->engine, application, everywhere, 0) != result::ok)
+        return false;
+    deliver_all(0);
+    return joiner->engine.session_count == 1;
+}
+
+// A host and a joiner that name the same application GUID see each other.
+// A joiner that names Total Annihilation's GUID does not see a host under
+// another one, and a joiner under that other GUID does not see a host
+// under Total Annihilation's.
+void a_search_finds_only_a_game_under_its_application_guid() {
+    current_test = "a_search_finds_only_a_game_under_its_application_guid";
+    const uint8_t custom_bytes[16] = {
+        0xdd,
+        0xcc,
+        0xbb,
+        0xaa,
+        0xff,
+        0xee,
+        0x22,
+        0x11,
+        0x33,
+        0x44,
+        0x55,
+        0x66,
+        0x77,
+        0x88,
+        0x99,
+        0xaa,
+    };
+    Guid custom{};
+    std::memcpy(custom.bytes, custom_bytes, 16);
+    const Guid original = game_application();
+
+    {
+        Wire wire;
+        g_wire = &wire;
+        auto host = make_node(1, 2300, 41);
+        auto same = make_node(2, 2301, 43);
+        auto other = make_node(3, 2302, 45);
+        wire.nodes[0] = host.get();
+        wire.nodes[1] = same.get();
+        wire.nodes[2] = other.get();
+        CHECK(host_under(host.get(), custom));
+        CHECK(finds_one_game(same.get(), custom));
+        CHECK(
+            same->engine.session_count == 1 &&
+            std::memcmp(same->engine.sessions[0].desc.application_guid, custom.bytes, 16) == 0
+        );
+        CHECK(engine_enum_sessions(&other->engine, original, everywhere, 0) == result::ok);
+        deliver_all(0);
+        CHECK(other->engine.session_count == 0);
+        g_wire = nullptr;
+    }
+    {
+        Wire wire;
+        g_wire = &wire;
+        auto host = make_node(1, 2300, 47);
+        auto same = make_node(2, 2301, 49);
+        auto other = make_node(3, 2302, 51);
+        wire.nodes[0] = host.get();
+        wire.nodes[1] = same.get();
+        wire.nodes[2] = other.get();
+        CHECK(host_under(host.get(), original));
+        CHECK(finds_one_game(same.get(), original));
+        CHECK(engine_enum_sessions(&other->engine, custom, everywhere, 0) == result::ok);
+        deliver_all(0);
+        CHECK(other->engine.session_count == 0);
+        g_wire = nullptr;
+    }
+}
+
 } // namespace
 
 int main() {
@@ -1143,6 +1237,7 @@ int main() {
     pings_from_strangers();
     player_name_and_data_changes_reach_the_other_machines();
     name_server_and_player_change_messages_round_trip();
+    a_search_finds_only_a_game_under_its_application_guid();
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

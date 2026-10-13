@@ -14,6 +14,7 @@
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/ui/screen_registry.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -46,6 +47,10 @@ struct NetOptions {
     // then any the system has free. Checks that host or search give each run
     // its own, so they can run side by side.
     std::optional<uint16_t> dplay_port;
+    // The DirectPlay application GUID this game hosts under and looks for,
+    // in wire byte order (--dplay-guid). Unset: Total Annihilation's own GUID,
+    // so a game stays visible to 3.1c and to a game started without the option.
+    std::optional<std::array<uint8_t, 16>> dplay_guid;
     // .tad recording to replay; match_ticks bounds a headless replay.
     fs::path play_demo;
     // Replay even when the recording's unit table differs from the installed
