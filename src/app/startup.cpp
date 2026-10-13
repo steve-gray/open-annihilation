@@ -894,6 +894,10 @@ take_folder_option(std::string_view argument, ArgumentCursor& cursor, Options& o
         options.check_content_copy = path_from_utf8(option_value(cursor));
         return true;
     }
+    if (argument == "--check-installer") {
+        options.check_installer = path_from_utf8(option_value(cursor));
+        return true;
+    }
     return false;
 }
 
@@ -1267,6 +1271,7 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
                    "[--check-megamap-clicks] [--check-radar-orders] "
                    "[--check-pointer-interfaces] [--check-pad-controls] [--check-touch-controls] "
                    "[--check-game-files] [--check-content-copy PATH] "
+                   "[--check-installer FILE] "
                    "[--check-multiplayer-menu] "
                    "[--check-load-save] [--check-frontend-controls] "
                    "[--check-scroll-bars] [--check-engine-settings [--force-capable]] "
@@ -1501,6 +1506,8 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
     if (result.check_game_files)
         result.unattended = true;
     if (!result.check_content_copy.empty())
+        result.unattended = true;
+    if (!result.check_installer.empty())
         result.unattended = true;
     if (!result.display_modes.empty() && !result.unattended)
         throw std::runtime_error(

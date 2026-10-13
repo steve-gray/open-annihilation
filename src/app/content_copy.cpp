@@ -1144,6 +1144,10 @@ bool ContentSource::locate(std::string_view, fs::path&, std::string*) {
     return false;
 }
 
+bool ContentSource::copy_together(const CopyRequest&, CopyResult&) {
+    return false;
+}
+
 fs::path ContentSource::disk_root() const {
     return {};
 }
@@ -1459,6 +1463,9 @@ bool managed_base_present(const fs::path& user_folder, std::span<const bundles::
 }
 
 CopyResult copy_content(ContentSource& source, const CopyRequest& request) {
+    CopyResult together;
+    if (source.copy_together(request, together))
+        return together;
     CopyResult result;
     try {
         SourceDescription described;
