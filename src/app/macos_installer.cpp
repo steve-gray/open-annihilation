@@ -266,7 +266,11 @@ void add_bytes(uint64_t& total, uint64_t more) noexcept {
 
 [[nodiscard]] bool truncate_file(std::FILE* file, uint64_t length) noexcept {
 #if defined(_WIN32)
-    return _chsize_s(_fileno(file), static_cast<__int64>(length)) == 0;
+    // _chsize, not _chsize_s: Windows 95's C runtime has only the first. Its
+    // length is a long, and no game file comes near 2 GiB.
+    if (std::fflush(file) != 0 || length > static_cast<uint64_t>(std::numeric_limits<long>::max()))
+        return false;
+    return _chsize(_fileno(file), static_cast<long>(length)) == 0;
 #else
     if (length > static_cast<uint64_t>(std::numeric_limits<off_t>::max()))
         return false;
