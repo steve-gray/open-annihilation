@@ -54,8 +54,8 @@ void fail(std::string* error, const char* message) {
         *error = message;
 }
 
-[[nodiscard]] uint64_t narrow_size(std::uintmax_t value) noexcept {
-    constexpr auto limit = static_cast<std::uintmax_t>(std::numeric_limits<uint64_t>::max());
+[[nodiscard]] uint64_t narrow_size(uintmax_t value) noexcept {
+    constexpr auto limit = static_cast<uintmax_t>(std::numeric_limits<uint64_t>::max());
     if (value > limit)
         return std::numeric_limits<uint64_t>::max();
     return static_cast<uint64_t>(value);
