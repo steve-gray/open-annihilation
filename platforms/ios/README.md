@@ -138,9 +138,16 @@ Where things are, in the game's data container:
 |---|---|
 | `Documents/Total Annihilation` | the game folder, shown in the Files app and the Finder |
 | `Documents/Open Annihilation` | the player's own folder: `Saves`, `Screenshots`, `Films`, `Recordings` and `Mods`, shown in the Files app and the Finder; saves and recordings an earlier version kept beside the preferences file move here once |
+| `Documents/Open Annihilation/games` | a base game copied into the player's folder, with a `.oa-content` record of each file |
+| `Documents/Open Annihilation/expansions` | expansions copied into the player's folder, each under the base game it extends |
 | `Documents/Total Annihilation (old)` | a folder set aside by a replacement, until removed |
 | `Library/Application Support/net.coreprime.open-annihilation/import/` | the copy being made (`Total Annihilation/`) and its state file |
 | `Library/Application Support/net.coreprime.open-annihilation/demo-1997/` | the demo's unpacked game data |
+
+The Game files screen still fills `Documents/Total Annihilation`, and that folder is what the
+game plays from. The same start also copies the known files into `games` and `expansions` under
+`Documents/Open Annihilation`. That copy only reads the folder the screen filled. On the same
+volume the second copy shares the file's disk blocks, so it takes no extra space.
 
 `--no-game-files-screen` shows the message the game had before the screen instead (the **Check
 again** alert): it says where to copy the folder with the Files app or the Finder, and stays up

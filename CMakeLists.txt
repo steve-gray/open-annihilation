@@ -319,12 +319,15 @@ target_link_libraries(oa-app-mod-profile PUBLIC oa-app-headers oa-data-mod-profi
 # the files copied and left out, the name check, the plan, the space it
 # needs, the listing and the copy on worker threads, the state file, the
 # commit and recovery, and the additions and removals of the management
-# state (game_files_import.hpp, docs/game-files.md).
+# state (game_files_import.hpp, docs/game-files.md). The managed copy of a
+# base game and its expansions, and the source reader an installer
+# implements, are content_copy.hpp.
 add_library(oa-app-game-files src/app/game_files_import.cpp src/app/game_files_scan.cpp
-  src/app/game_files_run.cpp src/app/game_files_state.cpp)
+  src/app/game_files_run.cpp src/app/game_files_state.cpp src/app/content_copy.cpp)
 add_library(oa::app::game_files ALIAS oa-app-game-files)
 target_link_libraries(oa-app-game-files PUBLIC oa-app-headers oa-app-game-directory oa-app-mod-profile
-  oa-base-threads PRIVATE oa-formats-zip oa-platform-preferences oa-options)
+  oa-base-threads oa-data-content-bundles PRIVATE oa-formats-zip oa-platform-preferences
+  oa-platform-shims oa-options)
 # The player's own folder: where it is, the folders it holds, a folder for
 # each mod in Saves, Screenshots, Films and Recordings, the one-time moves
 # of saved games from beside the preferences file and loose in Saves, and of
@@ -741,6 +744,13 @@ if(BUILD_TESTING)
   oa_add_game_data_test(app-game-files-import-data oa-app-game-files-import-test --data)
   set_tests_properties(app-game-files-import-data PROPERTIES TIMEOUT 300)
   oa_demo_installer_tests(app-game-files-import-data)
+  # The managed copy of a fixture install: an interrupted copy resumed, the
+  # source left unchanged, and the content-copy check.
+  add_executable(oa-app-content-copy-test src/app/content_copy_test.cpp)
+  target_link_libraries(oa-app-content-copy-test PRIVATE oa-app-game-files oa-platform-shims
+    oa-test-support oa-options)
+  add_test(NAME app-content-copy COMMAND oa-app-content-copy-test)
+  set_tests_properties(app-content-copy PROPERTIES TIMEOUT 60)
   # The renderer records by table: the text of every key and value, values
   # that cannot be read, strikes that become records and what clears them,
   # and the native-density key a run writes or erases as it ends.

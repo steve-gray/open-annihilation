@@ -16,6 +16,7 @@
 #include "oa/app/full_screen.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/game_files_hooks.hpp"
+#include "oa/app/content_copy.hpp"
 #include "oa/app/game_files_import.hpp"
 #include "oa/app/input_hints.hpp"
 #include "oa/app/package_install.hpp"
@@ -722,6 +723,10 @@ int game_files_status([[maybe_unused]] const Options& options, int status) {
     return status;
 }
 
+void publish_managed_copy(
+    const Options& options, const fs::path& installation, bool game_dir_named
+);
+
 /// Runs the game once: finds the game folders and their profile, with the
 /// Game files screen where the platform brings game files in and none is
 /// usable, opens the window the first time, plays the intro movies the
@@ -745,6 +750,7 @@ int run_once(
     LookupLog* lookup_log,
     ModSwitchMemory& switch_memory
 ) {
+    const bool game_dir_named = !options.game_dir.empty();
     // A soft restart reads the settings the switch saved: the mod the Game
     // files screen would play and the backups setting.
     if (options.restarts > 0 && game_files.installed &&
@@ -795,6 +801,7 @@ int run_once(
             "game directory does not exist: " + path_to_utf8(options.game_dir) +
             " (name it with --game-dir PATH)"
         );
+    publish_managed_copy(options, options.game_dir, game_dir_named);
     options.game_folders = game_directory->folders;
     if (options.game_folders.empty())
         options.game_folders = {options.game_dir};
@@ -1132,6 +1139,42 @@ void report_fatal(const std::string& message) {
         );
 }
 
+/// Copies known game files into the player's folder when this start should.
+///
+/// --check-game-files drives the screen's own copy and is left to it. A
+/// named --game-dir is used as it is. A run nobody is watching uses a copy
+/// already there, or stops with a message. The installation is only read.
+///
+/// @param options the parsed command line
+/// @param installation the folder the game will play from
+/// @param game_dir_named true when the command line named --game-dir
+void publish_managed_copy(
+    const Options& options, const fs::path& installation, bool game_dir_named
+) {
+    if (options.check_game_files)
+        return;
+    ManagedCopyRequest request;
+    request.installation = installation;
+    request.game_dir_named = game_dir_named;
+    request.unattended = options.unattended || options.headless_check;
+    request.news = &std::cerr;
+    try {
+        const fs::path preferences = preference_file(options.preferences_file);
+        std::error_code error;
+        const oa::platform::preferences::Values values =
+            fs::exists(preferences, error) ? oa::platform::preferences::load(preferences)
+                                           : oa::platform::preferences::Values{};
+        std::string note;
+        request.user_folder = own_user_folder(
+            options.user_folder, options.preferences_file, preferences, values, note
+        );
+        request.user_folder_known = true;
+    } catch (const std::exception&) {
+        request.user_folder_known = false;
+    }
+    ensure_managed_copy(request);
+}
+
 } // namespace
 } // namespace oa::app
 
@@ -1171,6 +1214,8 @@ int main(int argc, char** argv) {
                 std::cout,
                 std::cerr
             );
+        if (!parsed.check_content_copy.empty())
+            return run_content_copy_check(parsed.check_content_copy);
         // A game started for play, from a terminal or the desktop, logs to the
         // logs folder. Checks, benchmarks and other scripted runs keep their
         // output where it goes, and so does a run whose output another

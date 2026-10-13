@@ -504,6 +504,9 @@ struct Options {
     bool touch_controls = false;
     /// --check-game-files: the Game files screen driven through a route by scripted hooks.
     bool check_game_files = false;
+    /// --check-content-copy PATH: copies a small fixture into PATH, standing in
+    /// for Documents, and checks that copy. The run does nothing else.
+    fs::path check_content_copy{};
     /// --no-game-files-screen: with no usable game folder, the notice with its look-again
     /// button instead of the Game files screen, where the platform offers both.
     bool no_game_files_screen = false;
