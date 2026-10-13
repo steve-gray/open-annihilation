@@ -1402,6 +1402,12 @@ int run_once(
     if (!options.headless_check && !display.initialized)
         display.initialize(options);
     std::optional<GameDirectory> game_directory;
+    // Language, the game and the copy are the first thing a new player sees.
+    // While they will, the system's folder dialog, the in-engine locator and
+    // the Game files screen stay closed: those were what showed before the
+    // language step. The look itself still runs on the side thread when a
+    // run nobody watches has the window up.
+    const bool setup_now = setup_before_game_due(options, mount_copy);
     GameFilesNeeded needed;
     const uint32_t folder_began = oa::platform::tick_ms();
     const auto resolve_folder = [&] {
@@ -1409,7 +1415,11 @@ int run_once(
             game_directory = compose_for_run(options);
         if (!game_directory)
             game_directory = find_game_directory(
-                options, (game_files.offered || folder_chooser_offered(options)) ? &needed : nullptr
+                options,
+                setup_now
+                    ? nullptr
+                    : ((game_files.offered || folder_chooser_offered(options)) ? &needed : nullptr),
+                setup_now
             );
     };
     const bool folder_aside = display.initialized && (options.unattended || options.headless_check);
@@ -1435,18 +1445,20 @@ int run_once(
         resolve_folder();
     }
     oa::platform::log_files::note_timing_span("game folder", folder_began);
-    // Without a usable folder where the in-engine chooser is asked for, it picks one.
-    if (!game_directory && needed.needed && needed.chooser) {
-        ChooserDisplay chooser{&display, &options};
-        const FolderChooserDisplayHooks hooks = display_hooks(chooser);
-        if (!run_folder_chooser_until_resolved(options, hooks, needed, game_directory))
-            return 0;
+    if (!setup_now) {
+        // Without a usable folder where the in-engine chooser is asked for, it picks one.
+        if (!game_directory && needed.needed && needed.chooser) {
+            ChooserDisplay chooser{&display, &options};
+            const FolderChooserDisplayHooks hooks = display_hooks(chooser);
+            if (!run_folder_chooser_until_resolved(options, hooks, needed, game_directory))
+                return 0;
+        }
+        // Without a usable folder, the Game files screen brings one in.
+        if (!run_game_files_until_resolved(options, display, game_files, needed, game_directory))
+            return game_files_status(options, 0);
+        if (!game_directory)
+            return game_files_status(options, 1);
     }
-    // Without a usable folder, the Game files screen brings one in.
-    if (!run_game_files_until_resolved(options, display, game_files, needed, game_directory))
-        return game_files_status(options, 0);
-    if (!game_directory)
-        return game_files_status(options, 1);
     // The game files are kept out of device backups unless the player put
     // them back in, with or without the screen.
     if (game_files.installed)
@@ -1457,27 +1469,28 @@ int run_once(
     // its archive was unpacked to, and remembered as chosen. A folder found
     // on this machine is remembered too, and the main menu says where it was
     // found.
-    options.game_dir = game_directory->installation;
-    if (game_directory->source == GameDirectorySource::chosen ||
-        game_directory->source == GameDirectorySource::found)
-        options.remember_game_dir = game_directory->path;
-    if (game_directory->source == GameDirectorySource::found && game_directory->found_from)
-        options.found_install_notice = found_install_notice(*game_directory->found_from);
-    if (!fs::is_directory(options.game_dir))
-        throw std::runtime_error(
-            "game directory does not exist: " + path_to_utf8(options.game_dir) +
-            " (name it with --game-dir PATH)"
-        );
-    // Language, the game and the copy, in this window, before the menu.
-    // A player who already has the game, or who named a folder, skips them.
-    // Quit leaves before the silent copy. A copy that finished here is the
-    // one the start plays, so the silent copy does not run again.
+    if (game_directory) {
+        options.game_dir = game_directory->installation;
+        if (game_directory->source == GameDirectorySource::chosen ||
+            game_directory->source == GameDirectorySource::found)
+            options.remember_game_dir = game_directory->path;
+        if (game_directory->source == GameDirectorySource::found && game_directory->found_from)
+            options.found_install_notice = found_install_notice(*game_directory->found_from);
+        if (!fs::is_directory(options.game_dir))
+            throw std::runtime_error(
+                "game directory does not exist: " + path_to_utf8(options.game_dir) +
+                " (name it with --game-dir PATH)"
+            );
+    }
+    // Quit leaves before the silent copy. Skip with no folder leaves too,
+    // without opening a dialog. A copy that finished here is the one the
+    // start plays, so the silent copy does not run again.
     bool copied_on_setup = false;
-    if (setup_before_game_due(options, mount_copy)) {
+    if (setup_now) {
         if (!display.initialized)
             display.initialize(options);
         fs::path found_install;
-        if (game_directory->source != GameDirectorySource::managed)
+        if (game_directory && game_directory->source != GameDirectorySource::managed)
             found_install = game_directory->installation;
         const SetupBefore setup = run_setup_before_game(
             options,
@@ -1488,7 +1501,11 @@ int run_once(
         if (setup == SetupBefore::quit)
             return game_files_status(options, 0);
         copied_on_setup = setup == SetupBefore::copied;
+        if (setup == SetupBefore::skipped && !game_directory)
+            return game_files_status(options, 0);
     }
+    if (!game_directory && !copied_on_setup)
+        return game_files_status(options, 1);
     if (!copied_on_setup)
         publish_managed_copy(options, options.game_dir, options.game_dir_named);
     // A copy made on this start is what the start plays. --game-dir is left
@@ -1496,8 +1513,12 @@ int run_once(
     if (mount_copy) {
         if (std::optional<GameDirectory> copied = compose_for_run(options))
             game_directory = std::move(copied);
+        if (!game_directory)
+            return game_files_status(options, 1);
         options.game_dir = game_directory->installation;
     }
+    if (!game_directory)
+        return game_files_status(options, 1);
     options.managed_content = game_directory->source == GameDirectorySource::managed;
     options.game_folders = game_directory->folders;
     if (options.game_folders.empty())

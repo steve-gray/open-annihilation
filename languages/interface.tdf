@@ -12649,11 +12649,3 @@
 	es=Desde {place}…;
 	it=Da {place}…;
 	}
-
-[no {name}]
-	{
-	de=kein {name};
-	fr=pas de {name};
-	es=sin {name};
-	it=niente {name};
-	}

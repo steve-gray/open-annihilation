@@ -249,6 +249,10 @@ struct GameDirectoryRequest {
     /// it holds the demo's installer. The locator asks for it, or the system's
     /// picker where the locator is not shown.
     bool demo_only = false;
+    /// The five-step setup will ask where the game is. One usable folder is
+    /// still returned. Otherwise resolution opens no folder dialog, no
+    /// in-engine locator and no Game files screen.
+    bool defer_dialog = false;
 };
 
 /// Why resolution found no folder to play when the Game files screen is offered.
@@ -548,9 +552,12 @@ void remember_content_choice(
 /// @param options parsed command line
 /// @param[out] needed non-null: the Game files screen may be offered, and is
 ///        filled as resolve_game_directory() fills it
+/// @param defer_dialog true when the five-step setup will ask where the game
+///        is, so this call opens no folder dialog, locator or Game files screen
 /// @return as resolve_game_directory()
-[[nodiscard]] std::optional<GameDirectory>
-find_game_directory(const Options& options, GameFilesNeeded* needed = nullptr);
+[[nodiscard]] std::optional<GameDirectory> find_game_directory(
+    const Options& options, GameFilesNeeded* needed = nullptr, bool defer_dialog = false
+);
 
 /// Inspects a folder the in-engine chooser picked with a host's inspection and returns it as
 /// chosen (it is remembered) when it can be played.
