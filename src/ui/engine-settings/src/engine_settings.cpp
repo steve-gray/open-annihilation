@@ -553,6 +553,7 @@ EngineSettings read_settings(
     read_word(
         values, key::view_past_map_edge, view_past_map_edge_words, settings.view_past_map_edge
     );
+    read_word(values, key::window_edge, window_edge_words, settings.window_edge);
     if (const auto number = stored_number(values, key::escape_opens_menu))
         settings.escape_opens_menu = *number > 0;
     if (const auto number = stored_number(values, key::unit_limit))
@@ -829,6 +830,15 @@ void write_settings(
         opened.zoomed_out_after,
         chosen.zoomed_out_after,
         defaults.zoomed_out_after,
+        restored
+    );
+    store_word(
+        values,
+        key::window_edge,
+        window_edge_words,
+        opened.window_edge,
+        chosen.window_edge,
+        defaults.window_edge,
         restored
     );
     store_word(

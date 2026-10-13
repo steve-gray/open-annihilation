@@ -710,6 +710,9 @@ void Runtime::run_frame(bool& running) {
     // frame, for the screen the events left.
     apply_system_pointer(false);
     apply_window_frame();
+    // A pause, a menu or a resize since the last event settles the sticky
+    // edge before this frame is drawn.
+    apply_sticky_edge();
     idle_tick();
     const auto now_ms = static_cast<uint32_t>(SDL_GetTicks());
     if (oa::platform::finished_stream_sweep_due(now_ms, last_stream_sweep_ms_)) {
@@ -720,6 +723,27 @@ void Runtime::run_frame(bool& running) {
 }
 
 void Runtime::dispatch_event(SDL_Event& event, bool& running) {
+    // Every return, the full-screen one included, settles the sticky edge
+    // after keep_pointer_on_screen has had its say.
+    struct StickyGuard {
+        Runtime& runtime;
+        bool force_release = false;
+
+        ~StickyGuard() { runtime.apply_sticky_edge(force_release); }
+    } sticky{*this};
+
+    if (event.type == SDL_EVENT_MOUSE_MOTION && event.motion.which != SDL_TOUCH_MOUSEID &&
+        sticky_edge_wanted()) {
+        const uint64_t time_ms = event.motion.timestamp != 0
+                                     ? event.motion.timestamp / 1'000'000ULL
+                                     : static_cast<uint64_t>(SDL_GetTicks());
+        note_sticky_motion(
+            event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel, time_ms
+        );
+        sticky_wanted_ = true;
+    }
+    if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE || event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
+        sticky.force_release = true;
     // The inactive-loop check's wake ends the run. It is not a focus change,
     // and it must not be read as one.
     if constexpr (self_checks_built)

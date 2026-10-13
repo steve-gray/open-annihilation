@@ -19,3 +19,20 @@ selected unit and does not follow it.
 A gamepad's group buttons do the same. With the groups grip held, a tap
 selects the group and a second tap centres on it. See
 [controllers.md](controllers.md).
+
+## The window's edge
+
+In a window, while a match's battlefield shows, **Window edge** Sticky (the
+default, under Settings > Controls) holds the pointer on the window's edges.
+It rests on the last pixel and the view scrolls, as it does in full screen.
+A firm push outward, or a flick onto the edge, lets it leave. After that it
+is held again only once it has come back in and moved about 24 points away
+from the edges. Motion along an edge does not let it go. Menus, the pause
+screen, a window without the focus and Free leave the pointer free. Full
+screen keeps its own hold.
+
+Through SDL 3, macOS, Windows, X11 and Wayland do not report movement while
+the pointer is held at the edge. A flick is how it leaves on each of them:
+arrive at the edge fast, or pull back in and flick out. A slow rest stays
+held and the view scrolls. Where a window system does report movement past
+the edge, a push of that movement lets the pointer go too.

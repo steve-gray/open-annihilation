@@ -41,6 +41,8 @@ inline constexpr std::string_view max_zoom_in = "open-annihilation.max-zoom-in";
 /// "off", or the share of the battlefield in percent: "25" or "50"
 /// (EngineSettings::view_past_map_edge).
 inline constexpr std::string_view view_past_map_edge = "open-annihilation.view-past-map-edge";
+/// "sticky" or "free" (EngineSettings::window_edge).
+inline constexpr std::string_view window_edge = "open-annihilation.window-edge";
 /// 1 or 0 (EngineSettings::escape_opens_menu).
 inline constexpr std::string_view escape_opens_menu = "open-annihilation.escape-opens-menu";
 /// Units per player, decimal (EngineSettings::unit_limit).
@@ -580,6 +582,20 @@ inline constexpr std::array<ZoomedOutUnits, 3> zoomed_out_units_choices{
 /// Icons is shown, but cannot be chosen yet.
 inline constexpr std::size_t offered_zoomed_out_units = 2;
 
+/// Window edge: whether a window holds the pointer on its edges while a
+/// match's battlefield shows, so the view edge-scrolls. Full screen holds
+/// the pointer either way.
+enum class WindowEdge : uint8_t {
+    sticky, ///< the pointer rests on the edge so the view scrolls
+    free,   ///< the pointer leaves a window's edge, as before
+};
+
+/// The ways of Window edge, in the order the dialog offers them.
+inline constexpr std::array<WindowEdge, 2> window_edge_choices{
+    WindowEdge::sticky,
+    WindowEdge::free,
+};
+
 /// Window frame: when the game's window shows its title bar and borders.
 /// Full screen has none either way.
 enum class WindowFrame : uint8_t {
@@ -853,6 +869,9 @@ struct EngineSettings {
     ViewPastMapEdge view_past_map_edge{ViewPastMapEdge::one_half};
     bool escape_opens_menu{}; ///< Escape with nothing to cancel opens the game menu
     bool switch_alt{};        ///< 3.1c's SwitchAlt: a number key alone selects its group
+    /// Whether a window holds the pointer on its edges while a match's
+    /// battlefield shows. Full screen holds the pointer either way.
+    WindowEdge window_edge{WindowEdge::sticky};
     uint16_t unit_limit{default_unit_limit};       ///< units per player, from the next game
     uint32_t max_frame_rate{highest_frame_rate};   ///< frames a second
     AntiAliasing anti_aliasing{AntiAliasing::off}; ///< enhanced anti-aliasing of units

@@ -3,11 +3,17 @@
 
 // Pointer tracking, menu activation and match unit picking.
 #include "oa/app/runtime.hpp"
+#include "engine_settings_state.hpp"
 #include "match_models.hpp"
 #include "oa/app/far_view.hpp"
 #include "oa/app/hook_call.hpp"
 #include "oa/sim/spatial_state/spatial.hpp"
 #include "oa/sim/weapon_execution/retaliation.hpp"
+#include "oa/ui/console/game_fields.hpp"
+#include "oa/ui/frontend_dialogs.hpp"
+
+#include <SDL3/SDL.h>
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -19,6 +25,7 @@
 #include <limits>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace oa::app {
@@ -523,6 +530,100 @@ std::string_view Runtime::match_hud_action(std::string_view name) const {
     if (name.size() > 3 && (name.starts_with("ARM") || name.starts_with("COR")))
         return name.substr(3);
     return name;
+}
+
+void Runtime::note_sticky_motion(
+    float x, float y, float motion_x, float motion_y, uint64_t time_ms
+) {
+    if (sdl_.window == nullptr)
+        return;
+    int width = 0;
+    int height = 0;
+    if (!SDL_GetWindowSize(sdl_.window, &width, &height))
+        return;
+    std::ignore = sticky_edge(
+        sticky_edge_,
+        StickySample{x, y, motion_x, motion_y, time_ms},
+        static_cast<float>(width),
+        static_cast<float>(height)
+    );
+}
+
+bool Runtime::sticky_edge_wanted() {
+    if (sdl_.window == nullptr || screen_ != Screen::match || !match_ || match_finished_ ||
+        match_paused_)
+        return false;
+    if (engine_settings_dialog() != nullptr || oa::ui::frontend_dialogs::dialog_count() != 0)
+        return false;
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(sdl_.window);
+    // Full screen keeps its own grab. A window wants the rule only with
+    // the focus and the pointer inside it.
+    if ((flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_MOUSE_FOCUS)) !=
+        (SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_MOUSE_FOCUS))
+        return false;
+    if ((match_->state().game.sim_run_flags & oa::ui::console::kSimRunPaused) != 0)
+        return false;
+    if (engine_settings_ != nullptr &&
+        engine_settings_->current.window_edge != oa::ui::engine_settings::WindowEdge::sticky)
+        return false;
+    return true;
+}
+
+void Runtime::forget_sticky_edge() {
+    release_sticky_edge(sticky_edge_);
+    sticky_wanted_ = false;
+}
+
+void Runtime::apply_sticky_edge(bool force_release) {
+    SDL_Window* window = sdl_.window;
+    if (window == nullptr)
+        return;
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(window);
+    if ((flags & SDL_WINDOW_FULLSCREEN) != 0) {
+        // The rect is the sticky edge's. The grab stays full screen's.
+        std::ignore = SDL_SetWindowMouseRect(window, nullptr);
+        forget_sticky_edge();
+        sticky_confined_ = false;
+        return;
+    }
+    if (force_release || !sticky_edge_wanted()) {
+        forget_sticky_edge();
+        if (sticky_confined_) {
+            std::ignore = SDL_SetWindowMouseGrab(window, false);
+            std::ignore = SDL_SetWindowMouseRect(window, nullptr);
+            sticky_confined_ = false;
+        }
+        return;
+    }
+    if (!sticky_wanted_) {
+        float place_x = 0.0F;
+        float place_y = 0.0F;
+        std::ignore = SDL_GetMouseState(&place_x, &place_y);
+        note_sticky_motion(place_x, place_y, 0.0F, 0.0F, static_cast<uint64_t>(SDL_GetTicks()));
+        sticky_wanted_ = true;
+    }
+    int width = 0;
+    int height = 0;
+    if (!SDL_GetWindowSize(window, &width, &height) || width < 2 || height < 2) {
+        if (sticky_confined_) {
+            std::ignore = SDL_SetWindowMouseGrab(window, false);
+            std::ignore = SDL_SetWindowMouseRect(window, nullptr);
+            sticky_confined_ = false;
+        }
+        return;
+    }
+    if (sticky_edge_.holding) {
+        const SDL_Rect bounds{0, 0, width, height};
+        std::ignore = SDL_SetWindowMouseRect(window, &bounds);
+        std::ignore = SDL_SetWindowMouseGrab(window, true);
+        sticky_confined_ = true;
+        return;
+    }
+    if (sticky_confined_) {
+        std::ignore = SDL_SetWindowMouseGrab(window, false);
+        std::ignore = SDL_SetWindowMouseRect(window, nullptr);
+        sticky_confined_ = false;
+    }
 }
 
 bool Runtime::gadget_command_available(const oa::ui::gui_layout::Gadget& gadget) const {

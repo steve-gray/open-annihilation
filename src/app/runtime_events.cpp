@@ -602,7 +602,9 @@ void Runtime::show_unsupported(std::string_view message) {
     std::cerr << "unsupported operation: " << message << '\n';
     if (sdl_.window != nullptr) {
         // The box needs the pointer; full screen holds it again once the
-        // box has closed and the window has the focus back.
+        // box has closed and the window has the focus back. The sticky
+        // edge is forgotten so the pointer is held again only from inside.
+        forget_sticky_edge();
         release_pointer(sdl_.window);
         SDL_ShowSimpleMessageBox(
             SDL_MESSAGEBOX_INFORMATION, "Open Annihilation", status_.c_str(), sdl_.window

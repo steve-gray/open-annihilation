@@ -23,6 +23,7 @@ the locks a running game puts on them (`settings_locks`).
 | | Maximum zoom in, a drop-down: how close the same zooms go | None (the game's own scale), 2x, 3x, 4x | 4x | `open-annihilation.max-zoom-in` (`1`, `2`, `3` or `4`) |
 | | View past the map's edge, a strip: how much of the battlefield the view may show past the map's edges; at 25% and Off a zoom keeps to it too | Off (the view stays on the map, as 3.1c's does), 25%, 50% (the map's edge reaches the battlefield's middle) | 50% | `open-annihilation.view-past-map-edge` (`off`, `25` or `50`) |
 | | Select groups without Alt | Off, On | Off | 3.1c's SwitchAlt |
+| | Window edge, a strip: whether a window holds the pointer on its edges while a match's battlefield shows, so the view edge-scrolls. A firm push or a flick lets it leave. Menus, the pause screen and a window without the focus leave it free. Full screen holds the pointer either way | Sticky, Free | Sticky | `open-annihilation.window-edge` (`sticky` or `free`) |
 | Engine Limits | Unit limit | 50 to 1500 per player, steps of 50, or on to a mod's higher maximum | the installation's `totala.ini` UnitLimit, else 250 or a mod's default | `open-annihilation.unit-limit` |
 | | Pathfinding cycles | 1× to 8× of 1333 path nodes a tick, or of a mod's budget | 1× | `open-annihilation.path-search-nodes` |
 | Language & Text | Language | System default, English, Deutsch, Español, Français, Italiano, and any installed pack | System default with the player's own preferences file; English with `--preferences-file` | `open-annihilation.language` (`system` or a language's tag, as `de`) |
@@ -446,8 +447,8 @@ under 16 pixels. Graphics, with nine rows, is taller than its view by
 the Text size slider, by 129, User Interface, with its three switches, Menu
 scaling's strip and Interface size's drop-down, by 88, Touch, with its
 three strips, the Hold delay slider and two switches, by 121, and Controls,
-with Mouse wheel zoom, the two zoom drop-downs, View past the map's edge
-and Select groups without Alt, by 84; Engine Limits fits, its two sliders
+with Mouse wheel zoom, the two zoom drop-downs, View past the map's edge,
+Select groups without Alt and Window edge, by 131; Engine Limits fits, its two sliders
 in 151 pixels, and draws as if there were no scrolling,
 with no bar. While the dialog's words are drawn in the modern fonts, as in
 Simplified Chinese, whose ideographs stand as tall as a hint line, the

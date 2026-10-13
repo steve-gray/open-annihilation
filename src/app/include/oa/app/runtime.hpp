@@ -9,6 +9,7 @@
 #include "extension.hpp"
 #include "frame_pacing.hpp"
 #include "full_screen.hpp"
+#include "sticky_edge.hpp"
 #include "match_model_draws.hpp"
 #include "megamap_state.hpp"
 #include "platform_hooks.hpp"
@@ -8854,6 +8855,43 @@ class Runtime final : public menu::Host,
     /// @param y canvas row
     void update_pointer(float x, float y);
 
+    /// Feeds one pointer sample to the sticky window edge.
+    ///
+    /// The place is in window points, before the frame's letterbox moves
+    /// it. Called only while the battlefield wants the rule.
+    ///
+    /// @param x place across the window
+    /// @param y place down the window
+    /// @param motion_x movement across since the previous sample
+    /// @param motion_y movement down since the previous sample
+    /// @param time_ms the sample's time, in milliseconds
+    void note_sticky_motion(float x, float y, float motion_x, float motion_y, uint64_t time_ms);
+
+    /// Tells whether a match's battlefield in a focused window wants the
+    /// pointer held at the window's edges.
+    ///
+    /// Menus, the pause screen, a settings dialog, a message box, a window
+    /// without the focus or the pointer, full screen and Window edge Free
+    /// do not. Full screen keeps its own rule.
+    ///
+    /// @return true while the sticky edge should confine the pointer
+    [[nodiscard]] bool sticky_edge_wanted();
+
+    /// Confines the pointer, or lets it go, as the sticky edge says now.
+    ///
+    /// Full screen is left to keeps_pointer_on_screen. A window that does
+    /// not want the rule, or force_release, lets the pointer go until it
+    /// has moved back in. Becoming wanted samples the pointer once with no
+    /// movement, so a pointer already on an edge is not trapped.
+    ///
+    /// @param force_release let go for this call even when the battlefield
+    ///        still looks wanted, as when the pointer leaves or the focus
+    ///        is lost and the window's flags have not caught up
+    void apply_sticky_edge(bool force_release = false);
+
+    /// Forgets a hold, so the next apply holds again only from inside.
+    void forget_sticky_edge();
+
     /// Tells whether a press on a gadget of the current screen selects it: a grayed-out button
     /// takes no press, as in the game's panels.
     ///
@@ -15728,6 +15766,14 @@ class Runtime final : public menu::Host,
     /// other screen has shown and the match's screen has kept its size.
     /// Until then the screen's edges do not scroll the camera.
     bool match_pointer_known_ = false;
+    /// The sticky window edge's memory. The runtime confines the pointer
+    /// while it holds, and only on a match's window.
+    StickyEdge sticky_edge_{};
+    /// The battlefield wanted the sticky edge the last time it was applied,
+    /// so a change to wanting it samples the pointer once before it holds.
+    bool sticky_wanted_ = false;
+    /// The window is confined for the sticky edge, so letting go clears it.
+    bool sticky_confined_ = false;
     float pointer_x_ = 0;
     float pointer_y_ = 0;
     oa::formats::gaf::Archive cursor_gaf_{};

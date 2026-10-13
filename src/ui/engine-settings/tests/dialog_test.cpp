@@ -646,14 +646,16 @@ void each_section_shows_its_rows() {
     CHECK(graphics_entry.y + graphics_entry.height <= divider.y);
     CHECK(divider.y + divider.height <= geometry::list_item(Page::developer).y);
 
-    // Controls: the wheel's switch with the zoom's two limits under it, and
-    // how far past the map's edges the view goes under them.
-    CHECK(settings::page_settings(Page::controls).size() == 5);
+    // Controls: the wheel's switch with the zoom's two limits under it, how
+    // far past the map's edges the view goes, and whether a window holds
+    // the pointer on its edges.
+    CHECK(settings::page_settings(Page::controls).size() == 6);
     CHECK(settings::page_settings(Page::controls)[0] == Setting::wheel_zoom);
     CHECK(settings::page_settings(Page::controls)[1] == Setting::max_zoom_out);
     CHECK(settings::page_settings(Page::controls)[2] == Setting::max_zoom_in);
     CHECK(settings::page_settings(Page::controls)[3] == Setting::view_past_map_edge);
     CHECK(settings::page_settings(Page::controls)[4] == Setting::switch_alt);
+    CHECK(settings::page_settings(Page::controls)[5] == Setting::window_edge);
     // Engine Limits: the unit limit, then pathfinding.
     CHECK(settings::page_settings(Page::common_tweaks).size() == 2);
     CHECK(settings::page_settings(Page::common_tweaks)[0] == Setting::unit_limit);
@@ -756,8 +758,8 @@ void each_section_shows_its_rows() {
             find_part(parts, choice, settings::first_row_control + static_cast<int32_t>(row)) !=
             nullptr
         );
-    CHECK(controls_rows.rows.size() == 5);
-    // The last two rows, scrolled into view.
+    CHECK(controls_rows.rows.size() == 6);
+    // The rows from View past the map's edge down, scrolled into view.
     settings::Dialog scrolled = opened(Page::controls);
     scrolled.scroll[static_cast<std::size_t>(Page::controls)] = std::numeric_limits<int32_t>::max();
     parts = settings::dialog_layout(scrolled);
@@ -766,7 +768,11 @@ void each_section_shows_its_rows() {
           "Up to half the battlefield past the map's edges; a",
           "zoom keeps the ground under the pointer.",
           "Select groups without Alt",
-          "A number key selects its group on its own."})
+          "A number key selects its group on its own.",
+          "Window edge",
+          "The pointer rests on the edge so the view scrolls.",
+          "Sticky",
+          "Free"})
         CHECK(find_part(parts, text, settings::no_control) != nullptr);
     CHECK(find_part(parts, "Shared game - still running", settings::no_control) == nullptr);
     // Each entry is its section's control.
@@ -2202,6 +2208,7 @@ void the_focus_moves_round_every_control() {
         settings::first_row_control + 2,
         settings::first_row_control + 3,
         settings::first_row_control + 4,
+        settings::first_row_control + 5,
         settings::restore_control,
         settings::cancel_control,
         settings::ok_control,
@@ -2433,17 +2440,17 @@ void the_view_and_the_scroll_bar_keep_their_places() {
 void sections_that_fit_do_not_scroll() {
     // Each section's content: its rows, and the end gap under the last.
     // Engine Limits' unit limit and pathfinding sliders are 151,
-    // and fit; Controls' two switches, the zoom's two drop-downs and View
-    // past the map's edge's strip are 320, Graphics' nine rows are 572,
-    // Language's drop-down, five switches and slider 424, and User
-    // Interface's four strips and switches with Interface size's row are
-    // 324, and they scroll. Developer's list scrolls in a view of its own
-    // (developer_*).
+    // and fit; Controls' two switches, the zoom's two drop-downs, View
+    // past the map's edge's strip and Window edge's strip are 367,
+    // Graphics' nine rows are 572, Language's drop-down, five switches and
+    // slider 424, and User Interface's four strips and switches with
+    // Interface size's row are 324, and they scroll. Developer's list
+    // scrolls in a view of its own (developer_*).
     const std::array<Page, 5> pages{
         Page::controls, Page::common_tweaks, Page::graphics, Page::language, Page::user_interface
     };
-    const std::array<int32_t, 5> content{320, 151, 572, 424, 324};
-    const std::array<int32_t, 5> limits{84, 0, 336, 188, 88};
+    const std::array<int32_t, 5> content{367, 151, 572, 424, 324};
+    const std::array<int32_t, 5> limits{131, 0, 336, 188, 88};
     for (std::size_t index = 0; index < content.size(); ++index) {
         const Page page = pages[index];
         if (limits[index] != 0) {
@@ -5916,8 +5923,8 @@ void hint_lines_part_while_the_modern_fonts_draw_the_words() {
     oa::data::languages::set_interface_language(nullptr, modern);
     const auto tall = geometry::place_rows(Page::controls, {});
     oa::data::languages::set_interface_language(nullptr, oa::data::languages::english());
-    CHECK(game_fonts.rows.size() == 5 && tall.rows.size() == 5);
-    if (game_fonts.rows.size() != 5 || tall.rows.size() != 5)
+    CHECK(game_fonts.rows.size() == 6 && tall.rows.size() == 6);
+    if (game_fonts.rows.size() != 6 || tall.rows.size() != 6)
         return;
     // Mouse wheel zoom: one line, in the same place.
     CHECK(tall.rows[0].hint_lines == 1 && tall.rows[0].height == game_fonts.rows[0].height);
@@ -8695,20 +8702,20 @@ std::vector<int32_t> tab_round(settings::Dialog dialog) {
 }
 
 void the_arrows_move_by_geometry() {
-    // Controls: Down walks its five rows, and from the last, which it brings
+    // Controls: Down walks its six rows, and from the last, which it brings
     // into view, reaches the footer under it. A row lies across the
     // section, so Cancel and OK both lie in line with it; Cancel's middle
     // is nearer the row's. Up comes back to the last row.
     settings::Dialog controls = opened(Page::controls);
-    for (int32_t row = 0; row < 5; ++row) {
+    for (int32_t row = 0; row < 6; ++row) {
         CHECK(settings::dialog_key(controls, DialogKey::down) == DialogAction::redraw);
         CHECK(controls.focused == settings::first_row_control + row);
     }
-    CHECK(inside(geometry::open_rows(controls).rows.rows[4].control_area, geometry::view));
+    CHECK(inside(geometry::open_rows(controls).rows.rows[5].control_area, geometry::view));
     CHECK(settings::dialog_key(controls, DialogKey::down) == DialogAction::redraw);
     CHECK(controls.focused == settings::cancel_control);
     CHECK(settings::dialog_key(controls, DialogKey::up) == DialogAction::redraw);
-    CHECK(controls.focused == settings::first_row_control + 4);
+    CHECK(controls.focused == settings::first_row_control + 5);
     // Down from the footer finds nothing: the focus stays.
     controls.focused = settings::ok_control;
     CHECK(settings::dialog_key(controls, DialogKey::down) == DialogAction::none);
@@ -8795,7 +8802,8 @@ void the_arrows_move_by_geometry() {
         return order;
     };
     CHECK(
-        tab_round(opened(Page::controls)) == then_rest({row, row + 1, row + 2, row + 3, row + 4})
+        tab_round(opened(Page::controls)) ==
+        then_rest({row, row + 1, row + 2, row + 3, row + 4, row + 5})
     );
     CHECK(tab_round(opened(Page::common_tweaks)) == then_rest({row, row + 1}));
     // Language: Text size waits for the modern fonts.

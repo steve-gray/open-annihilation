@@ -886,6 +886,13 @@ if(BUILD_TESTING)
   target_link_libraries(oa-app-frame-pacing-test PRIVATE oa-app-headers oa-base-game-loop oa-ui-hud
     oa-options)
   add_test(NAME app-frame-pacing COMMAND oa-app-frame-pacing-test)
+  # The sticky window edge over a made-up pointer: resting on an edge stays
+  # held, a push past the threshold or a flick lets the pointer go, movement
+  # along an edge does not, and coming back in near an edge stays free until
+  # the pointer has moved in away from the edges.
+  add_executable(oa-app-sticky-edge-test src/app/sticky_edge_test.cpp src/app/sticky_edge.cpp)
+  target_link_libraries(oa-app-sticky-edge-test PRIVATE oa-app-headers oa-test-support oa-options)
+  add_test(NAME app-sticky-edge COMMAND oa-app-sticky-edge-test)
   # The +stats overlay's panel: its rows, columns, notes and graph laid out
   # over texts of known widths and kept in place whatever the figures, its
   # place and scale on windows of every size, the height of each frame's
@@ -991,6 +998,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_match_hud.cpp src/app/runtime_match_menus.cpp src/app/runtime_load_game.cpp
   src/app/runtime_order_panel.cpp
   src/app/runtime_match_render.cpp src/app/runtime_messages.cpp src/app/runtime_pointer.cpp
+  src/app/sticky_edge.cpp
   src/app/runtime_present.cpp src/app/runtime_display.cpp
   src/app/runtime_accelerated.cpp src/app/runtime_render_tier.cpp src/app/runtime_tier_watch.cpp
   src/app/runtime_full.cpp src/app/runtime_full_sprites.cpp src/app/runtime_full_overlays.cpp

@@ -283,7 +283,8 @@ struct FullScreenSwitch {
 /// game's screen, as in 3.1c: it can rest against an edge, on its last row or
 /// column of pixels, and never strays onto another monitor. A window, and full
 /// screen without the focus (another program switched to, or a dialog of the
-/// system's in front), leave it free.
+/// system's in front), leave it free. A window's sticky edge is a separate
+/// rule (sticky_edge.hpp) and is not this one.
 ///
 /// @param window_flags the window's flags, as SDL_GetWindowFlags reports them
 /// @return true to keep the pointer on the window
@@ -333,7 +334,9 @@ void keep_pointer_on_screen(SDL_Window* window);
 /// Lets the pointer leave the game's window, before the window closes or
 /// before a dialog of the system's opens over it.
 ///
-/// keep_pointer_on_screen holds it again.
+/// Also clears a mouse rect a sticky edge set, so the dialog is not
+/// confined to the window. keep_pointer_on_screen holds a full screen
+/// window again.
 ///
 /// @param window the game's window; null does nothing
 void release_pointer(SDL_Window* window);

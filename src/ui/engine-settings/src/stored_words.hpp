@@ -46,6 +46,11 @@ inline constexpr std::array<ChoiceWord<ZoomedOutAfter>, 7> zoomed_out_after_word
     {ZoomedOutAfter::one_twelfth, "1/12"},
     {ZoomedOutAfter::one_sixteenth, "1/16"},
 }};
+/// Window edge's words, in window_edge_choices' order.
+inline constexpr std::array<ChoiceWord<WindowEdge>, 2> window_edge_words{{
+    {WindowEdge::sticky, "sticky"},
+    {WindowEdge::free, "free"},
+}};
 /// Window frame's words, in window_frame_choices' order.
 inline constexpr std::array<ChoiceWord<WindowFrame>, 2> window_frame_words{{
     {WindowFrame::hidden_in_play, "hidden-in-play"},
