@@ -1558,9 +1558,10 @@ library::Inputs Runtime::library_inputs() {
     inputs.in_match = screen_ == Screen::match || match_ != nullptr;
     inputs.mod_from_command_line = !options_.mod_dir.empty() || options_.base_game;
 
-    // The Active tab. The mod played, as list_offered_mods finds it: the
-    // folder layered over the game folder, with its title, version and
-    // badge as read at start.
+    // The Active tab. The mod played is the folder this start layered
+    // (layered_mod_folder), with its title, version and badge as read at
+    // start. An expansion bundle is not that folder, so the tile says No
+    // Mod while only expansions are mounted.
     const EngineSettingsState& mods = engine_settings_state();
     if (!mods.playing_mod_folder.empty()) {
         for (std::size_t index = 0;
