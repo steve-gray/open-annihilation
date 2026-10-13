@@ -1866,8 +1866,7 @@ void GameFilesScreen::State::act(view::Outcome outcome) {
     }
     case view::Command::remove_demo_data: {
         std::string error;
-        const fs::path demo_data =
-            request_.paths.data_folder / path_from_utf8(demo_1997.folder_name);
+        const fs::path demo_data = demo_bundle_directory(request_.paths.data_folder);
         if (!game_files::remove_folder_now(demo_data, &error))
             std::cerr << "open-annihilation: the demo's data was not removed: " << error << '\n';
         fill_manage();

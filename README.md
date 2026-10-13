@@ -375,8 +375,11 @@ file.
    with `--choose-game-dir` to choose again, or with `--game-dir <folder>` to
    use the demo for one run only.
 
-The first time, Open Annihilation checks the file and unpacks the demo's
-game data, about 20 MB, into a `demo-1997` folder in its per-user data folder:
+The first time, Open Annihilation checks the file and copies the demo's
+game data, about 20 MB, into `games/totala-demo` in the player's Open
+Annihilation folder, with its `.oa-content` record. An earlier unpack in
+`demo-1997` of the per-user data folder is copied from once and left there.
+That earlier folder is:
 
 - **macOS:** `~/Library/Application Support/net.coreprime.open-annihilation`,
   beside its preferences. Earlier versions named it

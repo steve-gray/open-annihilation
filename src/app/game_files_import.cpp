@@ -479,7 +479,7 @@ void add_to_part(PartSummary& summary, std::string_view name, uint64_t size, boo
         return false;
     std::error_code error;
     const auto archive =
-        paths.data_folder / fs::path(demo_1997.folder_name) / fs::path(demo_1997.archive_name);
+        demo_bundle_directory(paths.data_folder) / fs::path(demo_1997.archive_name);
     const auto size = fs::file_size(archive, error);
     return !error && size == demo_1997.archive_size;
 }
@@ -740,7 +740,7 @@ InstalledSummary summarize_installed(const GameFilesHooks& hooks, const ImportPa
         summary.demo = !has_archives && summary.parts[static_cast<std::size_t>(Part::demo)].found;
     }
     if (!paths.data_folder.empty()) {
-        summary.demo_data_bytes = folder_bytes(paths.data_folder / fs::path(demo_1997.folder_name));
+        summary.demo_data_bytes = folder_bytes(demo_bundle_directory(paths.data_folder));
         summary.demo_data_unused = summary.demo_data_bytes > 0 && has_archives;
     }
     if (!paths.documents.empty()) {
