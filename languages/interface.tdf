@@ -6,6 +6,8 @@
 // it reads a language pack's interface.tdf.
 
 
+
+
 [,]
 	{
 	de=,;
@@ -598,6 +600,14 @@
 	it=Tutto;
 	}
 
+[All files match]
+	{
+	de=Alle Dateien stimmen überein;
+	fr=Tous les fichiers correspondent;
+	es=Todos los archivos coinciden;
+	it=Tutti i file corrispondono;
+	}
+
 [Alliance Menu Everywhere]
 	{
 	de=Allianzmenü überall;
@@ -838,6 +848,14 @@
 	it=INDIETRO;
 	}
 
+[BASE GAME]
+	{
+	de=BASISSPIEL;
+	fr=JEU DE BASE;
+	es=JUEGO BASE;
+	it=GIOCO BASE;
+	}
+
 [BLAST]
 	{
 	de=SPRENGEN;
@@ -908,22 +926,6 @@
 	fr=Base;
 	es=Base;
 	it=Base;
-	}
-
-[Base Game]
-	{
-	de=Grundspiel;
-	fr=Jeu de base;
-	es=Juego base;
-	it=Gioco di base;
-	}
-
-[Base Game (Disable Mods)]
-	{
-	de=Grundspiel (Mods ausschalten);
-	fr=Jeu de base (désactiver les mods);
-	es=Juego base (desactivar mods);
-	it=Gioco di base (disattiva i mod);
 	}
 
 [Base game]
@@ -1038,12 +1040,12 @@
 	it=Battle Tactics;
 	}
 
-[Battle room · Total Annihilation 3.1c]
+[Battle room · No Mod]
 	{
-	de=Gefechtsraum · Total Annihilation 3.1c;
-	fr=Salle de bataille · Total Annihilation 3.1c;
-	es=Sala de batalla · Total Annihilation 3.1c;
-	it=Sala di battaglia · Total Annihilation 3.1c;
+	de=Gefechtsraum · Kein Mod;
+	fr=Salle de bataille · Aucun mod;
+	es=Sala de batalla · Ningún mod;
+	it=Sala di battaglia · Nessun mod;
 	}
 
 [Battle room · playing {mod}]
@@ -1236,6 +1238,14 @@
 	fr=CHANGER CE QUI EST COPIÉ;
 	es=CAMBIAR LO QUE SE COPIA;
 	it=CAMBIA CIÒ CHE VIENE COPIATO;
+	}
+
+[CHANGE…]
+	{
+	de=WECHSELN…;
+	fr=CHANGER…;
+	es=CAMBIAR…;
+	it=CAMBIA…;
 	}
 
 [CHAT]
@@ -2126,6 +2136,14 @@
 	it=TRASCINA PER MUOVERE · DOPPIO TOCCO O TIENI PREMUTO PER POSIZIONARE;
 	}
 
+[Demo]
+	{
+	de=Demo;
+	fr=Démo;
+	es=Demo;
+	it=Demo;
+	}
+
 [Desktop]
 	{
 	de=Schreibtisch;
@@ -2412,6 +2430,22 @@
 	fr=LIMITES DU MOTEUR;
 	es=LÍMITES DEL MOTOR;
 	it=LIMITI DEL MOTORE;
+	}
+
+[EXPANSIONS]
+	{
+	de=ERWEITERUNGEN;
+	fr=EXTENSIONS;
+	es=EXPANSIONES;
+	it=ESPANSIONI;
+	}
+
+[EXPANSIONS · {on} OF {count} ON]
+	{
+	de=ERWEITERUNGEN · {on} VON {count} AN;
+	fr=EXTENSIONS · {on} SUR {count} ACTIVÉES;
+	es=EXPANSIONES · {on} DE {count} ACTIVAS;
+	it=ESPANSIONI · {on} DI {count} ATTIVE;
 	}
 
 [Each frame waits for the display: no tearing.]
@@ -5222,14 +5256,6 @@
 	it=Non ci sono pacchetti di mappe installati.;
 	}
 
-[No mod: the game as it was made]
-	{
-	de=Kein Mod: das Spiel, wie es gemacht wurde;
-	fr=Aucun mod : le jeu tel qu'il a été fait;
-	es=Sin mod: el juego tal como se hizo;
-	it=Nessun mod: il gioco come è stato fatto;
-	}
-
 [No oamod.yaml present]
 	{
 	de=Kein oamod.yaml vorhanden;
@@ -7382,12 +7408,12 @@
 	it=Salta la configurazione;
 	}
 
-[Skirmish · Total Annihilation 3.1c]
+[Skirmish · No Mod]
 	{
-	de=Gefecht · Total Annihilation 3.1c;
-	fr=Escarmouche · Total Annihilation 3.1c;
-	es=Escaramuza · Total Annihilation 3.1c;
-	it=Schermaglia · Total Annihilation 3.1c;
+	de=Gefecht · Kein Mod;
+	fr=Escarmouche · Aucun mod;
+	es=Escaramuza · Ningún mod;
+	it=Schermaglia · Nessun mod;
 	}
 
 [Skirmish · playing {mod}]
@@ -7708,6 +7734,14 @@
 	fr=RÉESSAYER;
 	es=REINTENTAR;
 	it=RIPROVA;
+	}
+
+[TURN OFF]
+	{
+	de=AUSSCHALTEN;
+	fr=ÉTEINDRE;
+	es=APAGAR;
+	it=SPEGNI;
 	}
 
 [TYPE]
@@ -8566,6 +8600,14 @@
 	it=Questa cartella contiene {size}, molto più di un'installazione di Total Annihilation (circa 1.1 GB con tutto).;
 	}
 
+[This game has no expansions.]
+	{
+	de=Dieses Spiel hat keine Erweiterungen.;
+	fr=Ce jeu n'a aucune extension.;
+	es=Este juego no tiene expansiones.;
+	it=Questo gioco non ha espansioni.;
+	}
+
 [This game includes no multiplayer maps, so multiplayer is not available.]
 	{
 	de=Dieses Spiel enthält keine Mehrspieler-Karten, darum gibt es kein Mehrspieler-Spiel.;
@@ -8670,14 +8712,6 @@
 	it=Total Annihilation 3.1c;
 	}
 
-[Total Annihilation 3.1c as it was made, with no mod]
-	{
-	de=Total Annihilation 3.1c, wie es gemacht wurde, ohne Mod;
-	fr=Total Annihilation 3.1c tel qu'il a été fait, sans mod;
-	es=Total Annihilation 3.1c tal como se hizo, sin mod;
-	it=Total Annihilation 3.1c come è stato fatto, senza mod;
-	}
-
 [Total Annihilation demo]
 	{
 	de=Demo von Total Annihilation;
@@ -8740,6 +8774,14 @@
 	fr=Réessayer;
 	es=Reintentar;
 	it=Riprova;
+	}
+
+[Turn off {name}?]
+	{
+	de={name} ausschalten?;
+	fr=Éteindre {name} ?;
+	es=¿Apagar {name}?;
+	it=Spegnere {name}?;
 	}
 
 [Turn on online features]
@@ -10966,6 +11008,22 @@
 	it={count} giorni fa;
 	}
 
+[{count} file differs]
+	{
+	de={count} Datei weicht ab;
+	fr={count} fichier diffère;
+	es={count} archivo difiere;
+	it={count} file è diverso;
+	}
+
+[{count} files differ]
+	{
+	de={count} Dateien weichen ab;
+	fr={count} fichiers diffèrent;
+	es={count} archivos difieren;
+	it={count} file sono diversi;
+	}
+
 [{count} h ago]
 	{
 	de=vor {count} h;
@@ -11174,6 +11232,14 @@
 	it={from} → {to} · cambia le regole del gioco. I salvataggi di {old} non si caricano con {new};
 	}
 
+[{game} as it was made]
+	{
+	de={game}, wie es gemacht wurde;
+	fr={game} tel qu'il a été fait;
+	es={game} tal como se hizo;
+	it={game} come è stato fatto;
+	}
+
 [{game} change the game · {view} view only]
 	{
 	de={game} ändern das Spiel · nur Ansicht {view};
@@ -11286,6 +11352,14 @@
 	it={map} · {players} · {size};
 	}
 
+[{mod} needs {name}, so it is unloaded and the game plays with No Mod.]
+	{
+	de={mod} braucht {name}, also wird es entladen und das Spiel läuft mit Kein Mod.;
+	fr={mod} a besoin de {name}, donc il est retiré et le jeu se joue avec Aucun mod.;
+	es={mod} necesita {name}, así que se quita y el juego se juega con Ningún mod.;
+	it={mod} ha bisogno di {name}, quindi viene tolto e il gioco si gioca con Nessun mod.;
+	}
+
 [{names} and {count} more]
 	{
 	de={names} und {count} mehr;
@@ -11302,12 +11376,44 @@
 	it={name} da {installed} è installato. Sostituirlo con {name} da {new}? Quello da {installed} viene tenuto, e RIPRISTINA lo riporta.;
 	}
 
+[{name} needs {need}.]
+	{
+	de={name} braucht {need}.;
+	fr={name} a besoin de {need}.;
+	es={name} necesita {need}.;
+	it={name} ha bisogno di {need}.;
+	}
+
 [{name} only]
 	{
 	de=nur {name};
 	fr={name} seulement;
 	es=solo {name};
 	it=solo {name};
+	}
+
+[{name} turns off too: it needs {need}.]
+	{
+	de={name} wird auch ausgeschaltet: es braucht {need}.;
+	fr={name} s'éteint aussi : il a besoin de {need}.;
+	es={name} también se apaga: necesita {need}.;
+	it={name} si spegne anch'esso: ha bisogno di {need}.;
+	}
+
+[{name} turns off when the Library closes.]
+	{
+	de={name} wird ausgeschaltet, wenn die Bibliothek schließt.;
+	fr={name} s'éteint à la fermeture de la bibliothèque.;
+	es={name} se apaga cuando se cierra la Biblioteca.;
+	it={name} si spegne quando la Biblioteca si chiude.;
+	}
+
+[{name} turns on when the Library closes.]
+	{
+	de={name} wird eingeschaltet, wenn die Bibliothek schließt.;
+	fr={name} s'allume à la fermeture de la bibliothèque.;
+	es={name} se enciende cuando se cierra la Biblioteca.;
+	it={name} si accende quando la Biblioteca si chiude.;
 	}
 
 [{name} was not uninstalled. {reason}]
@@ -11350,6 +11456,14 @@
 	it={name} {version} · revisione {from} → {to};
 	}
 
+[{name} · ADD FROM…]
+	{
+	de={name} · HINZUFÜGEN AUS…;
+	fr={name} · AJOUTER DEPUIS…;
+	es={name} · AÑADIR DESDE…;
+	it={name} · AGGIUNGI DA…;
+	}
+
 [{name} · rules changed]
 	{
 	de={name} · Regeln geändert;
@@ -11364,6 +11478,14 @@
 	fr={name} · {phase};
 	es={name} · {phase};
 	it={name} · {phase};
+	}
+
+[{name}'s maps and campaigns leave the lists until you turn it on again. Nothing is deleted.]
+	{
+	de=Die Karten und Feldzüge von {name} verlassen die Listen, bis du es wieder einschaltest. Nichts wird gelöscht.;
+	fr=Les cartes et les campagnes de {name} quittent les listes jusqu'à ce que tu le rallumes. Rien n'est effacé.;
+	es=Los mapas y las campañas de {name} salen de las listas hasta que lo enciendas de nuevo. No se borra nada.;
+	it=Le mappe e le campagne di {name} escono dalle liste finché non lo riaccendi. Non viene cancellato nulla.;
 	}
 
 [{n} GB]
@@ -11988,6 +12110,14 @@
 	fr={version} · {size};
 	es={version} · {size};
 	it={version} · {size};
+	}
+
+[{version} · {source}]
+	{
+	de={version} · {source};
+	fr={version} · {source};
+	es={version} · {source};
+	it={version} · {source};
 	}
 
 [{version}+]

@@ -20,7 +20,7 @@
 // the tiles, the row and the details show those pictures and not a file
 // from the game. Given --frames DIR, it writes
 // library-<class>.png, library-details-compact.png, library-active-<class>.png,
-// library-active-many-regular.png,
+// library-active-compact-maps.png, library-active-many-regular.png,
 // library-updates-<class>.png, library-registries-<class>.png,
 // library-languages-compact.png, library-languages-zh-compact.png,
 // library-maps-one-large.png and library-maps-several-large.png there.
@@ -137,6 +137,9 @@ struct Scene {
     bool many{};
     /// On Languages, an installed pack of this key is the language in use.
     std::string in_use_language{};
+    /// How far the Active page is scrolled before it is drawn. The layout
+    /// clamps this to the page's limit, so a large value shows the maps.
+    int32_t maps_scroll{};
 };
 
 /// A drawing of a scene: the picture with its margin, and its scale.
@@ -453,6 +456,48 @@ void add_many_maps(lib::Library& library) {
     lib::refresh(library, std::move(library.inputs));
 }
 
+/// Dresses the three Active pictures: No Mod, the base game from GOG, every
+/// expansion copied and on except Battle Tactics, which turns off when the
+/// Library closes. The draft is set after the last refresh, which would
+/// otherwise drop it.
+///
+/// @param[in,out] library the scene's library
+void dress_active_choice(lib::Library& library) {
+    for (lib::Installed& held : library.inputs.installed) {
+        if (held.kind == lib::Kind::mod)
+            held.playing = false;
+    }
+    library.inputs.playing_mod.reset();
+    library.inputs.content.base_id = "totala";
+    library.inputs.content.source = "from GOG for macOS";
+    library.inputs.content.files_differ = 0;
+    library.inputs.content.copied = {
+        "totala",
+        "campaign",
+        "core-contingency",
+        "battle-tactics",
+        "music",
+        "cavedog-units",
+        "cavedog-tilesets",
+    };
+    library.inputs.content.enabled = {
+        "campaign",
+        "core-contingency",
+        "battle-tactics",
+        "music",
+        "cavedog-units",
+        "cavedog-tilesets",
+    };
+    lib::refresh(library, std::move(library.inputs));
+    library.content.base_game = "totala";
+    library.content.expansions = {
+        "campaign", "core-contingency", "music", "cavedog-units", "cavedog-tilesets"
+    };
+    library.content.last_id = "battle-tactics";
+    library.content.last_on = false;
+    library.content.edited = true;
+}
+
 /// Lays a scene out and draws it.
 ///
 /// @param scene the scene
@@ -470,6 +515,8 @@ Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
         dress_map_previews(library);
     if (scene.many)
         add_many_maps(library);
+    if (scene.tab == lib::Tab::active && !scene.many)
+        dress_active_choice(library);
     lib::select(library, fixture::ridge_id());
     lib::set_tab(library, scene.tab);
     if (!scene.select_key.empty()) {
@@ -478,6 +525,7 @@ Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
         lib::select(library, {scene.select_registry, kind, scene.select_key});
     }
     lib::ScreenState state;
+    state.maps_scroll = scene.maps_scroll;
     if (scene.details_page) {
         lib::open_details(library);
         state.details_page = true;
@@ -655,6 +703,16 @@ int main(int argc, char** argv) {
         {"large", window_of(2560, 1440, 200), false},
         {"details-compact", window_of(640, 480, 100), true},
         {"active-compact", window_of(640, 480, 100), false, lib::Tab::active, true},
+        {"active-compact-maps",
+         window_of(640, 480, 100),
+         false,
+         lib::Tab::active,
+         true,
+         {},
+         {},
+         false,
+         {},
+         100000},
         {"active-regular", window_of(1920, 1080, 200), false, lib::Tab::active, true},
         {"active-large", window_of(2560, 1440, 200), false, lib::Tab::active, true},
         {"active-many-regular",

@@ -165,7 +165,9 @@ bool list_and_row(const kit::Control& a, const kit::Control& b) {
     return pair(a, b) || pair(b, a);
 }
 
-/// Lists the pairs of controls that meet, by their rectangles and by their press areas.
+/// Lists the pairs of controls whose press areas meet. A clip hides the rest
+/// of a control, so two rectangles that meet only outside what is shown do
+/// not count.
 ///
 /// @param list the display list
 /// @return a line for each pair
@@ -177,12 +179,10 @@ std::vector<std::string> meeting_controls(const kit::DisplayList& list) {
             const kit::Control& second = list.controls[b];
             if (list_and_row(first, second))
                 continue;
-            if (fixture::has_room(kit::intersect(first.rect, second.rect)))
-                problems.push_back(first.name + " meets " + second.name);
             if (fixture::has_room(
                     kit::intersect(fixture::press_area(first), fixture::press_area(second))
                 ))
-                problems.push_back(first.name + "'s press area meets " + second.name + "'s");
+                problems.push_back(first.name + " meets " + second.name);
         }
     }
     return problems;
@@ -207,6 +207,7 @@ int declared_place(std::string_view name) {
         return 3;
     if (name == "library.action" || starts(name, "library.action.") ||
         name == "library.active.unload" || name == "library.active.search" ||
+        name == "library.active.change" || starts(name, "library.active.expansion.") ||
         starts(name, "library.active.from.") || starts(name, "library.detail.tag."))
         return 4;
     if (starts(name, "library.registry."))
@@ -295,7 +296,8 @@ bool designed_name(const std::string& name) {
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|uninstall|"
         "open-folder|homepage)|"
         "details|back|refresh|close-x|close|status|queue|note|from|rules|"
-        "active\\.(mod|language|unload|search|map\\.[1-9][0-9]*|from\\.[1-9][0-9]*)|"
+        "active\\.(mod|language|base|expansions|unload|change|search|map\\.[1-9][0-9]*|"
+        "from\\.[1-9][0-9]*|expansion\\.[a-z0-9-]+)|"
         "add-registry|registries\\.(note|notice)|"
         "registry\\.[a-z0-9-]+(\\.(remove|add-mirror|key|refresh|address|refreshed))?)"
     );
@@ -303,7 +305,7 @@ bool designed_name(const std::string& name) {
 }
 
 /// The labels: lines a journey reads, which take nothing.
-constexpr std::array<std::string_view, 9> label_names{
+constexpr std::array<std::string_view, 11> label_names{
     "library.status",
     "library.queue",
     "library.note",
@@ -311,6 +313,8 @@ constexpr std::array<std::string_view, 9> label_names{
     "library.rules",
     "library.active.mod",
     "library.active.language",
+    "library.active.base",
+    "library.active.expansions",
     "library.registries.note",
     "library.registries.notice",
 };
@@ -341,7 +345,9 @@ std::vector<std::string> name_problems(const kit::DisplayList& list) {
     }
     for (const kit::Control& control : list.controls)
         if (control.name != "library.active.unload" && control.name != "library.active.search" &&
+            control.name != "library.active.change" &&
             !starts(control.name, "library.active.from.") &&
+            !starts(control.name, "library.active.expansion.") &&
             starts(control.name, "library.active.") &&
             (control.kind != kit::ControlKind::area || control.enabled || control.focusable))
             problems.push_back(control.name + " takes a press, a key or Tab");
@@ -668,6 +674,8 @@ void check_frame(const fixture::NamedFrame& named) {
             (starts(stop->name, "library.tab.") || stop->name == "library.close" ||
              stop->name == "library.close-x" || stop->name == "library.refresh" ||
              stop->name == "library.active.unload" || stop->name == "library.active.search" ||
+             stop->name == "library.active.change" ||
+             starts(stop->name, "library.active.expansion.") ||
              starts(stop->name, "library.active.from."))
         );
     }
@@ -675,12 +683,63 @@ void check_frame(const fixture::NamedFrame& named) {
     OA_CHECK(mod_line != nullptr && mod_line->text == "Highland 0.4.0");
     const kit::Control* language_line = fixture::named(active_list, "library.active.language");
     OA_CHECK(language_line != nullptr && language_line->text == "Polski 1.0");
-    // Folded title, then pack: Atoll, Ridgeline, Twin Rivers.
-    const kit::Control* first_map = fixture::named(active_list, "library.active.map.1");
+    // Folded title, then pack: Atoll, Ridgeline, Twin Rivers. On a small
+    // window the tiles can leave the maps off the page. Scrolling brings
+    // every map into view. Once the page is scrolled as far as it goes,
+    // four rows fit under the heading.
+    lib::ScreenState at_maps;
+    kit::DisplayList maps_list = active_list;
+    if (compact) {
+        for (int32_t step = 0; step < 40; ++step) {
+            const kit::Control* sample = fixture::named(maps_list, "library.active.map.1");
+            const kit::Item* twin = text_item(maps_list, "Twin Rivers");
+            if (sample != nullptr && twin != nullptr && twin->rect.y >= sample->clip.y &&
+                twin->rect.y + twin->rect.height <= sample->clip.y + sample->clip.height)
+                break;
+            const int32_t before = at_maps.maps_scroll;
+            at_maps.maps_scroll = before + kit::compact_metrics.small_line;
+            maps_list = laid_out(active, at_maps, frame);
+            if (at_maps.maps_scroll == before)
+                break;
+        }
+    }
+    const kit::Control* first_map = fixture::named(maps_list, "library.active.map.1");
     OA_CHECK(first_map != nullptr && first_map->text == "Atoll · 6 players · 20x20");
-    const kit::Control* last_map = fixture::named(active_list, "library.active.map.3");
+    if (compact && first_map != nullptr) {
+        const kit::Item* atoll_line = text_item(maps_list, "Atoll");
+        const kit::Item* twin_line = text_item(maps_list, "Twin Rivers");
+        OA_CHECK(atoll_line != nullptr && twin_line != nullptr);
+        const int32_t clip_bottom = first_map->clip.y + first_map->clip.height;
+        if (atoll_line != nullptr && twin_line != nullptr) {
+            OA_CHECK(atoll_line->rect.y >= first_map->clip.y);
+            OA_CHECK(twin_line->rect.y + twin_line->rect.height <= clip_bottom);
+        }
+        // The page, once the maps are in it, holds four compact rows under the heading.
+        OA_CHECK(
+            first_map->clip.height >= kit::compact_metrics.field_height +
+                                          kit::compact_metrics.hint_gap +
+                                          4 * kit::compact_metrics.small_line
+        );
+    }
+    lib::ScreenState at_end = at_maps;
+    static_cast<void>(lib::library_key(active, at_end, maps_list, kit::Key::end));
+    const kit::DisplayList end_list =
+        at_end.maps_scroll == at_maps.maps_scroll ? maps_list : laid_out(active, at_end, frame);
+    const kit::Control* last_map = fixture::named(end_list, "library.active.map.3");
     OA_CHECK(last_map != nullptr && last_map->text == "Twin Rivers · 2 players · 12x12");
-    OA_CHECK(fixture::named(active_list, "library.active.map.4") == nullptr);
+    OA_CHECK(fixture::named(end_list, "library.active.map.4") == nullptr);
+    if (compact && last_map != nullptr) {
+        const kit::Item* end_heading = nullptr;
+        for (const kit::Item& item : end_list.items)
+            if (item.role == kit::Role::heading && item.text == "MAPS")
+                end_heading = &item;
+        OA_CHECK(end_heading != nullptr);
+        if (end_heading != nullptr) {
+            const int32_t below = last_map->clip.y + last_map->clip.height -
+                                  (end_heading->rect.y + end_heading->rect.height);
+            OA_CHECK(below >= 4 * kit::compact_metrics.small_line);
+        }
+    }
     // The three tiles: the kit's card face, the mod's facts, and the language's.
     if (mod_line != nullptr) {
         OA_CHECK(!mod_line->enabled && !mod_line->focusable);
@@ -706,18 +765,28 @@ void check_frame(const fixture::NamedFrame& named) {
         OA_CHECK(unload->rect.y >= mod_line->rect.y + mod_line->rect.height);
     const kit::Item* mod_title = text_item(active_list, "Highland");
     const kit::Item* language_title = text_item(active_list, "Polski");
+    const kit::Item* base_name = text_item(active_list, "Total Annihilation");
     if (mod_title != nullptr && mod_line != nullptr)
         OA_CHECK(mod_title->rect.y == mod_line->rect.y + kit::compact_metrics.card_inset);
-    if (!compact && mod_title != nullptr && language_title != nullptr)
-        OA_CHECK(mod_title->rect.y == language_title->rect.y);
+    // Row one is the base game beside the language. Row two is the mod.
+    if (base_name != nullptr && language_title != nullptr)
+        OA_CHECK(base_name->rect.y == language_title->rect.y);
+    if (mod_title != nullptr && base_name != nullptr)
+        OA_CHECK(mod_title->rect.y > base_name->rect.y);
     OA_CHECK(text_item(active_list, "by the Highland team") != nullptr);
     OA_CHECK(text_item(active_list, "0.4.0 (rev 1)") != nullptr);
     OA_CHECK(text_item(active_list, "Polish") != nullptr);
     OA_CHECK(text_item(active_list, "1.0 (rev 2)") != nullptr);
     OA_CHECK(text_item(active_list, "Coverage 92%") != nullptr);
-    const kit::Item* atoll = text_item(active_list, "Atoll");
-    const kit::Item* ridgeline = text_item(active_list, "Ridgeline");
-    OA_CHECK(atoll != nullptr && ridgeline != nullptr);
+    const kit::Item* atoll = text_item(maps_list, "Atoll");
+    const kit::Item* ridgeline = text_item(maps_list, "Ridgeline");
+    OA_CHECK(atoll != nullptr);
+    if (ridgeline == nullptr) {
+        OA_CHECK(compact && atoll != nullptr);
+        if (atoll != nullptr)
+            OA_CHECK(atoll->rect.height == kit::compact_metrics.small_line);
+        OA_CHECK(text_item(end_list, "Twin Rivers") != nullptr);
+    }
     if (atoll != nullptr && ridgeline != nullptr) {
         if (frame.size_class == kit::SizeClass::large) {
             OA_CHECK(atoll->rect.y == ridgeline->rect.y && atoll->rect.x < ridgeline->rect.x);
@@ -731,10 +800,10 @@ void check_frame(const fixture::NamedFrame& named) {
     }
     // Island Hopping holds Atoll alone, so its title is the link and the
     // tile has no From line. Core Map Pack holds two, so those keep From.
-    const kit::Control* from_atoll = fixture::named(active_list, "library.active.from.1");
-    const kit::Control* from_ridge = fixture::named(active_list, "library.active.from.2");
-    const kit::Control* from_twin = fixture::named(active_list, "library.active.from.3");
-    OA_CHECK(text_item(active_list, "From Island Hopping") == nullptr);
+    const kit::Control* from_atoll = fixture::named(maps_list, "library.active.from.1");
+    const kit::Control* from_ridge = fixture::named(maps_list, "library.active.from.2");
+    const kit::Control* from_twin = fixture::named(maps_list, "library.active.from.3");
+    OA_CHECK(text_item(maps_list, "From Island Hopping") == nullptr);
     if (from_atoll != nullptr) {
         OA_CHECK(from_atoll->kind == kit::ControlKind::link);
         OA_CHECK(from_atoll->text == "Atoll");
@@ -768,10 +837,14 @@ void check_frame(const fixture::NamedFrame& named) {
     }
     if (from_twin != nullptr)
         OA_CHECK(from_twin->text == "From Core Map Pack");
+    else {
+        const kit::Control* from_end = fixture::named(end_list, "library.active.from.3");
+        OA_CHECK(from_end != nullptr && from_end->text == "From Core Map Pack");
+    }
     const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
-    const kit::Item* atoll_tile = atoll != nullptr ? tile_around(active_list, *atoll) : nullptr;
+    const kit::Item* atoll_tile = atoll != nullptr ? tile_around(maps_list, *atoll) : nullptr;
     const kit::Item* ridge_tile =
-        ridgeline != nullptr ? tile_around(active_list, *ridgeline) : nullptr;
+        ridgeline != nullptr ? tile_around(maps_list, *ridgeline) : nullptr;
     if (atoll_tile != nullptr && ridge_tile != nullptr) {
         const int32_t side = metrics.list_row_badge + 2 * metrics.card_inset;
         const auto tile_height = [&](int32_t lines) {
@@ -789,18 +862,11 @@ void check_frame(const fixture::NamedFrame& named) {
             OA_CHECK(atoll_height < ridge_height);
         }
     }
+    // Row one is the language. Row two is the mod, in the same column.
     if (mod_line != nullptr && language_line != nullptr) {
-        if (compact) {
-            OA_CHECK(
-                mod_line->rect.y < language_line->rect.y &&
-                mod_line->rect.x == language_line->rect.x
-            );
-        } else {
-            OA_CHECK(
-                mod_line->rect.y == language_line->rect.y &&
-                mod_line->rect.x < language_line->rect.x
-            );
-        }
+        OA_CHECK(
+            language_line->rect.y < mod_line->rect.y && language_line->rect.x == mod_line->rect.x
+        );
     }
 }
 
@@ -906,8 +972,8 @@ void rows_name_their_entries() {
     const kit::DisplayList list = laid_out(library, {}, fixture::frames()[1].frame);
     const kit::Control* base = fixture::named(list, "library.row.base-game");
     OA_CHECK(
-        base != nullptr && base->text == "Base Game (Disable Mods)" &&
-        base->kind == kit::ControlKind::list_item && !base->checked
+        base != nullptr && base->text == "No Mod" && base->kind == kit::ControlKind::list_item &&
+        !base->checked
     );
     OA_CHECK(
         !library.visible.empty() && library.entries[library.visible.front()].id.key == "@base-game"
@@ -996,9 +1062,7 @@ void empty_and_offline_lists_say_why() {
     lib::set_tab(none, lib::Tab::mods);
     const kit::DisplayList none_list = laid_out(none, {}, fixture::frames()[0].frame);
     const kit::Control* base_row = fixture::named(none_list, "library.row.base-game");
-    OA_CHECK(
-        base_row != nullptr && base_row->text == "Base Game (Disable Mods)" && base_row->checked
-    );
+    OA_CHECK(base_row != nullptr && base_row->text == "No Mod" && base_row->checked);
     bool told = false;
     for (const kit::Item& item : none_list.items)
         told =
@@ -1607,8 +1671,22 @@ void filters_and_tags() {
     );
 }
 
-/// With no mod played the Active tab's tile is the base game, the language
-/// says it is built in, and the maps tile says there are none.
+/// Tells whether a drawn text starts with a prefix.
+///
+/// @param list the display list
+/// @param prefix the prefix
+/// @return true when one text does
+bool text_starts(const kit::DisplayList& list, std::string_view prefix) {
+    for (const kit::Item& item : list.items) {
+        if (item.role == kit::Role::text && item.text.compare(0, prefix.size(), prefix) == 0)
+            return true;
+    }
+    return false;
+}
+
+/// With no mod played the base game and No Mod are tiles, the language says
+/// it is built in, and the maps tile says there are none. Compact, Regular
+/// and Large keep the same four tiles.
 void active_base_game_is_a_tile() {
     const std::vector<fixture::NamedFrame> all = fixture::frames();
     lib::Inputs inputs = fixture::fixture_inputs();
@@ -1616,30 +1694,52 @@ void active_base_game_is_a_tile() {
         held.playing = false;
     inputs.language = {};
     inputs.map_packs.clear();
+    inputs.content.source = "from GOG for macOS";
+    inputs.content.files_differ = 0;
     lib::Library library;
     lib::refresh(library, std::move(inputs));
     OA_CHECK(library.tab == lib::Tab::active);
-    for (const fixture::NamedFrame& named : {all[0], all[2]}) {
+    for (const fixture::NamedFrame& named : {all[0], all[1], all[2]}) {
         lib::ScreenState state;
         const kit::DisplayList list = laid_out(library, state, named.frame);
         const kit::Point window = lib::window_size(named.frame);
         OA_EXPECT_NONE(fixture::outside_window(list, window), named.name + " base game");
         OA_EXPECT_NONE(meeting_controls(list), named.name + " base game");
+        OA_EXPECT_NONE(order_problems(list), named.name + " base game");
+        OA_EXPECT_NONE(name_problems(list), named.name + " base game");
         OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), named.name + " base game");
         const kit::Control* mod = fixture::named(list, "library.active.mod");
-        OA_CHECK(mod != nullptr && mod->text == "No mod: the game as it was made");
+        OA_CHECK(mod != nullptr && mod->text == "No Mod");
         OA_CHECK(mod != nullptr && !mod->enabled && !mod->focusable);
-        OA_CHECK(text_item(list, "Base Game") != nullptr);
-        OA_CHECK(text_item(list, "Total Annihilation 3.1c") != nullptr);
-        OA_CHECK(text_item(list, "3.1") != nullptr);
+        OA_CHECK(text_item(list, "No Mod") != nullptr);
+        OA_CHECK(text_item(list, "Total Annihilation as it was made") != nullptr);
+        OA_CHECK(text_item(list, "Total Annihilation") != nullptr);
+        OA_CHECK(text_item(list, "TA") != nullptr);
+        OA_CHECK(text_item(list, "All files match") != nullptr);
+        OA_CHECK(text_starts(list, "3.1c"));
+        const kit::Control* change = fixture::named(list, "library.active.change");
+        OA_CHECK(change != nullptr && change->enabled && change->text == "CHANGE…");
+        const kit::Control* expansions = fixture::named(list, "library.active.expansions");
+        OA_CHECK(expansions != nullptr && expansions->text == "EXPANSIONS · 0 OF 6 ON");
+        OA_CHECK(text_starts(list, "Core Contingency needs"));
+        const kit::Control* add = fixture::named(list, "library.active.expansion.campaign");
+        OA_CHECK(add != nullptr && add->text.find("ADD FROM…") != std::string::npos);
         OA_CHECK(!shows_pill(list, "Playing"));
         OA_CHECK(!shows_chip(list, "Playing"));
         OA_CHECK(!shows_chip(list, "Built in"));
         OA_CHECK(shows_pill(list, "Built in"));
         OA_CHECK(fixture::named(list, "library.active.unload") == nullptr);
-        const kit::Item* base_title = text_item(list, "Base Game");
-        if (mod != nullptr && base_title != nullptr)
-            OA_CHECK(base_title->rect.y == mod->rect.y + kit::compact_metrics.card_inset);
+        const kit::Item* game_title = text_item(list, "Total Annihilation");
+        const kit::Item* language_title = text_item(list, "English");
+        const kit::Item* mod_title = text_item(list, "No Mod");
+        if (game_title != nullptr && language_title != nullptr)
+            OA_CHECK(game_title->rect.y == language_title->rect.y);
+        if (mod_title != nullptr && game_title != nullptr)
+            OA_CHECK(mod_title->rect.y > game_title->rect.y);
+        const kit::Control* base = fixture::named(list, "library.active.base");
+        OA_CHECK(base != nullptr && base->text == "Total Annihilation · 3.1c");
+        if (base != nullptr && game_title != nullptr)
+            OA_CHECK(game_title->rect.y == base->rect.y + kit::compact_metrics.card_inset);
         OA_CHECK(text_item(list, "No map packs are installed.") != nullptr);
         OA_CHECK(fixture::named(list, "library.active.map.1") == nullptr);
     }
@@ -1708,9 +1808,10 @@ void unload_mod_asks_switch_off() {
     );
 }
 
-/// The Active tab's mod and language take no press. With more maps than fit,
-/// the maps pane scrolls by the wheel, a finger, the page keys, the scroll
-/// bar and the right stick. The mod line does not.
+/// The Active tab's mod and language take no press. With more maps than fit
+/// under the tiles, Compact scrolls the page as one, by the wheel, a finger,
+/// the page keys, the scroll bar and the right stick, until at least four
+/// map rows are in view. Focusing a map link scrolls that row into view.
 void active_tab_takes_nothing_and_scrolls() {
     const kit::Frame compact = fixture::frames()[0].frame;
     lib::Inputs inputs = fixture::fixture_inputs();
@@ -1728,7 +1829,6 @@ void active_tab_takes_nothing_and_scrolls() {
     OA_EXPECT_NONE(meeting_controls(list), "active, many maps");
     OA_EXPECT_NONE(name_problems(list), "active, many maps");
     OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), "active, many maps");
-    OA_CHECK(fixture::named(list, "library.active.map.1") != nullptr);
     OA_CHECK(fixture::named(list, "library.active.map.43") == nullptr);
     const bool has_bar =
         std::any_of(list.items.begin(), list.items.end(), [](const kit::Item& item) {
@@ -1750,27 +1850,46 @@ void active_tab_takes_nothing_and_scrolls() {
         lib::library_pointer(library, state, list, lib::PointerKind::up, 1, on_line, 0);
     OA_CHECK(!pressed.action && !library.selected && library.tab == lib::Tab::active);
 
-    // The wheel over the mod does not scroll. The wheel over a map does, and
-    // so do the page keys, End and Home.
+    // The wheel over the mod scrolls the page, and so does a finger, and the
+    // tiles move up with it. Page Down, End and Home scroll the same page.
     const int32_t mod_top = mod_line->rect.y;
-    OA_CHECK(!lib::library_wheel(library, state, list, on_line, -1.0F).redraw);
-    OA_CHECK(state.maps_scroll == 0);
-    const kit::Control* first_map = fixture::named(list, "library.active.map.1");
-    OA_CHECK(first_map != nullptr);
-    if (first_map == nullptr)
-        return;
-    const kit::Point on_map = centre_of(*first_map);
-    OA_CHECK(lib::library_wheel(library, state, list, on_map, -1.0F).redraw);
+    OA_CHECK(lib::library_wheel(library, state, list, on_line, -1.0F).redraw);
     OA_CHECK(state.maps_scroll > 0);
     list = laid_out(library, state, compact);
     const kit::Control* mod_after = fixture::named(list, "library.active.mod");
-    OA_CHECK(mod_after != nullptr && mod_after->rect.y == mod_top);
+    OA_CHECK(mod_after != nullptr && mod_after->rect.y < mod_top);
+    state.maps_scroll = 0;
+    list = laid_out(library, state, compact);
+    static_cast<void>(
+        lib::library_pointer(library, state, list, lib::PointerKind::down, 1, on_line, 8)
+    );
+    static_cast<void>(lib::library_pointer(
+        library, state, list, lib::PointerKind::move, 0, {on_line.x, on_line.y - 24}, 8
+    ));
+    OA_CHECK(state.maps_scroll > 0);
+    static_cast<void>(lib::library_pointer(
+        library, state, list, lib::PointerKind::up, 1, {on_line.x, on_line.y - 24}, 8
+    ));
+    list = laid_out(library, state, compact);
     static_cast<void>(lib::library_key(library, state, list, kit::Key::home));
     OA_CHECK(state.maps_scroll == 0);
     list = laid_out(library, state, compact);
-    static_cast<void>(lib::library_key(library, state, list, kit::Key::page_down));
+    int32_t shown_rows = 0;
+    for (int32_t step = 0; step < 8 && shown_rows < 4; ++step) {
+        if (!lib::library_key(library, state, list, kit::Key::page_down).redraw && step > 0)
+            break;
+        list = laid_out(library, state, compact);
+        shown_rows = 0;
+        for (const kit::Control& control : list.controls) {
+            if (control.name.rfind("library.active.map.", 0) == 0) {
+                const kit::Rect shown = kit::intersect(control.rect, control.clip);
+                if (shown.height >= kit::compact_metrics.small_line)
+                    ++shown_rows;
+            }
+        }
+    }
     OA_CHECK(state.maps_scroll > 0);
-    list = laid_out(library, state, compact);
+    OA_CHECK(shown_rows >= 4);
     static_cast<void>(lib::library_key(library, state, list, kit::Key::end));
     const int32_t bottom = state.maps_scroll;
     list = laid_out(library, state, compact);
@@ -1788,8 +1907,100 @@ void active_tab_takes_nothing_and_scrolls() {
     OA_CHECK(lib::library_stick(library, state, list, 1.0F).redraw);
     OA_CHECK(state.maps_scroll < bottom);
     list = laid_out(library, state, compact);
+
+    // The maps search, while only part of it shows, is scrolled wholly into
+    // view when the focus moves onto it. A map link keeps the whole line, so
+    // the same scroll brings that line in once the focus reaches it.
+    lib::ScreenState partial;
+    kit::DisplayList partial_list;
+    const kit::Control* partial_search = nullptr;
+    for (int32_t step = 0; step < 120 && partial_search == nullptr; ++step) {
+        partial.maps_scroll = step * 4;
+        partial_list = laid_out(library, partial, compact);
+        const kit::Control* search = fixture::named(partial_list, "library.active.search");
+        if (search == nullptr || !search->focusable)
+            continue;
+        const kit::Rect shown = kit::intersect(search->rect, search->clip);
+        if (shown.height > 0 && shown.height < search->rect.height)
+            partial_search = search;
+    }
+    OA_CHECK(partial_search != nullptr);
+    if (partial_search != nullptr) {
+        const kit::ControlId search_id = partial_search->id;
+        kit::ControlId before_focus = kit::no_control;
+        for (const kit::ControlId id : partial_list.tab_order) {
+            if (id == search_id)
+                break;
+            before_focus = id;
+        }
+        OA_CHECK(before_focus != kit::no_control);
+        partial.interaction.focus_shown = true;
+        partial.interaction.focused = before_focus;
+        const int32_t before_scroll = partial.maps_scroll;
+        OA_CHECK(lib::library_key(library, partial, partial_list, kit::Key::tab).redraw);
+        OA_CHECK(partial.interaction.focused == search_id);
+        OA_CHECK(partial.maps_scroll != before_scroll);
+        partial_list = laid_out(library, partial, compact);
+        const kit::Control* shown_search = kit::control_of(partial_list, search_id);
+        OA_CHECK(
+            shown_search != nullptr && shown_search->clip.height > 0 &&
+            kit::wholly_in(shown_search->rect, shown_search->clip)
+        );
+        kit::ControlId link = kit::no_control;
+        bool passed_search = false;
+        for (const kit::ControlId id : partial_list.tab_order) {
+            if (!passed_search) {
+                passed_search = id == search_id;
+                continue;
+            }
+            const kit::Control* control = kit::control_of(partial_list, id);
+            if (control != nullptr && control->name.rfind("library.active.from.", 0) == 0) {
+                link = id;
+                break;
+            }
+        }
+        if (link != kit::no_control && shown_search != nullptr) {
+            partial.interaction.focused = search_id;
+            OA_CHECK(lib::library_key(library, partial, partial_list, kit::Key::tab).redraw);
+            OA_CHECK(partial.interaction.focused == link);
+            partial_list = laid_out(library, partial, compact);
+            const kit::Control* shown_link = kit::control_of(partial_list, link);
+            OA_CHECK(
+                shown_link != nullptr && shown_link->clip.height > 0 &&
+                kit::wholly_in(shown_link->rect, shown_link->clip)
+            );
+        }
+    }
+
     static_cast<void>(click(library, state, list, "library.tab.mods"));
     OA_CHECK(library.tab == lib::Tab::mods && state.details_scroll == 0);
+}
+
+/// On Compact the expansions hint wraps, and every word of it is drawn.
+void compact_expansions_hint_wraps() {
+    lib::Inputs inputs;
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"campaign"};
+    inputs.content.enabled = {"campaign"};
+    lib::Library library;
+    lib::refresh(library, std::move(inputs));
+    lib::set_tab(library, lib::Tab::active);
+    OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::redraw);
+    const std::string hint = lib::active_content(library).hint;
+    OA_CHECK(hint == "Campaign turns off when the Library closes.");
+    const kit::Frame compact = fixture::frames()[0].frame;
+    lib::ScreenState state;
+    const kit::DisplayList list = laid_out(library, state, compact);
+    OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), "expansions hint");
+    std::string joined;
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::text || hint.find(item.text) == std::string::npos)
+            continue;
+        if (!joined.empty())
+            joined.push_back(' ');
+        joined += item.text;
+    }
+    OA_CHECK(joined == hint);
 }
 
 /// On Compact's details page the page keys and the arrows never change the
@@ -2415,7 +2626,8 @@ void base_badge_is_nearest_and_tabs_are_bracketed() {
     lib::refresh(letters, inputs);
     lib::set_tab(letters, lib::Tab::active);
     const kit::DisplayList letter_list = laid_out(letters, {}, compact);
-    OA_CHECK(text_item(letter_list, "3.1") != nullptr);
+    OA_CHECK(text_item(letter_list, "TA") != nullptr);
+    OA_CHECK(text_item(letter_list, "—") != nullptr);
     const kit::Control* mods = fixture::named(letter_list, "library.tab.mods");
     OA_CHECK(
         mods != nullptr &&
@@ -3230,20 +3442,36 @@ void active_maps_fill_scroll_and_filter() {
         const kit::Control* map = fixture::named(list, "library.active.map.1");
         const kit::Control* close = fixture::named(list, "library.close");
         const kit::Item* heading = maps_heading(list);
-        OA_CHECK(search != nullptr && heading != nullptr && map != nullptr && close != nullptr);
+        OA_CHECK(search != nullptr && heading != nullptr && close != nullptr);
         OA_CHECK(mod != nullptr && language != nullptr);
-        if (search == nullptr || heading == nullptr || map == nullptr || close == nullptr ||
-            mod == nullptr || language == nullptr)
+        if (search == nullptr || heading == nullptr || close == nullptr || mod == nullptr ||
+            language == nullptr)
             continue;
         OA_CHECK(search->rect.x > heading->rect.x);
         OA_CHECK(heading->rect.y >= search->rect.y);
         OA_CHECK(heading->rect.y < search->rect.y + search->rect.height);
-        OA_CHECK(map->clip.y >= search->rect.y + search->rect.height);
-        OA_CHECK(mod->rect.y + mod->rect.height <= map->clip.y);
-        OA_CHECK(language->rect.y + language->rect.height <= map->clip.y);
+        // Compact can leave the maps below the page until it scrolls. The
+        // other frames keep a maps pane under the tiles.
+        if (map == nullptr) {
+            OA_CHECK(named.frame.size_class == kit::SizeClass::compact);
+            continue;
+        }
         const int32_t pane_bottom = map->clip.y + map->clip.height;
         OA_CHECK(pane_bottom <= close->rect.y);
         OA_CHECK(close->rect.y - pane_bottom <= 40);
+        const bool page = map->clip.y <= mod->rect.y;
+        if (page) {
+            OA_CHECK(named.frame.size_class == kit::SizeClass::compact);
+            OA_CHECK(
+                map->clip.height >= kit::compact_metrics.field_height +
+                                        kit::compact_metrics.hint_gap +
+                                        4 * kit::compact_metrics.small_line
+            );
+        } else {
+            OA_CHECK(map->clip.y >= search->rect.y + search->rect.height);
+            OA_CHECK(mod->rect.y + mod->rect.height <= map->clip.y);
+            OA_CHECK(language->rect.y + language->rect.height <= map->clip.y);
+        }
         OA_CHECK(text_item(list, "1 of 3") == nullptr);
         OA_CHECK(text_item(list, "No installed map matches.") == nullptr);
     }
@@ -3412,6 +3640,7 @@ int main() {
     typing_searches();
     filters_and_tags();
     active_tab_takes_nothing_and_scrolls();
+    compact_expansions_hint_wraps();
     active_maps_fill_scroll_and_filter();
     active_base_game_is_a_tile();
     base_badge_is_nearest_and_tabs_are_bracketed();

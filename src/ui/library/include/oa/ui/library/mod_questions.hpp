@@ -21,6 +21,8 @@ inline constexpr std::string_view cancel_button_id = "cancel";
 inline constexpr std::string_view switch_button_id = "switch";
 /// The Roll Back Mod question's ROLL BACK's name to automation.
 inline constexpr std::string_view roll_back_button_id = "roll-back";
+/// The expansion-off question's TURN OFF's name to automation.
+inline constexpr std::string_view turn_off_button_id = "turn-off";
 /// The note's OK's name to automation.
 inline constexpr std::string_view ok_button_id = "ok";
 
@@ -43,6 +45,16 @@ inline constexpr std::string_view ok_button_id = "ok";
 /// @return the note, as a question of one button
 [[nodiscard]] oa::ui::kit::Question
 switch_refused_note(std::string_view reason, const TextHooks& text = {});
+
+/// Makes the question asked before an expansion a playing mod needs is turned
+/// off. Its title, one line for each other expansion that turns off with it,
+/// the line that the mod is unloaded and the game plays with No Mod, the
+/// line that the expansion's maps and campaigns leave the lists, and CANCEL
+/// then TURN OFF. CANCEL is marked at first; TURN OFF has the primary look.
+///
+/// @param library the Library, its draft holding the proposal
+/// @return the question
+[[nodiscard]] oa::ui::kit::Question expansion_off_question(const Library& library);
 
 /// Makes ROLL BACK's question: the Roll Back Mod question. Its title, what
 /// it asks of the mod, with the reload line for the mod the game plays, and

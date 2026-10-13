@@ -47,6 +47,9 @@ constexpr int32_t compact_filter_room = 128;
 constexpr int32_t wide_search_width = 240;
 /// The Active tab's maps search, at the right of the MAPS heading, when the row has room.
 constexpr int32_t maps_search_width = 148;
+/// How many map rows the Active page keeps in view, once scrolled to them,
+/// before it scrolls the tiles and the maps as one page.
+constexpr int32_t maps_rows_kept = 4;
 /// The list pane's width at Regular.
 constexpr int32_t regular_list_width = 420;
 /// The list pane's width at Large.
@@ -77,8 +80,8 @@ constexpr std::size_t badge_letter_count = 3;
 constexpr kit::Colour badge_face = kit::colour::hint;
 /// The most bytes one word of an automation name keeps.
 constexpr std::size_t most_name_word_bytes = 40;
-/// The letters on the base game's badge: the 3.1c mark.
-constexpr std::string_view base_badge_name = "3.1c";
+/// The letters on the No Mod tile, and on the Mods row, when the icon is absent.
+constexpr std::string_view base_badge_name = "\u2014";
 /// A full progress bar, in the bar's own units.
 constexpr int32_t progress_whole = 1000;
 /// The prefix of every control's name.
@@ -151,6 +154,12 @@ std::string_view action_word(Action action) {
         return "uninstall";
     case Action::use_now:
         return "use-now";
+    case Action::change_base_game:
+        return "change";
+    case Action::add_expansion:
+        return "add-from";
+    case Action::ask_expansion_off:
+        return "turn-off";
     }
     return "action";
 }
@@ -442,11 +451,18 @@ void add_label(
     group.push_back(std::move(label));
 }
 
-/// Adds a control to Tab's order when it takes the focus.
+/// Adds a control to Tab's order when it takes the focus. One clipped
+/// wholly out of its scroll area does not: the arrows cannot reach it,
+/// and it joins the order once a scroll brings it into view.
 ///
 /// @param[in,out] building the layout
-/// @param control the control
-void tab_stop(Building& building, const kit::Control& control) {
+/// @param[in,out] control the control; its focus is cleared when none shows
+void tab_stop(Building& building, kit::Control& control) {
+    if (control.clip.width > 0 && control.clip.height > 0) {
+        const kit::Rect shown = kit::intersect(control.rect, control.clip);
+        if (shown.width <= 0 || shown.height <= 0)
+            control.focusable = false;
+    }
     if (control.enabled && control.focusable)
         building.order.push_back(control.id);
 }
@@ -747,7 +763,8 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     const Library& library = *building.library;
     kit::ListRowLook look;
     look.badge = badge_picture(entry);
-    look.badge_text = badge_letters(entry_name(entry));
+    look.badge_text =
+        is_base_game(entry.id) ? std::string(base_badge_name) : badge_letters(entry_name(entry));
     look.badge_colour = badge_face;
     look.title = std::string(entry_name(entry));
     look.chip = entry_chip(library, entry);
@@ -2049,7 +2066,8 @@ void add_badge(
             return;
         }
     }
-    add_badge_of(building, badge_picture(entry), entry_name(entry), rect, clip);
+    const std::string_view letters = is_base_game(entry.id) ? base_badge_name : entry_name(entry);
+    add_badge_of(building, badge_picture(entry), letters, rect, clip);
 }
 
 /// Returns a map's players and size as one line: "4 players · 16x16".
@@ -2705,20 +2723,20 @@ int32_t tile_lines_height(const kit::Metrics& metrics, const std::vector<TileLin
 }
 
 /// Returns an identity tile's height. The badge and the lines start at the
-/// top inset. A tile with UNLOAD MOD keeps the button under both, with the
-/// button gap between and the card's inset below the button. One without a
-/// button keeps that inset below the badge or the last line.
+/// top inset. A tile with a button keeps it under both, with the button gap
+/// between and the card's inset below the button. One without a button keeps
+/// that inset below the badge or the last line.
 ///
 /// @param metrics the class's metrics
 /// @param badge the badge's side
 /// @param lines the lines beside the badge
-/// @param unload the tile holds UNLOAD MOD
+/// @param button the tile holds a button
 /// @return the height, in points
 int32_t identity_tile_height(
-    const kit::Metrics& metrics, int32_t badge, const std::vector<TileLine>& lines, bool unload
+    const kit::Metrics& metrics, int32_t badge, const std::vector<TileLine>& lines, bool button
 ) {
     int32_t stack = std::max(badge, tile_lines_height(metrics, lines));
-    if (unload)
+    if (button)
         stack += metrics.button_gap + metrics.button_height;
     return stack + 2 * metrics.card_inset;
 }
@@ -2801,9 +2819,9 @@ int32_t add_idle_pill(
 }
 
 /// Appends an identity tile: a badge and lines from the top inset, a pill
-/// at the right of the title's line, and UNLOAD MOD at the bottom right
-/// while a mod is played. The label is the tile above that button, so the
-/// two do not meet, and the label takes no press.
+/// at the right of the title's line, and a button at the bottom right when
+/// the tile has one. The label is the tile above that button, so the two do
+/// not meet, and the label takes no press.
 ///
 /// @param[in,out] building the layout
 /// @param tile the tile
@@ -2812,7 +2830,11 @@ int32_t add_idle_pill(
 /// @param lines the lines beside the badge
 /// @param pill the pill's words; empty for none
 /// @param pill_state the pill's colours
-/// @param unload the tile holds UNLOAD MOD
+/// @param button the tile holds a button
+/// @param button_caption the button's words, looked up
+/// @param button_enabled the button takes a press
+/// @param button_id the button's number
+/// @param button_name the button's name
 /// @param id the label's number
 /// @param name the label's name
 /// @param read the label's text
@@ -2825,13 +2847,16 @@ void add_identity_tile(
     const std::vector<TileLine>& lines,
     const std::string& pill,
     kit::PillState pill_state,
-    bool unload,
+    bool button,
+    const std::string& button_caption,
+    bool button_enabled,
+    kit::ControlId button_id,
+    const std::string& button_name,
     kit::ControlId id,
     std::string name,
     std::string read,
     const kit::Rect& clip
 ) {
-    const Library& library = *building.library;
     const kit::Metrics& metrics = *building.metrics;
     const int32_t inset = metrics.card_inset;
     const int32_t side =
@@ -2856,30 +2881,30 @@ void add_identity_tile(
                        : text_width;
     place_tile_lines(building, lines, text_left, text_top, text_width, first_room, clip);
     kit::Rect label = tile;
-    if (unload) {
-        const std::string caption(shown(library.text, words::action_unload_mod));
-        const int32_t across =
-            std::min(button_width(building, caption), std::max(tile.width - 2 * inset, int32_t{0}));
-        const kit::Rect button{
+    if (button && !button_caption.empty()) {
+        const int32_t across = std::min(
+            button_width(building, button_caption), std::max(tile.width - 2 * inset, int32_t{0})
+        );
+        const kit::Rect button_rect{
             tile.x + tile.width - inset - across,
             tile.y + tile.height - inset - metrics.button_height,
             across,
             metrics.button_height,
         };
-        if (across > 0 && button.y >= tile.y) {
+        if (across > 0 && button_rect.y >= tile.y) {
             add_button(
                 building,
                 building.detail,
-                button,
-                caption,
+                button_rect,
+                button_caption,
                 true,
-                can_switch(library),
-                controls::active_unload,
-                named("active.unload"),
+                button_enabled,
+                button_id,
+                button_name,
                 clip,
                 -1
             );
-            label.height = std::max(button.y - tile.y, int32_t{0});
+            label.height = std::max(button_rect.y - tile.y, int32_t{0});
         }
     }
     add_label(
@@ -2912,7 +2937,11 @@ struct IdentityTile {
     std::vector<TileLine> lines{};
     std::string pill{};
     kit::PillState pill_state{kit::PillState::neutral};
-    bool unload{}; ///< UNLOAD MOD, on the mod tile while a mod is played
+    bool button{}; ///< a button at the bottom right
+    std::string button_caption{};
+    bool button_enabled{true};
+    kit::ControlId button_id{};
+    std::string button_name{};
     kit::ControlId id{};
     std::string name{};
     std::string read{};
@@ -2939,7 +2968,9 @@ IdentityTile mod_tile(Building& building, const ActiveSetup& setup) {
             tile.lines.push_back(
                 TileLine{setup.base_look, kit::FontRole::small, kit::colour::hint}
             );
-        if (!setup.mod_line.empty())
+        // The label reads "No Mod", which is already the title. A different
+        // line, when one is set, is drawn under the look.
+        if (!setup.mod_line.empty() && setup.mod_line != setup.base_title)
             tile.lines.push_back(TileLine{setup.mod_line, kit::FontRole::small, kit::colour::hint});
     } else {
         tile.letters = setup.mod_name;
@@ -2954,7 +2985,11 @@ IdentityTile mod_tile(Building& building, const ActiveSetup& setup) {
             );
         tile.pill = setup.mod_state;
         tile.pill_state = kit::PillState::playing;
-        tile.unload = true;
+        tile.button = true;
+        tile.button_caption = std::string(shown(building.library->text, words::action_unload_mod));
+        tile.button_enabled = can_switch(*building.library);
+        tile.button_id = controls::active_unload;
+        tile.button_name = named("active.unload");
     }
     return tile;
 }
@@ -3002,7 +3037,7 @@ IdentityTile language_tile(Building& building, const ActiveSetup& setup) {
 /// @param tile the tile
 /// @return the height, in points
 int32_t identity_height(const kit::Metrics& metrics, const IdentityTile& tile) {
-    return identity_tile_height(metrics, active_badge_side(metrics), tile.lines, tile.unload);
+    return identity_tile_height(metrics, active_badge_side(metrics), tile.lines, tile.button);
 }
 
 /// Appends an identity tile.
@@ -3022,7 +3057,11 @@ void place_identity(
         tile.lines,
         tile.pill,
         tile.pill_state,
-        tile.unload,
+        tile.button,
+        tile.button_caption,
+        tile.button_enabled,
+        tile.button_id,
+        tile.button_name,
         tile.id,
         tile.name,
         tile.read,
@@ -3208,6 +3247,40 @@ void add_map_tile(
 /// @param width its width
 /// @param clip what drawing may touch
 /// @return the row under it and the gap after it
+/// Returns a heading cut so its tracked width fits.
+///
+/// @param building the layout
+/// @param words_shown the heading, looked up
+/// @param width the room, in points
+/// @return the heading, with "..." when it does not fit
+std::string cut_heading(const Building& building, std::string_view words_shown, int32_t width) {
+    const kit::Metrics& metrics = *building.metrics;
+    const auto fits = [&](std::string_view text) {
+        return kit::tracked_width(
+                   *building.fonts, kit::FontRole::small, text, metrics.heading_tracking
+               ) <= width;
+    };
+    if (width <= 0)
+        return {};
+    if (fits(words_shown))
+        return std::string(words_shown);
+    std::string kept;
+    std::string next;
+    for (std::size_t index = 0; index < words_shown.size();) {
+        const std::size_t bytes =
+            std::max(kit::character_bytes(words_shown.substr(index)), std::size_t{1});
+        next.append(words_shown.substr(index, bytes));
+        const std::string trial = next + "...";
+        if (!fits(trial))
+            break;
+        kept = trial;
+        index += bytes;
+    }
+    if (kept.empty() || !fits(kept))
+        return {};
+    return kept;
+}
+
 int32_t add_active_heading(
     Building& building,
     std::string_view words_shown,
@@ -3217,10 +3290,11 @@ int32_t add_active_heading(
     const kit::Rect& clip
 ) {
     const kit::Metrics& metrics = *building.metrics;
+    const std::string drawn = cut_heading(building, words_shown, width);
     kit::Item& heading =
         add_item(building.list, kit::Role::heading, {left, top, width, metrics.small_line}, clip);
-    heading.text = std::string(words_shown);
-    heading.look = kit::HeadingLook{std::string(words_shown)};
+    heading.text = drawn;
+    heading.look = kit::HeadingLook{drawn};
     return top + metrics.small_line + metrics.hint_gap;
 }
 
@@ -3470,17 +3544,22 @@ void add_maps_heading_row(
 ///
 /// @param[in,out] building the layout
 /// @param words_shown the line, looked up
-/// @param pane the pane, which clips the tile
+/// @param pane where the line sits
 /// @param width the tile's width
+/// @param clip what drawing may touch
 void add_maps_note(
-    Building& building, std::string_view words_shown, const kit::Rect& pane, int32_t width
+    Building& building,
+    std::string_view words_shown,
+    const kit::Rect& pane,
+    int32_t width,
+    const kit::Rect& clip
 ) {
     const kit::Metrics& metrics = *building.metrics;
     const int32_t inset = metrics.card_inset;
     const int32_t inner = std::max(width - 2 * inset, int32_t{0});
     const int32_t height = metrics.small_line + 2 * inset;
     const kit::Rect tile{pane.x, pane.y, width, height};
-    add_tile_face(building, tile, pane);
+    add_tile_face(building, tile, clip);
     if (inner <= 0)
         return;
     const std::string drawn = cut(building, kit::FontRole::small, words_shown, inner);
@@ -3492,7 +3571,7 @@ void add_maps_note(
             {pane.x + inset, pane.y + inset, inner, metrics.small_line},
             kit::Align::left,
             kit::colour::hint,
-            pane
+            clip
         );
 }
 
@@ -3570,8 +3649,8 @@ void add_compact_map_row(
             clip
         );
     if (title_is_link) {
-        const kit::Rect link_rect =
-            kit::intersect({row.x, row.y, title_width, metrics.small_line}, clip);
+        const kit::Rect full_link{row.x, row.y, title_width, metrics.small_line};
+        const kit::Rect link_rect = kit::intersect(full_link, clip);
         if (link_rect.width > 0 && link_rect.height > 0) {
             kit::LinkLook link;
             link.caption = title;
@@ -3581,14 +3660,15 @@ void add_compact_map_row(
             const std::size_t controls_before = building.list.controls.size();
             kit::add_link(
                 building.list,
-                link_rect,
+                full_link,
                 link,
                 link_id,
                 unique_name(building, named("active.from." + std::to_string(number)))
             );
             // The name is already drawn above, in the small font the link
             // would use, so the link item is dropped and only its control
-            // remains.
+            // remains. The control keeps the whole line, so moving the focus
+            // onto a line that only partly shows can scroll the rest in.
             building.list.items.resize(items_before);
             move_controls(building.list, controls_before, building.detail);
             kit::Control& control = building.detail.back();
@@ -3629,7 +3709,7 @@ void add_compact_map_row(
             add_label(
                 building.detail,
                 controls::first_active_map + static_cast<kit::ControlId>(number - 1),
-                shown_label,
+                label_rect,
                 unique_name(building, named("active.map." + std::to_string(number))),
                 map.line,
                 clip,
@@ -3641,15 +3721,16 @@ void add_compact_map_row(
     kit::LinkLook link;
     link.caption = from_caption;
     link.hovered = hovered(building, link_id) || building.state->interaction.pressed == link_id;
-    const kit::Rect link_rect = kit::intersect(
-        {row.x + row.width - from_width, row.y, from_width, metrics.small_line}, clip
-    );
+    const kit::Rect full_from{
+        row.x + row.width - from_width, row.y, from_width, metrics.small_line
+    };
+    const kit::Rect link_rect = kit::intersect(full_from, clip);
     if (link_rect.width <= 0 || link_rect.height <= 0)
         return;
     const std::size_t before = building.list.controls.size();
     kit::add_link(
         building.list,
-        link_rect,
+        full_from,
         link,
         link_id,
         unique_name(building, named("active.from." + std::to_string(number)))
@@ -3664,33 +3745,42 @@ void add_compact_map_row(
     tab_stop(building, control);
 }
 
-/// Appends the map rows that meet the pane. The rest are left out. Marks at
-/// the content's edges, when those edges are outside the pane, keep the
-/// scroll extent equal to the measured height. Each row keeps its place in
-/// the full list, so a pack link still opens that map's pack.
+/// Appends the map rows that meet the clip. The rest are left out. When the
+/// clip is the pane, marks at the content's edges, outside that pane, keep
+/// the scroll extent equal to the measured height. Each row keeps its place
+/// in the full list, so a pack link still opens that map's pack.
 ///
 /// @param[in,out] building the layout
 /// @param setup what the tab shows
 /// @param shown each matching map's place in the setup, from 0
 /// @param grid the rows, measured at the tiles' width
-/// @param pane the pane
+/// @param pane where the rows sit when the offset is 0
 /// @param offset how far the tiles are scrolled up, in points
+/// @param clip what drawing may touch
 void add_visible_map_rows(
     Building& building,
     const ActiveSetup& setup,
     const std::vector<std::size_t>& shown,
     const MapGrid& grid,
     const kit::Rect& pane,
-    int32_t offset
+    int32_t offset,
+    const kit::Rect& clip
 ) {
     const int32_t content_top = pane.y - offset;
-    if (grid.height > pane.height) {
+    if (clip.y == pane.y && clip.height == pane.height && grid.height > pane.height) {
         add_extent_edge(building.list, pane, content_top);
         add_extent_edge(building.list, pane, content_top + grid.height - 1);
     }
+    const bool pane_is_clip = clip.x == pane.x && clip.y == pane.y && clip.width == pane.width &&
+                              clip.height == pane.height;
     for (const MapRowGeom& row : grid.rows) {
         const int32_t placed = content_top + row.top;
-        if (placed >= pane.y + pane.height || placed + row.height <= pane.y)
+        if (placed >= clip.y + clip.height || placed + row.height <= clip.y)
+            continue;
+        // On the scrolling page a row is drawn whole or not at all, so a line
+        // is never cut by the footer and two captions never share a pixel.
+        // The maps pane still draws the slice of a tile that meets its edge.
+        if (!pane_is_clip && (placed < clip.y || placed + row.height > clip.y + clip.height))
             continue;
         for (std::size_t place = 0; place < row.count; ++place) {
             const std::size_t shown_index = row.begin + place;
@@ -3702,68 +3792,367 @@ void add_visible_map_rows(
                 row.height,
             };
             if (building.size_class == kit::SizeClass::compact)
-                add_compact_map_row(building, setup.maps[map_index], tile, map_index + 1, pane);
+                add_compact_map_row(building, setup.maps[map_index], tile, map_index + 1, clip);
             else
-                add_map_tile(building, setup.maps[map_index], tile, map_index + 1, pane);
+                add_map_tile(building, setup.maps[map_index], tile, map_index + 1, clip);
         }
     }
 }
 
-/// Appends the mod tile and the language tile, which do not scroll, and
-/// returns the row under them.
+/// Returns the base game tile: its icon or "TA", its name, version and check,
+/// and CHANGE….
+///
+/// @param[in,out] building the layout, which records the label's name
+/// @param content what the tile shows
+/// @return the tile
+IdentityTile base_tile(Building& building, const ActiveContent& content) {
+    IdentityTile tile;
+    tile.badge = content.badge;
+    tile.letters = content.letters;
+    tile.id = controls::active_base;
+    tile.name = unique_name(building, named("active.base"));
+    tile.read = content.read;
+    if (!content.name.empty())
+        tile.lines.push_back(TileLine{content.name, kit::FontRole::regular, kit::colour::text});
+    if (!content.version_line.empty())
+        tile.lines.push_back(
+            TileLine{content.version_line, kit::FontRole::small, kit::colour::hint}
+        );
+    if (!content.check_line.empty()) {
+        const kit::Colour ink = content.check_good ? kit::colour::accent : kit::colour::lock;
+        tile.lines.push_back(TileLine{content.check_line, kit::FontRole::small, ink});
+    }
+    tile.button = true;
+    tile.button_caption = std::string(shown(building.library->text, words::active_change));
+    tile.button_enabled = true;
+    tile.button_id = controls::active_change;
+    tile.button_name = named("active.change");
+    return tile;
+}
+
+/// Returns a pill's words cut so the pill fits a width.
+///
+/// @param building the layout
+/// @param text the pill's words
+/// @param room the width, in points
+/// @return the words, with "..." when they do not fit
+std::string fit_pill_text(const Building& building, std::string text, int32_t room) {
+    kit::PillLook look;
+    look.text = text;
+    if (room <= 0)
+        return {};
+    if (kit::pill_width(*building.fonts, look) <= room)
+        return text;
+    const int32_t padding = std::max(building.metrics->chip_padding, kit::pill_height() / 2);
+    std::string fitted =
+        cut(building, kit::FontRole::small, text, std::max(room - 2 * padding, int32_t{0}));
+    look.text = fitted;
+    while (!fitted.empty() && kit::pill_width(*building.fonts, look) > room) {
+        std::size_t drop = 1;
+        if (fitted.size() >= 3 && fitted.compare(fitted.size() - 3, 3, "...") == 0 &&
+            fitted.size() > 3) {
+            const std::string_view body(fitted.data(), fitted.size() - 3);
+            std::size_t index = 0;
+            std::size_t previous = 0;
+            while (index < body.size()) {
+                previous = index;
+                index += std::max(kit::character_bytes(body.substr(index)), std::size_t{1});
+            }
+            drop = body.size() - previous;
+            if (drop == 0)
+                drop = 1;
+            fitted.erase(fitted.size() - 3 - drop, drop);
+        } else {
+            fitted.pop_back();
+        }
+        look.text = fitted;
+    }
+    return fitted;
+}
+
+/// One row of expansion pills, measured before it is placed.
+struct ExpansionRow {
+    std::vector<std::size_t> indexes{};
+    std::vector<int32_t> widths{};
+};
+
+/// The expansion pills wrapped into the tile's inner width.
+struct ExpansionWrap {
+    std::vector<ExpansionRow> rows{};
+    int32_t rows_height{}; ///< the rows, gaps included
+    bool hint{};
+};
+
+/// Wraps the expansion pills into a width.
+///
+/// @param building the layout
+/// @param content the pills and the hint
+/// @param inner the width inside the card
+/// @return the rows
+ExpansionWrap
+wrap_expansions(const Building& building, const ActiveContent& content, int32_t inner) {
+    const kit::Metrics& metrics = *building.metrics;
+    ExpansionWrap wrap;
+    const int32_t room = std::max(inner, int32_t{0});
+    const int32_t gap = metrics.button_gap;
+    const int32_t pill_height = kit::pill_height();
+    ExpansionRow row;
+    int32_t across = 0;
+    for (std::size_t index = 0; index < content.pills.size(); ++index) {
+        kit::PillLook look;
+        look.text = fit_pill_text(building, content.pills[index].text, room);
+        int32_t width = room <= 0 ? 0 : kit::pill_width(*building.fonts, look);
+        if (room > 0)
+            width = std::min(width, room);
+        if (!row.indexes.empty() && across + gap + width > room) {
+            wrap.rows.push_back(std::move(row));
+            row = {};
+            across = 0;
+        }
+        row.indexes.push_back(index);
+        row.widths.push_back(width);
+        across += width;
+        if (row.indexes.size() > 1)
+            across += gap;
+    }
+    if (!row.indexes.empty())
+        wrap.rows.push_back(std::move(row));
+    if (!wrap.rows.empty())
+        wrap.rows_height = static_cast<int32_t>(wrap.rows.size()) * pill_height +
+                           static_cast<int32_t>(wrap.rows.size() - 1) * gap;
+    wrap.hint = !content.hint.empty();
+    return wrap;
+}
+
+/// Returns the expansions hint wrapped to the tile's inner width. Every
+/// line is kept: the hint wraps instead of being cut.
+///
+/// @param building the layout
+/// @param hint the hint; empty returns nothing
+/// @param inner the width inside the card
+/// @return the lines
+std::vector<std::string>
+expansion_hint_lines(const Building& building, std::string_view hint, int32_t inner) {
+    if (hint.empty() || inner <= 0)
+        return {};
+    return wrapped(building, kit::FontRole::small, hint, inner, 0);
+}
+
+/// Returns the expansions tile's height, including a button's room when the
+/// mod tile has UNLOAD MOD, so the pills stay above that button. The hint
+/// takes one line for each line it wraps to.
+///
+/// @param building the layout
+/// @param content the pills and the hint
+/// @param width the tile's width
+/// @param reserve_button leave room for a button at the bottom
+/// @return the height, in points
+int32_t expansions_height(
+    const Building& building, const ActiveContent& content, int32_t width, bool reserve_button
+) {
+    const kit::Metrics& metrics = *building.metrics;
+    const int32_t inset = metrics.card_inset;
+    const int32_t inner = std::max(width - 2 * inset, int32_t{0});
+    const ExpansionWrap wrap = wrap_expansions(building, content, inner);
+    int32_t stack = wrap.rows_height;
+    const std::vector<std::string> hint_lines = expansion_hint_lines(building, content.hint, inner);
+    if (!hint_lines.empty())
+        stack += (wrap.rows.empty() ? 0 : metrics.hint_gap) +
+                 static_cast<int32_t>(hint_lines.size()) * metrics.small_line;
+    if (reserve_button)
+        stack += metrics.button_gap + metrics.button_height;
+    return stack + 2 * inset;
+}
+
+/// Appends the expansions tile: wrapped pills and the hint. The heading's
+/// label is the caller's.
 ///
 /// @param[in,out] building the layout
-/// @param setup what the tab shows
-/// @param area the tab's area, which clips them
+/// @param content the pills and the hint
+/// @param tile the tile
+/// @param clip what drawing may touch
+void place_expansions(
+    Building& building, const ActiveContent& content, const kit::Rect& tile, const kit::Rect& clip
+) {
+    const kit::Metrics& metrics = *building.metrics;
+    const int32_t inset = metrics.card_inset;
+    add_tile_face(building, tile, clip);
+    const int32_t inner_left = tile.x + inset;
+    const int32_t inner_width = std::max(tile.width - 2 * inset, int32_t{0});
+    const ExpansionWrap wrap = wrap_expansions(building, content, inner_width);
+    int32_t row_y = tile.y + inset;
+    const int32_t pill_height = kit::pill_height();
+    for (const ExpansionRow& row : wrap.rows) {
+        int32_t column = inner_left;
+        for (std::size_t place = 0; place < row.indexes.size(); ++place) {
+            const std::size_t index = row.indexes[place];
+            const ExpansionPill& pill = content.pills[index];
+            const int32_t width = row.widths[place];
+            if (width <= 0 || index >= controls::most_expansions) {
+                column += width + metrics.button_gap;
+                continue;
+            }
+            const kit::ControlId id =
+                controls::first_expansion + static_cast<kit::ControlId>(index);
+            kit::PillLook look;
+            look.text = fit_pill_text(building, pill.text, inner_width);
+            look.state =
+                pill.face == ExpansionFace::on ? kit::PillState::active : kit::PillState::inactive;
+            look.hovered = hovered(building, id);
+            look.focused = focused(building, id);
+            look.disabled = !pill.enabled;
+            const kit::Rect rect{column, row_y, width, pill_height};
+            const std::size_t before = building.list.controls.size();
+            kit::add_pill(
+                building.list,
+                rect,
+                look,
+                id,
+                unique_name(building, named("active.expansion." + pill.id))
+            );
+            building.list.items.back().clip = clip;
+            move_controls(building.list, before, building.detail);
+            kit::Control& control = building.detail.back();
+            control.clip = clip;
+            control.group = -1;
+            control.focusable = pill.enabled;
+            control.enabled = pill.enabled;
+            tab_stop(building, control);
+            column += width + metrics.button_gap;
+        }
+        row_y += pill_height + metrics.button_gap;
+    }
+    const std::vector<std::string> hint_lines =
+        expansion_hint_lines(building, content.hint, inner_width);
+    if (!hint_lines.empty()) {
+        if (!wrap.rows.empty())
+            row_y += metrics.hint_gap - metrics.button_gap;
+        for (const std::string& hint_line : hint_lines) {
+            add_text(
+                building,
+                kit::FontRole::small,
+                hint_line,
+                {inner_left, row_y, inner_width, metrics.small_line},
+                kit::Align::left,
+                kit::colour::hint,
+                clip
+            );
+            row_y += metrics.small_line;
+        }
+    }
+}
+
+/// Appends the base game, the language, the expansions and the mod, and
+/// returns the row under them. The four tiles stand two by two at every
+/// size. `area` places them; `clip` is what drawing may touch, the page
+/// when that page scrolls.
+///
+/// @param[in,out] building the layout
+/// @param setup what the tab shows of the mod and the language
+/// @param area where the tiles sit
+/// @param clip what drawing may touch
 /// @return the row under the tiles and the gap after them
-int32_t place_fixed_identity(Building& building, const ActiveSetup& setup, const kit::Rect& area) {
+int32_t place_fixed_identity(
+    Building& building, const ActiveSetup& setup, const kit::Rect& area, const kit::Rect& clip
+) {
     const Library& library = *building.library;
     const kit::Metrics& metrics = *building.metrics;
-    const IdentityTile mod = mod_tile(building, setup);
+    const ActiveContent content = active_content(library);
+    const IdentityTile base = base_tile(building, content);
     const IdentityTile language = language_tile(building, setup);
-    const int32_t mod_height = identity_height(metrics, mod);
-    const int32_t language_height = identity_height(metrics, language);
-    int32_t top = area.y;
-    if (building.size_class == kit::SizeClass::compact) {
-        top = add_active_heading(
-            building, shown(library.text, words::active_heading_mod), area.x, top, area.width, area
-        );
-        place_identity(building, mod, {area.x, top, area.width, mod_height}, area);
-        top += mod_height + metrics.paragraph_gap;
-        top = add_active_heading(
-            building,
-            shown(library.text, words::active_heading_language),
-            area.x,
-            top,
-            area.width,
-            area
-        );
-        place_identity(building, language, {area.x, top, area.width, language_height}, area);
-        top += language_height + metrics.paragraph_gap;
-        return top;
-    }
+    const IdentityTile mod = mod_tile(building, setup);
     const int32_t gap = metrics.card_gap;
     const int32_t left_width = std::max((area.width - gap) / 2, int32_t{0});
     const int32_t right = area.x + left_width + gap;
     const int32_t right_width = std::max(area.x + area.width - right, int32_t{0});
-    const int32_t tiles = add_active_heading(
-        building, shown(library.text, words::active_heading_mod), area.x, top, left_width, area
+    const int32_t row1 =
+        std::max(identity_height(metrics, base), identity_height(metrics, language));
+    const int32_t row2 = std::max(
+        expansions_height(building, content, left_width, mod.button), identity_height(metrics, mod)
+    );
+
+    int32_t top = area.y;
+    const int32_t first = add_active_heading(
+        building, shown(library.text, words::active_heading_base), area.x, top, left_width, clip
     );
     static_cast<void>(add_active_heading(
-        building, shown(library.text, words::active_heading_language), right, top, right_width, area
+        building, shown(library.text, words::active_heading_language), right, top, right_width, clip
     ));
-    const int32_t tile_height = std::max(mod_height, language_height);
-    place_identity(building, mod, {area.x, tiles, left_width, tile_height}, area);
-    place_identity(building, language, {right, tiles, right_width, tile_height}, area);
-    return tiles + tile_height + metrics.paragraph_gap;
+    place_identity(building, base, {area.x, first, left_width, row1}, clip);
+    place_identity(building, language, {right, first, right_width, row1}, clip);
+
+    top = first + row1 + metrics.paragraph_gap;
+    const std::string expansions_heading = content.expansions_heading;
+    const int32_t second =
+        add_active_heading(building, expansions_heading, area.x, top, left_width, clip);
+    add_label(
+        building.detail,
+        controls::active_expansions,
+        kit::intersect({area.x, top, left_width, metrics.small_line}, clip),
+        unique_name(building, named("active.expansions")),
+        expansions_heading,
+        clip,
+        -1
+    );
+    static_cast<void>(add_active_heading(
+        building, shown(library.text, words::active_heading_mod), right, top, right_width, clip
+    ));
+    place_expansions(building, content, {area.x, second, left_width, row2}, clip);
+    place_identity(building, mod, {right, second, right_width, row2}, clip);
+    return second + row2 + metrics.paragraph_gap;
 }
 
-/// Appends the Active tab. The mod and the language stay under the tabs.
-/// The MAPS heading and its search stay under those tiles, and the maps
-/// pane fills the room from there to the bottom of the area. The pane
-/// scrolls on its own when the tiles are taller than it, and keeps a
-/// column for the scroll bar at its right. A search on the heading leaves
-/// the tiles whose name or pack name holds the text.
+/// Returns the row under the four tiles, measured without appending them.
+///
+/// @param building the layout
+/// @param setup what the tab shows
+/// @param area where the tiles would sit
+/// @return that row
+int32_t measured_identity_bottom(
+    const Building& building, const ActiveSetup& setup, const kit::Rect& area
+) {
+    Building trial = building;
+    trial.list = {};
+    trial.detail.clear();
+    trial.order.clear();
+    return place_fixed_identity(trial, setup, area, area);
+}
+
+/// Appends the Active tab's scroll bar, clipped to the view it scrolls, so a
+/// scroll can be read from the bar when no row of that view is on screen.
+///
+/// @param[in,out] building the layout
+/// @param view what the bar scrolls
+/// @param well the bar's column
+/// @param content_height the scrolled content's height
+/// @param limit the greatest offset
+/// @param offset how far it is scrolled
+void add_active_bar(
+    Building& building,
+    const kit::Rect& view,
+    const kit::Rect& well,
+    int32_t content_height,
+    int32_t limit,
+    int32_t offset
+) {
+    const kit::Metrics& metrics = *building.metrics;
+    kit::ScrollArea scroll;
+    scroll.view = view;
+    scroll.well = well;
+    scroll.content_height = content_height;
+    scroll.limit = limit;
+    scroll.offset = offset;
+    add_item(building.list, kit::Role::scroll_bar, scroll.well, view).look =
+        kit::ScrollBarLook{scroll.thumb(metrics.least_thumb_height), building.state->maps_bar_held};
+}
+
+/// Appends the Active tab. The four tiles stand under the tabs, then the
+/// MAPS heading and its search, then the maps. On a small window, when the
+/// tiles leave the maps fewer than four rows, the page scrolls as one: the
+/// tiles, then the maps, and once the maps are scrolled to the top at least
+/// four rows fit. Otherwise the maps pane scrolls on its own and the tiles
+/// stay. Either scroll bar is the one the other pages use. A search on the
+/// heading leaves the tiles whose name or pack name holds the text.
 ///
 /// @param[in,out] building the layout
 /// @param area the area
@@ -3778,11 +4167,81 @@ void add_active(Building& building, const kit::Rect& area) {
         if (map_matches_query(setup.maps[index], query))
             matching.push_back(index);
 
-    const int32_t heading_top = place_fixed_identity(building, setup, area);
+    const int32_t heading_span = metrics.field_height + metrics.hint_gap;
+    const int32_t full_bottom = measured_identity_bottom(building, setup, area);
+    const int32_t pane_height = area.y + area.height - (full_bottom + heading_span);
+    const bool page = building.size_class == kit::SizeClass::compact &&
+                      pane_height < maps_rows_kept * metrics.small_line;
+    const int32_t well_width = metrics.scroll_thumb_width + 2;
+
+    if (page) {
+        const int32_t content_width =
+            std::max(area.width - well_width - metrics.button_gap, int32_t{0});
+        const kit::Rect narrow{area.x, area.y, content_width, area.height};
+        const int32_t identity_bottom = measured_identity_bottom(building, setup, narrow);
+        const MapGrid grid = measure_map_grid(building, setup, matching, content_width);
+        const int32_t note_height = metrics.small_line + 2 * metrics.card_inset;
+        const int32_t maps_block = matching.empty() ? note_height : grid.height;
+        const int32_t maps_height = heading_span + maps_block;
+        const int32_t identity_span = identity_bottom - area.y;
+        // The tiles left fewer than four rows. The page can scroll until the
+        // heading sits high enough that four rows fit under it, even when
+        // fewer maps than that are installed.
+        const int32_t kept_room = heading_span + maps_rows_kept * metrics.small_line;
+        const int32_t content_height =
+            std::max(identity_span + maps_height, identity_span + kept_room);
+        const int32_t limit = kit::ScrollArea::limit_for(content_height, area.height);
+        const int32_t offset = std::clamp(building.state->maps_scroll, int32_t{0}, limit);
+        const kit::Rect placed{area.x, area.y - offset, content_width, area.height};
+        static_cast<void>(place_fixed_identity(building, setup, placed, area));
+        const int32_t heading_top = identity_bottom - offset;
+        add_maps_heading_row(
+            building,
+            area.x,
+            heading_top,
+            content_width,
+            area,
+            query,
+            matching.size(),
+            setup.maps.size()
+        );
+        const int32_t rows_top = heading_top + heading_span;
+        if (matching.empty()) {
+            const std::string_view note =
+                setup.maps.empty() ? words::active_no_maps : words::active_no_map_match;
+            add_maps_note(
+                building,
+                shown(library.text, note),
+                {area.x, rows_top, content_width, note_height},
+                content_width,
+                area
+            );
+        } else {
+            const kit::Rect rows{
+                area.x, rows_top, content_width, std::max(grid.height, int32_t{0})
+            };
+            add_visible_map_rows(building, setup, matching, grid, rows, 0, area);
+        }
+        if (limit > 0) {
+            add_extent_edge(building.list, area, area.y - offset);
+            add_extent_edge(building.list, area, area.y - offset + content_height - 1);
+            add_active_bar(
+                building,
+                area,
+                {area.x + area.width - well_width, area.y, well_width, area.height},
+                content_height,
+                limit,
+                offset
+            );
+        }
+        return;
+    }
+
+    const int32_t heading_top = place_fixed_identity(building, setup, area, area);
     add_maps_heading_row(
         building, area.x, heading_top, area.width, area, query, matching.size(), setup.maps.size()
     );
-    const int32_t pane_top = heading_top + metrics.field_height + metrics.hint_gap;
+    const int32_t pane_top = heading_top + heading_span;
     const int32_t pane_bottom = area.y + area.height;
     const kit::Rect pane{
         area.x, pane_top, area.width, std::max(pane_bottom - pane_top, int32_t{0})
@@ -3790,7 +4249,6 @@ void add_active(Building& building, const kit::Rect& area) {
     if (pane.height <= 0)
         return;
 
-    const int32_t well_width = metrics.scroll_thumb_width + 2;
     MapGrid grid = measure_map_grid(building, setup, matching, pane.width);
     const bool scrolls = !matching.empty() && grid.height > pane.height;
     int32_t tiles_width = pane.width;
@@ -3805,22 +4263,22 @@ void add_active(Building& building, const kit::Rect& area) {
     if (matching.empty()) {
         const std::string_view note =
             setup.maps.empty() ? words::active_no_maps : words::active_no_map_match;
-        add_maps_note(building, shown(library.text, note), pane, tiles_width);
+        add_maps_note(building, shown(library.text, note), pane, tiles_width, pane);
         return;
     }
     const int32_t limit = kit::ScrollArea::limit_for(grid.height, pane.height);
     const int32_t offset = std::clamp(building.state->maps_scroll, int32_t{0}, limit);
-    add_visible_map_rows(building, setup, matching, grid, pane, offset);
+    add_visible_map_rows(building, setup, matching, grid, pane, offset, pane);
     if (limit <= 0)
         return;
-    kit::ScrollArea scroll;
-    scroll.view = pane;
-    scroll.well = {pane.x + pane.width - well_width, pane.y, well_width, pane.height};
-    scroll.content_height = grid.height;
-    scroll.limit = limit;
-    scroll.offset = offset;
-    add_item(building.list, kit::Role::scroll_bar, scroll.well, {}).look =
-        kit::ScrollBarLook{scroll.thumb(metrics.least_thumb_height), building.state->maps_bar_held};
+    add_active_bar(
+        building,
+        pane,
+        {pane.x + pane.width - well_width, pane.y, well_width, pane.height},
+        grid.height,
+        limit,
+        offset
+    );
 }
 
 /// Appends a registry's Off/On switch, in the details' scroll.
@@ -4406,7 +4864,7 @@ void add_list_footer(Building& building, const Window& window, bool compact) {
     int32_t left = window.right - total;
     const int32_t queue_right = left - metrics.label_gap;
     if (library.tab == Tab::registries) {
-        for (const kit::Control& control : building.top)
+        for (kit::Control& control : building.top)
             if (control.id == controls::add_registry)
                 tab_stop(building, control);
     }
@@ -4767,7 +5225,7 @@ kit::DisplayList finish(Building& building, const Window& window) {
     add_open_menu(building, window.footer_rule);
     add_unload_note(building, window);
     add_key_tooltip(building, window);
-    for (const kit::Control& control : building.top)
+    for (kit::Control& control : building.top)
         if (control.id == controls::close_x)
             tab_stop(building, control);
     kit::DisplayList list = std::move(building.list);

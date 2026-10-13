@@ -93,7 +93,7 @@ constexpr std::string_view word_catalogue_unfit = "Its catalogue says it does no
 /// The words for a map the picker could not show.
 constexpr std::string_view word_not_offered = "The map list does not hold this map.";
 /// The game's short name in the words above.
-constexpr std::string_view word_game_short = "TA 3.1c";
+constexpr std::string_view word_game_short = "No Mod";
 /// The sound MORE MAPS… plays as the browser opens: the OA button's.
 constexpr std::string_view open_sound = "Options";
 /// The sound Cancel plays: the settings' Cancel.
