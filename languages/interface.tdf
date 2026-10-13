@@ -1610,6 +1610,14 @@
 	it=Controllo…;
 	}
 
+[Checking… {percent}%]
+	{
+	de=Prüfen… {percent} %;
+	fr=Vérification… {percent} %;
+	es=Comprobando… {percent} %;
+	it=Controllo… {percent} %;
+	}
+
 [Choose PLAY NOW to play it, or choose it later with PLAY NOW in the Library.]
 	{
 	de=Wähle JETZT SPIELEN, um es zu spielen, oder später mit JETZT SPIELEN in der Bibliothek.;
@@ -12482,12 +12490,12 @@
 	it=Le copie vanno in Documents › Open Annihilation;
 	}
 
-[To Documents › Open Annihilation › games and expansions]
+[To Documents › Open Annihilation › Games and Expansions]
 	{
-	de=Nach Documents › Open Annihilation › Spiele und Erweiterungen;
-	fr=Vers Documents › Open Annihilation › jeux et extensions;
-	es=A Documents › Open Annihilation › juegos y expansiones;
-	it=In Documents › Open Annihilation › giochi ed espansioni;
+	de=Nach Documents › Open Annihilation › Games und Expansions;
+	fr=Vers Documents › Open Annihilation › Games et Expansions;
+	es=A Documents › Open Annihilation › Games y Expansions;
+	it=In Documents › Open Annihilation › Games ed Expansions;
 	}
 
 [A continues. B goes back.]

@@ -283,20 +283,21 @@ void section_list_puts_downloads_before_developer() {
                 OA_CHECK(system + 1 == developer);
                 const int32_t optionals =
                     (touch ? 1 : 0) + (controller ? 1 : 0) + (game_files ? 1 : 0);
-                const int32_t downloads_y =
-                    geometry::list_first_top +
-                    (5 + optionals) * (geometry::list_item_height + geometry::list_item_gap);
+                // The fullest compact list drops the gap so System ends on the divider.
+                const int32_t stride =
+                    geometry::list_item_height + (optionals == 3 ? 0 : geometry::list_item_gap);
+                const int32_t downloads_y = geometry::list_first_top + (5 + optionals) * stride;
                 OA_CHECK(
                     geometry::list_item(Page::downloads, touch, game_files, controller).y ==
                     downloads_y
                 );
                 OA_CHECK(
                     geometry::list_item(Page::game_content, touch, game_files, controller).y ==
-                    downloads_y + geometry::list_item_height + geometry::list_item_gap
+                    downloads_y + stride
                 );
                 OA_CHECK(
                     geometry::list_item(Page::system, touch, game_files, controller).y ==
-                    downloads_y + 2 * (geometry::list_item_height + geometry::list_item_gap)
+                    downloads_y + 2 * stride
                 );
                 OA_CHECK(
                     geometry::list_item(Page::developer, touch, game_files, controller).y == 262

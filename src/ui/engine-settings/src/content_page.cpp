@@ -20,6 +20,9 @@ namespace {
 /// How wide each button is, so "Copiar otra vez desde…" fits the compact column.
 constexpr int32_t kButtonWidth = 220;
 
+/// How wide Cancel is, so "Abbrechen" fits.
+constexpr int32_t kCancelWidth = 140;
+
 /// The sentence under the heading, looked up whole.
 constexpr std::string_view kIntro = "OA plays from its own copy in Documents › Open Annihilation. "
                                     "The installation is not used or changed.";
@@ -70,14 +73,25 @@ geometry::Rows place(
     for (std::size_t index = 0; index < dialog.game_content.size(); ++index) {
         const GameContentRow& bundle = dialog.game_content[index];
         kit::RowView view;
-        view.kind = kit::RowKind::text;
+        if (bundle.copying) {
+            view.kind = kit::RowKind::value_and_button;
+            view.button_ids.emplace_back("cancel-copy");
+            view.buttons.emplace_back(geometry::shown_text("Cancel"));
+            view.control_width = kCancelWidth;
+        } else {
+            view.kind = kit::RowKind::text;
+        }
         if (kit::row_word(bundle.id))
             view.id = bundle.id;
         else
             view.id = "bundle-" + std::to_string(index);
         view.label = bundle.name;
-        view.hints.push_back(bundle.size + " · " + bundle.check);
-        view.notices.push_back(bundle.warn);
+        if (bundle.copying || bundle.checking)
+            view.hints.push_back(bundle.check);
+        else
+            view.hints.push_back(bundle.size + " · " + bundle.check);
+        if (!bundle.copying && !bundle.checking)
+            view.notices.push_back(bundle.warn);
         views.push_back(std::move(view));
     }
 
@@ -118,6 +132,13 @@ geometry::Rows place(
 
 DialogAction take(const Dialog& dialog, const geometry::Row& row) noexcept {
     const int32_t bundles = static_cast<int32_t>(dialog.game_content.size());
+    if (row.content >= 1 && row.content <= bundles) {
+        const GameContentRow& bundle =
+            dialog.game_content[static_cast<std::size_t>(row.content - 1)];
+        if (bundle.copying)
+            return DialogAction::cancel_content_copy;
+        return DialogAction::none;
+    }
     if (row.content == bundles + 1)
         return DialogAction::check_content;
     if (row.content == bundles + 2)

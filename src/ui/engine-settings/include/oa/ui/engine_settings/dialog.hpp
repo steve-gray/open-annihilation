@@ -548,9 +548,12 @@ enum class DialogAction : uint8_t {
     /// COPY AGAIN FROM… on Game Content: the host asks for a place and copies
     /// from it, and the dialog stays open
     copy_content_again,
-    /// OPEN FOLDER on Game Content: open the games folder in the system's
+    /// OPEN FOLDER on Game Content: open the Games folder in the system's
     /// file manager. The dialog stays open.
     open_content_folder,
+    /// CANCEL on the bundle being copied: stop that copy. What was already
+    /// in the managed folders stays. The dialog stays open.
+    cancel_content_copy,
 };
 
 /// One of the Library's tabs, as the dialog asks the host to open it
@@ -689,11 +692,15 @@ struct AvailableLanguage {
 /// One bundle on Game Content. The host fills the words; the page shows them
 /// as they are, so a product name is not looked up again.
 struct GameContentRow {
-    std::string id;    ///< the bundle's id, a row word such as totala
-    std::string name;  ///< the name shown, as the table writes it
-    std::string size;  ///< the size, already as the page shows it
-    std::string check; ///< the check, already in the language shown
-    bool warn{};       ///< the check names files that differ
+    std::string id;       ///< the bundle's id, a row word such as totala
+    std::string name;     ///< the name shown, as the table writes it
+    std::string size;     ///< the size, already as the page shows it
+    std::string check;    ///< the check, already in the language shown
+    bool warn{};          ///< the check names files that differ
+    bool copying{};       ///< this bundle is being copied; the row offers Cancel
+    bool checking{};      ///< a check is running; `check` is its progress
+    int32_t bar_done{-1}; ///< the bar's filled part; -1 draws no bar
+    int32_t bar_whole{1}; ///< the bar's whole
 };
 
 /// One registry's install ID, as Downloads shows it. The host fills this

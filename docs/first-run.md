@@ -88,9 +88,8 @@ installer, or the demo installer, with what that place holds. **Locate
 another…** asks for a folder. **Copy the game** is available once a row is
 chosen. **Back** returns to the language. **Quit** leaves.
 
-The line under the rows says the copy goes to Documents › Open
-Annihilation › games and expansions, and that the installation is left as
-it is.
+The line under the rows says the copies go to Documents › Open
+Annihilation, and that the installation is left as it is.
 
 ## Copying
 
@@ -100,8 +99,9 @@ it is.
 
 The page word is Setup, the step is COPYING, and the count is 3 of 5. The
 title is "Copying Total Annihilation". The overall bar and one row for
-each bundle show how far the copy has got. A line says "If OA stops, the
-copy carries on from here next time." **Pause** holds the copy, and
+each bundle show how far the copy has got. Two centred lines say "If OA
+stops, the copy carries on from here next time." and "To Documents › Open
+Annihilation › Games and Expansions". **Pause** holds the copy, and
 **Continue** lets it go on. **Cancel** returns to the game step.
 
 When the copy has been checked, the rows say what the check found, and

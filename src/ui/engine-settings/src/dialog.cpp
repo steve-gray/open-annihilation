@@ -1006,9 +1006,25 @@ SourceRect list_item(
     const auto found = std::find(listed.begin(), listed.end(), page);
     const auto index = found != listed.end() ? static_cast<int32_t>(found - listed.begin())
                                              : page_control(page) - first_page_control;
-    int32_t top = list_first_top + index * (list_item_height + list_item_gap);
-    if (page == Page::developer)
+    // Developer stays pinned under the divider. The other entries step down
+    // from the list's top. The compact list of every section would cross that
+    // line by the gap it keeps between entries, so that list drops the gap
+    // and the last entry ends on the line. Every shorter list keeps the gap.
+    int32_t top = list_first_top;
+    if (page == Page::developer) {
         top = list_divider(size_class).y + 1 + list_divider_margin;
+    } else {
+        int32_t flowing = static_cast<int32_t>(listed.size());
+        if (!listed.empty() && listed.back() == Page::developer)
+            --flowing;
+        const int32_t gaps = flowing > 0 ? flowing - 1 : 0;
+        const int32_t gapped_bottom =
+            list_first_top + flowing * list_item_height + gaps * list_item_gap;
+        const int32_t stride = gapped_bottom > list_divider(size_class).y
+                                   ? list_item_height
+                                   : list_item_height + list_item_gap;
+        top = list_first_top + index * stride;
+    }
     return {list_item_left, top, sizes_of(size_class).list_item_width, list_item_height};
 }
 

@@ -196,7 +196,7 @@ centre would land on the line between Off and On.
 | A drop-down's item, while open | `oa.settings.<row>.<value>` | check box, checked on the choice |
 | A slider | `oa.settings.<row>` | slider; its text the value shown |
 | A row's own button (MANAGE…) | `oa.settings.<row>.<button>`, as `oa.settings.game-files-summary.manage` | button |
-| Game Content's buttons | `oa.settings.content-check.check-again`, `oa.settings.content-copy.copy-again`, `oa.settings.content-open.open-folder` | button. The section's entry is `oa.settings.nav.game-content` |
+| Game Content's buttons | `oa.settings.content-check.check-again`, `oa.settings.content-copy.copy-again`, `oa.settings.content-open.open-folder` | button. The section's entry is `oa.settings.nav.game-content`. While a bundle is being copied, that bundle's row offers Cancel as `oa.settings.<id>.cancel-copy` |
 | Your files' buttons, on System | `oa.settings.user-folder.saves`, `.screenshots`, `.mods` | button |
 | File Type Registration, on System on Windows, Linux and macOS | `oa.settings.file-type-registration` (the heading); `oa.settings.file-type-oamod`, `oa.settings.file-type-oamap`, `oa.settings.file-type-oalang`, `oa.settings.file-type-oareg` | the heading a label; each switch as a switch |
 | File types, on System on iOS | `oa.settings.file-types` | label |

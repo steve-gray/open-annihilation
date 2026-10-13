@@ -35,8 +35,9 @@ enum class SetupBefore : uint8_t {
 };
 
 /// Reports whether this start should show language, the game and copying
-/// before the game is mounted. A named --game-dir, a check, and an
-/// unattended start do not.
+/// before the game is mounted. A named --game-dir, --check-first-run, and an
+/// unattended start do not. --check-setup-window does: the window copies the
+/// check's install, and the menu still plays the named folder.
 ///
 /// @param options the parsed command line
 /// @param mount_copy true when this start plays the player's copy

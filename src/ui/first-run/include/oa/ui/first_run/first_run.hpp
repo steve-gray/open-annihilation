@@ -206,6 +206,10 @@ struct CopyView {
     bool paused{};                     ///< the copy is paused
     bool checked{};                    ///< the copy has finished and been checked
     std::string verdict{};             ///< what the check said, when it has
+    bool hashing{};                    ///< the check after the bytes is running
+    uint32_t check_done{};             ///< files the check has considered
+    uint32_t check_total{};            ///< files the check will consider
+    bool bytes_landed{};               ///< the bytes finished, whether or not the check did
 };
 
 /// What the steps show. The host keeps it current.

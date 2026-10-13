@@ -82,7 +82,7 @@ inline constexpr std::string_view interface_words[] = {
     "Quit",
     "Setup",
     "THE GAME",
-    "To Documents › Open Annihilation › games and expansions",
+    "To Documents › Open Annihilation › Games and Expansions",
     "Welcome to Open Annihilation",
     "Where is Total Annihilation?",
     "Your install ID",

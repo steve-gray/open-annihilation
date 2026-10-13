@@ -8,6 +8,10 @@
 // it, then applies both online choices. The pack cannot be signed as Core
 // Prime, so the registry is the made-up one Ridge and the setup reads it
 // only while this check runs. The named game folder is not copied.
+//
+// --check-setup-window walks language, the game and the copy in the pre-game
+// window, then checks that online features continue over the main menu in
+// the language chosen there. The named game folder is what the menu plays.
 
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
@@ -600,6 +604,54 @@ void Runtime::check_first_run() {
         "the setup showed again after it was finished"
     );
     std::cout << "first-run check: passed\n" << std::flush;
+}
+
+void Runtime::check_setup_window() {
+    const auto expect = [](bool ok, std::string_view what) {
+        if (!ok)
+            throw std::runtime_error("setup window check: " + std::string(what));
+    };
+    expect(options_.first_run, "needs --first-run");
+    expect(options_.preferences_file.has_value(), "needs --preferences-file");
+    expect(sdl_.window != nullptr && sdl_.renderer != nullptr, "the window did not open");
+
+    load(Screen::main_menu);
+    expect(screen_ == Screen::main_menu, "the main menu did not open");
+    expect(engine_settings_fonts() != nullptr, "the dialog's fonts did not load");
+
+    const auto pump = [this] {
+        bool running = true;
+        run_frame(running);
+        if (!running)
+            throw std::runtime_error("setup window check: a frame ended the run");
+    };
+    const auto online_in_german = [this] {
+        LayerScreen* screen = oa_layer().find(kScreen);
+        if (screen == nullptr)
+            return false;
+        const kit::DisplayList display = screen->display_list();
+        bool button = false;
+        bool words = false;
+        for (const kit::Control& control : display.controls) {
+            if (control.name == "first-run.online.not-now" && control.enabled)
+                button = true;
+            if (control.text.find("Nicht jetzt") != std::string::npos)
+                words = true;
+        }
+        for (const kit::Item& item : display.items)
+            if (item.text.find("Nicht jetzt") != std::string::npos)
+                words = true;
+        return button && words;
+    };
+
+    const auto deadline = std::chrono::steady_clock::now() + kWait;
+    while (!online_in_german()) {
+        expect(!deadline_passed(deadline), "the online step did not show in German");
+        pump();
+    }
+    const std::string not_now{oa::data::languages::interface_text("Not now")};
+    expect(not_now == "Nicht jetzt", "Not now is not German");
+    std::cout << "setup window check: passed\n" << std::flush;
 }
 
 } // namespace oa::app

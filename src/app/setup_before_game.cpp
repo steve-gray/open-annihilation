@@ -45,7 +45,9 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -113,12 +115,14 @@ struct CopyJob {
     std::chrono::steady_clock::time_point started{};
     /// Bundle ids in the same order as `view.bundles`. The progress report names an id.
     std::vector<std::string> bundle_ids{};
-    uint64_t bytes_done{};   ///< bytes finished, for the line the window's thread writes
-    uint64_t bytes_total{};  ///< bytes of every matched file
-    uint32_t files_done{};   ///< files finished
-    uint32_t files_total{};  ///< matched files
-    bool needs_check{false}; ///< the copy finished and the window's thread has not checked it
-    bool fixture{false};     ///< the check's table, rather than the built-in one
+    uint64_t bytes_done{};  ///< bytes finished, for the line the window's thread writes
+    uint64_t bytes_total{}; ///< bytes of every matched file
+    uint32_t files_done{};  ///< files finished
+    uint32_t files_total{}; ///< matched files
+    bool needs_check{
+        false
+    }; ///< the copy's thread checked it; the window's thread has not applied it
+    ContentCheck pending_check{}; ///< that check; empty until needs_check
 };
 
 CopyJob& copy_job() {
@@ -583,6 +587,20 @@ void on_copy_progress(void* context, const CopyProgress& progress) {
     note_progress(*static_cast<CopyJob*>(context), progress);
 }
 
+/// The check's progress. It runs on the copy's thread and only stores counts.
+bool on_copy_check(uint32_t done, uint32_t total, void* context) {
+    if (context == nullptr)
+        return false;
+    auto* job = static_cast<CopyJob*>(context);
+    const std::lock_guard<std::mutex> lock(job->mutex);
+    job->view.hashing = true;
+    job->view.running = true;
+    job->view.check_done = done;
+    job->view.check_total = total;
+    job->changed = true;
+    return !job->stop.load();
+}
+
 /// One bundle row for each bundle the table names that the copy may write.
 void prime_bundles(CopyJob& job, std::span<const bundles::Bundle> table) {
     job.view.bundles.clear();
@@ -624,6 +642,7 @@ void apply_check(first_run::CopyView& view, const ContentCheck& check, bool fini
     }
     view.running = false;
     view.paused = false;
+    view.hashing = false;
     view.remaining.clear();
     if (!finished) {
         view.verdict = std::string(languages::interface_text("The game could not be copied."));
@@ -653,48 +672,6 @@ std::unique_ptr<ContentSource> open_source(const Remembered& remembered) {
         );
     }
     return nullptr;
-}
-
-/// The user folder the worker checks.
-fs::path& copy_user_folder() {
-    static fs::path folder;
-    return folder;
-}
-
-/// Finishes the view from the check. The copy's thread calls it after the bytes stop.
-void finish_view_from_check(bool finished, const std::string& error, bool fixture) {
-    CopyJob& job = copy_job();
-    ContentCheck check;
-    if (finished) {
-        try {
-            check = check_managed_content(
-                copy_user_folder(), fixture ? copy_check_bundles() : bundles::bundles()
-            );
-        } catch (const std::exception& failure) {
-            const std::lock_guard<std::mutex> lock(job.mutex);
-            job.view.verdict = failure.what();
-            job.view.checked = false;
-            job.view.running = false;
-            job.changed = true;
-            return;
-        }
-    }
-    const std::lock_guard<std::mutex> lock(job.mutex);
-    if (!finished) {
-        job.view.running = false;
-        job.view.paused = false;
-        job.view.checked = false;
-        if (job.view.verdict.empty()) {
-            job.view.verdict =
-                error.empty()
-                    ? std::string(languages::interface_text("The game could not be copied."))
-                    : error;
-        }
-        job.changed = true;
-        return;
-    }
-    apply_check(job.view, check, true);
-    job.changed = true;
 }
 
 /// Ends access a system picker gave, after the copy no longer reads the place.
@@ -833,6 +810,10 @@ bool write_fixture(const fs::path& folder) {
 
 /// Tells whether this start shows the game steps.
 bool setup_due(const Options& options, bool mount_copy) {
+    // The pre-game window check walks these steps here. --game-dir is what the
+    // menu plays afterwards, and a dummy video would otherwise count as unattended.
+    if (options.check_setup_window && !options.check_first_run)
+        return true;
     if (!mount_copy || options.game_dir_named || options.check_first_run)
         return false;
     if (options.unattended || options.headless_check || options.benchmark_frames.has_value() ||
@@ -880,6 +861,210 @@ std::string stored_language(const Options& options) {
     }
 }
 
+/// How long the pre-game window check may run, in frames of this loop.
+constexpr int kSetupCheckFrames = 2000;
+
+/// Deutsch on the language carousel.
+constexpr std::string_view kDeutschCard = "first-run.language.card.de";
+
+/// Where the pre-game window check is in its walk. One call takes one action.
+struct SetupWindowDrive {
+    enum class Phase : uint8_t {
+        seek,     ///< bring Deutsch onto the carousel
+        pick,     ///< choose Deutsch
+        language, ///< the German lines, then Next
+        game,     ///< the fixture, then Next
+        copying,  ///< the copying step's German lines
+        wait,     ///< the copy and its check
+        records,  ///< the managed copy and its records, then Next
+        done,     ///< the walk has left the window
+    };
+    Phase phase{Phase::seek};
+    int frames{0};  ///< frames this walk has taken
+    int back{0};    ///< previous-card presses
+    int forward{0}; ///< next-card presses
+    int pause{0};   ///< frames to wait before the next card press
+    int picks{0};   ///< presses on Deutsch
+};
+
+/// Throws when a step of the pre-game window check failed.
+void setup_check_expect(bool ok, std::string_view what) {
+    if (!ok)
+        throw std::runtime_error("setup window check: " + std::string(what));
+}
+
+/// Walks language, the game and the copy. One call is one press, or a look.
+///
+/// The scene is the one just drawn. A press is handled and the next call sees
+/// the step it opened. The check's install is already the chosen source.
+template <typename Handle>
+void drive_setup_window_check(
+    SetupWindowDrive& drive,
+    const fs::path& user,
+    first_run::Session& session,
+    const first_run::Scene& scene,
+    Handle&& handle
+) {
+    if (drive.phase == SetupWindowDrive::Phase::done)
+        return;
+    ++drive.frames;
+    setup_check_expect(drive.frames <= kSetupCheckFrames, "ran out of frames");
+
+    const auto has = [&](std::string_view name) {
+        for (const kit::Control& control : scene.list.controls)
+            if (control.name == name && control.enabled)
+                return true;
+        return false;
+    };
+    const auto shows = [&](std::string_view words) {
+        std::string joined;
+        for (const kit::Item& item : scene.list.items) {
+            if (item.text.find(words) != std::string::npos)
+                return true;
+            joined += item.text;
+        }
+        for (const kit::Control& control : scene.list.controls) {
+            if (control.text.find(words) != std::string::npos)
+                return true;
+            joined += control.text;
+        }
+        return joined.find(words) != std::string::npos;
+    };
+    const auto click = [&](std::string_view name) {
+        kit::Rect rect{};
+        bool enabled = false;
+        for (const kit::Control& control : scene.list.controls) {
+            if (control.name != name)
+                continue;
+            rect = control.rect;
+            enabled = control.enabled;
+            break;
+        }
+        setup_check_expect(enabled, std::string(name) + " is not on the setup");
+        const kit::Point at{rect.x + rect.width / 2, rect.y + rect.height / 2};
+        handle(first_run::pointer(session, scene, first_run::PointerKind::down, at, 0, 1));
+        handle(first_run::pointer(session, scene, first_run::PointerKind::up, at, 0, 1));
+    };
+    const auto german = [](std::string_view key, std::string_view words) {
+        const std::string got{languages::interface_text(key)};
+        setup_check_expect(got == words, std::string(key) + " is not German");
+    };
+
+    if (drive.pause > 0) {
+        if (drive.phase == SetupWindowDrive::Phase::seek && has(kDeutschCard)) {
+            drive.pause = 0;
+            drive.phase = SetupWindowDrive::Phase::pick;
+            return;
+        }
+        --drive.pause;
+        return;
+    }
+
+    switch (drive.phase) {
+    case SetupWindowDrive::Phase::seek:
+        setup_check_expect(
+            session.model.step == first_run::Step::language, "the language step did not show"
+        );
+        if (has(kDeutschCard)) {
+            drive.phase = SetupWindowDrive::Phase::pick;
+            return;
+        }
+        if (drive.back < 8 && has("first-run.language.previous")) {
+            click("first-run.language.previous");
+            ++drive.back;
+            drive.pause = 40;
+            return;
+        }
+        if (drive.forward < 8 && has("first-run.language.next-card")) {
+            click("first-run.language.next-card");
+            ++drive.forward;
+            drive.pause = 40;
+            return;
+        }
+        throw std::runtime_error("setup window check: Deutsch is not on the carousel");
+    case SetupWindowDrive::Phase::pick:
+        setup_check_expect(has(kDeutschCard), "Deutsch is not on the carousel");
+        click(kDeutschCard);
+        ++drive.picks;
+        if (drive.picks >= 2)
+            drive.phase = SetupWindowDrive::Phase::language;
+        return;
+    case SetupWindowDrive::Phase::language:
+        german("Where is Total Annihilation?", "Wo ist Total Annihilation?");
+        german(
+            "OA copies the game once. The installation is left as it is.",
+            "OA kopiert das Spiel einmal. Die Installation bleibt, wie sie ist."
+        );
+        german(
+            "If OA stops, the copy carries on from here next time.",
+            "Wenn OA anhält, geht die Kopie beim nächsten Mal von hier weiter."
+        );
+        german("Copying Total Annihilation", "Total Annihilation wird kopiert");
+        german("All files match", "Alle Dateien stimmen überein");
+        german("Not now", "Nicht jetzt");
+        click("first-run.language.next");
+        drive.phase = SetupWindowDrive::Phase::game;
+        return;
+    case SetupWindowDrive::Phase::game:
+        setup_check_expect(
+            session.model.step == first_run::Step::game, "the game step did not show"
+        );
+        setup_check_expect(session.model.source == 0, "the check's install was not chosen");
+        setup_check_expect(
+            scene.title_text == "Wo ist Total Annihilation?", "the game step's title is not German"
+        );
+        setup_check_expect(shows("OA kopiert das Spiel einmal"), "the game step is not in German");
+        click("first-run.game.next");
+        drive.phase = SetupWindowDrive::Phase::copying;
+        return;
+    case SetupWindowDrive::Phase::copying:
+        setup_check_expect(
+            session.model.step == first_run::Step::copying, "the copying step did not show"
+        );
+        setup_check_expect(
+            scene.title_text == "Total Annihilation wird kopiert",
+            "the copying step's title is not German"
+        );
+        setup_check_expect(shows("Wenn OA anhält"), "the copying step is not in German");
+        drive.phase = SetupWindowDrive::Phase::wait;
+        return;
+    case SetupWindowDrive::Phase::wait:
+        setup_check_expect(
+            session.model.step == first_run::Step::copying, "the copying step closed early"
+        );
+        if (shows("Alle Dateien stimmen überein"))
+            drive.phase = SetupWindowDrive::Phase::records;
+        return;
+    case SetupWindowDrive::Phase::records: {
+        const fs::path games = user / std::string(bundles::managed_games_folder) / "totala";
+        const fs::path campaign =
+            user / std::string(bundles::managed_expansions_folder) / "totala" / "campaign";
+        const auto regular = [](const fs::path& path) {
+            std::error_code failure;
+            return fs::is_regular_file(path, failure) && !failure;
+        };
+        setup_check_expect(
+            regular(games / std::string(bundles::content_record_name)),
+            "Games/totala/.oa-content was not written"
+        );
+        setup_check_expect(regular(games / "rev31.gp3"), "rev31.gp3 was not copied");
+        setup_check_expect(regular(games / "Data" / "2.zrb"), "Data/2.zrb was not copied");
+        setup_check_expect(
+            regular(campaign / std::string(bundles::content_record_name)),
+            "Expansions/totala/campaign/.oa-content was not written"
+        );
+        setup_check_expect(regular(campaign / "totala4.hpi"), "totala4.hpi was not copied");
+        setup_check_expect(session.model.copy.checked, "the copy was not checked");
+        click("first-run.copying.next");
+        drive.phase = SetupWindowDrive::Phase::done;
+        std::cout << "setup window check: the game was copied\n" << std::flush;
+        return;
+    }
+    case SetupWindowDrive::Phase::done:
+        return;
+    }
+}
+
 } // namespace
 
 bool setup_before_game_due(const Options& options, bool mount_copy) {
@@ -918,8 +1103,11 @@ SetupBefore run_setup_before_game(
             session.carousel.selected = index;
     }
     first_run::bind(session);
-    if (session.model.step == first_run::Step::game)
+    if (session.model.step == first_run::Step::game) {
         fill_sources(session.model, user, found_install);
+        if (options.check_setup_window)
+            setup_install_check_source(user, session.model);
+    }
 
     std::unique_ptr<text_font::FontStack> fonts;
     try {
@@ -943,8 +1131,15 @@ SetupBefore run_setup_before_game(
         return laid;
     };
 
+    // The check's German sentences stay on one line at the picture's wide size.
+    if (options.check_setup_window &&
+        (!SDL_SetWindowSize(display.window, 1280, 720) || !SDL_SyncWindow(display.window)))
+        throw std::runtime_error("setup window check: the window did not take 1280x720");
     kit::Frame room = frame_of_window(viewport);
+    if (read_window_viewport(display.window, display.renderer, viewport))
+        room = frame_of_window(viewport);
     first_run::Scene scene = relayout(room);
+    SetupWindowDrive window_check;
 
     const auto present = [&] {
         if (viewport.width <= 0 || viewport.height <= 0)
@@ -989,6 +1184,8 @@ SetupBefore run_setup_before_game(
             if (session.model.step == first_run::Step::language) {
                 apply_selected_language(session, options);
                 fill_sources(session.model, user, found_install);
+                if (options.check_setup_window)
+                    setup_install_check_source(user, session.model);
                 session.model.step = first_run::Step::game;
                 session.focus_ready = false;
             } else if (session.model.step == first_run::Step::game) {
@@ -1139,6 +1336,20 @@ SetupBefore run_setup_before_game(
             scene = relayout(room);
             present();
         }
+        if (options.check_setup_window) {
+            try {
+                drive_setup_window_check(window_check, user, session, scene, handle);
+            } catch (...) {
+                setup_request_cancel();
+                setup_stop_join();
+                if (awake) {
+                    SDL_EnableScreenSaver();
+                    awake = false;
+                }
+                release_picked_sources();
+                throw;
+            }
+        }
         if (ended == SetupBefore::skipped || ended == SetupBefore::quit ||
             ended == SetupBefore::copied)
             running = false;
@@ -1225,8 +1436,8 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
     job.view.running = true;
     job.view.whole = 1000;
     const bool fixture = chosen->kind == SourceKind::fixture;
-    job.fixture = fixture;
     job.needs_check = false;
+    job.pending_check = {};
     job.bytes_done = 0;
     job.bytes_total = 0;
     job.files_done = 0;
@@ -1234,7 +1445,6 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
     const std::span<const bundles::Bundle> table =
         fixture ? copy_check_bundles() : bundles::bundles();
     prime_bundles(job, table);
-    copy_user_folder() = user_folder;
     const Remembered copy = *chosen;
     job.worker = std::thread([copy, user_folder] {
         CopyJob& held = copy_job();
@@ -1258,17 +1468,54 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
             result.status = CopyStatus::failed;
             result.error = error.what();
         }
-        const bool finished = result.status == CopyStatus::finished && !held.stop.load();
+        const bool bytes_done = result.status == CopyStatus::finished;
+        const bool run_check = bytes_done && !held.stop.load();
         const std::string error = result.error;
+        if (!run_check) {
+            const std::lock_guard<std::mutex> lock(held.mutex);
+            held.view.running = false;
+            held.view.paused = false;
+            held.view.hashing = false;
+            held.view.bytes_landed = bytes_done;
+            if (!bytes_done && result.status != CopyStatus::stopped && !held.stop.load()) {
+                held.view.checked = false;
+                held.view.verdict =
+                    error.empty() ? std::string("The game could not be copied.") : error;
+            }
+            held.changed = true;
+            return;
+        }
+        {
+            const std::lock_guard<std::mutex> lock(held.mutex);
+            held.view.bytes_landed = true;
+            held.view.hashing = true;
+            held.view.running = true;
+            held.view.check_done = 0;
+            held.view.check_total = 0;
+            held.changed = true;
+        }
+        ContentCheck check;
+        std::string failure;
+        bool threw = false;
+        try {
+            const std::span<const bundles::Bundle> checked =
+                copy.kind == SourceKind::fixture ? copy_check_bundles() : bundles::bundles();
+            check = check_managed_content(user_folder, checked, on_copy_check, &held, &held.stop);
+        } catch (const std::exception& caught) {
+            threw = true;
+            failure = caught.what();
+        }
+        const bool stopped = held.stop.load();
         const std::lock_guard<std::mutex> lock(held.mutex);
+        held.view.hashing = false;
         held.view.running = false;
         held.view.paused = false;
-        if (finished) {
-            held.needs_check = true;
-        } else if (result.status != CopyStatus::stopped && !held.stop.load()) {
+        if (threw) {
             held.view.checked = false;
-            held.view.verdict =
-                error.empty() ? std::string("The game could not be copied.") : error;
+            held.view.verdict = std::move(failure);
+        } else if (!stopped) {
+            held.pending_check = std::move(check);
+            held.needs_check = true;
         }
         held.changed = true;
     });
@@ -1299,22 +1546,28 @@ void setup_request_cancel() {
 
 bool setup_pull_copy(first_run::CopyView& view) {
     CopyJob& job = copy_job();
+    ContentCheck pending;
     bool check_now = false;
-    bool fixture = false;
     {
         const std::lock_guard<std::mutex> lock(job.mutex);
         check_now = job.needs_check;
-        fixture = job.fixture;
-        if (check_now)
+        if (check_now) {
+            pending = std::move(job.pending_check);
+            job.pending_check = {};
             job.needs_check = false;
+        }
     }
-    if (check_now)
-        finish_view_from_check(true, {}, fixture);
+    // The copy's thread already hashed. This thread only writes the lines.
+    if (check_now) {
+        const std::lock_guard<std::mutex> lock(job.mutex);
+        apply_check(job.view, pending, true);
+        job.changed = true;
+    }
     const std::lock_guard<std::mutex> lock(job.mutex);
     view = job.view;
     if (job.files_total > 0)
         view.overall = overall_line(job.files_done, job.files_total);
-    if (view.running && !view.paused)
+    if (view.running && !view.paused && !view.hashing)
         view.remaining = remaining_line(job, job.bytes_done, job.bytes_total);
     if (view.verdict == "The game could not be copied.")
         view.verdict = std::string(languages::interface_text(view.verdict));

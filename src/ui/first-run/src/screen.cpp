@@ -1296,7 +1296,8 @@ void lay_copying(
         column,
         show("If OA stops, the copy carries on from here next time."),
         kit::FontRole::small,
-        kit::colour::quiet
+        kit::colour::quiet,
+        kit::Align::centre
     );
     if (session.model.controller) {
         add_paragraph(
@@ -1317,7 +1318,7 @@ void lay_copying(
          band.top + band.height - kit::compact_metrics.small_line * 2,
          column,
          kit::compact_metrics.small_line},
-        show("To Documents › Open Annihilation › games and expansions"),
+        show("To Documents › Open Annihilation › Games and Expansions"),
         kit::FontRole::small,
         kit::colour::quiet,
         kit::Align::centre

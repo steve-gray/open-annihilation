@@ -638,10 +638,13 @@ bundle whose files differ is marked.
 OA plays from its own copy in Documents › Open Annihilation. The
 installation is not used or changed.
 
-- **Check again** reads the copy and updates each row. The dialog stays open.
+- **Check again** reads the copy on its own and the row shows "Checking…
+  N%" until the result replaces it. The dialog stays open and keeps drawing.
 - **Copy again from…** asks for a folder or an installer and copies from
-  it into the same folders. The dialog stays open.
-- **Open folder** opens the games folder in the system's file manager.
+  it into the same folders. The bundle's row shows how far the copy has
+  got, its bar, and Cancel. Cancel leaves the copy that was already there.
+  The dialog stays open and keeps drawing.
+- **Open folder** opens the Games folder in the system's file manager.
 
 ## System
 

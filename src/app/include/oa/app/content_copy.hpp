@@ -811,12 +811,24 @@ struct ContentNoticeCopy {
 /// music file that is present and not a known hash is still named. An empty
 /// `table` uses the built-in table.
 ///
+/// Called as each file of a copied bundle is considered. `files_done` counts
+/// files already considered and `files_total` the files of bundles that have
+/// a record. Return false to stop. The callback must not call interface_text.
+using ContentCheckProgress =
+    bool (*)(uint32_t files_done, uint32_t files_total, void* progress_context);
+
 /// @param user_folder the player's folder
 /// @param table the bundles to check; empty uses the built-in table
-/// @return the check
+/// @param on_progress optional; told after each file, and once before the first
+/// @param progress_context passed to on_progress
+/// @param stop when not null and set, the check returns what it has so far
+/// @return the check; a stopped check is not a finished answer
 [[nodiscard]] ContentCheck check_managed_content(
     const std::filesystem::path& user_folder,
-    std::span<const oa::data::content_bundles::Bundle> table
+    std::span<const oa::data::content_bundles::Bundle> table,
+    ContentCheckProgress on_progress = nullptr,
+    void* progress_context = nullptr,
+    const std::atomic<bool>* stop = nullptr
 );
 
 /// Reads a Windows installer and prints the bundles it holds.

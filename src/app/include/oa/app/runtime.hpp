@@ -7419,6 +7419,13 @@ class Runtime final : public menu::Host,
     /// @return true when its rows changed
     bool refresh_settings_languages(oa::ui::engine_settings::Dialog& dialog);
 
+    /// Brings Game Content up to date. A copy and a check run on their own
+    /// threads; this reads how far they have got. The dialog stays open.
+    ///
+    /// @param dialog the open dialog
+    /// @return true when its rows changed, or while a copy or a check is running
+    bool refresh_game_content(oa::ui::engine_settings::Dialog& dialog);
+
     /// Reads the catalogues into the available languages when they have changed.
     void note_catalogue_languages();
 
@@ -11554,6 +11561,11 @@ class Runtime final : public menu::Host,
     /// pack that fails and then retries, Skip setup, and both online
     /// choices. Throws std::runtime_error naming what differed.
     void check_first_run();
+
+    /// Walks language, the game and the copy in the pre-game window, then
+    /// checks the online step over the main menu. Throws std::runtime_error
+    /// naming what differed.
+    void check_setup_window();
 
     /// Opens every Open Annihilation screen in English, German, French,
     /// Spanish, Italian and Simplified Chinese, at 640x480 and 1280x720.

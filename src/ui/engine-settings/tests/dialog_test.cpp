@@ -4971,16 +4971,16 @@ void the_kit_gallery_row_moves_only_developers_list() {
     // is printed, so that a change meant to move these parts can pin them
     // again.
     const std::array<std::pair<Page, uint64_t>, 10> kBefore{{
-        {Page::controls, 0x51ad7b4e8226447b},
-        {Page::common_tweaks, 0xba9a9282f99db4c6},
-        {Page::language, 0x70513178fa2b66e7},
-        {Page::graphics, 0xbf34350a06276ecf},
-        {Page::user_interface, 0xea88ed76bd132e42},
-        {Page::touch, 0xcfa0c7754c78c1a9},
-        {Page::controller, 0xb40af55af62d3cd9},
-        {Page::game_files, 0xccc244f44eaa409e},
-        {Page::downloads, 0x2482ea3feca0238a},
-        {Page::game_content, 0x08c493a060b705ac},
+        {Page::controls, 0xc9b50dd61f00f98a},
+        {Page::common_tweaks, 0x834556760a9d2417},
+        {Page::language, 0xa7351a7ba3a3fcbe},
+        {Page::graphics, 0xd03cbfe3c82dbe49},
+        {Page::user_interface, 0x1bedfda1543e7ecf},
+        {Page::touch, 0x08b231fbeece3bdd},
+        {Page::controller, 0x64b3e4bf52e43679},
+        {Page::game_files, 0x405310d8fb1d4566},
+        {Page::downloads, 0xd624c36706853e0f},
+        {Page::game_content, 0x2854530ae6dbef1f},
     }};
     for (const auto& [page, before] : kBefore) {
         const settings::Dialog other = opened_with_controller(page, true, true, true);
@@ -7782,13 +7782,21 @@ void controller_is_listed_only_once_a_gamepad_sent_input() {
     CHECK(geometry::list_item(Page::controller, false, false, true).y == 141);
     CHECK(geometry::list_item(Page::touch, true, false, true).y == 141);
     CHECK(geometry::list_item(Page::controller, true, false, true).y == 162);
-    CHECK(geometry::list_item(Page::game_files, true, true, true).y == 183);
+    CHECK(geometry::list_item(Page::game_files, true, true, true).y == 176);
     CHECK(geometry::list_item(Page::game_files, false, true, true).y == 162);
     CHECK(geometry::list_item(Page::developer, true, true, true).y == 262);
     CHECK(
         geometry::list_item(Page::game_files, true, true, true).y + geometry::list_item_height <
         geometry::list_divider().y
     );
+    // The fullest compact list ends on the divider. A gap would cross it.
+    for (const Page page : kAllPages) {
+        if (page == Page::developer)
+            continue;
+        const auto entry = geometry::list_item(page, true, true, true);
+        CHECK(entry.y + entry.height <= geometry::list_divider().y);
+        CHECK(!overlap(entry, geometry::list_divider()));
+    }
 
     // Each section's entry keeps its number with or without Controller
     // listed; a dialog without it has no entry numbered as Controller.
@@ -9717,6 +9725,21 @@ void game_content_lists_each_bundle_and_three_actions() {
     CHECK(press("Check again") == DialogAction::check_content);
     CHECK(press("Copy again from…") == DialogAction::copy_content_again);
     CHECK(press("Open folder") == DialogAction::open_content_folder);
+
+    dialog.game_content[0].copying = true;
+    dialog.game_content[0].bar_done = 400;
+    dialog.game_content[0].bar_whole = 1000;
+    dialog.game_content[0].check = "2 of 5 · 40%";
+    const auto copying = settings::dialog_layout(dialog);
+    CHECK(find_part(copying, "Cancel", settings::no_control) != nullptr);
+    CHECK(find_part(copying, "2 of 5 · 40%", settings::no_control) != nullptr);
+    const oa::ui::kit::DisplayList drawn = geometry::dialog_list(dialog, nullptr);
+    bool bar = false;
+    for (const oa::ui::kit::Item& item : drawn.items)
+        if (item.role == oa::ui::kit::Role::progress)
+            bar = true;
+    CHECK(bar);
+    CHECK(press("Cancel") == DialogAction::cancel_content_copy);
 }
 
 int main(int argc, char** argv) {

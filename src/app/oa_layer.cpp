@@ -976,6 +976,7 @@ struct Runtime::SettingsScreen final : LayerScreen {
         // The front end draws every frame. A match draws this dialog again
         // only when the revision moves, so a download's progress has to.
         changed = runtime_.refresh_settings_languages(*dialog) || changed;
+        changed = runtime_.refresh_game_content(*dialog) || changed;
         if (!changed)
             return LayerAnswer::none;
         ++revision_;
