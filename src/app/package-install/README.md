@@ -2,11 +2,14 @@
 
 This module installs packages into a folder of the player's own folder. One
 table of kinds says what differs; it holds the mod kind, `oamod`, the
-map pack kind, `oamap`, and the language pack kind, `oalang`. A mod package
+map pack kind, `oamap`, the language pack kind, `oalang`, and the expansion
+kind, `expansion`. A mod package
 is a zip archive of a mod's folder, the one that holds its `oamod.yaml`; it
 installs into `Mods/<id>`, by the id its profile gives, whatever the file is
 called. A map pack installs into `Maps/<id>`. A language pack installs into
-`Languages/<tag>`, by the tag its `language.yaml` gives. The module has no
+`Languages/<tag>`, by the tag its `language.yaml` gives. An expansion
+installs into `Expansions/<game>/<id>` and is copied by `install_oaexp`,
+which writes the table's files and a `.oa-content` record. The module has no
 SDL: the game's runtime shows what it asks
 and answers (`src/app/runtime_mod_install.cpp`,
 "Mod packages" in [src/app](../README.md#mod-packages-oamod) and
@@ -74,12 +77,14 @@ running. The folder's name stays `opened-mods`.
 ## Kinds
 
 `kKinds` in `src/kinds.cpp` is the table. It holds `oamod`, then `oamap`,
-then `oalang`. A mod uses the extension `.oamod`, the manifest `oamod.yaml`
+then `oalang`, then `expansion`. A mod uses the extension `.oamod`, the manifest `oamod.yaml`
 (at most 256 KiB), the root folder `Mods` and the prefix `.oamod-` on the
 installer's own folders and on the lock. A map pack uses `.oamap`,
 `oamap.yaml` (the same limit), the root folder `Maps` and the prefix
 `.oamap-`. A language pack uses `.oalang`, `language.yaml` (the same limit),
-the root folder `Languages` and the prefix `.oalang-`.
+the root folder `Languages` and the prefix `.oalang-`. An expansion uses
+`.oaexp`, `oaexp.yaml` (the same limit), the root folder `expansions` and
+the prefix `.oaexp-`. Its `plan` refuses the generic unpack.
 `package_kinds`, `kind_for_file` and `find_kind` read the table; `mod_kind`
 is the mod entry. A file whose extension is none of them is refused as
 `unknown_kind`, and nothing is read.
@@ -110,6 +115,10 @@ A new kind is wired in five places, and nowhere in the generic files:
   `package_options` is where the runtime hands the hooks their `context`,
   and `package_changed` is where the app takes in what a change put in place.
 - Its test `app-package-install-<kind>`.
+
+An expansion is the exception to the generic unpack. Its `plan` refuses
+that unpack, and the runtime copies it with `install_oaexp`, which writes
+the table's files and the `.oa-content` record.
 
 A kind's own refusals go at the end of `Refusal`, worded by its
 `KindPrompts::refusal_text`.
@@ -398,8 +407,8 @@ a replace that fails leaves the previous record as it was.
   whole by `recover_changes`; and a held update dropped by
   `discard_pending_change`, leaving the installed version, its record and
   `.backup`, with no staged files, while a waiting roll back is left.
-- `app-package-install-kinds`: the kind table holds `oamod`, `oamap` and
-  `oalang`, a file is a package by those extensions, the seven folder names
+- `app-package-install-kinds`: the kind table holds `oamod`, `oamap`,
+  `oalang` and `expansion`, a file is a package by those extensions, the seven folder names
   of each, and a made-up kind built in the test installs, replaces, rolls
   back, recovers and discards through the generic code, including a staged
   check that refuses.
@@ -408,6 +417,12 @@ a replace that fails leaves the previous record as it was.
   that keeps the old revision in `.backup`, a manifest inside one top
   folder, and each refusal, including a font that does not open after
   unpacking and an entry the shared names check refuses.
+- `app-package-install-oaexp`: the fixture package is refused by the
+  built-in table with nothing written; the same package, checked against
+  the test table, lands in `Expansions/<game>/<id>` with `.oa-content`; a
+  reinstall drops a file the table does not name; uninstall removes that
+  folder and leaves a sibling; a link in the expansion's place is left
+  alone.
 
 The native checks `native-mod-install`, `native-library-install` and
 `native-language-install` (`docs/development/testing.md`,

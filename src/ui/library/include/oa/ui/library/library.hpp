@@ -328,10 +328,28 @@ struct InstalledMaps {
     std::vector<std::string> required_expansions{};
 };
 
+/// An expansion a registry offers for download.
+///
+/// The Library does not list it as a package row. A later screen draws the
+/// download from this.
+struct DownloadableExpansion {
+    std::string id{};              ///< the expansion's id
+    std::string registry{};        ///< the registry that offers it
+    std::string name{};            ///< the name a player sees
+    std::string version{};         ///< the catalogue's version
+    std::string file{};            ///< the catalogue reference of the .oaexp
+    base::sha256::Digest sha256{}; ///< the package file's SHA-256
+    uint64_t size{};               ///< the package file's size, in bytes
+    /// Base games the expansion extends, in the table's order.
+    std::vector<std::string> extends{};
+};
+
 /// Everything the Library is built from.
 struct Inputs {
     std::vector<Registry> registries{};
     std::vector<Listing> listings{};
+    /// Expansions a registry offers. Not listed as package rows.
+    std::vector<DownloadableExpansion> downloadable_expansions{};
     std::vector<Installed> installed{};
     std::vector<UpdateNote> updates{};
     std::vector<QueueItem> queue{}; ///< in the order the items were queued

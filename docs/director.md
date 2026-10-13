@@ -333,9 +333,11 @@ bundles.
   pixel for pixel: models' texture animations and cached images start with
   the first frame drawn.
 - **What changes at the tick rate alone.** Between ticks only places,
-  headings, piece poses and spins are shown part of the way: sprite and
-  texture animation frames, smoke puffs, the nanoframe's pulse and units
-  that appear, jump or are loaded and dropped change at the tick.
+  headings, piece poses and spins are shown part of the way. A piece that
+  is spinning follows that spin, including a turn of more than half a
+  revolution, so it never comes back the other way between ticks. Sprite
+  and texture animation frames, smoke puffs, the nanoframe's pulse and
+  units that appear, jump or are loaded and dropped change at the tick.
 - **A map smaller than the smallest view** (270 map pixels high, or 480
   wide at 16:9) is drawn from its top-left corner.
 - **Drawing is slow when many units show.** The renderer draws on the CPU,

@@ -16,6 +16,9 @@ Every document in the repository, by what you want to do.
     non-Steam game, the Steam Input layouts and artwork installed by hand,
     the controls, the first start, the Deck's settings and the logs
   - [iPhone and iPad](installation/ios.md), built on your own Mac
+- [command-line.md](command-line.md): `--version`, which prints one line and
+  exits before the game starts, and `--print-profile`, which ends with that
+  same line.
 - [settings.md](settings.md): Open Annihilation's own settings, with a
   picture of each section: opening them, OK, Cancel and Restore defaults,
   and what every setting in Mods, Controls, Engine Limits, Language & Text,
@@ -42,6 +45,9 @@ Every document in the repository, by what you want to do.
   an iPhone or a touch screen: the gestures, the tablet and phone layouts,
   QUEUE, ADD and x5, the order wheel, building, the Touch settings, the
   keyboard's Cmd keys and the Pencil.
+- [controls.md](controls.md): group keys, and a second recall of the
+  group that is already selected, which centres the view and does not
+  follow it.
 - [controllers.md](controllers.md): playing with a gamepad: the Steam
   Deck's pad pointer (the right trackpad as the mouse, the grips as QUEUE,
   ADD, FORCE and the groups, the order and build rings), sticks only for
@@ -117,6 +123,10 @@ Every document in the repository, by what you want to do.
 - [maps/oamap-standard.md](maps/oamap-standard.md): the OAMAP standard, the
   format of a map pack's manifest (`oamap.yaml`) and its rules: the index,
   map names, what a pack holds and how a map fits.
+- [expansions/oaexp-standard.md](expansions/oaexp-standard.md): the OAEXP
+  standard, the format of an expansion package (`oaexp.yaml` inside a
+  `.oaexp`) and its rules: the built-in expansion it names, and the files
+  it may carry.
 
 ## Developing
 

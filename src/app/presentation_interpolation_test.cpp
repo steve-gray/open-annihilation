@@ -6,12 +6,14 @@
 // turn), steps taken over a batch of ticks, a unit's pose noted tick by tick
 // and batch by batch with its jumps, new instances and ticks run unseen, a
 // unit's copies placed between two poses with the source left alone, its
-// pieces between their two poses across a jump,
+// pieces between their two poses across a jump, a spin of more than half
+// a revolution followed along its turn rather than back the short way,
 // projectiles followed through the pool's compaction and across a batch,
 // debris followed by slot, and the debug grid's random numbers taken once a
 // tick however often it is drawn.
 #include "presentation_interpolation.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -225,6 +227,67 @@ void test_unit_motion() {
     CHECK(motion.instance.pieces().empty());
 }
 
+void test_fast_spin() {
+    // More than half a revolution in one tick. The short way from 0 to the
+    // wrapped angle turns backwards; the spin goes on forwards.
+    constexpr int32_t speed = 40000;
+    const auto landed = static_cast<int16_t>(static_cast<uint16_t>(speed));
+    CHECK(oa::app::blend_piece_turn(0, landed, speed, 1, 0) == 0);
+    CHECK(oa::app::blend_piece_turn(0, landed, speed, 1, whole_tick) == landed);
+    CHECK(oa::app::blend_piece_turn(0, landed, speed, 1, half_tick) == 20000);
+    CHECK(oa::app::blend_piece_turn(0, landed, speed, 1, quarter_tick) == 10000);
+    CHECK(oa::app::blend_angle(0, landed, half_tick) < 0);
+
+    // The other way.
+    constexpr int32_t back = -40000;
+    const auto landed_back = static_cast<int16_t>(static_cast<uint16_t>(back));
+    CHECK(oa::app::blend_piece_turn(0, landed_back, back, 1, half_tick) == -20000);
+
+    // Exactly half a revolution follows the spin, not the negative short way.
+    constexpr int32_t half_turn = 32768;
+    const auto half_landed = static_cast<int16_t>(static_cast<uint16_t>(half_turn));
+    CHECK(oa::app::blend_piece_turn(0, half_landed, half_turn, 1, half_tick) == 16384);
+    CHECK(oa::app::blend_angle(0, half_landed, half_tick) < 0);
+
+    // A short turn whose speed accounts for it matches the short way.
+    CHECK(oa::app::blend_piece_turn(0, 0x400, 0x400, 1, half_tick) == 0x200);
+
+    // A speed that does not account for the two angles keeps the short way
+    // while the turn stays within half a revolution.
+    CHECK(
+        oa::app::blend_piece_turn(0, 0x400, 1000, 1, half_tick) ==
+        oa::app::blend_angle(0, 0x400, half_tick)
+    );
+
+    // Past half a revolution a tick, a speed that no longer accounts for the
+    // two angles shows the current angle rather than turning back.
+    CHECK(oa::app::blend_piece_turn(0, 100, speed, 1, 0) == 0);
+    CHECK(oa::app::blend_piece_turn(0, 100, speed, 1, half_tick) == 100);
+
+    // A batch of two ticks: halfway is one tick of the spin.
+    constexpr int32_t batch_speed = 20000;
+    const auto batch_landed =
+        static_cast<int16_t>(static_cast<uint16_t>(static_cast<uint32_t>(batch_speed) * 2));
+    CHECK(
+        oa::app::blend_piece_turn(0, batch_landed, batch_speed, 2, half_tick) ==
+        static_cast<int16_t>(batch_speed)
+    );
+
+    // The piece blend reads the turn off the later pose's matching axis.
+    auto instance = oa::sim::model_runtime::make_instance(turret_model());
+    oa::app::UnitMotion motion;
+    oa::app::observe_unit(motion, 1, 1, unit_at(10, 10, 0), instance);
+    instance.pieces()[1].rotation.xz = landed;
+    std::array<int32_t, 6> turns{};
+    turns[1 * 3 + 1] = speed;
+    oa::app::observe_unit(motion, 2, 1, unit_at(10, 10, 0), instance, turns);
+    auto copy = instance;
+    oa::app::blend_unit_pieces(motion.previous, motion.current, half_tick, copy, 1);
+    CHECK(copy.pieces()[1].rotation.xz == 20000);
+    CHECK(instance.pieces()[1].rotation.xz == landed);
+    CHECK(motion.current.pieces[1].turn_per_tick[1] == speed);
+}
+
 oa::Projectile shot_at(int32_t x, int32_t index_before, uint32_t created_tick, oa::oa_ref32 def) {
     oa::Projectile shot{};
     shot.position = {x * unit_fixed, 0, 0};
@@ -360,6 +423,7 @@ int main() {
     test_tick_fraction();
     test_blends();
     test_unit_motion();
+    test_fast_spin();
     test_shots();
     test_debris();
     test_debug_grid_numbers();

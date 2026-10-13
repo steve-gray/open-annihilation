@@ -13,8 +13,9 @@ target_link_libraries(oa-platform-display-modes PRIVATE oa-options)
 if(BUILD_TESTING)
   # The sizes offered for made-up monitors: a 4K monitor, a Retina Mac's
   # built-in display, a 1280x1024 monitor of Windows XP's time, an
-  # ultrawide, a portrait monitor, one that reports more than the list holds
-  # and one that reports nothing; for full screen and for a window; the mode
+  # ultrawide, a portrait monitor, a Wayland laptop whose desktop is a
+  # scaled 1920x1080, one that reports more than the list holds, and one
+  # that reports nothing; for full screen and for a window; the mode
   # each size switches to; and the reports a check names in text.
   add_executable(oa-platform-display-modes-test tests/display_modes_test.cpp)
   target_link_libraries(oa-platform-display-modes-test PRIVATE oa-platform-display-modes

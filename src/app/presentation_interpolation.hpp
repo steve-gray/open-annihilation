@@ -5,7 +5,9 @@
 // the way from one tick to the next shows each unit's place, heading and
 // script-moved pieces, each projectile's flight and each debris piece's fall
 // that fraction of the way from the tick before to the current tick, never
-// past it. "The tick before" is the last tick the presentation saw before the
+// past it. A piece that is spinning follows that spin, including a turn of
+// more than half a revolution, so the spin never reads as turning back. "The
+// tick before" is the last tick the presentation saw before the
 // current one: the tick before it, or, when one frame's clock step ran a
 // batch of ticks (above normal speed), the tick before the batch. The poses
 // of the tick before are copies the presentation takes as it sees each tick;
@@ -118,10 +120,31 @@ blend_point(const FixedVec3& previous, const FixedVec3& current, uint32_t fracti
 [[nodiscard]] int16_t
 angle_along_step(int16_t angle, int16_t step, uint32_t ticks, uint32_t fraction) noexcept;
 
+/// Returns an angle word part of the way from one tick to the next for one
+/// axis of a piece.
+///
+/// When `speed_per_tick` over `ticks` lands on `current`, the angle follows
+/// that turn, including one of more than half a revolution. A speed above
+/// half a revolution a tick that does not land there shows the current angle.
+/// Any other turn takes the shorter way, as blend_angle does.
+///
+/// @param previous the angle at the tick before, 65536 a turn
+/// @param current the angle at the current tick
+/// @param speed_per_tick the turn the axis adds each tick; 0 when it is still
+/// @param ticks the ticks from the tick before to the current tick
+/// @param fraction the part of the way, 0 to whole_tick
+/// @return `previous` at 0, `current` at whole_tick
+[[nodiscard]] int16_t blend_piece_turn(
+    int16_t previous, int16_t current, int32_t speed_per_tick, uint32_t ticks, uint32_t fraction
+) noexcept;
+
 /// What a unit's script left of one piece at a tick.
 struct PiecePose {
     oa::formats::objects3d::FixedVector3 translation{};
     oa::sim::model_runtime::RotationWords rotation{};
+    /// The turn each axis adds per tick, in the rotation word's order
+    /// (xy, xz, yz), 65536 a full turn. Zero when that axis is still.
+    std::array<int32_t, 3> turn_per_tick{};
 };
 
 /// What a draw shows of one unit at a tick: its place, its orientation, the
@@ -140,8 +163,13 @@ struct UnitPose {
 /// @param unit the unit record
 /// @param instance its model instance
 /// @param[out] pose the pose; its piece list keeps its memory
+/// @param piece_turns three turn-per-tick words a piece, in xy, xz, yz
+///        order; a short span leaves the remaining axes still
 void capture_unit_pose(
-    const oa::Unit& unit, const oa::sim::model_runtime::Instance& instance, UnitPose& pose
+    const oa::Unit& unit,
+    const oa::sim::model_runtime::Instance& instance,
+    UnitPose& pose,
+    std::span<const int32_t> piece_turns = {}
 );
 
 /// Tells whether two poses are the same.
@@ -173,27 +201,33 @@ void capture_unit_pose(
 /// @param fraction the part of the way, 0 to whole_tick
 /// @param[in,out] record a copy of the unit's record
 /// @param[in,out] instance a copy of the unit's model instance
+/// @param ticks the ticks from the tick before to the current tick; a
+///        spinning piece follows its turn per tick over these
 void blend_unit_pose(
     const UnitPose& previous,
     const UnitPose& current,
     uint32_t fraction,
     oa::Unit& record,
-    oa::sim::model_runtime::Instance& instance
+    oa::sim::model_runtime::Instance& instance,
+    uint32_t ticks = 1
 );
 
 /// Places the pieces of a copy of a unit's model instance part of the way
 /// from one pose to the next: each piece's translation and rotation is
-/// blended, and its flags stay as the copy holds them.
+/// blended, a spinning axis along its spin, and its flags stay as the copy
+/// holds them.
 ///
 /// @param previous the pose at the tick before
 /// @param current the pose at the current tick; it has the instance's pieces
 /// @param fraction the part of the way, 0 to whole_tick
 /// @param[in,out] instance a copy of the unit's model instance
+/// @param ticks the ticks from the tick before to the current tick
 void blend_unit_pieces(
     const UnitPose& previous,
     const UnitPose& current,
     uint32_t fraction,
-    oa::sim::model_runtime::Instance& instance
+    oa::sim::model_runtime::Instance& instance,
+    uint32_t ticks = 1
 );
 
 /// One unit slot's poses at the last two ticks the presentation saw, and the
@@ -244,12 +278,15 @@ static_assert(std::is_nothrow_move_constructible_v<UnitMotion>);
 /// @param instance_generation the slot's SlotRuntime::instance_generation
 /// @param unit the unit record
 /// @param instance its model instance
+/// @param piece_turns three turn-per-tick words a piece, in xy, xz, yz
+///        order; empty when the unit's pieces are still
 void observe_unit(
     UnitMotion& motion,
     uint32_t tick,
     uint32_t instance_generation,
     const oa::Unit& unit,
-    const oa::sim::model_runtime::Instance& instance
+    const oa::sim::model_runtime::Instance& instance,
+    std::span<const int32_t> piece_turns = {}
 );
 
 /// Forgets the unit of a slot that holds none: its poses, the copies of its

@@ -70,6 +70,7 @@
 #include <SDL3/SDL_main.h>
 
 #include "oa_engine_build.hpp"
+#include "oa/app/version_line.hpp"
 
 #ifndef OA_ENGINE_VERSION
 #error                                                                                             \
@@ -1275,6 +1276,11 @@ void publish_managed_copy(
 using namespace oa::app;
 
 int main(int argc, char** argv) {
+    // --version prints one line and leaves before the log folder, the
+    // preferences, the game data or a window are touched. Other options on
+    // the same line are not read.
+    if (version_argument_present(argc, argv))
+        write_startup_line(running_engine_version_line());
 #if defined(SDL_PLATFORM_MACOS) && SDL_VERSION_ATLEAST(3, 4, 0)
     // A held key repeats while text is typed, as on the other systems,
     // rather than opening macOS's accents menu. SDL reads the hint once, as
@@ -1300,14 +1306,19 @@ int main(int argc, char** argv) {
             if (parsed.check_game_files)
                 install_game_files_check(parsed);
         // --print-profile prints the resolved mod profile and stops.
-        if (parsed.print_profile)
-            return print_mod_profile(
+        if (parsed.print_profile) {
+            const int status = print_mod_profile(
                 parsed.mod_file,
                 parsed.mod_dir.empty() ? parsed.game_dir : parsed.mod_dir,
                 parsed.accept_unimplemented_hacks,
                 std::cout,
                 std::cerr
             );
+            // The version follows the profile, so a reader of the profile's
+            // JSON still finds it at the start of the output.
+            std::cout << running_engine_version_line() << '\n';
+            return status;
+        }
         if (!parsed.check_content_copy.empty())
             return run_content_copy_check(parsed.check_content_copy);
         if (!parsed.check_installer.empty())

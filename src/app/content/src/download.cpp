@@ -231,7 +231,7 @@ fs::path package_path(
     const auto hex = sha::to_hex(digest);
     std::string name(hex.begin(), hex.end());
     name.push_back('.');
-    name += data::catalogue::kind_name(kind);
+    name += data::catalogue::package_extension(kind);
     if (part)
         name += part_suffix;
     return folder / name;
@@ -339,6 +339,7 @@ std::optional<data::catalogue::Kind> kind_from_name(std::string_view text) noexc
         data::catalogue::Kind::oalang,
         data::catalogue::Kind::oamod,
         data::catalogue::Kind::oamap,
+        data::catalogue::Kind::expansion,
     };
     for (const data::catalogue::Kind kind : kinds) {
         if (text == data::catalogue::kind_name(kind))
