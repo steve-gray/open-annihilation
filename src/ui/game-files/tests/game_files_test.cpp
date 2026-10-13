@@ -1790,6 +1790,8 @@ std::string_view glyph_name(game_files::Glyph glyph) {
         return "file";
     case Glyph::oa:
         return "oa";
+    case Glyph::magnifier:
+        return "magnifier";
     }
     return "?";
 }

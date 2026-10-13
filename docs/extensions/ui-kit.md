@@ -770,7 +770,7 @@ header and the footer.
 
 Regular at 2x, on a 1920x1080 window: two columns.
 
-![The UI kit gallery at Regular, 2x, on a 1920x1080 window: the header with "Regular · 2x". First run spans the width. The carousel's centre card is tall, with a large badge, a large own name, the English name, "Built into the game" and a pill at the bottom, and an accent border with a one-point ring. Two turned cards sit on each side. Under the carousel, four language cards and a picture well, with the coach mark "1 Library" cut off at the right. CLOSE is at the bottom right. The rest of First run is below the window.](../images/ui-kit/gallery-regular.png)
+![The UI kit gallery at Regular, 2x, on a 1920x1080 window: the header with "Regular · 2x". First run spans the width. The carousel's centre card is tall, with a large badge, a large own name, the English name, "Built into the game" and a pill at the bottom, and an accent border with a one-point ring. Two turned cards sit on each side. Under the carousel, four language cards, then a picture well with the coach mark "1 Library" under it, wide enough for its words. CLOSE is at the bottom right. The rest of First run is below the window.](../images/ui-kit/gallery-regular.png)
 
 Large at 1x, on a 1280x720 window: three columns.
 

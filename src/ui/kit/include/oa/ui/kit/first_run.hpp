@@ -322,8 +322,11 @@ void add_language_card(
 ///
 /// Cards are drawn at card_width by card_height and copied into their places,
 /// so a card that has fallen back is smaller and turned. The copy is the
-/// canvas's perspective blit. The pager is one bar a card, and the bar of the
-/// card nearest centre_milli is lit. The arrows are not part of the carousel.
+/// canvas's perspective blit. A card two steps from the centre, the two outer
+/// cards of the five that show, is drawn with no pill: the blit turns those
+/// words into a smear. The centre card and the cards one step out keep the
+/// pill. The pager is one bar a card, and the bar of the card nearest
+/// centre_milli is lit. The arrows are not part of the carousel.
 ///
 /// @param canvas where it is drawn
 /// @param rect the band and the pager

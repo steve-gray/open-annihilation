@@ -2136,10 +2136,17 @@ int32_t first_run(Builder& b, Point at, int32_t width, std::string_view /*word*/
                 std::max(layer.height - 4, int32_t{40}),
             };
         } else {
+            int32_t target_w = std::min(mark, std::max(layer.width / 5, int32_t{16}));
+            // The title "Library" needs a card about 140 points wide. A
+            // narrower leftover shrinks the spotlight instead of the words.
+            constexpr int32_t kCardLeast = 140;
+            const int32_t gaps = coach_gap + 8;
+            if (layer.width - gaps - target_w < kCardLeast)
+                target_w = std::max(layer.width - gaps - kCardLeast, int32_t{12});
             target = {
                 layer.x + 4,
                 layer.y + std::max((layer.height - mark) / 2, int32_t{0}),
-                std::min(mark, std::max(layer.width / 5, int32_t{16})),
+                target_w,
                 mark,
             };
             const int32_t wanted_w =
@@ -2363,10 +2370,28 @@ int32_t first_run(Builder& b, Point at, int32_t width, std::string_view /*word*/
         }
 
         add_chrome({three_x, row2, pocket2_w, kSetupHeight});
+        // Beside four language cards the leftover is a third of a Regular
+        // window, too narrow for "Library". When that column cannot hold the
+        // coach, the picture sits above it and the coach takes the pocket's
+        // whole width. Large already leaves a wide enough column beside the
+        // picture.
         const int32_t picture_w = card_w >= large_metrics.language_card_width ? 168 : 112;
-        const int32_t coach_x = four_x + picture_w + kGap;
-        add_picture({four_x, row1, picture_w, card_h});
-        add_coach({coach_x, row1, std::max(four_x + pocket1_w - coach_x, int32_t{1}), card_h});
+        constexpr int32_t kCoachLeast = 140;
+        const int32_t beside = std::max(pocket1_w - picture_w - kGap, int32_t{0});
+        if (beside >= kCoachLeast) {
+            add_picture({four_x, row1, picture_w, card_h});
+            add_coach({four_x + picture_w + kGap, row1, beside, card_h});
+        } else {
+            const int32_t picture_h = std::max(std::min(card_h / 3, int32_t{96}), int32_t{40});
+            const int32_t coach_y = row1 + picture_h + kGap;
+            add_picture({four_x, row1, std::max(pocket1_w, int32_t{1}), picture_h});
+            add_coach({
+                four_x,
+                coach_y,
+                std::max(pocket1_w, int32_t{1}),
+                std::max(row1 + card_h - coach_y, int32_t{40}),
+            });
+        }
         const int32_t under = row2 + kSetupHeight + 4;
         add_step({
             three_x,

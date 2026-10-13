@@ -724,6 +724,57 @@ void card_reads_the_largest_count() {
     OA_CHECK(details);
 }
 
+/// At Compact a long pack name stays whole on the byline, and the fit chips
+/// sit on that line inside the footer.
+void compact_byline_and_chips_fit() {
+    const kit::Frame frame = frames()[0].frame;
+    mb::Browser browser = many_maps();
+    for (std::size_t index = 0; index < browser.cards.size(); ++index) {
+        if (browser.cards[index].name != "isle_of_ashes@archipelago")
+            continue;
+        browser.selected = index;
+        browser.cards[index].pack_name = "Western Isles Pack";
+        browser.cards[index].pack_version = "1.2";
+        browser.cards[index].registry_name = "Example Maps";
+        browser.cards[index].download_bytes = 2400000;
+        browser.cards[index].base_fit = mb::MapCard::Fit::fits;
+        browser.cards[index].mod_fit = mb::MapCard::Fit::unknown;
+    }
+    browser.mod_name = "Ridge";
+    const kit::DisplayList list = laid_out(browser, {}, frame);
+    const std::string byline = "Western Isles Pack · 4 players";
+    bool byline_whole = false;
+    kit::Rect byline_rect{};
+    std::vector<kit::Rect> chip_rects;
+    for (const kit::Item& item : list.items) {
+        if (item.role == kit::Role::text && item.text == byline) {
+            byline_whole = true;
+            byline_rect = item.rect;
+        }
+        if (const auto* chip = std::get_if<kit::ChipLook>(&item.look);
+            chip != nullptr && item.control == kit::no_control &&
+            (chip->text == "Fits No Mod ✓" ||
+             chip->text == "Fit with Ridge is checked when it's installed"))
+            chip_rects.push_back(item.rect);
+    }
+    OA_CHECK(byline_whole);
+    OA_CHECK(chip_rects.size() == 2);
+    const kit::Point window = mb::window_size(frame);
+    const auto inside = [&](const kit::Rect& rect) {
+        return rect.width > 0 && rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= window.x &&
+               rect.y + rect.height <= window.y;
+    };
+    OA_CHECK(inside(byline_rect));
+    for (const kit::Rect& rect : chip_rects) {
+        OA_CHECK(inside(rect));
+        OA_CHECK(
+            rect.y == byline_rect.y ||
+            (rect.y >= byline_rect.y && rect.y < byline_rect.y + byline_rect.height)
+        );
+        OA_CHECK(rect.x >= byline_rect.x + byline_rect.width);
+    }
+}
+
 void header_and_footer_words() {
     const kit::Frame frame = frames()[2].frame;
     mb::Browser browser = many_maps();
@@ -850,7 +901,7 @@ mb::Browser picture_browser() {
         made("isle_of_ashes@archipelago", "Isle of Ashes", 4, "16x16"),
         made("black_shoals@archipelago", "Black Shoals", 6, "12x12"),
     };
-    online[0].pack_name = "Archipelago Pack";
+    online[0].pack_name = "Western Isles Pack";
     online[0].pack_version = "1.2";
     online[0].registry_name = "Example Maps";
     online[0].download_bytes = 2400000;
@@ -973,4 +1024,5 @@ void layout_tests() {
     wheel_and_drag_scroll();
     card_reads_the_largest_count();
     header_and_footer_words();
+    compact_byline_and_chips_fit();
 }

@@ -51,8 +51,11 @@ The language in use starts in the centre, in front of the cards beside it.
 A move eases to the next card over half a second, and the window draws
 every frame of that move. The place at a moment depends on how long the
 move has been running, not on how many times the window has been drawn.
-Cards one or two steps away stay readable, and the floor's grid is drawn
-behind them.
+Cards one or two steps away stay readable. The two furthest from the
+centre show no pill, because a pill turned with those cards cannot be
+read. The centre card and the card one step to either side keep theirs.
+The floor's grid is drawn behind the cards, at half the strength of a
+rule, so the lines do not meet the cards as a table.
 
 ![The language step of a first start, at 1280 by 720: English centred and ringed, Active and Built in whole, and a fixture pack offering Get.](images/first-run/language-large.png)
 
@@ -88,7 +91,7 @@ either way, and the language stays as it was until a pack is installed.
 
 Under the carousel, a note says that other languages download from Core
 Prime and that the first download makes a random install ID, which the
-next step explains. **Next** is disabled while a download is running.
+later step explains. **Next** is disabled while a download is running.
 Escape, and B on a controller, do nothing on this step.
 
 ## When the packs cannot be fetched
@@ -159,11 +162,14 @@ is still there.
 
 ![Online features: a picture of the Library's Active tab, the heading ONLINE FEATURES, three lines about downloads, the install ID panel, and the choices Turn on online features and Not now.](images/first-run/online.png)
 
-The page word is still Welcome. The step is ONLINE, 2 of 3. The picture is
-the Library's Active tab, drawn live in the language just chosen, from a
-fixed sample (the made-up mod Ridge). No picture of it is shipped with the
-game. Under it, the kicker ONLINE FEATURES, the heading "Downloads, updates
-and a number only you hold", three lines, and the install ID as
+The page word is still Welcome. The step is ONLINE, 2 of 3. At Regular
+and Large a picture of the Library's Active tab sits beside the words, or
+above them when the column is too narrow for both. It is drawn live in
+the language just chosen, from a fixed sample (the made-up mod Ridge). No
+picture of it is shipped with the game. At Compact that picture is left
+out, and the words use the whole column from the top of the page. The
+kicker is ONLINE FEATURES, then the heading "Downloads, updates and a
+number only you hold", three lines, and the install ID as
 [downloads.md](downloads.md#the-install-id) describes it:
 
 - Get language packs, mods and map packs from Core Prime.

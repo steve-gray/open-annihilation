@@ -871,6 +871,10 @@ void paint_game_files_glyph(Painter& painter, gf::Glyph glyph, Area area, Rgba c
         // The OA mark the settings dialog shows without the icon.
         paint_game_files_oa_mark(painter, area, renderer::RgbaPicture{});
         return;
+    case gf::Glyph::magnifier:
+        painter.outline_circle(at(10.0F, 10.0F), 5.5F * unit, w, colour);
+        line(14.2F, 14.2F, 20.0F, 20.0F);
+        return;
     }
 }
 
