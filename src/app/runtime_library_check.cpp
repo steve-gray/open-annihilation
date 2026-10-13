@@ -862,11 +862,18 @@ void Runtime::check_library() {
         {
             const std::optional<AutomationControl> mod = named("oa.library.active.mod");
             const std::optional<AutomationControl> language = named("oa.library.active.language");
-            const std::optional<AutomationControl> map = named("oa.library.active.map.2");
+            const std::optional<AutomationControl> first_map = named("oa.library.active.map.1");
+            const std::optional<AutomationControl> second_map = named("oa.library.active.map.2");
+            // The mod sits on the MOD tile and the language on the LANGUAGE
+            // tile. Fixture Isles' maps are in the MAPS pane. Compact may
+            // show only the first until the pane scrolls; the second, when
+            // it is already in view, is Long Strait.
             require(
                 mod.has_value() && mod->text == "Basalt 2.1" && language.has_value() &&
-                    language->text == "Deutsch 1.2" && map.has_value() &&
-                    map->text == "Long Strait · 2 players · 20x12",
+                    language->text == "Deutsch 1.2" && first_map.has_value() &&
+                    first_map->text == "Isle Hop · 4 players · 16x16" &&
+                    (!second_map.has_value() ||
+                     second_map->text == "Long Strait · 2 players · 20x12"),
                 "the Active tab does not read Basalt, Deutsch 1.2 and Fixture Isles' maps" + on
             );
             require(

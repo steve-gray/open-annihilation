@@ -686,9 +686,15 @@ void check_frame(const fixture::NamedFrame& named) {
     // Folded title, then pack: Atoll, Ridgeline, Twin Rivers.
     const kit::Control* first_map = fixture::named(active_list, "library.active.map.1");
     OA_CHECK(first_map != nullptr && first_map->text == "Atoll · 6 players · 20x20");
-    const kit::Control* last_map = fixture::named(active_list, "library.active.map.3");
+    // Compact can show only the first maps under the expansions tile. End
+    // scrolls the pane, and the last map is Twin Rivers either way.
+    lib::ScreenState at_end;
+    static_cast<void>(lib::library_key(active, at_end, active_list, kit::Key::end));
+    const kit::DisplayList end_list =
+        at_end.maps_scroll == 0 ? active_list : laid_out(active, at_end, frame);
+    const kit::Control* last_map = fixture::named(end_list, "library.active.map.3");
     OA_CHECK(last_map != nullptr && last_map->text == "Twin Rivers · 2 players · 12x12");
-    OA_CHECK(fixture::named(active_list, "library.active.map.4") == nullptr);
+    OA_CHECK(fixture::named(end_list, "library.active.map.4") == nullptr);
     // The three tiles: the kit's card face, the mod's facts, and the language's.
     if (mod_line != nullptr) {
         OA_CHECK(!mod_line->enabled && !mod_line->focusable);
@@ -729,7 +735,13 @@ void check_frame(const fixture::NamedFrame& named) {
     OA_CHECK(text_item(active_list, "Coverage 92%") != nullptr);
     const kit::Item* atoll = text_item(active_list, "Atoll");
     const kit::Item* ridgeline = text_item(active_list, "Ridgeline");
-    OA_CHECK(atoll != nullptr && ridgeline != nullptr);
+    OA_CHECK(atoll != nullptr);
+    if (ridgeline == nullptr) {
+        OA_CHECK(compact && atoll != nullptr);
+        if (atoll != nullptr)
+            OA_CHECK(atoll->rect.height == kit::compact_metrics.small_line);
+        OA_CHECK(text_item(end_list, "Twin Rivers") != nullptr);
+    }
     if (atoll != nullptr && ridgeline != nullptr) {
         if (frame.size_class == kit::SizeClass::large) {
             OA_CHECK(atoll->rect.y == ridgeline->rect.y && atoll->rect.x < ridgeline->rect.x);
@@ -780,6 +792,10 @@ void check_frame(const fixture::NamedFrame& named) {
     }
     if (from_twin != nullptr)
         OA_CHECK(from_twin->text == "From Core Map Pack");
+    else {
+        const kit::Control* from_end = fixture::named(end_list, "library.active.from.3");
+        OA_CHECK(from_end != nullptr && from_end->text == "From Core Map Pack");
+    }
     const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
     const kit::Item* atoll_tile = atoll != nullptr ? tile_around(active_list, *atoll) : nullptr;
     const kit::Item* ridge_tile =
@@ -801,18 +817,11 @@ void check_frame(const fixture::NamedFrame& named) {
             OA_CHECK(atoll_height < ridge_height);
         }
     }
+    // Row one is the language. Row two is the mod, in the same column.
     if (mod_line != nullptr && language_line != nullptr) {
-        if (compact) {
-            OA_CHECK(
-                mod_line->rect.y < language_line->rect.y &&
-                mod_line->rect.x == language_line->rect.x
-            );
-        } else {
-            OA_CHECK(
-                mod_line->rect.y == language_line->rect.y &&
-                mod_line->rect.x < language_line->rect.x
-            );
-        }
+        OA_CHECK(
+            language_line->rect.y < mod_line->rect.y && language_line->rect.x == mod_line->rect.x
+        );
     }
 }
 

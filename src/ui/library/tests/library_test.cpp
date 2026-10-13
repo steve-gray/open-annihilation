@@ -2091,7 +2091,8 @@ void test_base_game() {
     lib::set_tag(library, "");
     for (const std::string_view word : {"no", "mod", "annihilation", "made"}) {
         lib::set_query(library, word);
-        OA_CHECK(visible_keys(library).front() == "@base-game@");
+        const std::vector<std::string> found = visible_keys(library);
+        OA_CHECK(!found.empty() && found.front() == "@base-game@");
     }
     lib::set_query(library, "game");
     OA_CHECK(shows_key(library, "game-kit@fixture-core"));
