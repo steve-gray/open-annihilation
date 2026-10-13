@@ -282,6 +282,14 @@
 	it=Una mappa nel pacchetto non è adatta al gioco di base.;
 	}
 
+[A middle click pans the view towards the pointer until you click or press a key.]
+	{
+	de=Ein Mittelklick schwenkt die Ansicht zum Zeiger, bis du klickst oder eine Taste drückst.;
+	fr=Un clic du milieu fait défiler la vue vers le pointeur, jusqu'à ce que tu cliques ou appuies sur une touche.;
+	es=Un clic con el botón central desplaza la vista hacia el puntero hasta que haces clic o pulsas una tecla.;
+	it=Un clic centrale sposta la vista verso il puntatore finché non fai clic o premi un tasto.;
+	}
+
 [A number key selects its group on its own.]
 	{
 	de=Eine Zifferntaste wählt ihre Gruppe von allein.;
@@ -5064,6 +5072,14 @@
 	fr=Rayon d'aimantation de l'extracteur;
 	es=Radio de ajuste del extractor de metal;
 	it=Raggio di aggancio dell'estrattore;
+	}
+
+[Middle-click pans]
+	{
+	de=Mittelklick schwenkt;
+	fr=Le clic du milieu fait défiler;
+	es=El clic central desplaza;
+	it=Il clic centrale sposta;
 	}
 
 [Minus]

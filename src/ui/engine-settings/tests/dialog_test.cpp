@@ -646,14 +646,15 @@ void each_section_shows_its_rows() {
     CHECK(graphics_entry.y + graphics_entry.height <= divider.y);
     CHECK(divider.y + divider.height <= geometry::list_item(Page::developer).y);
 
-    // Controls: the wheel's switch with the zoom's two limits under it, and
-    // how far past the map's edges the view goes under them.
-    CHECK(settings::page_settings(Page::controls).size() == 5);
+    // Controls: the wheel's switch with the zoom's two limits under it, how
+    // far past the map's edges the view goes, and middle-click panning.
+    CHECK(settings::page_settings(Page::controls).size() == 6);
     CHECK(settings::page_settings(Page::controls)[0] == Setting::wheel_zoom);
     CHECK(settings::page_settings(Page::controls)[1] == Setting::max_zoom_out);
     CHECK(settings::page_settings(Page::controls)[2] == Setting::max_zoom_in);
     CHECK(settings::page_settings(Page::controls)[3] == Setting::view_past_map_edge);
-    CHECK(settings::page_settings(Page::controls)[4] == Setting::switch_alt);
+    CHECK(settings::page_settings(Page::controls)[4] == Setting::middle_click_pan);
+    CHECK(settings::page_settings(Page::controls)[5] == Setting::switch_alt);
     // Engine Limits: the unit limit, then pathfinding.
     CHECK(settings::page_settings(Page::common_tweaks).size() == 2);
     CHECK(settings::page_settings(Page::common_tweaks)[0] == Setting::unit_limit);

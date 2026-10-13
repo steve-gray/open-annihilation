@@ -327,6 +327,8 @@ std::string_view label_of(settings::Setting setting) {
         return "Maximum zoom in";
     case settings::Setting::view_past_map_edge:
         return "View past the map's edge";
+    case settings::Setting::middle_click_pan:
+        return "Middle-click pans";
     case settings::Setting::escape_opens_menu:
         return "Escape opens the game menu";
     case settings::Setting::switch_alt:

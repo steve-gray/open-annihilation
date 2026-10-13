@@ -886,6 +886,11 @@ if(BUILD_TESTING)
   target_link_libraries(oa-app-frame-pacing-test PRIVATE oa-app-headers oa-base-game-loop oa-ui-hud
     oa-options)
   add_test(NAME app-frame-pacing COMMAND oa-app-frame-pacing-test)
+  # A middle click's pan: its states, the dead zone and the top speed, and
+  # the setting off leaving a press alone.
+  add_executable(oa-app-middle-pan-test src/app/middle_pan_test.cpp src/app/middle_pan.cpp)
+  target_link_libraries(oa-app-middle-pan-test PRIVATE oa-app-headers oa-options)
+  add_test(NAME app-middle-pan COMMAND oa-app-middle-pan-test)
   # The +stats overlay's panel: its rows, columns, notes and graph laid out
   # over texts of known widths and kept in place whatever the figures, its
   # place and scale on windows of every size, the height of each frame's
@@ -980,7 +985,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/screen_mode.cpp src/app/runtime_screen_size.cpp
   src/app/game_directory_dialog.cpp src/app/runtime.cpp
   src/app/runtime_builtin_screens.cpp
-  src/app/runtime_camera.cpp src/app/runtime_campaign.cpp
+  src/app/runtime_camera.cpp src/app/middle_pan.cpp src/app/runtime_campaign.cpp
   src/app/runtime_console.cpp src/app/runtime_console_options.cpp src/app/runtime_console_debug.cpp
   src/app/runtime_console_sound.cpp src/app/runtime_console_display.cpp
   src/app/runtime_console_units.cpp

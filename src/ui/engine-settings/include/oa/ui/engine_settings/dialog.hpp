@@ -173,6 +173,7 @@ enum class Setting : uint8_t {
     max_zoom_in, ///< Maximum zoom in: a drop-down of None, 2x, 3x and 4x
     /// View past the map's edge: a strip of Off, 25% and 50%
     view_past_map_edge,
+    middle_click_pan,  ///< Middle-click pans: a switch
     escape_opens_menu, ///< Escape opens the game menu: a switch
     switch_alt,        ///< Select groups without Alt: a switch
     unit_limit,        ///< Unit limit: a slider
