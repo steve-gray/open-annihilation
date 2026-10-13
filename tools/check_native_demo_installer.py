@@ -24,8 +24,9 @@ menu open with no dialog over it, such as a disc prompt or a message box.
 
 With --check NAME it runs one of the game's own checks over the demo instead,
 started the same way on a fresh scratch folder: navigation
-(--check-navigation, which over data with no skirmish map walks the notices,
-the grayed-out entries and the campaign's way in and out), saved-games
+(--check-navigation, which over the demo greys Skirmish so a press and its
+key do nothing, walks MULTI's notice, the other grayed-out entries and the
+campaign's way in and out), saved-games
 (--check-load-save, which over data with no save and load dialog checks that
 every entry to it is grayed out), multiplayer-menu
 (--check-multiplayer-menu, whose MULTI shows the notice for data with no
