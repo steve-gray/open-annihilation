@@ -809,6 +809,17 @@ struct Options {
 
 struct Extension;
 
+/// Writes one notice on the standard output and ends the process with status 0.
+///
+/// On Windows a program built without a console attaches to the console it was
+/// started from, when there is one and nothing is capturing the output, and
+/// writes the notice there as well. A captured stream, or a test that has
+/// replaced the output buffer, receives the notice only on the standard output.
+/// The text is written as given; a text with no newline gains one.
+///
+/// @param text the notice
+[[noreturn]] void write_startup_line(std::string_view text);
+
 /// Parses the command line into the run options.
 ///
 /// Long options the engine knows set their fields; any other long option goes

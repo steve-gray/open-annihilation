@@ -9,7 +9,17 @@
 #include <string>
 #include <vector>
 
+#if __has_include("oa_engine_build.hpp")
+#include "oa_engine_build.hpp"
+#endif
+#include "oa/app/version_line.hpp"
+
 int main(int argc, char** argv) {
+    // The same line as the game, before any command reads a file.
+    if (oa::app::version_argument_present(argc, argv)) {
+        std::cout << oa::app::running_engine_version_line() << '\n';
+        return oa::tool::exit_done;
+    }
     try {
         std::vector<std::string> arguments;
         if (argc > 1)

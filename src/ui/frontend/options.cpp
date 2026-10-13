@@ -6,6 +6,7 @@
 #include "oa/base/game_math.hpp"
 
 #include "oa/data/languages/translation.hpp"
+#include "oa/platform/display_modes.hpp"
 #include "oa/ui/gui_input/gadget_panel.hpp"
 #include "oa/ui/gui_layout/gui_gadget.hpp"
 
@@ -81,8 +82,9 @@ void set_lines_text(Panel& panel, uint32_t lines) {
 }
 
 void set_mode_text(Panel& panel, const DisplayMode& mode) {
-    char text[40];
-    std::snprintf(text, sizeof text, "%d X %d", mode.width, mode.height);
+    // The words the settings' Screen size shows for the same size.
+    const std::string text =
+        oa::platform::display_modes::listed_size_text({mode.width, mode.height});
     panel_set_text(panel, "VIDVAL", text);
 }
 
@@ -741,7 +743,10 @@ void options_on_gamma_slider(Panel& panel, OptionsContext& context) noexcept {
 void options_enter_visuals(Panel& panel, OptionsContext& context, bool select_mode) noexcept {
     if (!select_mode)
         options_enter_tabs(panel, context);
-    if (!context.realtime_panels) {
+    // Wherever the screen-size control is drawn, including the in-match
+    // visuals column, it lists the sizes the host scanned: the same list the
+    // settings offer. A panel with no such control leaves the list unused.
+    if (panel_control(panel, "VIDSLDR") != nullptr) {
         context.display_modes = DisplayModeList{};
         context.display_modes_ready = true;
         const bool scanned =
@@ -760,7 +765,7 @@ void options_enter_visuals(Panel& panel, OptionsContext& context, bool select_mo
                 options_sync_video_mode(panel, context);
             }
         }
-    } else {
+    } else if (context.realtime_panels) {
         context.display_modes_ready = false;
         options_hide_controls_with_prefix(panel, "MAP");
         options_hide_controls_with_prefix(panel, "VID");

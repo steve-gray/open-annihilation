@@ -1242,6 +1242,13 @@ if(OA_BUILD_PLATFORM)
     target_link_libraries(oa-game PRIVATE "-framework AppKit")
   endif()
   if(BUILD_TESTING)
+    # --version prints one line and exits before the game looks for anything.
+    # It needs no game data. The Windows and Linux package checks are the reviewer's.
+    add_test(NAME native-version COMMAND oa-game --version)
+    set_tests_properties(native-version PROPERTIES
+      PASS_REGULAR_EXPRESSION
+        "^Open Annihilation [0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)? \\([a-z0-9.-]+ [A-Za-z0-9_]+, ([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|unknown)\\)\n?$"
+      TIMEOUT 60)
     # The native checks run oa-game over the installation OA_GAME_DIR names;
     # without one they are not added.
     if(IS_DIRECTORY "${OA_GAME_DIR}")
@@ -3058,6 +3065,29 @@ endif()
 add_subdirectory(tools/oa-tool)
 add_executable(oa-tool tools/oa-tool/main.cpp)
 target_link_libraries(oa-tool PRIVATE oa-tool-commands oa-options)
+if(TARGET oa-app-engine-build)
+  # The same version line as the game: the commit the build wrote, and the
+  # version, so `oa-tool --version` matches `open-annihilation --version`.
+  add_dependencies(oa-tool oa-app-engine-build)
+  target_include_directories(oa-tool PRIVATE "${oa_engine_build_dir}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/app/include")
+  target_compile_definitions(oa-tool PRIVATE "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\""
+    "OA_ENGINE_VERSION_LABEL=\"${OA_VERSION_LABEL}\"")
+  if(TARGET oa-game-options-test)
+    add_dependencies(oa-game-options-test oa-app-engine-build)
+    target_include_directories(oa-game-options-test PRIVATE "${oa_engine_build_dir}")
+    target_compile_definitions(oa-game-options-test PRIVATE
+      "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\""
+      "OA_ENGINE_VERSION_LABEL=\"${OA_VERSION_LABEL}\"")
+  endif()
+endif()
+if(BUILD_TESTING)
+  add_test(NAME tools-oa-tool-version COMMAND oa-tool --version)
+  set_tests_properties(tools-oa-tool-version PROPERTIES
+    PASS_REGULAR_EXPRESSION
+      "^Open Annihilation [0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)? \\([a-z0-9.-]+ [A-Za-z0-9_]+, ([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|unknown)\\)\n?$"
+    TIMEOUT 60)
+endif()
 # The Steam Deck's artwork and files for the Steam Deck package.
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/OaSteamDeck.cmake")
 
