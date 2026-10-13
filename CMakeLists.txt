@@ -2981,9 +2981,10 @@ endforeach()
     endif()
     # oa-game started on the folder that holds the installer of the Total
     # Annihilation demo (1997) OA_DEMO_INSTALLER names unpacks its archive
-    # into a scratch data folder, checks it, mounts it and opens the main
-    # menu with no dialog over it, and on a second start checks and mounts it
-    # again; skipped without an installer.
+    # into games/totala-demo of the scratch player folder, with its record,
+    # checks it, mounts it and opens the main menu with no dialog over it,
+    # and on a second start checks and mounts it again; an earlier demo-1997
+    # archive is copied from once. Skipped without an installer.
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
       add_test(NAME native-demo-installer COMMAND ${Python3_EXECUTABLE}

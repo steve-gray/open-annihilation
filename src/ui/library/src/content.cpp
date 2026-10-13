@@ -593,6 +593,9 @@ std::vector<const bundles::Bundle*> base_games() {
 /// @param[in,out] library the Library
 /// @param marked the row the radio marks
 void fill_chooser(Library& library, std::string_view marked) {
+    // A row's id can be what `marked` views. The chooser below is replaced,
+    // and that row with it, so the id is kept first.
+    const std::string marked_id{marked};
     const TextHooks& text = library.text;
     const ContentSnapshot& stored = library.inputs.content;
     const PendingChoice pending = pending_choice(library);
@@ -601,7 +604,7 @@ void fill_chooser(Library& library, std::string_view marked) {
     chooser = {};
     chooser.open = true;
     chooser.problem = problem;
-    chooser.marked = std::string(marked);
+    chooser.marked = marked_id;
     const std::string mounted = resolved_base(stored.base_id);
     for (const bundles::Bundle* game : base_games()) {
         BaseGameRow row;

@@ -298,15 +298,19 @@ it was configured with, and tests receive it at run time. It is the only
 setting the demo's tests need: each unpacks the demo's data from the
 installer itself. These tests read it:
 
-- `demo-installer-data` unpacks the installer's archive into a temporary data
-  folder, checks its size and SHA-256, and checks that a second start reuses
-  it and that the unpacked folder is a usable installation;
+- `demo-installer-data` unpacks the installer's archive into
+  `games/totala-demo` of a temporary player's folder, checks its size and
+  SHA-256, and checks that a second start reuses it and that the unpacked
+  folder is a usable installation;
 - `native-demo-installer` starts the game headless, with `--game-dir` on the
   installer's folder and `--data-dir` on a scratch folder, and checks that the
-  archive is unpacked, checked and mounted, that every start opens the main
-  menu with no dialog over it, that a second start mounts it without
-  unpacking it again, that a damaged archive is unpacked again, and that the
-  installer's folder is left as it was;
+  archive is unpacked into that scratch folder's player folder at
+  `games/totala-demo` with its `.oa-content` record, checked and mounted, that
+  every start opens the main menu with no dialog over it, that a second start
+  mounts it without unpacking it again, that a damaged archive is unpacked
+  again, that an earlier `demo-1997` archive in the data folder is copied
+  from once and left there, and that the installer's folder is left as it
+  was;
 - `native-demo-navigation`, `native-demo-saved-games` and
   `native-demo-multiplayer-menu` start the game the same way and run its
   `--check-navigation`, `--check-load-save` and `--check-multiplayer-menu`
