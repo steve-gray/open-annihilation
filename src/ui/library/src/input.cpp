@@ -32,6 +32,43 @@ namespace oa::ui::library {
 
 namespace {
 
+/// Turns a pill press into what the host is asked for.
+///
+/// @param pressed what the model did
+/// @return the screen's answer; empty when the press did nothing
+ScreenResult content_press_result(const ContentPress& pressed) {
+    ScreenResult answered;
+    answered.expansion = pressed.expansion;
+    answered.registry = pressed.registry;
+    switch (pressed.kind) {
+    case ContentPressKind::none:
+        return {};
+    case ContentPressKind::redraw:
+        answered.redraw = true;
+        return answered;
+    case ContentPressKind::ask:
+        answered.action = Action::ask_expansion_off;
+        answered.redraw = true;
+        return answered;
+    case ContentPressKind::add:
+        answered.action = Action::add_expansion;
+        return answered;
+    case ContentPressKind::download:
+        answered.action = Action::get;
+        answered.redraw = true;
+        return answered;
+    case ContentPressKind::cancel_download:
+        answered.action = Action::cancel;
+        answered.redraw = true;
+        return answered;
+    case ContentPressKind::retry_download:
+        answered.action = Action::retry;
+        answered.redraw = true;
+        return answered;
+    }
+    return {};
+}
+
 /// How many tabs there are, in Tab's order.
 constexpr auto tab_controls = static_cast<int32_t>(tab_total);
 /// How many filters there are, in Filter's order.
@@ -848,30 +885,22 @@ ScreenResult activate(
     }
     if (controls::active_from_control(id))
         return open_map_pack(library, state, id);
-    if (controls::expansion_control(id)) {
+    if (controls::expansion_control(id) || controls::expansion_arrow_control(id)) {
         const ActiveContent face = active_content(library);
-        const auto index = static_cast<std::size_t>(id - controls::first_expansion);
-        if (index >= face.pills.size() || !face.pills[index].enabled)
+        const bool arrow = controls::expansion_arrow_control(id);
+        const auto index = static_cast<std::size_t>(
+            id - (arrow ? controls::first_expansion_arrow : controls::first_expansion)
+        );
+        if (index >= face.pills.size())
             return {};
-        const std::string expansion_id = face.pills[index].id;
-        const ContentPress pressed = press_expansion(library, expansion_id);
-        ScreenResult answered;
-        answered.expansion = pressed.expansion;
-        switch (pressed.kind) {
-        case ContentPressKind::none:
+        const ExpansionPill& pill = face.pills[index];
+        if (arrow) {
+            if (!pill.arrow || !pill.arrow_enabled)
+                return {};
+        } else if (!pill.enabled) {
             return {};
-        case ContentPressKind::redraw:
-            answered.redraw = true;
-            return answered;
-        case ContentPressKind::ask:
-            answered.action = Action::ask_expansion_off;
-            answered.redraw = true;
-            return answered;
-        case ContentPressKind::add:
-            answered.action = Action::add_expansion;
-            return answered;
         }
-        return {};
+        return content_press_result(press_expansion(library, pill.id));
     }
     ScreenResult result = redrawn();
     switch (id) {

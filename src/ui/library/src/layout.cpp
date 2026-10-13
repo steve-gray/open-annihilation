@@ -3890,7 +3890,8 @@ std::string fit_pill_text(const Building& building, std::string text, int32_t ro
 /// One row of expansion pills, measured before it is placed.
 struct ExpansionRow {
     std::vector<std::size_t> indexes{};
-    std::vector<int32_t> widths{};
+    std::vector<int32_t> widths{}; ///< each pill, without the download arrow
+    int32_t band{};                ///< the row's height: the pill, or the arrow when it is taller
 };
 
 /// The expansion pills wrapped into the tile's inner width.
@@ -3913,30 +3914,39 @@ wrap_expansions(const Building& building, const ActiveContent& content, int32_t 
     const int32_t room = std::max(inner, int32_t{0});
     const int32_t gap = metrics.button_gap;
     const int32_t pill_height = kit::pill_height();
+    const int32_t arrow_side = metrics.state_icon_side;
     ExpansionRow row;
     int32_t across = 0;
     for (std::size_t index = 0; index < content.pills.size(); ++index) {
+        const ExpansionPill& pill = content.pills[index];
+        const int32_t extra = pill.arrow ? gap + arrow_side : 0;
+        const int32_t pill_room = std::max(room - extra, int32_t{0});
         kit::PillLook look;
-        look.text = fit_pill_text(building, content.pills[index].text, room);
-        int32_t width = room <= 0 ? 0 : kit::pill_width(*building.fonts, look);
-        if (room > 0)
-            width = std::min(width, room);
-        if (!row.indexes.empty() && across + gap + width > room) {
+        look.text = fit_pill_text(building, pill.text, pill_room);
+        int32_t width = pill_room <= 0 ? 0 : kit::pill_width(*building.fonts, look);
+        if (pill_room > 0)
+            width = std::min(width, pill_room);
+        const int32_t cluster = width + extra;
+        if (!row.indexes.empty() && across + gap + cluster > room) {
             wrap.rows.push_back(std::move(row));
             row = {};
             across = 0;
         }
         row.indexes.push_back(index);
         row.widths.push_back(width);
-        across += width;
+        const int32_t band = pill.arrow ? std::max(pill_height, arrow_side) : pill_height;
+        row.band = std::max(row.band, band);
+        across += cluster;
         if (row.indexes.size() > 1)
             across += gap;
     }
     if (!row.indexes.empty())
         wrap.rows.push_back(std::move(row));
-    if (!wrap.rows.empty())
-        wrap.rows_height = static_cast<int32_t>(wrap.rows.size()) * pill_height +
-                           static_cast<int32_t>(wrap.rows.size() - 1) * gap;
+    for (std::size_t row_index = 0; row_index < wrap.rows.size(); ++row_index) {
+        if (row_index != 0)
+            wrap.rows_height += gap;
+        wrap.rows_height += wrap.rows[row_index].band;
+    }
     wrap.hint = !content.hint.empty();
     return wrap;
 }
@@ -3999,20 +4009,23 @@ void place_expansions(
     const ExpansionWrap wrap = wrap_expansions(building, content, inner_width);
     int32_t row_y = tile.y + inset;
     const int32_t pill_height = kit::pill_height();
+    const int32_t arrow_side = metrics.state_icon_side;
     for (const ExpansionRow& row : wrap.rows) {
         int32_t column = inner_left;
+        const int32_t band = std::max(row.band, pill_height);
         for (std::size_t place = 0; place < row.indexes.size(); ++place) {
             const std::size_t index = row.indexes[place];
             const ExpansionPill& pill = content.pills[index];
             const int32_t width = row.widths[place];
+            const int32_t extra = pill.arrow ? metrics.button_gap + arrow_side : 0;
             if (width <= 0 || index >= controls::most_expansions) {
-                column += width + metrics.button_gap;
+                column += width + extra + metrics.button_gap;
                 continue;
             }
             const kit::ControlId id =
                 controls::first_expansion + static_cast<kit::ControlId>(index);
             kit::PillLook look;
-            look.text = fit_pill_text(building, pill.text, inner_width);
+            look.text = fit_pill_text(building, pill.text, width);
             look.state =
                 pill.face == ExpansionFace::on ? kit::PillState::active : kit::PillState::inactive;
             look.hovered = hovered(building, id);
@@ -4035,9 +4048,47 @@ void place_expansions(
             control.focusable = pill.enabled;
             control.enabled = pill.enabled;
             tab_stop(building, control);
-            column += width + metrics.button_gap;
+            column += width;
+            if (pill.arrow) {
+                const Action arrow_action = action_of(*pill.arrow);
+                const kit::ControlId arrow_id =
+                    controls::first_expansion_arrow + static_cast<kit::ControlId>(index);
+                kit::ChipLook chip;
+                chip.text = std::string(action_text(arrow_action, building.library->text));
+                chip.state = kit::ChipState::get;
+                chip.hovered = pill.arrow_enabled && hovered(building, arrow_id);
+                chip.disabled = !pill.arrow_enabled;
+                chip.icon = kit::StateIcon::download_arrow;
+                const kit::Rect arrow_rect{
+                    column + metrics.button_gap, row_y, arrow_side, arrow_side
+                };
+                const std::size_t arrow_before = building.list.controls.size();
+                kit::add_chip(
+                    building.list,
+                    arrow_rect,
+                    chip,
+                    arrow_id,
+                    unique_name(
+                        building,
+                        named(
+                            "active.expansion." + pill.id + "." +
+                            std::string(action_word(arrow_action))
+                        )
+                    )
+                );
+                building.list.items.back().clip = clip;
+                move_controls(building.list, arrow_before, building.detail);
+                kit::Control& arrow = building.detail.back();
+                arrow.clip = clip;
+                arrow.group = -1;
+                arrow.focusable = pill.arrow_enabled;
+                arrow.enabled = pill.arrow_enabled;
+                tab_stop(building, arrow);
+                column += extra;
+            }
+            column += metrics.button_gap;
         }
-        row_y += pill_height + metrics.button_gap;
+        row_y += band + metrics.button_gap;
     }
     const std::vector<std::string> hint_lines =
         expansion_hint_lines(building, content.hint, inner_width);
