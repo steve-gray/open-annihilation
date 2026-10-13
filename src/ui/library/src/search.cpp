@@ -529,9 +529,9 @@ std::size_t added_package_count(const Inputs& inputs) {
         if (!map_pack_already_installed(inputs, pack))
             ++total;
     }
-    for (const std::string& copied : inputs.content.copied) {
+    for (const std::string& downloaded : inputs.content.downloaded) {
         const oa::data::content_bundles::Bundle* bundle =
-            oa::data::content_bundles::find_bundle(copied);
+            oa::data::content_bundles::find_bundle(downloaded);
         if (bundle != nullptr && bundle->kind == oa::data::content_bundles::Kind::expansion)
             ++total;
     }

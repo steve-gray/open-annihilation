@@ -4192,7 +4192,7 @@ class Runtime final : public menu::Host,
     /// with the pack's name in brackets when another listed map uses the
     /// same words. Empty when `key` is not a pack map's name.
     ///
-    /// @param key the map's name, `name@package`
+    /// @param key the map's name, `name\@package`
     /// @return those words
     [[nodiscard]] std::string pack_map_shown_name(std::string_view key);
 

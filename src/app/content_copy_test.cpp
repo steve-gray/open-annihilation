@@ -890,6 +890,68 @@ void test_sibling_and_absent(const fs::path& scratch) {
     }
 }
 
+/// A finished copy counts the files it took, so the overall line reads 100%.
+void test_finished_copy_counts_taken(const fs::path& scratch) {
+    constexpr oa::app::CopyFileCount full = oa::app::copy_file_count(38, 48, 10);
+    OA_CHECK(full.done == 38);
+    OA_CHECK(full.total == 38);
+    OA_CHECK(oa::app::copy_file_percent(full) == 100);
+    constexpr oa::app::CopyFileCount open = oa::app::copy_file_count(38, 48, 0);
+    OA_CHECK(open.done == 38);
+    OA_CHECK(open.total == 48);
+    OA_CHECK(oa::app::copy_file_percent(open) == 79);
+    OA_CHECK(oa::app::copy_file_percent({}) == 0);
+
+    const auto base = oa::app::copy_check_bundles();
+    static constexpr std::string_view extra_sources[]{"missing.hpi"};
+    static constexpr oa::base::sha256::Digest extra_digest{};
+    static constexpr oa::base::sha256::Digest extra_hashes[]{extra_digest};
+    static const oa::data::content_bundles::ContentFile extra_files[]{
+        {"missing.hpi", extra_sources, 3, extra_hashes},
+    };
+    static constexpr std::string_view extra_extends[]{"totala"};
+    std::vector<oa::data::content_bundles::Bundle> table(base.begin(), base.end());
+    table.push_back(
+        {"absent",
+         "Absent Bundle",
+         oa::data::content_bundles::Kind::expansion,
+         extra_extends,
+         {},
+         extra_files}
+    );
+
+    const fs::path install = scratch / "install";
+    const fs::path user = scratch / "user";
+    write_cased_install(install);
+    oa::app::FolderContentSource source(install, table);
+    oa::app::CopyRequest request;
+    request.user_folder = user;
+    request.bundles = table;
+    request.share_blocks = false;
+    request.chunk_bytes = 4;
+
+    struct Tally {
+        uint32_t done{};
+        uint32_t total{};
+        int calls{};
+    } tally;
+
+    request.progress_context = &tally;
+    request.on_progress = [](void* context, const oa::app::CopyProgress& progress) {
+        auto* noted = static_cast<Tally*>(context);
+        noted->done = progress.files_done;
+        noted->total = progress.files_total;
+        noted->calls += 1;
+    };
+    const oa::app::CopyResult copied = oa::app::copy_content(source, request);
+    OA_CHECK(copied.status == oa::app::CopyStatus::finished);
+    OA_CHECK(copied.files_copied == 3);
+    OA_CHECK(tally.calls > 0);
+    OA_CHECK(tally.done == 3);
+    OA_CHECK(tally.total == 3);
+    OA_CHECK(oa::app::copy_file_percent({tally.done, tally.total}) == 100);
+}
+
 } // namespace
 
 int main() {
@@ -907,6 +969,7 @@ int main() {
     test_startup_reuses_copy_check(scratch / "G54-startup");
     test_content_difference(scratch / "G03-difference");
     test_sibling_and_absent(scratch / "G26-music");
+    test_finished_copy_counts_taken(scratch / "G59-count");
     each_regular_file(scratch, unlock_one);
     std::error_code ignored;
     fs::remove_all(scratch, ignored);

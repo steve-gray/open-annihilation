@@ -490,6 +490,112 @@ void check_locator_places() {
     OA_CHECK(installs::locator_places({}).empty());
 }
 
+/// A Downloads folder of loose game files and two installers lists the installers, and the
+/// fuller one is the place to preselect.
+///
+/// @param root a temporary folder
+void check_setup_sources(const fs::path& root) {
+    const fs::path downloads = root / "G58-setup" / "Downloads";
+    write_file(downloads / "totala1.hpi", "loose-3.1c");
+    write_file(downloads / "music.mp3", "loose-track");
+    write_file(downloads / "tileset.ufo", "loose-tiles");
+    write_file(downloads / "setup-full.exe", "fuller-installer");
+    write_file(downloads / "setup-thin.exe", "thinner-installer");
+    const auto named_installer = [](const fs::path& file, uint64_t, void*) {
+        const std::string name = file.filename().string();
+        return name == "setup-full.exe" || name == "setup-thin.exe";
+    };
+    const installs::SetupFolderOffer offer =
+        installs::offer_from_folder(downloads, named_installer, nullptr);
+    OA_CHECK(!offer.folder_offered);
+    OA_CHECK(offer.installers.size() == 2);
+
+    const auto no_installer = [](const fs::path&, uint64_t, void*) { return false; };
+    const fs::path copied = root / "G58-setup" / "Total Annihilation";
+    make_game_folder(copied);
+    const installs::SetupFolderOffer copied_offer =
+        installs::offer_from_folder(copied, no_installer, nullptr);
+    OA_CHECK(copied_offer.folder_offered);
+    OA_CHECK(copied_offer.installers.empty());
+
+    const fs::path desktop = root / "G58-setup" / "Desktop";
+    make_game_folder(desktop);
+    OA_CHECK(!installs::offer_from_folder(desktop, no_installer, nullptr).folder_offered);
+    const fs::path documents = root / "G58-setup" / "documents";
+    make_game_folder(documents);
+    OA_CHECK(!installs::offer_from_folder(documents, no_installer, nullptr).folder_offered);
+    const fs::path mixed = root / "G58-setup" / "Mixed";
+    make_game_folder(mixed);
+    write_file(mixed / "setup-full.exe", "inside");
+    const installs::SetupFolderOffer mixed_offer =
+        installs::offer_from_folder(mixed, named_installer, nullptr);
+    OA_CHECK(!mixed_offer.folder_offered);
+    OA_CHECK(mixed_offer.installers.size() == 1);
+
+    OA_CHECK(installs::drop_folder_name("Downloads"));
+    OA_CHECK(installs::drop_folder_name("downloads"));
+    OA_CHECK(installs::drop_folder_name("Desktop"));
+    OA_CHECK(installs::drop_folder_name("Documents"));
+    OA_CHECK(!installs::drop_folder_name("Total Annihilation"));
+    OA_CHECK(!installs::offer_as_installation("Downloads", true, false, false));
+    OA_CHECK(!installs::offer_as_installation("Games", true, true, false));
+    OA_CHECK(!installs::offer_as_installation("Games", false, false, false));
+    OA_CHECK(!installs::offer_as_installation("Games", true, false, true));
+    OA_CHECK(installs::offer_as_installation("Games", true, false, false));
+
+    // The loose folder holds more bundles than either installer. It is still not a row, and
+    // the fuller installer, given second, is the one to preselect.
+    installs::SetupSource loose;
+    loose.token = "downloads";
+    loose.place = installs::SetupPlace::loose;
+    loose.bundle_count = 8;
+    loose.base_rank = 2;
+    loose.expansion_count = 6;
+    installs::SetupSource thin;
+    thin.token = "setup-thin.exe";
+    thin.place = installs::SetupPlace::installer;
+    thin.bundle_count = 2;
+    thin.base_rank = 2;
+    thin.expansion_count = 1;
+    installs::SetupSource full;
+    full.token = "setup-full.exe";
+    full.place = installs::SetupPlace::installer;
+    full.bundle_count = 5;
+    full.base_rank = 2;
+    full.expansion_count = 4;
+    bool saw_full = false;
+    bool saw_thin = false;
+    for (const fs::path& installer : offer.installers) {
+        const std::string name = installer.filename().string();
+        if (name == "setup-full.exe")
+            saw_full = true;
+        if (name == "setup-thin.exe")
+            saw_thin = true;
+        OA_CHECK(name != "totala1.hpi");
+    }
+    OA_CHECK(saw_full && saw_thin);
+    installs::SetupSource demo;
+    demo.token = "demo";
+    demo.place = installs::SetupPlace::installer;
+    demo.bundle_count = 1;
+    demo.base_rank = 1;
+    demo.expansion_count = 0;
+    installs::SetupSource base;
+    base.token = "base";
+    base.place = installs::SetupPlace::installation;
+    base.bundle_count = 1;
+    base.base_rank = 2;
+    base.expansion_count = 0;
+    const std::vector<installs::SetupSource> ranked = installs::rank_setup_sources(
+        {std::move(loose), std::move(thin), std::move(full), std::move(demo), std::move(base)}
+    );
+    OA_CHECK(ranked.size() == 4);
+    OA_CHECK(ranked[0].token == "setup-full.exe");
+    OA_CHECK(ranked[1].token == "setup-thin.exe");
+    OA_CHECK(ranked[2].token == "base");
+    OA_CHECK(ranked[3].token == "demo");
+}
+
 /// Runs the checks.
 int main() {
     check_source_words();
@@ -504,6 +610,7 @@ int main() {
          std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         check_search(temporary);
+        check_setup_sources(temporary);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "check failed: %s\n", error.what());
         ++oa::test::failed_checks();

@@ -47,12 +47,27 @@ button on the right, and the header and footer sit inside the window.
 The title is "Welcome to Open Annihilation" and the line under it is
 "Choose your language."
 
+The language in use starts in the centre, in front of the cards beside it.
+A move eases to the next card over half a second, and the window draws
+every frame of that move. The place at a moment depends on how long the
+move has been running, not on how many times the window has been drawn.
+Cards one or two steps away stay readable, and the floor's grid is drawn
+behind them.
+
+![The language step of a first start, at 1280 by 720: English centred and ringed, Active and Built in whole, and a fixture pack offering Get.](images/first-run/language-large.png)
+
+![The same step at 960 by 540.](images/first-run/language-regular.png)
+
+![The same step at 640 by 480.](images/first-run/language-compact.png)
+
 The carousel lists the built-in languages in the order the game keeps them
 (English, Deutsch, Español, Français, Italiano), then language packs that
 are already installed, then each language pack Core Prime lists when
-downloads are on and that catalogue can be read. A pack that is not
-installed yet wears **Get** and its size. While a built-in language, or a pack already installed, sits in the
-middle, this step speaks that language before it is chosen: the title,
+downloads are on and that catalogue can be read. The pre-game window reads
+that catalogue the same way the welcome over the menu does. A pack that is
+not installed yet wears **Get** and its size. While a built-in language, or
+a pack already installed, sits in the middle, this step speaks that
+language before it is chosen: the title,
 "Choose your language.", the note and the offline lines under the
 carousel, a download's status, the step line, and **Skip** or **Quit**,
 **Back** and **Next**. Turning to a language the game cannot read yet
@@ -87,35 +102,57 @@ so language packs stay offline." The built-in languages still switch.
 
 ## The game
 
-![The game: Where is Total Annihilation?, one source row, Locate another, and Copy the game.](images/first-run/game.png)
+![The game: Where is Total Annihilation?, two installer rows with the fuller one selected, Locate another, and Copy the game.](images/first-run/game.png)
 
-This step is only on the five-step walk. The page word is Setup, the step
-is THE GAME, and the count is 2 of 5. The title is "Where is Total
-Annihilation?". Each row is a place that was found: an install, a GOG
-installer, or the demo installer, with what that place holds. **Locate
-another…** asks for a folder. **Copy the game** is available once a row is
-chosen. **Back** returns to the language. The left button is the walk's
-**Quit** or **Skip**.
+This step is only on the five-step walk, and it is the second step.
+Language comes first. A start that will show these steps does not ask for
+a folder before them: no system folder dialog, no folder locator, and no
+Game files screen.
+
+The page word is Setup, the step is THE GAME, and the count is 2 of 5.
+The title is "Where is Total Annihilation?". The column is as wide as
+Settings. Each row is a place that was found: an installer or an
+installation, never a folder of loose files such as Downloads. When a
+folder was only searched for installers, those installers are the rows.
+The fullest place is selected. A row names the file or the folder, the
+path shortened under the home folder, and the bundles that place holds.
+It does not name a bundle the place lacks. **Locate another…** asks for a
+folder. **Copy the game** is available once a row is chosen. **Back**
+returns to the language. The left button is the walk's **Quit** or
+**Skip**.
 
 The line under the rows says the copies go to Documents › Open
 Annihilation, and that the installation is left as it is.
 
 ## Copying
 
-![Copying: the overall bar, one bundle, and Pause.](images/first-run/copying.png)
+![Copying: the overall bar, the bundles this source holds, and Pause.](images/first-run/copying.png)
 
-![The same step after the check: All files match, and Continue.](images/first-run/check.png)
+![The same step after the check: 100 percent, All files match with the overall bar, a tracks note, and Continue counting down.](images/first-run/check.png)
 
 The page word is Setup, the step is COPYING, and the count is 3 of 5. The
-title is "Copying Total Annihilation". The overall bar and one row for
-each bundle show how far the copy has got. Two centred lines say "If OA
-stops, the copy carries on from here next time." and "To Documents › Open
-Annihilation › Games and Expansions". **Pause** holds the copy, and
-**Continue** lets it go on. The left button is still the walk's **Quit**
-or **Skip**: it stops the copy and leaves. Escape returns to the game step.
+title is "Copying Total Annihilation". Under it, a line says where the
+bytes are read from. The column is the game step's, as wide as Settings.
+The overall count is the files this copy takes from
+this source. A file the source does not hold is not in that count, so a
+finished copy reads 100%. The bundles the source holds sit in a panel
+under the bar. A bundle the source does not hold is not listed. While a
+file is being copied its name is on the row; once that bundle is complete
+the name goes. A track the music bundle never held is a note, such as
+"17 of 18 tracks", and is not a failure.
 
-When the copy has been checked, the rows say what the check found, and
-**Continue** goes on to online features. **Quit** or **Skip** is still there.
+Two centred lines say "If OA stops, the copy carries on from here next
+time." and "To Documents › Open Annihilation › Games and Expansions".
+**Pause** holds the copy, and **Continue** lets it go on. The left button
+is still the walk's **Quit** or **Skip**: it stops the copy and leaves.
+Escape returns to the game step.
+
+When the copy and the check finish with every taken file matching,
+**Continue** shows a countdown of about three seconds, then goes on to
+online features. A key, a pointer press, the wheel or a gamepad stops the
+countdown. Moving the pointer does not. When the check finds a difference,
+the rows say so and **Continue** waits for a press. **Quit** or **Skip**
+is still there.
 
 ## Online features
 

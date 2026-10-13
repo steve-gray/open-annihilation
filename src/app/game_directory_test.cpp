@@ -1181,6 +1181,46 @@ void check_found_installs() {
         );
     }
     {
+        // The five-step setup asks where the game is. Several folders, or none,
+        // open no dialog and no Game files screen. One folder is still returned.
+        auto host = found_host();
+        host.picks = {{FolderPick::chosen, kCd, {}}};
+        auto h = host.host();
+        GameFilesNeeded needed;
+        auto request = found_request(std::nullopt, {from_steam, from_heroic});
+        request.defer_dialog = true;
+        request.import_offered = true;
+        const auto result = resolve_game_directory(request, h, &needed);
+        expect(
+            !result && host.starts.empty() && host.notices.empty() && host.asked.empty() &&
+                !needed.needed && !needed.chooser,
+            "while the setup will ask, several folders open no dialog, locator or Game files screen"
+        );
+        auto only = found_host();
+        auto only_host = only.host();
+        GameFilesNeeded only_needed;
+        auto one = found_request(std::nullopt, {from_steam});
+        one.defer_dialog = true;
+        const auto played = resolve_game_directory(one, only_host, &only_needed);
+        expect(
+            played && played->source == GameDirectorySource::found && only.starts.empty() &&
+                only.notices.empty() && !only_needed.needed,
+            "while the setup will ask, the one folder found is still returned"
+        );
+        auto none_host = found_host();
+        none_host.picks = {{FolderPick::chosen, kCd, {}}};
+        auto none = none_host.host();
+        GameFilesNeeded none_needed;
+        auto empty = found_request(std::nullopt, {});
+        empty.defer_dialog = true;
+        const auto waiting = resolve_game_directory(empty, none, &none_needed);
+        expect(
+            !waiting && none_host.starts.empty() && none_host.notices.empty() &&
+                !none_needed.needed,
+            "while the setup will ask, a first start opens no folder dialog"
+        );
+    }
+    {
         auto host = found_host();
         host.picks = {{FolderPick::chosen, kCd, {}}};
         auto h = host.host();

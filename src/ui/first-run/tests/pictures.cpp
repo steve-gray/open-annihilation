@@ -426,15 +426,27 @@ oa::ui::first_run::Session game_session() {
     session.model.walk = oa::ui::first_run::Walk::setup;
     session.model.leave = oa::ui::first_run::Leave::quit;
     session.model.step = oa::ui::first_run::Step::game;
-    oa::ui::first_run::GameSource source;
-    source.token = "install";
-    source.title = "Total Annihilation";
-    source.detail = "3.1c";
-    source.mark = oa::ui::first_run::SourceMark::folder;
-    source.footnote = "1.1 GB · 40 GB free";
-    source.chips.push_back({"Total Annihilation", true});
-    source.chips.push_back({"Core Contingency", true});
-    session.model.sources.push_back(std::move(source));
+    oa::ui::first_run::GameSource fuller;
+    fuller.token = "full";
+    fuller.title = "setup_total_annihilation.exe";
+    fuller.detail = "~/Downloads";
+    fuller.mark = oa::ui::first_run::SourceMark::gog;
+    fuller.footnote = "1.0 GB";
+    fuller.chips.push_back({"Total Annihilation 3.1c", true});
+    fuller.chips.push_back({"Campaign", true});
+    fuller.chips.push_back({"Core Contingency", true});
+    fuller.chips.push_back({"Battle Tactics", true});
+    fuller.chips.push_back({"Music", true});
+    oa::ui::first_run::GameSource thinner;
+    thinner.token = "thin";
+    thinner.title = "setup_total_annihilation_2.exe";
+    thinner.detail = "~/Downloads";
+    thinner.mark = oa::ui::first_run::SourceMark::gog;
+    thinner.footnote = "1.0 GB";
+    thinner.chips.push_back({"Total Annihilation 3.1c", true});
+    thinner.chips.push_back({"Music", true});
+    session.model.sources.push_back(std::move(fuller));
+    session.model.sources.push_back(std::move(thinner));
     session.model.source = 0;
     return session;
 }
@@ -447,20 +459,30 @@ oa::ui::first_run::Session copying_session(bool checked) {
     session.model.copy.whole = 1000;
     session.model.copy.running = !checked;
     session.model.copy.checked = checked;
-    session.model.copy.overall = checked ? "400 of 400 · 100%" : "120 of 400 · 30%";
+    session.model.copy.overall = checked ? "38 of 38 · 100%" : "12 of 38 · 31%";
     if (!checked)
         session.model.copy.remaining = "about 40 seconds left";
     oa::ui::first_run::CopyBundle bundle;
     bundle.name = "Total Annihilation";
     bundle.file = checked ? std::string{} : std::string("totala1.hpi");
-    bundle.amount = checked ? "All files match" : "30%";
+    bundle.amount = checked ? "All files match" : "31%";
     bundle.done = session.model.copy.done;
     bundle.whole = 1000;
     bundle.phase =
         checked ? oa::ui::first_run::CopyPhase::done : oa::ui::first_run::CopyPhase::copying;
     session.model.copy.bundles.push_back(std::move(bundle));
-    if (checked)
+    if (checked) {
+        oa::ui::first_run::CopyBundle music;
+        music.name = "Music";
+        music.amount = "17 of 18 tracks";
+        music.done = 1000;
+        music.whole = 1000;
+        music.phase = oa::ui::first_run::CopyPhase::done;
+        music.note = true;
+        session.model.copy.bundles.push_back(std::move(music));
         session.model.copy.verdict = "All files match";
+        session.copy_continue_ms = 3000;
+    }
     return session;
 }
 
@@ -549,6 +571,34 @@ int main(int argc, char** argv) {
     const renderer::RgbaPicture icon = app_icon.picture;
     const oa::ui::kit::Frame manual = large_frame();
 
+    {
+        // The pre-game window has no game fonts yet. These three are that
+        // window's language step, with a fixture pack on the carousel.
+        const struct Size {
+            const char* name;
+            int32_t width;
+            int32_t height;
+        } sizes[] = {
+            {"language-compact.png", 640, 480},
+            {"language-regular.png", 960, 540},
+            {"language-large.png", 1280, 720},
+        };
+
+        for (const Size& size : sizes) {
+            Picture picture(fonts.get(), size.width, size.height, 100);
+            picture.canvas.fonts = nullptr;
+            oa::ui::first_run::Session session = language_session(false);
+            session.model.walk = oa::ui::first_run::Walk::setup;
+            session.model.leave = oa::ui::first_run::Leave::quit;
+            oa::ui::kit::Frame frame;
+            frame.area = {0, 0, size.width, size.height};
+            frame.size_class = oa::ui::kit::size_class_of(size.width, size.height);
+            frame.scale_percent = 100;
+            draw_step(picture, session, frame, icon);
+            if (!write_png(picture, directory / size.name))
+                return 1;
+        }
+    }
     {
         Picture picture(fonts.get(), kWidth, kHeight, 100);
         draw_step(picture, language_session(false), manual, icon);

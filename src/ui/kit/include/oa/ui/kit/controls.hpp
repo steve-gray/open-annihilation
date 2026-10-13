@@ -182,6 +182,18 @@ void add_chip(
 /// @return the width, in points
 [[nodiscard]] int32_t pill_width(const Fonts& fonts, const PillLook& look);
 
+/// Returns a pill's width for the fonts the canvas will draw it with.
+///
+/// The smooth form measures the bundled fonts, including when the game's
+/// fonts are not open yet. The width is the words plus the pill's padding,
+/// and at least the pill's height, so the words are not clipped to a capsule
+/// that is only as wide as it is tall.
+///
+/// @param canvas where the pill will be drawn
+/// @param look the pill
+/// @return the width, in points
+[[nodiscard]] int32_t pill_width_of(const Canvas& canvas, const PillLook& look);
+
 /// Returns a pill's height: chip_height.
 ///
 /// @return the height, in points

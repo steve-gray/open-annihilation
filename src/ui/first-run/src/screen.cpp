@@ -192,6 +192,43 @@ int32_t paragraph_height(
     return count * line_height;
 }
 
+/// The height of the band a step's title is centred in.
+constexpr int32_t kTitleHeight = 40;
+/// The rows between the title's band and the line under it.
+constexpr int32_t kTitleGap = 4;
+
+/// Lays a step's title and the line under it out the same way on every
+/// step: the title across the band in its prominent size, and the line in
+/// the small font, centred under it, wrapped where the band is narrow.
+///
+/// @param[in,out] scene the scene
+/// @param fonts the fonts; null estimates
+/// @param band the room under the header
+/// @param title the title
+/// @param line the words under it
+/// @return the row under the line
+int32_t add_title(
+    Scene& scene,
+    const kit::Fonts* fonts,
+    const Band& band,
+    std::string title,
+    std::string_view line
+) {
+    scene.title_text = std::move(title);
+    scene.title = {band.left, band.top, band.width, kTitleHeight};
+    return add_paragraph(
+        scene.list,
+        fonts,
+        band.left,
+        band.top + kTitleHeight + kTitleGap,
+        band.width,
+        line,
+        kit::FontRole::small,
+        kit::colour::hint,
+        kit::Align::centre
+    );
+}
+
 /// Adds a button the chrome does not draw, and remembers it for Tab.
 ///
 /// @param[in,out] list the display list
@@ -434,6 +471,11 @@ kit::SetupChromeLook chrome_look(
         look.back_enabled = false;
         if (session.model.copy.checked || session.model.copy.paused) {
             look.next = show("Continue", language);
+            if (session.model.copy.checked && session.copy_continue_ms > 0) {
+                const int32_t seconds = (session.copy_continue_ms + 999) / 1000;
+                look.next += " · ";
+                look.next += std::to_string(seconds);
+            }
             look.next_enabled = true;
         } else {
             look.next = show("Pause", language);
@@ -576,19 +618,14 @@ void lay_language(
 
     const Band band = content_band(width, height);
     const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
-    constexpr int32_t kTitle = 40;
-    scene.title_text = show("Welcome to Open Annihilation", preview);
-    scene.title = {band.left, band.top, band.width, kTitle};
-    int32_t row = band.top + kTitle + 4;
-    add_text(
-        scene.list,
-        {band.left, row, band.width, kit::compact_metrics.small_line},
-        show("Choose your language.", preview),
-        kit::FontRole::small,
-        kit::colour::hint,
-        kit::Align::centre
+    int32_t row = add_title(
+        scene,
+        fonts,
+        band,
+        show("Welcome to Open Annihilation", preview),
+        show("Choose your language.", preview)
     );
-    row += kit::compact_metrics.small_line + 8;
+    row += 8;
 
     constexpr int32_t kArrow = 28;
     const std::string note = show(
@@ -1037,7 +1074,28 @@ std::string_view source_badge(SourceMark mark) noexcept {
     return "FOLDER";
 }
 
+/// A chip's width: the pill's own measure, or the estimate when the fonts are not there.
+///
+/// @param fonts the fonts; null estimates
+/// @param text the chip's words
+/// @param room the widest a chip may be
+/// @return the width, in points
+int32_t chip_width(const kit::Fonts* fonts, std::string_view text, int32_t room) {
+    int32_t measured = 0;
+    if (fonts != nullptr) {
+        kit::PillLook look;
+        look.text = std::string(text);
+        measured = kit::pill_width(*fonts, look);
+    }
+    if (measured <= 0)
+        measured = std::max(static_cast<int32_t>(text.size()) * 7 + 16, int32_t{48});
+    return std::min(measured, std::max(room, int32_t{48}));
+}
+
 /// Lays the game step out: the sources that were found, and Locate another.
+///
+/// The column is as wide as Settings' panel. Each row holds its path and the bundles it has,
+/// and the rows are separated by the panel's padding.
 ///
 /// @param[in,out] scene the scene
 /// @param session the session
@@ -1051,30 +1109,27 @@ void lay_game(
     std::vector<kit::ControlId> order;
     add_chrome(scene, order, session, width, height, true, true, nullptr);
     const Band band = content_band(width, height);
-    const bool narrow = frame.size_class == kit::SizeClass::compact || band.width < 520;
-    int32_t column = band.width;
-    if (!narrow)
-        column = std::min(band.width, int32_t{640});
+    const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
+    const int32_t column = std::min(band.width, metrics.dialog_width);
     const int32_t left = band.left + std::max((band.width - column) / 2, int32_t{0});
+    // The choice card's text starts after the radio, and stops short of the card's right edge.
+    constexpr int32_t kTextInset = 24;
+    constexpr int32_t kTextEnd = 6;
+    const int32_t text_w = std::max(column - kTextInset - kTextEnd, int32_t{1});
+    const int32_t text_left = left + kTextInset;
 
-    int32_t row = band.top;
-    constexpr int32_t kTitle = 36;
-    scene.title_text = show("Where is Total Annihilation?");
-    scene.title = {left, row, column, kTitle};
-    row += kTitle + 4;
-    row = add_paragraph(
-        scene.list,
+    int32_t row = add_title(
+        scene,
         fonts,
-        left,
-        row,
-        column,
-        show("OA copies the game once. The installation is left as it is."),
-        kit::FontRole::small,
-        kit::colour::hint
+        band,
+        show("Where is Total Annihilation?"),
+        show("OA copies the game once. The installation is left as it is.")
     );
-    row += 10;
+    row += metrics.padding;
 
-    const int32_t card_height = kit::choice_card_height();
+    constexpr int32_t kCardPad = 6;
+    constexpr int32_t kChipGap = 6;
+    const int32_t chip_h = kit::pill_height();
     const auto count = static_cast<int32_t>(session.model.sources.size());
     for (int32_t index = 0; index < count; ++index) {
         const GameSource& source = session.model.sources[static_cast<std::size_t>(index)];
@@ -1087,56 +1142,90 @@ void lay_game(
             hint += " · ";
             hint += source.status;
         }
+
+        struct ChipSpot {
+            std::string text{};
+            int32_t x{};
+            int32_t y{};
+            int32_t width{};
+        };
+
+        std::vector<ChipSpot> spots;
+        int32_t cursor = 0;
+        int32_t chip_row = 0;
+        for (const SourceChip& chip : source.chips) {
+            if (!chip.held || chip.name.empty())
+                continue;
+            const int32_t pill_w = chip_width(fonts, chip.name, text_w);
+            if (cursor > 0 && cursor + pill_w > text_w) {
+                cursor = 0;
+                ++chip_row;
+            }
+            ChipSpot spot;
+            spot.text = chip.name;
+            spot.x = cursor;
+            spot.y = chip_row * (chip_h + kChipGap);
+            spot.width = pill_w;
+            cursor += pill_w + kChipGap;
+            spots.push_back(std::move(spot));
+        }
+        const int32_t chip_rows = spots.empty() ? 0 : chip_row + 1;
+        const int32_t chip_block =
+            chip_rows == 0 ? 0 : chip_rows * chip_h + (chip_rows - 1) * kChipGap;
+        const int32_t hint_h = std::max(
+            paragraph_height(fonts, text_w, hint, kit::FontRole::small), metrics.small_line
+        );
+        const int32_t note_h =
+            source.footnote.empty()
+                ? 0
+                : paragraph_height(fonts, text_w, source.footnote, kit::FontRole::small);
+        int32_t card_h = kCardPad + metrics.regular_line + metrics.hint_gap + hint_h;
+        if (chip_block > 0)
+            card_h += metrics.hint_gap + chip_block;
+        if (note_h > 0)
+            card_h += metrics.hint_gap + note_h;
+        card_h += kCardPad;
+        card_h = std::max(card_h, kit::choice_card_height());
+
         kit::ChoiceCardLook card;
         card.title = source.title;
         card.hint = std::move(hint);
         card.chosen = session.model.source == index;
-        const kit::Rect rect{left, row, column, card_height};
+        const kit::Rect rect{left, row, column, card_h};
         const kit::ControlId id = source_id + index;
         kit::add_choice_card(
             scene.list, rect, card, id, control_name(Step::game, "source." + std::to_string(index))
         );
         order.insert(order.begin(), id);
-        row += card_height + 4;
-        int32_t chip_x = left + 8;
-        for (const SourceChip& chip : source.chips) {
-            if (chip.name.empty())
-                continue;
+        const int32_t chips_y =
+            rect.y + kCardPad + metrics.regular_line + metrics.hint_gap + hint_h + metrics.hint_gap;
+        for (const ChipSpot& spot : spots) {
             kit::PillLook pill;
-            pill.text = chip.held ? chip.name : show("no {name}");
-            if (!chip.held) {
-                const std::string token = "{name}";
-                const auto at = pill.text.find(token);
-                if (at != std::string::npos)
-                    pill.text.replace(at, token.size(), chip.name);
-            }
-            pill.state = chip.held ? kit::PillState::active : kit::PillState::inactive;
-            const int32_t pill_w = std::min(
-                std::max(static_cast<int32_t>(pill.text.size()) * 7 + 16, int32_t{48}),
-                std::max(column - 16, int32_t{48})
-            );
-            if (chip_x + pill_w > left + column)
-                break;
+            pill.text = spot.text;
+            pill.state = kit::PillState::active;
             kit::add_pill(
-                scene.list, {chip_x, row, pill_w, kit::pill_height()}, pill, kit::no_control, {}
+                scene.list,
+                {text_left + spot.x, chips_y + spot.y, spot.width, chip_h},
+                pill,
+                kit::no_control,
+                {}
             );
-            chip_x += pill_w + 6;
         }
-        if (!source.chips.empty())
-            row += kit::pill_height() + 2;
         if (!source.footnote.empty()) {
-            row = add_paragraph(
+            const int32_t note_y =
+                chip_block > 0 ? chips_y + chip_block + metrics.hint_gap : chips_y;
+            add_paragraph(
                 scene.list,
                 fonts,
-                left + 8,
-                row,
-                std::max(column - 16, int32_t{1}),
+                text_left,
+                note_y,
+                text_w,
                 source.footnote,
                 kit::FontRole::small,
                 kit::colour::quiet
             );
         }
-        row += 8;
+        row += card_h + metrics.padding;
     }
 
     const int32_t button_height = kit::compact_metrics.button_height;
@@ -1193,20 +1282,14 @@ void lay_copying(
     std::vector<kit::ControlId> order;
     add_chrome(scene, order, session, width, height, false, true, nullptr);
     const Band band = content_band(width, height);
-    const bool narrow = frame.size_class == kit::SizeClass::compact || band.width < 520;
-    int32_t column = narrow ? band.width : std::min(band.width, int32_t{640});
+    // The column is the game step's: Settings' width, centred in the band.
+    const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
+    const int32_t column = std::min(band.width, metrics.dialog_width);
     const int32_t left = band.left + std::max((band.width - column) / 2, int32_t{0});
     const CopyView& copy = session.model.copy;
 
-    int32_t row = band.top;
-    constexpr int32_t kTitle = 36;
-    scene.title_text = show("Copying Total Annihilation");
-    scene.title = {left, row, column, kTitle};
-    row += kTitle + 4;
     std::string subtitle;
-    if (copy.checked && !copy.verdict.empty())
-        subtitle = copy.verdict;
-    else if (!copy.from.empty()) {
+    if (!copy.from.empty()) {
         subtitle = show("From {place}…");
         const std::string token = "{place}";
         const auto at = subtitle.find(token);
@@ -1217,9 +1300,7 @@ void lay_copying(
     } else {
         subtitle = show("Nothing is installed and your files are not changed.");
     }
-    row = add_paragraph(
-        scene.list, fonts, left, row, column, subtitle, kit::FontRole::small, kit::colour::hint
-    );
+    int32_t row = add_title(scene, fonts, band, show("Copying Total Annihilation"), subtitle);
     row += 8;
     if (!copy.overall.empty()) {
         add_text(
@@ -1243,42 +1324,89 @@ void lay_copying(
     }
     row += 4;
     kit::add_progress(scene.list, {left, row, column, 8}, copy.done, copy.whole);
-    row += 16;
-
-    for (const CopyBundle& bundle : copy.bundles) {
+    row += 12;
+    if (copy.checked && !copy.verdict.empty()) {
         add_text(
             scene.list,
             {left, row, column, kit::compact_metrics.regular_line},
-            bundle.name,
+            copy.verdict,
             kit::FontRole::regular,
             kit::colour::text
         );
         row += kit::compact_metrics.regular_line;
-        if (!bundle.file.empty()) {
+    }
+    row += 8;
+
+    if (!copy.bundles.empty()) {
+        const int32_t pad = kit::compact_metrics.padding;
+        const int32_t inner_left = left + pad;
+        const int32_t inner_width = std::max(column - 2 * pad, int32_t{1});
+        const std::size_t panel_at = scene.list.items.size();
+        kit::Item panel;
+        panel.role = kit::Role::fill;
+        panel.rect = {left, row, column, 0};
+        panel.colour = kit::colour::list;
+        scene.list.items.push_back(panel);
+        kit::Item edge;
+        edge.role = kit::Role::bevel;
+        edge.rect = panel.rect;
+        edge.colour = kit::colour::edge_light;
+        scene.list.items.push_back(edge);
+
+        int32_t y = row + pad;
+        const auto count = static_cast<int32_t>(copy.bundles.size());
+        for (int32_t index = 0; index < count; ++index) {
+            const CopyBundle& bundle = copy.bundles[static_cast<std::size_t>(index)];
             add_text(
                 scene.list,
-                {left, row, column, kit::compact_metrics.small_line},
-                bundle.file,
-                kit::FontRole::small,
-                kit::colour::hint
+                {inner_left, y, inner_width, kit::compact_metrics.regular_line},
+                bundle.name,
+                kit::FontRole::regular,
+                kit::colour::text
             );
-            row += kit::compact_metrics.small_line;
-        }
-        kit::add_progress(
-            scene.list, {left, row, std::max(column / 2, int32_t{80}), 6}, bundle.done, bundle.whole
-        );
-        row += 8;
-        if (!bundle.amount.empty()) {
-            add_text(
-                scene.list,
-                {left, row, column, kit::compact_metrics.small_line},
-                bundle.amount,
-                kit::FontRole::small,
-                kit::colour::quiet
+            y += kit::compact_metrics.regular_line;
+            if (bundle.phase == CopyPhase::copying && !bundle.file.empty()) {
+                add_text(
+                    scene.list,
+                    {inner_left, y, inner_width, kit::compact_metrics.small_line},
+                    bundle.file,
+                    kit::FontRole::small,
+                    kit::colour::hint
+                );
+                y += kit::compact_metrics.small_line;
+            }
+            y += 4;
+            kit::add_progress(
+                scene.list, {inner_left, y, inner_width, 6}, bundle.done, bundle.whole
             );
-            row += kit::compact_metrics.small_line;
+            y += 10;
+            if (!bundle.amount.empty()) {
+                const kit::Colour ink = bundle.phase == CopyPhase::differ ? kit::colour::lock
+                                        : bundle.note                     ? kit::colour::hint
+                                                                          : kit::colour::quiet;
+                add_text(
+                    scene.list,
+                    {inner_left, y, inner_width, kit::compact_metrics.small_line},
+                    bundle.amount,
+                    kit::FontRole::small,
+                    ink
+                );
+                y += kit::compact_metrics.small_line;
+            }
+            if (index + 1 < count) {
+                y += 8;
+                kit::Item rule;
+                rule.role = kit::Role::rule;
+                rule.rect = {inner_left, y, inner_width, 1};
+                rule.colour = kit::colour::rule;
+                scene.list.items.push_back(std::move(rule));
+                y += 9;
+            }
         }
-        row += 8;
+        y += pad;
+        scene.list.items[panel_at].rect.height = y - row;
+        scene.list.items[panel_at + 1].rect.height = y - row;
+        row = y + 8;
     }
 
     add_paragraph(
@@ -1677,11 +1805,54 @@ void dim_around(
     }
 }
 
+/// True when the copy has been checked, matches, and is not still running.
+bool copy_is_clear(const CopyView& copy) noexcept {
+    if (!copy.checked || copy.running || copy.hashing || copy.paused || copy.verdict.empty())
+        return false;
+    for (const CopyBundle& bundle : copy.bundles) {
+        if (bundle.phase == CopyPhase::differ)
+            return false;
+    }
+    return true;
+}
+
 } // namespace
 
 void tick(Session& session, uint32_t dt_ms) noexcept {
     kit::carousel_tick(session.carousel, dt_ms);
     session.pulse_ms += dt_ms;
+    if (session.model.step != Step::copying || session.copy_continue_stopped)
+        return;
+    const CopyView& copy = session.model.copy;
+    if (copy.running || copy.hashing)
+        session.copy_continue_armed = true;
+    if (!copy_is_clear(copy)) {
+        session.copy_continue_ms = -1;
+        return;
+    }
+    if (!session.copy_continue_armed)
+        return;
+    if (session.copy_continue_ms < 0) {
+        session.copy_continue_ms = copy_continue_wait_ms;
+        return;
+    }
+    const uint32_t left = static_cast<uint32_t>(session.copy_continue_ms);
+    const uint32_t gap = dt_ms > left ? left : dt_ms;
+    session.copy_continue_ms -= static_cast<int32_t>(gap);
+}
+
+bool stop_copy_continue(Session& session) noexcept {
+    if (session.model.step != Step::copying || session.copy_continue_ms < 0)
+        return false;
+    session.copy_continue_stopped = true;
+    session.copy_continue_ms = -1;
+    return true;
+}
+
+void reset_copy_continue(Session& session) noexcept {
+    session.copy_continue_ms = -1;
+    session.copy_continue_armed = false;
+    session.copy_continue_stopped = false;
 }
 
 void ensure_focus(Session& session, const kit::DisplayList& list) {
@@ -1742,6 +1913,7 @@ Outcome pointer(
     uint8_t clicks
 ) {
     Outcome outcome;
+    const bool stopped = kind != PointerKind::move && stop_copy_continue(session);
     if (session.model.step == Step::language && !scene.places.empty()) {
         const kit::PointerPhase phase = kind == PointerKind::move   ? kit::PointerPhase::move
                                         : kind == PointerKind::down ? kit::PointerPhase::down
@@ -1777,13 +1949,15 @@ Outcome pointer(
     }
     if (pressed.result == kit::PointerResult::activated)
         return activate(session, scene, pressed.control);
-    if (pressed.result == kit::PointerResult::redraw)
+    if (pressed.result == kit::PointerResult::redraw || stopped)
         outcome.redraw = true;
     return outcome;
 }
 
 Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
     Outcome outcome;
+    if (stop_copy_continue(session))
+        outcome.redraw = true;
     // On the last step both keys finish the walk, even when Back has the focus.
     if (session.model.step == Step::buttons &&
         (pressed == kit::Key::escape || pressed == kit::Key::enter)) {
@@ -1846,6 +2020,8 @@ Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
 
 Outcome wheel(Session& session, const Scene& /*scene*/, float notches) {
     Outcome outcome;
+    if (notches != 0.F && stop_copy_continue(session))
+        outcome.redraw = true;
     if (session.model.step != Step::language || session.carousel.count <= 1 || notches == 0.F)
         return outcome;
     // A turn away from the player is the previous card. One card does not move.

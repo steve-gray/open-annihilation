@@ -460,7 +460,7 @@ void reset_and_empty_are_disabled_when_they_cannot_act() {
 void a_game_locks_reset_and_empty() {
     settings::Dialog dialog = opened(offer_of({core_prime()}));
     dialog.locks = settings::settings_locks(settings::GameState{true, false, false, false});
-    OA_CHECK(layout_has(dialog, "Locked during a game."));
+    OA_CHECK(layout_has(dialog, "Locked during a game"));
     OA_CHECK(!control_named(dialog, "settings.install-id.core-prime.reset").found);
     OA_CHECK(!control_named(dialog, "settings.downloaded-files.empty").found);
     dialog.focused = settings::first_row_control + 2;

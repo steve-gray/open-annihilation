@@ -13,6 +13,9 @@
 #include "render_host.hpp"
 #include "window_pixels.hpp"
 
+#include "oa/app/content/downloads.hpp"
+#include "oa/app/content/service.hpp"
+#include "oa/app/content/settings.hpp"
 #include "oa/app/content_copy.hpp"
 #include "oa/app/long_work.hpp"
 #include "oa/app/disk_image_source.hpp"
@@ -21,6 +24,7 @@
 #include "language_packs.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/app/window_icon.hpp"
+#include "oa/data/catalogue/catalogue.hpp"
 #include "oa/data/content_bundles.hpp"
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -32,6 +36,7 @@
 #include "oa/platform/system.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/ui/engine_settings.hpp"
+#include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/components_more.hpp"
@@ -57,6 +62,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -65,6 +71,8 @@ namespace {
 
 namespace fs = std::filesystem;
 namespace bundles = oa::data::content_bundles;
+namespace catalogue = oa::data::catalogue;
+namespace content = oa::app::content;
 namespace first_run = oa::ui::first_run;
 namespace installs = oa::platform::game_installs;
 namespace kit = oa::ui::kit;
@@ -297,7 +305,9 @@ std::string bundle_name(std::span<const bundles::Bundle> table, std::string_view
     return std::string(id);
 }
 
-/// Fills a row from a description. A place with no matched file is not listed.
+/// Fills a row from a description. A place with no matched file is not listed,
+/// and a bundle the place lacks is not a chip. The check's install uses this.
+/// The machine's list is gathered and ranked by fill_sources.
 ///
 /// @param[in,out] model the game step
 /// @param[in,out] memory the places already listed, so a scan can keep its own
@@ -338,78 +348,136 @@ bool add_described(
         chip.held = true;
         row.chips.push_back(std::move(chip));
     }
-    std::vector<std::string> missing_ids;
-    for (const MissingContentFile& missing : described.missing) {
-        if (std::find(described.bundles.begin(), described.bundles.end(), missing.bundle_id) !=
-            described.bundles.end())
-            continue;
-        if (std::find(missing_ids.begin(), missing_ids.end(), missing.bundle_id) !=
-            missing_ids.end())
-            continue;
-        missing_ids.push_back(missing.bundle_id);
-        first_run::SourceChip chip;
-        chip.name = bundle_name(table, missing.bundle_id);
-        chip.held = false;
-        row.chips.push_back(std::move(chip));
-    }
     memory.push_back(Remembered{token, kind, path});
     model.sources.push_back(std::move(row));
     return true;
 }
 
-/// Lists a folder when it holds game files.
+/// One place gathered before the list is ranked.
+struct HeldSource {
+    first_run::GameSource row{};   ///< the row
+    Remembered remembered{};       ///< how the copy opens it
+    installs::SetupSource facts{}; ///< what the rank reads
+};
+
+/// The path the row is known by, so the same place is not listed twice.
 ///
-/// @param[in,out] model the game step
-/// @param[in,out] memory the places already listed, so a scan can keep its own
-/// @param folder the folder
-/// @param user_folder the player's folder
-/// @param detail the line under the title
-/// @param table the table to match
-/// @param kind which reader; fixture uses the check's table
-void add_folder_source(
-    first_run::Model& model,
-    std::vector<Remembered>& memory,
-    const fs::path& folder,
-    const fs::path& user_folder,
-    std::string detail,
-    std::span<const bundles::Bundle> table,
-    SourceKind kind
-) {
-    if (folder.empty() || inside_managed(folder, user_folder))
-        return;
+/// @param path the place
+/// @return its canonical path, or the path itself when that cannot be found
+std::string source_token(const fs::path& path) {
     std::error_code failure;
-    if (!fs::is_directory(folder, failure) || failure)
-        return;
-    FolderContentSource source(folder, table);
-    SourceDescription described;
-    std::string error;
-    if (!describe_source(source, table, described, &error))
-        return;
-    add_described(
-        model,
-        memory,
-        folder,
-        kind,
-        first_run::SourceMark::folder,
-        std::move(detail),
-        described,
-        table
-    );
+    const fs::path canonical = fs::weakly_canonical(path, failure);
+    return path_to_utf8(failure ? path.lexically_normal() : canonical);
 }
 
-/// Lists an installer whose size is one this game knows.
+/// A path shortened under the home folder, for the line under a row's title.
 ///
-/// @param[in,out] model the game step
-/// @param[in,out] memory the places already listed, so a scan can keep its own
+/// @param home the home folder
+/// @param path the place
+/// @return the path to show
+std::string shortened_path(const fs::path& home, const fs::path& path) {
+    if (path.empty())
+        return {};
+    return installs::path_under_home(home, path);
+}
+
+/// The rank's facts for what a place holds.
+///
+/// @param token the row's token
+/// @param place which kind of place
+/// @param described what it holds
+/// @param table the table the description was made from
+/// @return the facts
+installs::SetupSource rank_facts(
+    std::string token,
+    installs::SetupPlace place,
+    const SourceDescription& described,
+    std::span<const bundles::Bundle> table
+) {
+    installs::SetupSource facts;
+    facts.token = std::move(token);
+    facts.place = place;
+    facts.bundle_count = static_cast<int>(described.bundles.size());
+    bool base_game = false;
+    bool demo = false;
+    int expansions = 0;
+    for (const std::string& id : described.bundles) {
+        const bundles::Bundle* bundle = nullptr;
+        for (const bundles::Bundle& known : table) {
+            if (known.id == id) {
+                bundle = &known;
+                break;
+            }
+        }
+        if (bundle != nullptr && bundle->kind == bundles::Kind::expansion)
+            ++expansions;
+        if (id == "totala")
+            base_game = true;
+        else if (id == "totala-demo")
+            demo = true;
+    }
+    facts.base_rank = base_game ? 2 : (demo ? 1 : 0);
+    facts.expansion_count = expansions;
+    return facts;
+}
+
+/// Tells whether a file's size is one of the installers this game knows.
+///
+/// @param file the file; unused
+/// @param size its size
+/// @param context unused
+/// @return true when the size is a known installer
+bool known_installer_file(const fs::path& file, uint64_t size, void* context) {
+    std::ignore = file;
+    std::ignore = context;
+    return bundles::find_installer(size) != nullptr;
+}
+
+/// Tells whether a token is already in a gathered list.
+///
+/// @param found the list
+/// @param token the token
+/// @return true when it is there
+bool already_gathered(const std::vector<HeldSource>& found, const std::string& token) {
+    for (const HeldSource& held : found) {
+        if (held.row.token == token)
+            return true;
+    }
+    return false;
+}
+
+/// Keeps a later "where it was found" line when the row was gathered without one.
+///
+/// @param[in,out] found the gathered places
+/// @param token the row
+/// @param status the line; empty does nothing
+void note_status(
+    std::vector<HeldSource>& found, const std::string& token, const std::string& status
+) {
+    if (status.empty())
+        return;
+    for (HeldSource& held : found) {
+        if (held.row.token == token && held.row.status.empty())
+            held.row.status = status;
+    }
+}
+
+/// Builds a row for an installer file. A file that is not a known installer is left out.
+///
+/// @param[in,out] found the gathered places
 /// @param file the installer
 /// @param user_folder the player's folder
-void add_installer_source(
-    first_run::Model& model,
-    std::vector<Remembered>& memory,
+/// @param home the home folder, for the shortened path
+void gather_installer(
+    std::vector<HeldSource>& found,
     const fs::path& file,
-    const fs::path& user_folder
+    const fs::path& user_folder,
+    const fs::path& home
 ) {
     if (file.empty() || inside_managed(file, user_folder))
+        return;
+    const std::string token = source_token(file);
+    if (already_gathered(found, token))
         return;
     std::error_code failure;
     if (!fs::is_regular_file(file, failure) || failure)
@@ -439,14 +507,210 @@ void add_installer_source(
         source = std::make_unique<WindowsInstallerSource>(file, table);
     SourceDescription described;
     std::string error;
-    if (!describe_source(*source, table, described, &error))
+    if (!describe_source(*source, table, described, &error) || described.bundles.empty())
         return;
-    add_described(
-        model, memory, file, kind, mark, path_to_utf8(file.parent_path()), described, table
-    );
+    HeldSource held;
+    held.row.token = token;
+    held.row.title =
+        file.filename().empty() ? std::string("Total Annihilation") : path_to_utf8(file.filename());
+    held.row.detail = shortened_path(home, file.parent_path());
+    held.row.mark = mark;
+    held.row.footnote = bytes_text(described.bytes_to_copy);
+    for (const std::string& id : described.bundles) {
+        first_run::SourceChip chip;
+        chip.name = bundle_name(table, id);
+        chip.held = true;
+        held.row.chips.push_back(std::move(chip));
+    }
+    held.remembered = Remembered{token, kind, file};
+    held.facts = rank_facts(token, installs::SetupPlace::installer, described, table);
+    found.push_back(std::move(held));
 }
 
-/// Lists the places this machine already has.
+/// Builds a row for a folder when it is a game installation.
+///
+/// @param[in,out] found the gathered places
+/// @param folder the folder
+/// @param user_folder the player's folder
+/// @param status where it was found, such as a Steam library; empty when that is not known
+/// @param home the home folder, for the shortened path
+void gather_folder(
+    std::vector<HeldSource>& found,
+    const fs::path& folder,
+    const fs::path& user_folder,
+    std::string status,
+    const fs::path& home
+) {
+    if (folder.empty() || inside_managed(folder, user_folder))
+        return;
+    const std::string token = source_token(folder);
+    if (already_gathered(found, token)) {
+        note_status(found, token, status);
+        return;
+    }
+    std::error_code failure;
+    if (!fs::is_directory(folder, failure) || failure)
+        return;
+    const std::span<const bundles::Bundle> table = bundles::bundles();
+    FolderContentSource source(folder, table);
+    SourceDescription described;
+    std::string error;
+    if (!describe_source(source, table, described, &error) || described.bundles.empty())
+        return;
+    HeldSource held;
+    held.row.token = token;
+    held.row.title = folder.filename().empty() ? std::string("Total Annihilation")
+                                               : path_to_utf8(folder.filename());
+    held.row.detail = shortened_path(home, folder);
+    held.row.mark = first_run::SourceMark::folder;
+    held.row.status = std::move(status);
+    held.row.footnote = bytes_text(described.bytes_to_copy);
+    for (const std::string& id : described.bundles) {
+        first_run::SourceChip chip;
+        chip.name = bundle_name(table, id);
+        chip.held = true;
+        held.row.chips.push_back(std::move(chip));
+    }
+    held.remembered = Remembered{token, SourceKind::folder, folder};
+    held.facts = rank_facts(token, installs::SetupPlace::installation, described, table);
+    found.push_back(std::move(held));
+}
+
+/// Gathers the rows a path contributes. A folder that is not an installation contributes the
+/// installer files inside it, and is not itself a row.
+///
+/// @param[in,out] found the gathered places
+/// @param path the folder or the file
+/// @param user_folder the player's folder
+/// @param status where a folder was found; empty when that is not known
+/// @param home the home folder, for the shortened path
+void gather_path(
+    std::vector<HeldSource>& found,
+    const fs::path& path,
+    const fs::path& user_folder,
+    std::string status,
+    const fs::path& home
+) {
+    if (path.empty() || inside_managed(path, user_folder))
+        return;
+    std::error_code failure;
+    if (!fs::is_directory(path, failure) || failure) {
+        gather_installer(found, path, user_folder, home);
+        return;
+    }
+    const installs::SetupFolderOffer offer =
+        installs::offer_from_folder(path, known_installer_file, nullptr);
+    for (const fs::path& installer : offer.installers)
+        gather_installer(found, installer, user_folder, home);
+    if (offer.folder_offered)
+        gather_folder(found, path, user_folder, std::move(status), home);
+}
+
+/// Appends gathered places, fullest first, up to the step's limit.
+///
+/// `found` is this function's own list. The match is taken from it, and copied out, before
+/// the function returns.
+///
+/// @param[in,out] model the game step
+/// @param[in,out] memory the places already listed; the scan keeps its own
+/// @param found the places
+/// @param select_best true to select the fullest of the places appended
+/// @return true when a place was appended
+bool append_ranked(
+    first_run::Model& model,
+    std::vector<Remembered>& memory,
+    std::vector<HeldSource> found,
+    bool select_best
+) {
+    std::vector<installs::SetupSource> facts;
+    facts.reserve(found.size());
+    for (const HeldSource& held : found)
+        facts.push_back(held.facts);
+    const std::vector<installs::SetupSource> ranked =
+        installs::rank_setup_sources(std::move(facts));
+    bool appended = false;
+    int32_t first_added = -1;
+    for (const installs::SetupSource& ranked_row : ranked) {
+        if (static_cast<int32_t>(model.sources.size()) >= kMostSources)
+            break;
+        const HeldSource* match = nullptr;
+        for (const HeldSource& held : found) {
+            if (held.facts.token == ranked_row.token) {
+                match = &held;
+                break;
+            }
+        }
+        if (match == nullptr)
+            continue;
+        bool seen = false;
+        for (const Remembered& remembered : memory) {
+            if (remembered.token == match->remembered.token)
+                seen = true;
+        }
+        if (seen)
+            continue;
+        if (first_added < 0)
+            first_added = static_cast<int32_t>(model.sources.size());
+        memory.push_back(match->remembered);
+        model.sources.push_back(match->row);
+        appended = true;
+    }
+    if (select_best && first_added >= 0)
+        model.source = first_added;
+    return appended;
+}
+
+/// Lists a folder the player just chose. An installation is one row. A folder of loose files,
+/// or one that holds installers, lists those installers instead, and the fullest new row is
+/// selected.
+///
+/// @param[in,out] model the game step
+/// @param[in,out] memory the places already listed, so a scan can keep its own
+/// @param folder the folder
+/// @param user_folder the player's folder
+/// @param detail unused; the row says the shortened path
+/// @param table unused; the built-in table is read
+/// @param kind unused; a chosen folder is read as a folder
+void add_folder_source(
+    first_run::Model& model,
+    std::vector<Remembered>& memory,
+    const fs::path& folder,
+    const fs::path& user_folder,
+    std::string detail,
+    std::span<const bundles::Bundle> table,
+    SourceKind kind
+) {
+    std::ignore = detail;
+    std::ignore = table;
+    std::ignore = kind;
+    std::vector<HeldSource> found;
+    gather_path(found, folder, user_folder, {}, installs::home_folder());
+    std::ignore = append_ranked(model, memory, std::move(found), true);
+}
+
+/// Lists an installer the player just chose, and selects it.
+///
+/// @param[in,out] model the game step
+/// @param[in,out] memory the places already listed, so a scan can keep its own
+/// @param file the installer
+/// @param user_folder the player's folder
+void add_installer_source(
+    first_run::Model& model,
+    std::vector<Remembered>& memory,
+    const fs::path& file,
+    const fs::path& user_folder
+) {
+    std::vector<HeldSource> found;
+    gather_installer(found, file, user_folder, installs::home_folder());
+    std::ignore = append_ranked(model, memory, std::move(found), true);
+}
+
+/// Lists the places this machine already has, fullest first, and selects that one.
+///
+/// A folder that is not a game installation is not a row. Installer files found directly
+/// inside it are. At most kMostSources rows are kept, after the rank, so the fullest stay.
+/// The scan calls this on its own thread and passes its own list; nothing here touches the
+/// list the game step is drawing.
 ///
 /// @param[in,out] model the game step
 /// @param user_folder the player's folder
@@ -462,23 +726,21 @@ void fill_sources(
     model.sources.clear();
     model.source = -1;
     memory.clear();
-    const std::span<const bundles::Bundle> table = bundles::bundles();
+    const fs::path home = installs::home_folder();
+    std::vector<HeldSource> found;
     if (!found_install.empty())
-        add_folder_source(model, memory, found_install, user_folder, {}, table, SourceKind::folder);
+        gather_path(found, found_install, user_folder, {}, home);
     for (const installs::Candidate& candidate :
          installs::find_candidates(installs::default_search_roots())) {
-        add_folder_source(
-            model,
-            memory,
+        gather_path(
+            found,
             candidate.folder,
             user_folder,
             std::string(installs::source_words(candidate.source, candidate.removable)),
-            table,
-            SourceKind::folder
+            home
         );
     }
     std::vector<fs::path> downloads;
-    const fs::path home = installs::home_folder();
     if (!home.empty())
         downloads.push_back(home / "Downloads");
     try {
@@ -487,17 +749,9 @@ void fill_sources(
             downloads.push_back(documents.parent_path() / "Downloads");
     } catch (const std::exception&) {
     }
-    for (const fs::path& folder : downloads) {
-        std::error_code failure;
-        if (!fs::is_directory(folder, failure) || failure)
-            continue;
-        for (fs::directory_iterator entry(folder, failure), end; !failure && entry != end;
-             entry.increment(failure)) {
-            if (!entry->is_regular_file(failure))
-                continue;
-            add_installer_source(model, memory, entry->path(), user_folder);
-        }
-    }
+    for (const fs::path& folder : downloads)
+        gather_path(found, folder, user_folder, {}, home);
+    std::ignore = append_ranked(model, memory, std::move(found), false);
     if (!model.sources.empty())
         model.source = 0;
 }
@@ -570,46 +824,577 @@ ScanKeeper& scan_keeper() {
     return keeper;
 }
 
-/// The languages the step can offer before a pack is downloaded.
+/// Core Prime's registry id. The language step reads that catalogue.
+constexpr std::string_view kCorePrime = "coreprime";
+
+/// The registry `--check-first-run` serves. A played start never reads it.
+constexpr std::string_view kCheckRegistry = "ridge";
+
+/// The progress bar's whole, so a large pack never narrows into a byte count.
+constexpr int32_t kProgressWhole = 1000;
+
+/// Tells whether two language tags match.
 ///
-/// @param[in,out] model the model
-/// @param shown the tag in effect
-void fill_cards(first_run::Model& model, std::string_view shown) {
-    model.cards.clear();
-    for (const languages::Language* language : languages::known_languages()) {
-        if (language == nullptr || !languages::playable(*language))
+/// @param tag a tag
+/// @param other a tag
+/// @return true when they match
+bool same_language_tag(std::string_view tag, std::string_view other) noexcept {
+    return settings::language_notice_same_tag(tag, other);
+}
+
+/// A catalogue phrase as the player reads it.
+///
+/// @param english the English phrase
+/// @return the phrase in the language shown
+std::string looked_up(std::string_view english) {
+    return std::string(languages::interface_text(english));
+}
+
+/// The catalogues and the download queue for the language step.
+///
+/// The service is destroyed with this window. The menu's own service starts
+/// later and reads the same cache and the same saved queue.
+struct LanguageOffers {
+    preferences::Values values{};
+    fs::path preferences_path{};
+    std::unique_ptr<content::Service> service{};
+    std::unique_ptr<content::Downloads> downloads{};
+    uint64_t seen_catalogue{0};
+    uint64_t seen_downloads{0};
+    bool filled{false};
+    uint64_t download_item{0};
+    std::string pending_failure{};
+    std::string pending_failure_tag{};
+};
+
+/// Asks the next card rebuild to read the catalogue and the queue again.
+///
+/// @param[in,out] offers the catalogues
+void forget_language_view(LanguageOffers& offers) noexcept {
+    offers.seen_catalogue = 0;
+    offers.seen_downloads = 0;
+}
+
+/// Writes the preferences the language step changed.
+///
+/// @param offers the catalogues
+void store_language_preferences(const LanguageOffers& offers) {
+    if (offers.preferences_path.empty())
+        return;
+    try {
+        preferences::save(offers.preferences_path, offers.values, preferences::SyncFolder::no);
+    } catch (const std::exception& caught) {
+        std::cerr << "open-annihilation: the setup could not store a preference: " << caught.what()
+                  << '\n';
+    }
+}
+
+/// Passes each registry's stored install ID to the queue. None is made.
+///
+/// @param[in,out] offers the catalogues
+void pass_install_ids(LanguageOffers& offers) {
+    if (!offers.downloads || !offers.service)
+        return;
+    const std::shared_ptr<const content::Snapshot> catalogues = offers.service->snapshot();
+    if (!catalogues)
+        return;
+    for (const content::RegistryView& listed : catalogues->registries) {
+        const content::InstallId stored =
+            content::read_install_id(offers.values, listed.registry.descriptor.id);
+        std::optional<std::string> held;
+        if (stored.state == content::InstallIdState::on)
+            held = stored.text;
+        offers.downloads->set_install_id(listed.registry.descriptor.id, std::move(held));
+    }
+}
+
+/// Keeps a finished pack for the welcome that runs once the game is mounted.
+///
+/// Nothing can install a pack before then. Accepting the file leaves it in
+/// the queue instead of reporting that the install failed.
+///
+/// @return true so the queue waits, and keeps the file when this window closes
+bool keep_language_pack(
+    void* /*context*/,
+    uint64_t /*item*/,
+    const std::filesystem::path& /*file*/,
+    const content::InstallOrigin& /*origin*/
+) {
+    return true;
+}
+
+/// Opens the cached catalogues and the download queue. A check does not refresh.
+///
+/// @param options the parsed command line
+/// @param user the player's folder
+/// @param language_tag the language the window is speaking
+/// @return the catalogues; a failed open still leaves the built-in languages
+LanguageOffers
+open_language_offers(const Options& options, const fs::path& user, std::string language_tag) {
+    LanguageOffers offers;
+    try {
+        offers.preferences_path = preference_file(options.preferences_file);
+        std::error_code io_error;
+        if (fs::exists(offers.preferences_path, io_error) && !io_error)
+            offers.values = preferences::load(offers.preferences_path);
+    } catch (const std::exception& caught) {
+        std::cerr << "open-annihilation: the setup could not read preferences: " << caught.what()
+                  << '\n';
+    }
+
+    content::ServiceOptions service_options;
+    if (options.data_dir) {
+        service_options.data_folder = *options.data_dir;
+    } else {
+        try {
+            service_options.data_folder = preferences::data_directory();
+        } catch (const std::exception& caught) {
+            std::cerr << "open-annihilation: content: " << caught.what() << '\n';
+        }
+    }
+    const fs::path data_folder = service_options.data_folder;
+    service_options.player_folder = user;
+    const std::string program = oa::platform::program_directory();
+    if (!program.empty()) {
+        service_options.builtin_folder =
+            path_from_utf8(program) /
+            path_from_utf8(std::string(content::builtin_registries_folder_name));
+    }
+    service_options.developer_mode = false;
+    // A window check must not fetch: a catalogue that arrives mid-walk would
+    // move the cards the check is pressing. A player's start refreshes as
+    // the menu's welcome does, and the first snapshot is the cache.
+    service_options.automatic =
+        !options.check_setup_window && !options.unattended && !options.headless_check;
+    service_options.check = content::read_check_for_updates(offers.values);
+    try {
+        offers.service = std::make_unique<content::Service>(std::move(service_options));
+        offers.service->start();
+    } catch (const std::exception& caught) {
+        std::cerr << "open-annihilation: the setup could not read the catalogue: " << caught.what()
+                  << '\n';
+        offers.service.reset();
+    }
+
+    try {
+        content::DownloadsOptions queue_options;
+        queue_options.data_folder = data_folder;
+        queue_options.language = std::move(language_tag);
+        queue_options.handoff = keep_language_pack;
+        offers.downloads = std::make_unique<content::Downloads>(std::move(queue_options));
+        if (offers.service) {
+            const std::shared_ptr<const content::Snapshot> catalogues = offers.service->snapshot();
+            if (catalogues)
+                offers.downloads->start(*catalogues);
+        }
+        pass_install_ids(offers);
+    } catch (const std::exception& caught) {
+        std::cerr << "open-annihilation: the setup could not open downloads: " << caught.what()
+                  << '\n';
+        offers.downloads.reset();
+    }
+    return offers;
+}
+
+/// Tells whether Core Prime's downloads are on.
+///
+/// @param catalogues the snapshot
+/// @param values the preferences
+/// @return false when Core Prime's install ID is off
+bool downloads_on(const content::Snapshot& catalogues, const preferences::Values& values) {
+    for (const content::RegistryView& listed : catalogues.registries) {
+        if (listed.registry.descriptor.id != kCorePrime)
             continue;
-        if (language->source != languages::Source::built_in &&
-            language->source != languages::Source::installed)
+        const bool required =
+            listed.registry.descriptor.install_id == oa::data::registry::InstallIdUse::required;
+        if (required &&
+            content::read_install_id(values, kCorePrime).state == content::InstallIdState::off)
+            return false;
+        return true;
+    }
+    return true;
+}
+
+/// Tells whether a catalogue the setup reads can be read.
+///
+/// @param catalogues the snapshot
+/// @param check_registry true while `--check-first-run` may read its own registry
+/// @return true when the snapshot lists one with a catalogue and no error
+bool catalogue_readable(const content::Snapshot& catalogues, bool check_registry) {
+    bool check_catalogue = false;
+    for (const content::RegistryView& listed : catalogues.registries) {
+        const bool readable = listed.catalogue != nullptr && listed.last_error.empty();
+        if (!readable)
+            continue;
+        if (listed.registry.descriptor.id == kCorePrime)
+            return true;
+        if (check_registry && listed.registry.descriptor.id == kCheckRegistry)
+            check_catalogue = true;
+    }
+    return check_catalogue;
+}
+
+/// The English name a catalogue gives a language, or the tag.
+///
+/// @param tag the language's tag
+/// @param named the catalogue's English name; empty when it names none
+/// @return the name
+std::string catalogue_english_name(std::string_view tag, std::string_view named) {
+    if (!named.empty())
+        return std::string(named);
+    if (const languages::Language* known = languages::find_by_tag(tag);
+        known != nullptr && !known->english_name.empty())
+        return std::string(known->english_name);
+    return std::string(tag);
+}
+
+/// Scales a download into the progress bar.
+///
+/// @param[in,out] card the card
+/// @param done bytes held
+/// @param size the pack's size
+void set_pack_progress(first_run::Card& card, uint64_t done, uint64_t size) {
+    card.progress_done_text = settings::download_size_text(done);
+    card.progress_size_text = settings::download_size_text(size);
+    if (size == 0) {
+        card.progress_done = 0;
+        card.progress_whole = 0;
+        return;
+    }
+    const double share = static_cast<double>(done) / static_cast<double>(size);
+    const double clamped = share < 0.0 ? 0.0 : (share > 1.0 ? 1.0 : share);
+    long rounded = std::lround(clamped * static_cast<double>(kProgressWhole));
+    if (rounded < 0)
+        rounded = 0;
+    if (rounded > kProgressWhole)
+        rounded = kProgressWhole;
+    card.progress_done = static_cast<int32_t>(rounded);
+    card.progress_whole = kProgressWhole;
+}
+
+/// Puts a queued pack's state on its card.
+///
+/// @param[in,out] card the card
+/// @param item the queue's row
+void apply_queue(first_run::Card& card, const content::DownloadView& item) {
+    switch (item.state) {
+    case content::DownloadState::waiting:
+    case content::DownloadState::asking:
+    case content::DownloadState::challenge:
+    case content::DownloadState::downloading:
+    case content::DownloadState::paused_for_match:
+        card.pack = first_run::PackState::downloading;
+        set_pack_progress(card, item.done, item.target.size);
+        break;
+    case content::DownloadState::verifying:
+    case content::DownloadState::handing_over:
+    case content::DownloadState::installing:
+    case content::DownloadState::done:
+        card.pack = first_run::PackState::checking;
+        break;
+    case content::DownloadState::failed:
+    case content::DownloadState::cancelled:
+        card.pack = first_run::PackState::failed;
+        card.failure = looked_up(content::failure_text(item.failure));
+        break;
+    }
+}
+
+/// Reads the queue's row for a pack, when one is there.
+///
+/// @param offers the catalogues
+/// @param tag the pack's tag
+/// @param check_registry true while `--check-first-run` may read its own registry
+/// @param[out] item the row; unchanged when there is none
+/// @return true when the queue holds it
+bool queued_pack(
+    const LanguageOffers& offers,
+    std::string_view tag,
+    bool check_registry,
+    content::DownloadView& item
+) {
+    if (!offers.downloads)
+        return false;
+    const std::vector<content::DownloadView> items = offers.downloads->view();
+    for (const content::DownloadView& queued : items) {
+        const bool core_prime = queued.target.registry == kCorePrime;
+        const bool check = check_registry && queued.target.registry == kCheckRegistry;
+        if ((!core_prime && !check) || !same_language_tag(queued.target.key, tag))
+            continue;
+        item = queued;
+        return true;
+    }
+    return false;
+}
+
+/// Tells whether two cards show the same thing.
+///
+/// @param earlier a card
+/// @param later a card
+/// @return true when they do
+bool same_language_card(const first_run::Card& earlier, const first_run::Card& later) {
+    return earlier.tag == later.tag && earlier.own_name == later.own_name &&
+           earlier.english_name == later.english_name && earlier.kind == later.kind &&
+           earlier.pack == later.pack && earlier.current == later.current &&
+           earlier.size_text == later.size_text &&
+           earlier.progress_done_text == later.progress_done_text &&
+           earlier.progress_size_text == later.progress_size_text &&
+           earlier.progress_done == later.progress_done &&
+           earlier.progress_whole == later.progress_whole && earlier.failure == later.failure;
+}
+
+/// Rebuilds the language cards from the built-ins, the installed packs and the catalogue.
+///
+/// The selected card stays the one the player was on. The first list, and a
+/// list whose shape changed, puts that card in the centre with no move.
+///
+/// @param[in,out] session the language step
+/// @param[in,out] offers the catalogues
+/// @param shown the tag in effect
+/// @param check_registry true while `--check-first-run` may read its own registry
+/// @return true when what the step shows changed
+bool refresh_language_cards(
+    first_run::Session& session, LanguageOffers& offers, std::string_view shown, bool check_registry
+) {
+    const uint64_t catalogue_generation = offers.service ? offers.service->generation() : 0;
+    const uint64_t download_generation = offers.downloads ? offers.downloads->generation() : 0;
+    if (offers.filled && catalogue_generation == offers.seen_catalogue &&
+        download_generation == offers.seen_downloads)
+        return false;
+
+    const std::shared_ptr<const content::Snapshot> catalogues =
+        offers.service ? offers.service->snapshot() : nullptr;
+    const bool online = catalogues ? downloads_on(*catalogues, offers.values) : true;
+    const bool readable = catalogues && catalogue_readable(*catalogues, check_registry);
+    first_run::CatalogueNote note = first_run::CatalogueNote::none;
+    if (!online)
+        note = first_run::CatalogueNote::downloads_off;
+    else if (!readable)
+        note = first_run::CatalogueNote::unread;
+
+    std::string kept;
+    if (session.carousel.selected >= 0 &&
+        static_cast<std::size_t>(session.carousel.selected) < session.model.cards.size())
+        kept = session.model.cards[static_cast<std::size_t>(session.carousel.selected)].tag;
+
+    std::vector<first_run::Card> built;
+    for (const languages::Language* language : languages::known_languages()) {
+        if (language == nullptr || language->source != languages::Source::built_in)
             continue;
         first_run::Card card;
         card.tag = std::string(language->tag);
         card.own_name = std::string(language->endonym);
         card.english_name = std::string(language->english_name);
-        card.kind = language->source == languages::Source::installed
-                        ? first_run::CardKind::installed
-                        : first_run::CardKind::built_in;
-        card.current = language->tag == shown;
-        model.cards.push_back(std::move(card));
+        card.kind = first_run::CardKind::built_in;
+        card.current = same_language_tag(card.tag, shown);
+        built.push_back(std::move(card));
     }
+    for (const languages::Language* language : languages::known_languages()) {
+        if (language == nullptr || language->source != languages::Source::installed)
+            continue;
+        if (!languages::playable(*language))
+            continue;
+        first_run::Card card;
+        card.tag = std::string(language->tag);
+        card.own_name = std::string(language->endonym);
+        card.english_name = std::string(language->english_name);
+        card.kind = first_run::CardKind::installed;
+        card.current = same_language_tag(card.tag, shown);
+        built.push_back(std::move(card));
+    }
+    if (catalogues) {
+        for (const content::Entry& listed : catalogues->entries) {
+            if (listed.package == nullptr || listed.package->kind != catalogue::Kind::oalang)
+                continue;
+            const bool core_prime = listed.registry == kCorePrime;
+            const bool check = check_registry && listed.registry == kCheckRegistry;
+            if (!core_prime && !check)
+                continue;
+            const catalogue::Package& package = *listed.package;
+            if (package.id.empty())
+                continue;
+            bool already = false;
+            for (const first_run::Card& card : built) {
+                if (same_language_tag(card.tag, package.id))
+                    already = true;
+            }
+            if (already)
+                continue;
+            const languages::Language* known = languages::find_by_tag(package.id);
+            if (known != nullptr && languages::playable(*known))
+                continue;
+            first_run::Card card;
+            card.tag = package.id;
+            card.english_name = catalogue_english_name(package.id, package.english_name);
+            card.own_name = package.name.empty() ? card.english_name : package.name;
+            card.kind = first_run::CardKind::pack;
+            card.current = same_language_tag(card.tag, shown);
+            card.size_text = settings::download_size_text(package.size);
+            if (note != first_run::CatalogueNote::none) {
+                card.pack = first_run::PackState::offline;
+            } else {
+                content::DownloadView item;
+                if (queued_pack(offers, card.tag, check_registry, item)) {
+                    apply_queue(card, item);
+                    if (offers.download_item == 0 || same_language_tag(card.tag, kept))
+                        offers.download_item = item.item;
+                } else if (same_language_tag(offers.pending_failure_tag, card.tag)) {
+                    card.pack = first_run::PackState::failed;
+                    card.failure = offers.pending_failure;
+                }
+            }
+            built.push_back(std::move(card));
+        }
+    }
+
+    bool changed = note != session.model.catalogue || built.size() != session.model.cards.size();
+    for (std::size_t at = 0; !changed && at < built.size(); ++at)
+        changed = !same_language_card(built[at], session.model.cards[at]);
+    offers.seen_catalogue = catalogue_generation;
+    offers.seen_downloads = download_generation;
+    if (!changed && offers.filled)
+        return false;
+
+    int32_t chosen = 0;
+    const auto count = static_cast<int32_t>(built.size());
+    bool found = false;
+    if (!kept.empty()) {
+        for (int32_t at = 0; at < count; ++at) {
+            if (same_language_tag(built[static_cast<std::size_t>(at)].tag, kept)) {
+                chosen = at;
+                found = true;
+                break;
+            }
+        }
+    }
+    if (!found) {
+        for (int32_t card_at = 0; card_at < count; ++card_at) {
+            if (built[static_cast<std::size_t>(card_at)].current)
+                chosen = card_at;
+        }
+    }
+    const bool snap =
+        !offers.filled || chosen != session.carousel.selected || session.carousel.count != count;
+    session.model.cards = std::move(built);
+    session.model.catalogue = note;
+    session.carousel.selected = chosen;
+    first_run::bind(session);
+    if (snap)
+        kit::carousel_settle(session.carousel);
+    offers.filled = true;
+    return true;
+}
+
+/// Queues a pack. A refusal is kept on the card until a download replaces it.
+///
+/// @param[in,out] offers the catalogues
+/// @param tag the pack's tag
+void queue_language_pack(LanguageOffers& offers, std::string_view tag) {
+    offers.pending_failure.clear();
+    offers.pending_failure_tag.clear();
+    forget_language_view(offers);
+    const auto refuse = [&](std::string_view why) {
+        offers.pending_failure_tag = std::string(tag);
+        offers.pending_failure = looked_up(why);
+    };
+    if (!offers.service || !offers.downloads) {
+        refuse("the catalogue has no such package");
+        return;
+    }
+    const std::shared_ptr<const content::Snapshot> catalogues = offers.service->snapshot();
+    if (!catalogues) {
+        refuse("the catalogue has no such package");
+        return;
+    }
+    std::string registry_id;
+    for (const content::Entry& listed : catalogues->entries) {
+        if (listed.package == nullptr || listed.package->kind != catalogue::Kind::oalang)
+            continue;
+        if (!same_language_tag(listed.package->id, tag))
+            continue;
+        registry_id = listed.registry;
+        break;
+    }
+    if (registry_id.empty()) {
+        refuse("the catalogue has no such package");
+        return;
+    }
+    std::string why;
+    std::optional<content::DownloadTarget> target =
+        content::download_target(*catalogues, registry_id, tag, &why);
+    if (!target) {
+        refuse(why.empty() ? "the catalogue has no such package" : why);
+        return;
+    }
+    if (target->install_id == oa::data::registry::InstallIdUse::required) {
+        bool changed = false;
+        const std::optional<std::string> id =
+            content::ensure_install_id(offers.values, registry_id, changed);
+        if (changed)
+            store_language_preferences(offers);
+        if (!id) {
+            refuse(content::failure_text(content::DownloadFailure::install_id_off));
+            return;
+        }
+        offers.downloads->set_install_id(registry_id, id);
+    }
+    const std::optional<uint64_t> queued =
+        offers.downloads->queue(std::move(*target), content::DownloadReason::install, &why);
+    if (!queued) {
+        refuse(why.empty() ? "the catalogue has no such package" : why);
+        return;
+    }
+    offers.download_item = *queued;
+}
+
+/// Queues a failed pack again, or starts it when the queue has dropped it.
+///
+/// @param[in,out] offers the catalogues
+/// @param session the language step
+void retry_language_pack(LanguageOffers& offers, const first_run::Session& session) {
+    const int32_t picked = session.carousel.selected;
+    if (picked < 0 || static_cast<std::size_t>(picked) >= session.model.cards.size())
+        return;
+    const std::string tag = session.model.cards[static_cast<std::size_t>(picked)].tag;
+    offers.pending_failure.clear();
+    offers.pending_failure_tag.clear();
+    forget_language_view(offers);
+    if (offers.downloads) {
+        const std::vector<content::DownloadView> items = offers.downloads->view();
+        for (const content::DownloadView& item : items) {
+            if (!same_language_tag(item.target.key, tag))
+                continue;
+            if (item.state != content::DownloadState::failed &&
+                item.state != content::DownloadState::cancelled)
+                continue;
+            offers.downloads->retry(item.item);
+            offers.download_item = item.item;
+            return;
+        }
+    }
+    queue_language_pack(offers, tag);
 }
 
 /// Opens the centred card's language.
 ///
-/// @param session the language step
+/// @param[in,out] session the language step
 /// @param options the parsed command line
-void apply_selected_language(first_run::Session& session, const Options& options) {
-    const int32_t index = session.carousel.selected;
-    if (index < 0 || static_cast<std::size_t>(index) >= session.model.cards.size())
+/// @param[in,out] shown the tag in effect
+void apply_selected_language(
+    first_run::Session& session, const Options& options, std::string& shown
+) {
+    const int32_t picked = session.carousel.selected;
+    if (picked < 0 || static_cast<std::size_t>(picked) >= session.model.cards.size())
         return;
-    const first_run::Card& card = session.model.cards[static_cast<std::size_t>(index)];
+    const first_run::Card& card = session.model.cards[static_cast<std::size_t>(picked)];
     const languages::Language* known = languages::find_by_tag(card.tag);
     if (known == nullptr || !languages::playable(*known))
         return;
     apply_early_language(card.tag);
     write_preference(options, settings::key::language, known->tag);
+    shown = std::string(known->tag);
     for (first_run::Card& other : session.model.cards)
-        other.current = other.tag == card.tag;
+        other.current = same_language_tag(other.tag, shown);
 }
 
 /// Replaces `{token}` once.
@@ -683,6 +1468,7 @@ void note_progress(CopyJob& job, const CopyProgress& progress) {
                 continue;
             earlier.phase = first_run::CopyPhase::done;
             earlier.done = earlier.whole;
+            earlier.file.clear();
         }
         first_run::CopyBundle& row = view.bundles[static_cast<std::size_t>(current)];
         row.phase = first_run::CopyPhase::copying;
@@ -714,11 +1500,23 @@ bool on_copy_check(uint32_t done, uint32_t total, void* context) {
     return !job->stop.load();
 }
 
-/// One bundle row for each bundle the table names that the copy may write.
-void prime_bundles(CopyJob& job, std::span<const bundles::Bundle> table) {
+/// One row for each bundle this source holds. A bundle with no matched file
+/// is left off, so the list does not show a bar for it.
+void prime_bundles(
+    CopyJob& job,
+    std::span<const bundles::Bundle> table,
+    std::span<const first_run::SourceChip> chips
+) {
     job.view.bundles.clear();
     job.bundle_ids.clear();
     for (const bundles::Bundle& bundle : table) {
+        bool held = false;
+        for (const first_run::SourceChip& chip : chips) {
+            if (chip.held && chip.name == bundle.english_name)
+                held = true;
+        }
+        if (!held)
+            continue;
         first_run::CopyBundle row;
         row.name = std::string(bundle.english_name);
         row.whole = 1000;
@@ -728,15 +1526,30 @@ void prime_bundles(CopyJob& job, std::span<const bundles::Bundle> table) {
     }
 }
 
-/// Marks every row from the check and sets the verdict.
+/// Adds two counts, stopping at the greatest uint32_t.
+uint32_t add_count(uint32_t left, uint32_t right) noexcept {
+    constexpr uint32_t kLimit = 0xffffffffu;
+    if (left > kLimit - right)
+        return kLimit;
+    return left + right;
+}
+
+/// Marks every listed row from the check and sets the verdict.
+///
+/// The overall count is the files those rows take. A file the source does
+/// not hold is not one of them. A music bundle that only lacks a track is a
+/// note, not a difference.
 void apply_check(first_run::CopyView& view, const ContentCheck& check, bool finished) {
     uint32_t differ = 0;
+    uint32_t taken = 0;
+    uint32_t done_files = 0;
+    CopyJob& job = copy_job();
     const auto rows = static_cast<int32_t>(view.bundles.size());
     for (int32_t index = 0; index < rows; ++index) {
         first_run::CopyBundle& row = view.bundles[static_cast<std::size_t>(index)];
         const ContentBundleCheck* found = nullptr;
-        const std::string id = index < static_cast<int32_t>(copy_job().bundle_ids.size())
-                                   ? copy_job().bundle_ids[static_cast<std::size_t>(index)]
+        const std::string id = index < static_cast<int32_t>(job.bundle_ids.size())
+                                   ? job.bundle_ids[static_cast<std::size_t>(index)]
                                    : std::string{};
         for (const ContentBundleCheck& bundle : check.bundles) {
             if (bundle.id == id || bundle.english_name == row.name)
@@ -745,6 +1558,17 @@ void apply_check(first_run::CopyView& view, const ContentCheck& check, bool fini
         if (found == nullptr)
             continue;
         row.amount = content_bundle_line(*found);
+        row.note = found->id == "music" && found->files_not_in_source > 0 &&
+                   found->files_differ == 0 && found->files_not_in_source <= found->file_count;
+        const uint32_t absent = found->files_not_in_source > found->file_count
+                                    ? found->file_count
+                                    : found->files_not_in_source;
+        const uint32_t row_taken = found->file_count - absent;
+        const uint32_t row_differ =
+            found->files_differ > row_taken ? row_taken : found->files_differ;
+        taken = add_count(taken, row_taken);
+        done_files = add_count(done_files, row_taken - row_differ);
+        row.file.clear();
         if (found->files_differ == 0) {
             row.phase = first_run::CopyPhase::done;
             row.done = row.whole;
@@ -764,7 +1588,20 @@ void apply_check(first_run::CopyView& view, const ContentCheck& check, bool fini
     }
     view.verdict = content_match_line(differ);
     view.checked = true;
-    view.done = view.whole;
+    if (taken > 0) {
+        const CopyFileCount tally = copy_file_count(done_files, taken, 0);
+        job.files_done = tally.done;
+        job.files_total = tally.total;
+        if (differ == 0 || view.whole <= 0)
+            view.done = view.whole;
+        else
+            view.done = static_cast<int32_t>(
+                (static_cast<uint64_t>(tally.done) * static_cast<uint64_t>(view.whole)) /
+                tally.total
+            );
+    } else {
+        view.done = view.whole;
+    }
 }
 
 /// Opens the chosen place.
@@ -1323,13 +2160,9 @@ SetupBefore run_setup_before_game(
     resume_state().leave_set = true;
     session.model.step = again ? first_run::Step::game : first_run::Step::language;
     session.model.controller = SDL_HasGamepad();
-    fill_cards(session.model, shown.tag);
-    session.carousel.selected = 0;
-    for (int32_t index = 0; index < static_cast<int32_t>(session.model.cards.size()); ++index) {
-        if (session.model.cards[static_cast<std::size_t>(index)].current)
-            session.carousel.selected = index;
-    }
-    first_run::bind(session);
+    std::string shown_tag(shown.tag);
+    LanguageOffers offers = open_language_offers(options, user, shown_tag);
+    static_cast<void>(refresh_language_cards(session, offers, shown_tag, options.check_first_run));
 
     // The step on screen, and whether its first frame has been presented.
     struct SetupStepTiming {
@@ -1522,13 +2355,17 @@ SetupBefore run_setup_before_game(
         case first_run::Ask::back:
             if (session.model.step == first_run::Step::game)
                 session.model.step = first_run::Step::language;
-            else if (session.model.step == first_run::Step::online)
+            else if (session.model.step == first_run::Step::online) {
                 session.model.step = first_run::Step::copying;
+                first_run::reset_copy_continue(session);
+            }
             session.focus_ready = false;
             break;
         case first_run::Ask::advance:
             if (session.model.step == first_run::Step::language) {
-                apply_selected_language(session, options);
+                apply_selected_language(session, options, shown_tag);
+                if (offers.downloads)
+                    offers.downloads->set_language(shown_tag);
                 session.model.step = first_run::Step::game;
                 note_setup_step();
                 // The check's install replaces the machine's list. A player's
@@ -1544,6 +2381,8 @@ SetupBefore run_setup_before_game(
                     break;
                 if (setup_begin_copy(user, session.model)) {
                     session.model.step = first_run::Step::copying;
+                    first_run::reset_copy_continue(session);
+                    session.copy_continue_armed = true;
                     session.focus_ready = false;
                     if (!awake) {
                         SDL_DisableScreenSaver();
@@ -1559,9 +2398,20 @@ SetupBefore run_setup_before_game(
                 return;
             }
             break;
-        case first_run::Ask::pick:
-            apply_selected_language(session, options);
+        case first_run::Ask::pick: {
+            const int32_t picked = session.carousel.selected;
+            apply_selected_language(session, options, shown_tag);
+            if (offers.downloads)
+                offers.downloads->set_language(shown_tag);
+            if (picked >= 0 && static_cast<std::size_t>(picked) < session.model.cards.size()) {
+                const first_run::Card& card = session.model.cards[static_cast<std::size_t>(picked)];
+                if (card.kind == first_run::CardKind::pack &&
+                    card.pack != first_run::PackState::downloading &&
+                    card.pack != first_run::PackState::checking)
+                    queue_language_pack(offers, card.tag);
+            }
             break;
+        }
         case first_run::Ask::locate:
             std::ignore = take_source_scan(sources, session.model);
             if (sources.started && !sources.applied)
@@ -1579,6 +2429,7 @@ SetupBefore run_setup_before_game(
             session.model.copy.running = false;
             session.model.copy.paused = false;
             session.model.step = first_run::Step::game;
+            first_run::reset_copy_continue(session);
             session.focus_ready = false;
             if (awake) {
                 SDL_EnableScreenSaver();
@@ -1586,7 +2437,13 @@ SetupBefore run_setup_before_game(
             }
             break;
         case first_run::Ask::cancel_download:
+            if (offers.downloads && offers.download_item != 0)
+                offers.downloads->cancel(offers.download_item);
+            forget_language_view(offers);
+            break;
         case first_run::Ask::retry_download:
+            retry_language_pack(offers, session);
+            break;
         case first_run::Ask::choose_on:
         case first_run::Ask::choose_off:
             break;
@@ -1609,6 +2466,7 @@ SetupBefore run_setup_before_game(
             room = fitted;
             dirty = true;
         }
+        const int32_t continue_before = session.copy_continue_ms;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
@@ -1624,6 +2482,8 @@ SetupBefore run_setup_before_game(
                 continue;
             }
             if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+                if (first_run::stop_copy_continue(session))
+                    dirty = true;
                 kit::Key pressed = kit::Key::info;
                 bool mapped = true;
                 switch (event.gbutton.button) {
@@ -1694,7 +2554,15 @@ SetupBefore run_setup_before_game(
         if (last_ticks != 0 && now >= last_ticks)
             dt = static_cast<uint32_t>(std::min<uint64_t>(now - last_ticks, 1000ULL));
         last_ticks = now;
+        // The carousel's place is how long the move has been running. Draw
+        // every frame of that move: a single paint when the key arrives
+        // would hold the first frame until the move had already finished.
+        const uint32_t elapsed_before = session.carousel.elapsed_ms;
         first_run::tick(session, dt);
+        if (session.carousel.elapsed_ms != elapsed_before)
+            dirty = true;
+        if (refresh_language_cards(session, offers, shown_tag, options.check_first_run))
+            dirty = true;
         if (take_source_scan(sources, session.model))
             dirty = true;
         const uint32_t progress_now = oa::platform::tick_ms();
@@ -1711,6 +2579,15 @@ SetupBefore run_setup_before_game(
             progress_hold.closed = true;
             std::cerr << "open-annihilation: progress dialog: closed\n";
             oa::platform::log_files::note_timing("progress dialog closed");
+        }
+        if (session.copy_continue_ms != continue_before)
+            dirty = true;
+        if (session.model.step == first_run::Step::copying && session.copy_continue_ms == 0) {
+            session.copy_continue_ms = -1;
+            session.copy_continue_stopped = true;
+            first_run::Outcome advance;
+            advance.ask = first_run::Ask::advance;
+            handle(advance);
         }
         if (dirty) {
             scene = relayout(room);
@@ -1839,7 +2716,8 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
     job.files_total = 0;
     const std::span<const bundles::Bundle> table =
         fixture ? copy_check_bundles() : bundles::bundles();
-    prime_bundles(job, table);
+    const first_run::GameSource& chosen_row = model.sources[static_cast<std::size_t>(model.source)];
+    prime_bundles(job, table, chosen_row.chips);
     const Remembered copy = *chosen;
     job.worker = std::thread([copy, user_folder] {
         CopyJob& held = copy_job();
@@ -1885,6 +2763,8 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
             held.view.bytes_landed = true;
             held.view.hashing = true;
             held.view.running = true;
+            for (first_run::CopyBundle& row : held.view.bundles)
+                row.file.clear();
             held.view.check_done = 0;
             held.view.check_total = 0;
             held.changed = true;
@@ -2036,10 +2916,9 @@ bool setup_locate_source(SDL_Window* window, const fs::path& user_folder, first_
             );
         else
             add_installer_source(model, remembered_sources(), folder, user_folder);
-        if (model.sources.size() != before) {
-            model.source = static_cast<int32_t>(model.sources.size()) - 1;
+        // add_folder_source and add_installer_source select the fullest new row.
+        if (model.sources.size() != before)
             added = true;
-        }
     }
     return added;
 }

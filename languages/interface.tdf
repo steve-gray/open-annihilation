@@ -4738,14 +4738,6 @@
 	it=Bloccato durante una partita;
 	}
 
-[Locked during a game.]
-	{
-	de=Während einer Partie gesperrt.;
-	fr=Verrouillé pendant une partie.;
-	es=Bloqueado durante una partida.;
-	it=Bloccato durante una partita.;
-	}
-
 [Locked during a game. Choose the mod from the main menu.]
 	{
 	de=Während einer Partie gesperrt. Wähl den Mod im Hauptmenü.;
@@ -12672,12 +12664,4 @@
 	fr=Depuis {place}…;
 	es=Desde {place}…;
 	it=Da {place}…;
-	}
-
-[no {name}]
-	{
-	de=kein {name};
-	fr=pas de {name};
-	es=sin {name};
-	it=niente {name};
 	}

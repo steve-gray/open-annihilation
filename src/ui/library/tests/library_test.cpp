@@ -2326,8 +2326,12 @@ void test_added_package_count() {
     listed.installed.push_back(installed(core, Kind::language, "de", "Deutsch"));
     listed.language = {"Deutsch", "Deutsch", "1.2"};
     listed.playing_mod = lib::PlayingMod{"Basalt", "2.1", std::nullopt};
+    // Bundles copied from an installation are the player's game, not added
+    // packages; an expansion a registry delivered is.
     listed.content.copied = {"totala", "totala-demo", "cavedog-units", "campaign"};
-    OA_CHECK(lib::added_package_count(listed) == 6);
+    OA_CHECK(lib::added_package_count(listed) == 4);
+    listed.content.downloaded = {"cavedog-units"};
+    OA_CHECK(lib::added_package_count(listed) == 5);
 }
 
 void test_tabs_list_what_their_counts_hold() {

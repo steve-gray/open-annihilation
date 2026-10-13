@@ -673,6 +673,249 @@ void check_leave_word() {
     }
 }
 
+/// The game step's column is Settings' panel, and its rows leave room between them.
+void check_game_column() {
+    using oa::ui::first_run::GameSource;
+    using oa::ui::first_run::SourceChip;
+    using oa::ui::first_run::SourceMark;
+    const int32_t sizes[][2] = {{640, 480}, {1280, 720}, {1920, 1080}};
+    for (const auto& size : sizes) {
+        oa::ui::kit::Frame frame;
+        frame.area = {0, 0, size[0], size[1]};
+        frame.size_class = oa::ui::kit::size_class_of(size[0], size[1]);
+        frame.scale_percent = 100;
+        Session session;
+        session.model.leave = Leave::quit;
+        session.model.walk = Walk::setup;
+        session.model.step = Step::game;
+        GameSource fuller;
+        fuller.title = "setup-full.exe";
+        fuller.detail = "~/Downloads";
+        fuller.mark = SourceMark::gog;
+        fuller.footnote = "1.0 GB";
+        fuller.chips = {
+            SourceChip{"Total Annihilation 3.1c", true},
+            SourceChip{"Campaign", true},
+            SourceChip{"Core Contingency", true},
+            SourceChip{"Battle Tactics", true},
+            SourceChip{"Music", true},
+        };
+        GameSource thinner;
+        thinner.title = "setup-thin.exe";
+        thinner.detail = "~/Downloads";
+        thinner.mark = SourceMark::gog;
+        thinner.footnote = "1.0 GB";
+        thinner.chips = {
+            SourceChip{"Total Annihilation 3.1c", true},
+            SourceChip{"Music", true},
+        };
+        session.model.sources.push_back(std::move(fuller));
+        session.model.sources.push_back(std::move(thinner));
+        session.model.source = 0;
+        const auto scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+        const oa::ui::kit::Control* first =
+            oa::ui::kit::control_of(scene.list, oa::ui::first_run::source_id);
+        const oa::ui::kit::Control* second =
+            oa::ui::kit::control_of(scene.list, oa::ui::first_run::source_id + 1);
+        const int32_t edge =
+            oa::ui::kit::compact_metrics.edge + oa::ui::kit::compact_metrics.padding;
+        const int32_t band = std::max(size[0] - 2 * edge, int32_t{0});
+        const oa::ui::kit::Metrics& metrics = oa::ui::kit::metrics_of(frame.size_class);
+        const int32_t column = std::min(band, metrics.dialog_width);
+        if (first == nullptr || second == nullptr) {
+            OA_CHECK(first != nullptr && second != nullptr);
+            continue;
+        }
+        OA_CHECK(first->rect.width == column);
+        OA_CHECK(second->rect.width == column);
+        OA_CHECK(first->rect.x == edge + std::max((band - column) / 2, int32_t{0}));
+        OA_CHECK(second->rect.y == first->rect.y + first->rect.height + metrics.padding);
+        OA_CHECK(first->rect.height > oa::ui::kit::choice_card_height());
+        OA_CHECK(!meets(first->rect, second->rect));
+        for (const oa::ui::kit::Item& item : scene.list.items) {
+            if (item.role != oa::ui::kit::Role::pill)
+                continue;
+            OA_CHECK(item.text.find("no ") == std::string::npos);
+            const bool in_first =
+                item.rect.x >= first->rect.x && item.rect.y >= first->rect.y &&
+                item.rect.x + item.rect.width <= first->rect.x + first->rect.width &&
+                item.rect.y + item.rect.height <= first->rect.y + first->rect.height;
+            const bool in_second =
+                item.rect.x >= second->rect.x && item.rect.y >= second->rect.y &&
+                item.rect.x + item.rect.width <= second->rect.x + second->rect.width &&
+                item.rect.y + item.rect.height <= second->rect.y + second->rect.height;
+            OA_CHECK(in_first || in_second);
+        }
+    }
+}
+
+/// The y of the first item whose text is `words`, or -1.
+int32_t line_y(const oa::ui::first_run::Scene& scene, std::string_view words) {
+    for (const oa::ui::kit::Item& item : scene.list.items) {
+        if (item.text == words)
+            return item.rect.y;
+    }
+    return -1;
+}
+
+/// A finished copy reads 100%, lists only the bundles it holds, and counts down.
+void check_copying_layout() {
+    oa::ui::kit::Frame frame;
+    frame.area = {0, 0, 1280, 720};
+    frame.size_class = oa::ui::kit::SizeClass::large;
+
+    Session session;
+    session.model.walk = Walk::setup;
+    session.model.leave = Leave::quit;
+    session.model.step = Step::copying;
+    session.model.copy.from = "GOG";
+    session.model.copy.overall = "38 of 38 · 100%";
+    session.model.copy.done = 1000;
+    session.model.copy.whole = 1000;
+    session.model.copy.checked = true;
+    session.model.copy.verdict = "All files match";
+    session.copy_continue_ms = 3000;
+
+    oa::ui::first_run::CopyBundle base;
+    base.name = "Total Annihilation";
+    base.file = "rev31.gp3";
+    base.amount = "All files match";
+    base.done = 1000;
+    base.whole = 1000;
+    base.phase = oa::ui::first_run::CopyPhase::done;
+    oa::ui::first_run::CopyBundle music;
+    music.name = "Music";
+    music.file = "music/9.mp3";
+    music.amount = "17 of 18 tracks";
+    music.done = 1000;
+    music.whole = 1000;
+    music.phase = oa::ui::first_run::CopyPhase::done;
+    music.note = true;
+    session.model.copy.bundles.push_back(std::move(base));
+    session.model.copy.bundles.push_back(std::move(music));
+
+    const auto finished = oa::ui::first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(next_caption(finished) == "Continue · 3");
+    OA_CHECK(shows_line(finished, "38 of 38 · 100%"));
+    OA_CHECK(shows_line(finished, "All files match"));
+    OA_CHECK(shows_line(finished, "17 of 18 tracks"));
+    OA_CHECK(!shows_line(finished, "music/9.mp3"));
+    OA_CHECK(!shows_line(finished, "rev31.gp3"));
+    OA_CHECK(!shows_line(finished, "Total Annihilation demo"));
+    const int32_t overall_y = line_y(finished, "38 of 38 · 100%");
+    const int32_t verdict_y = line_y(finished, "All files match");
+    OA_CHECK(overall_y >= 0 && verdict_y > overall_y);
+    bool panel = false;
+    bool rule = false;
+    int32_t panel_width = 0;
+    for (const oa::ui::kit::Item& item : finished.list.items) {
+        if (item.role == oa::ui::kit::Role::fill && item.colour == oa::ui::kit::colour::list) {
+            panel = true;
+            panel_width = item.rect.width;
+        }
+        if (item.role == oa::ui::kit::Role::bevel && item.colour == oa::ui::kit::colour::edge_light)
+            OA_CHECK(item.rect.width == panel_width || panel_width == 0);
+        if (item.role == oa::ui::kit::Role::rule)
+            rule = true;
+    }
+    OA_CHECK(panel);
+    OA_CHECK(rule);
+    bool inner_bar = false;
+    for (const oa::ui::kit::Item& item : finished.list.items) {
+        if (item.role != oa::ui::kit::Role::progress || item.rect.height != 6)
+            continue;
+        inner_bar = item.rect.width == panel_width - 2 * oa::ui::kit::compact_metrics.padding;
+    }
+    OA_CHECK(inner_bar);
+    bool tracks_hint = false;
+    for (const oa::ui::kit::Item& item : finished.list.items) {
+        if (item.text == "17 of 18 tracks")
+            tracks_hint = item.colour == oa::ui::kit::colour::hint;
+    }
+    OA_CHECK(tracks_hint);
+
+    session.model.copy.checked = false;
+    session.model.copy.running = true;
+    session.model.copy.verdict.clear();
+    session.copy_continue_ms = -1;
+    session.model.copy.overall = "12 of 38 · 31%";
+    session.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::copying;
+    session.model.copy.bundles.front().file = "rev31.gp3";
+    const auto running = oa::ui::first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(next_caption(running) == "Pause");
+    OA_CHECK(shows_line(running, "rev31.gp3"));
+    OA_CHECK(!shows_line(running, "music/9.mp3"));
+
+    session.model.copy.checked = true;
+    session.model.copy.running = false;
+    session.model.copy.hashing = false;
+    session.model.copy.paused = false;
+    session.model.copy.verdict = "All files match";
+    session.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::done;
+    session.copy_continue_armed = true;
+    session.copy_continue_stopped = false;
+    session.copy_continue_ms = -1;
+    oa::ui::first_run::tick(session, 16);
+    OA_CHECK(session.copy_continue_ms == oa::ui::first_run::copy_continue_wait_ms);
+    oa::ui::first_run::tick(session, 1000);
+    OA_CHECK(session.copy_continue_ms == oa::ui::first_run::copy_continue_wait_ms - 1000);
+    const auto counting = oa::ui::first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(next_caption(counting) == "Continue · 2");
+
+    std::ignore = oa::ui::first_run::pointer(
+        session, counting, oa::ui::first_run::PointerKind::move, {20, 20}, 0, 1
+    );
+    OA_CHECK(session.copy_continue_ms == oa::ui::first_run::copy_continue_wait_ms - 1000);
+    Session wheeled = session;
+    std::ignore = oa::ui::first_run::wheel(wheeled, counting, 1.F);
+    OA_CHECK(wheeled.copy_continue_stopped);
+    Session pressed = session;
+    std::ignore = oa::ui::first_run::pointer(
+        pressed, counting, oa::ui::first_run::PointerKind::down, {4, 4}, 0, 1
+    );
+    OA_CHECK(pressed.copy_continue_stopped);
+    std::ignore = oa::ui::first_run::key(session, counting, oa::ui::kit::Key::tab);
+    OA_CHECK(session.copy_continue_stopped);
+    OA_CHECK(session.copy_continue_ms < 0);
+    oa::ui::first_run::tick(session, 1000);
+    OA_CHECK(session.copy_continue_ms < 0);
+
+    Session differing = session;
+    differing.copy_continue_stopped = false;
+    differing.copy_continue_armed = true;
+    differing.copy_continue_ms = -1;
+    differing.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::differ;
+    oa::ui::first_run::tick(differing, 16);
+    OA_CHECK(differing.copy_continue_ms < 0);
+
+    Session waiting = session;
+    waiting.copy_continue_stopped = false;
+    waiting.copy_continue_armed = false;
+    waiting.copy_continue_ms = -1;
+    waiting.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::done;
+    oa::ui::first_run::tick(waiting, 16);
+    OA_CHECK(waiting.copy_continue_ms < 0);
+
+    oa::ui::kit::Frame narrow;
+    narrow.area = {0, 0, 640, 480};
+    narrow.size_class = oa::ui::kit::size_class_of(640, 480);
+    Session crowded = session;
+    crowded.copy_continue_ms = 3000;
+    crowded.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::done;
+    const auto small = oa::ui::first_run::lay_out(crowded, narrow, nullptr);
+    const oa::ui::kit::Control* skip =
+        oa::ui::kit::control_of(small.list, oa::ui::first_run::skip_id);
+    const oa::ui::kit::Control* back =
+        oa::ui::kit::control_of(small.list, oa::ui::first_run::back_id);
+    const oa::ui::kit::Control* next =
+        oa::ui::kit::control_of(small.list, oa::ui::first_run::next_id);
+    OA_CHECK(skip != nullptr && back != nullptr && next != nullptr);
+    OA_CHECK(next->text == "Continue · 3");
+    OA_CHECK(!meets(skip->rect, back->rect));
+    OA_CHECK(!meets(back->rect, next->rect));
+    OA_CHECK(!meets(skip->rect, next->rect));
+}
+
 } // namespace
 
 int main() {
@@ -685,6 +928,8 @@ int main() {
     check_wrap_click_and_buttons();
     check_lookup();
     check_leave_word();
+    check_copying_layout();
     check_centred_language();
+    check_game_column();
     return oa::test::check_exit_status();
 }

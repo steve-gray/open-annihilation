@@ -685,6 +685,52 @@ void every_kind_lies_by_the_rows_rules() {
     sample.in_game = false;
     const kit::PlacedRows narrow = kit::place_rows(views_of(locked, sample), dialog_column(false));
     check_rect("Narrow link", 0, "control", narrow.rows[0].control_area, {158, 63, 60, 16});
+
+    // A locked value row whose label and value do not fit on one line with
+    // the lock: the label keeps its line and the value stands on the next,
+    // before the lock in the button's place when the hint is the row's
+    // status, else before the lock and the button.
+    std::array<kit::RowSpec<Sample>, 2> values{
+        locked_in_game(
+            kit::value_and_button(
+                "downloaded-files",
+                "Downloaded files",
+                install_id_text,
+                "EMPTY",
+                "empty",
+                kReset,
+                {"Kept for resuming and repairs."}
+            )
+        ),
+        locked_in_game(
+            kit::value_and_button(
+                "install-value",
+                "Install ID",
+                install_id_text,
+                "RESET",
+                "reset",
+                kReset,
+                {"A random number for downloads."}
+            )
+        ),
+    };
+    sample.in_game = true;
+    sample.install_id = "877 KB kept for resuming and repairs";
+    std::vector<kit::RowView> value_views = views_of(values, sample);
+    value_views[0].control_below = true;
+    value_views[0].hint_is_status = true;
+    value_views[1].control_below = true;
+    const std::vector<Expected> value_rows{
+        {54, 65, {158, 63, 309, 16}, {319, 81, 148, 16}, {99}, {}, {158, 81, 153, 16}},
+        {119,
+         65,
+         {158, 128, 309, 16},
+         {235, 146, 148, 16},
+         {164},
+         {391, 146, 76, 16},
+         {158, 146, 69, 16}},
+    };
+    placed_as("Locked values", kit::place_rows(value_views, dialog_column(false)), value_rows, 184);
 }
 
 // ---- Scroll ----
