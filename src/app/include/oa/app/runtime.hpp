@@ -996,10 +996,16 @@ class Runtime final : public menu::Host,
     /// @return the layout
     [[nodiscard]] oa::ui::display_layout::MatchLayout lay_out_match(int width, int height);
 
-    /// Keeps the player's skirmish setup before a saved, recorded or network
-    /// game fills skirmish_settings_ with its own players, so the preferences
-    /// keep the player's. A setup already kept stays kept.
+    /// Keeps the player's skirmish setup before a saved, recorded, network or
+    /// campaign game fills skirmish_settings_ with its own players, so the
+    /// preferences keep the player's. A setup already kept stays kept.
     void keep_player_skirmish_settings();
+
+    /// Puts the player's skirmish setup back and forgets the kept copy.
+    ///
+    /// A campaign start that never builds a match calls it. The return to the
+    /// skirmish setup does the same through the preferences load.
+    void release_player_skirmish_settings();
 
     /// The base game, rule-changing expansions and language a presence record
     /// may name. Bundles are named only for a managed copy whose choice is
@@ -14815,9 +14821,10 @@ class Runtime final : public menu::Host,
     /// folder, kept whole when it is too long for Game.capture_path.
     std::string film_folder_;
     entry::SkirmishSettings skirmish_settings_{};
-    /// The player's own skirmish setup while a saved, recorded or network
-    /// game's players fill skirmish_settings_ for its match; the preferences
-    /// save it in their place. Empty while skirmish_settings_ is the player's.
+    /// The player's own skirmish setup while a saved, recorded, network or
+    /// campaign game's players fill skirmish_settings_ for its match; the
+    /// preferences save it in their place. Empty while skirmish_settings_ is
+    /// the player's.
     std::optional<entry::SkirmishSettings> player_skirmish_settings_;
     skirmish::UiState skirmish_ui_{};
     TypedKeyHook typed_key_hook_ = TypedKeyHook::none;

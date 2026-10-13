@@ -1193,6 +1193,10 @@ if(BUILD_TESTING)
     oa-formats-oamod oa-formats-tdf oa-platform-text-font oa-test-support oa-options)
   add_test(NAME app-language-packs COMMAND oa-app-language-packs-test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests)
+  # The player's skirmish rows through a campaign mission's options save.
+  add_executable(oa-campaign-skirmish-slots-test src/app/runtime_campaign_test.cpp)
+  target_link_libraries(oa-campaign-skirmish-slots-test PRIVATE oa-ui-frontend-state)
+  add_test(NAME campaign-skirmish-slots COMMAND oa-campaign-skirmish-slots-test)
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/OaExtensions.cmake")
 # Without SDL3's intro player, oa-game links the one that skips each movie

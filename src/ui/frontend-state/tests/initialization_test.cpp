@@ -427,6 +427,48 @@ struct Maps final : init::MapListHost {
     }
 };
 
+// Slot 1 and slot 5 both stored as Player. The load keeps Player on slot 5,
+// the row a skirmish starts as, and slot 1 reads Computer. One stored Player
+// is left as it is.
+void one_local_player() {
+    State state;
+    game_entry::SkirmishSettings settings;
+    init::Preferences p;
+    const auto controller = [](int32_t row) {
+        return SettingsHost::key(
+            init::skirmish_section, "Player" + std::to_string(row) + "Controller"
+        );
+    };
+    SettingsHost two;
+    two.number("NumSkirmishPlayers", 10);
+    two.strings[SettingsHost::key(init::general_section, "SkirmishMap")] = "Saved Map";
+    two.numbers[controller(0)] = 1;
+    two.numbers[controller(1)] = 2;
+    two.numbers[controller(4)] = 1;
+    init::load_preferences(state, settings, p, two);
+    require(settings.slot_count == 10, "ten rows stay ten rows");
+    require(
+        settings.slots[0].controller == 2 && settings.slots[1].controller == 2 &&
+            settings.slots[4].controller == 1,
+        "slot 1 becomes Computer and slot 5 stays Player"
+    );
+    int32_t player_rows = 0;
+    for (int32_t row = 0; row < settings.slot_count; ++row)
+        if (settings.slots[static_cast<std::size_t>(row)].controller == 1)
+            ++player_rows;
+    require(player_rows == 1, "one Player after the load");
+    SettingsHost one;
+    one.number("NumSkirmishPlayers", 10);
+    one.strings[SettingsHost::key(init::general_section, "SkirmishMap")] = "Saved Map";
+    one.numbers[controller(0)] = 2;
+    one.numbers[controller(4)] = 1;
+    init::load_preferences(state, settings, p, one);
+    require(
+        settings.slots[0].controller == 2 && settings.slots[4].controller == 1,
+        "one stored Player is unchanged"
+    );
+}
+
 void save_preferences() {
     State state;
     state.play_intro_movie = 0;
@@ -1160,6 +1202,7 @@ int main() {
     try {
         player_slots();
         preferences();
+        one_local_player();
         save_preferences();
         maps();
         restore_options_entry();

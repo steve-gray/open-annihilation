@@ -307,6 +307,28 @@ void write_all_missions(const Preferences& p, PreferencesHost& h);
 /// @param[in,out] h Settings services.
 void write_skirmish_player_count(const game_entry::SkirmishSettings& s, PreferencesHost& h);
 
+/// Remembers the player's skirmish setup the first time a match is about to
+/// replace the slots. A setup already remembered stays remembered, so a
+/// restart keeps the setup from before the first match.
+///
+/// @param live The slots the player set up.
+/// @param[in,out] kept Empty until the first match; then the player's setup.
+void remember_player_skirmish_settings(
+    const game_entry::SkirmishSettings& live, std::optional<game_entry::SkirmishSettings>& kept
+);
+
+/// Puts a remembered skirmish setup back into the live slots and forgets it.
+///
+/// A campaign start that never builds a match calls it, and so does the
+/// return to the skirmish setup after a saved, recorded, network or campaign
+/// game. Nothing happens when no setup is remembered.
+///
+/// @param[in,out] live The slots a match may have replaced.
+/// @param[in,out] kept The player's setup, cleared by the call.
+void restore_player_skirmish_settings(
+    game_entry::SkirmishSettings& live, std::optional<game_entry::SkirmishSettings>& kept
+);
+
 /// The display mode the DisplaymodeWidth and DisplaymodeHeight settings
 /// start at when they are not stored, and whether a smaller stored one is
 /// raised to it.
@@ -331,7 +353,9 @@ inline constexpr DisplayModeSetting tall_display_mode_setting{1024, 768, true};
 /// bit-preserving writes; restores the device volumes when RestoreVolume is
 /// set; picks the first skirmish map when none is stored. The Image Output
 /// Directory setting, and its default of the application directory and the
-/// user name, are kept at any length.
+/// user name, are kept at any length. A setup that names Player on more than
+/// one row keeps Player on the last of those rows, the one a skirmish starts
+/// as, and the earlier rows read Computer. A setup with one Player is unchanged.
 ///
 /// @param[in,out] state Dispatcher state; play_intro_movie is loaded.
 /// @param[out] settings Skirmish slot count, map and slots.
