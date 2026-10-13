@@ -1247,7 +1247,7 @@ if(OA_BUILD_PLATFORM)
     add_test(NAME native-version COMMAND oa-game --version)
     set_tests_properties(native-version PROPERTIES
       PASS_REGULAR_EXPRESSION
-        "^Open Annihilation [0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)? \\([a-z0-9.-]+ [A-Za-z0-9_]+, ([0-9a-f]{8}|unknown)\\)[\\r\\n]*$"
+        "^Open Annihilation [0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)? \\([a-z0-9.-]+ [A-Za-z0-9_]+, ([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|unknown)\\)\n?$"
       TIMEOUT 60)
     # The native checks run oa-game over the installation OA_GAME_DIR names;
     # without one they are not added.
@@ -3085,7 +3085,7 @@ if(BUILD_TESTING)
   add_test(NAME tools-oa-tool-version COMMAND oa-tool --version)
   set_tests_properties(tools-oa-tool-version PROPERTIES
     PASS_REGULAR_EXPRESSION
-      "^Open Annihilation [0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)? \\([a-z0-9.-]+ [A-Za-z0-9_]+, ([0-9a-f]{8}|unknown)\\)[\\r\\n]*$"
+      "^Open Annihilation [0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)? \\([a-z0-9.-]+ [A-Za-z0-9_]+, ([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|unknown)\\)\n?$"
     TIMEOUT 60)
 endif()
 # The Steam Deck's artwork and files for the Steam Deck package.
