@@ -921,6 +921,14 @@
 	it=Indietro;
 	}
 
+[Base]
+	{
+	de=Basis;
+	fr=Base;
+	es=Base;
+	it=Base;
+	}
+
 [Base game]
 	{
 	de=Grundspiel;
