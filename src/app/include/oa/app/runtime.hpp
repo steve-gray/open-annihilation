@@ -70,6 +70,7 @@
 #include "oa/ui/pad_controls.hpp"
 #include "oa/app/acceleration_status.hpp"
 #include "oa/app/content_copy.hpp"
+#include "oa/app/long_work.hpp"
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/settings.hpp"
 #include "oa/app/renderer_records.hpp"
@@ -7437,6 +7438,15 @@ class Runtime final : public menu::Host,
     /// @return the state
     LanguageState& language_state();
 
+    /// Shows the progress dialog while `job` runs, when this run has a window
+    /// and is not a headless check. The title is Open Annihilation. `line`
+    /// is an English key of the interface catalogue. With no window, or while
+    /// a dialog is already up, `job` runs on this thread and nothing is drawn.
+    ///
+    /// @param line the line's English key
+    /// @param job the work; it may store how far it has come
+    void run_progress(std::string_view line, const std::function<void(LongWork&)>& job);
+
     /// Chooses the language at start, once the preferences file is read: asks
     /// the operating system for its preferred locales, reads the interface
     /// catalogue and the setting, and puts the language in effect.
@@ -7528,7 +7538,12 @@ class Runtime final : public menu::Host,
     /// Puts the chosen language in effect: the translation table and the
     /// fonts of the game data's word when it changed, and the words the
     /// interface shows units' names and descriptions and its own words in.
+    /// A window that is not a headless check shows the progress dialog
+    /// while it runs, unless one is already up.
     void apply_language();
+
+    /// Puts the chosen language in effect on this thread, with no dialog.
+    void apply_language_now();
 
     /// Shows the language just put in effect at once. The screen or match
     /// panel the settings showed over is loaded again in it, its texts
@@ -11783,6 +11798,11 @@ class Runtime final : public menu::Host,
     /// checks the online step over the main menu. Throws std::runtime_error
     /// naming what differed.
     void check_setup_window();
+
+    /// Shows the progress dialog for a short job and for a long one, in a
+    /// spinner and with a bar, and writes a picture of each at three window
+    /// sizes. Throws std::runtime_error naming what differed.
+    void check_progress();
 
     /// Opens every Open Annihilation screen in English, German, French,
     /// Spanish, Italian and Simplified Chinese, at 640x480 and 1280x720.

@@ -372,6 +372,18 @@ void draw_oa_button(
     const Canvas& canvas, int32_t side, OaButtonState state, const OaButtonMark& mark
 );
 
+/// Draws the spinner the OA button's badge uses: eight dots on a circle,
+/// three of them lit, the brightest the place `turn` names and the two
+/// behind it dimmer. `turn` is which of oa_button_spinner_places is lit
+/// (refresh_eighth of the time it has been turning). The same turn draws
+/// the same pixels on every machine. The OA button's badge draws through
+/// this, so its spinner does not change.
+///
+/// @param canvas where it is drawn
+/// @param area the square the dots sit in
+/// @param turn which place is brightest, wrapped over the eight
+void draw_spinner(const Canvas& canvas, const Rect& area, uint32_t turn);
+
 /// The shipped icons' clear corners follow a quarter circle of this radius,
 /// in 256ths of the icon's side.
 inline constexpr int32_t menu_icon_corner_256 = 56;

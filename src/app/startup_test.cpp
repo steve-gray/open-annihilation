@@ -420,6 +420,7 @@ const std::vector<FlagCase>& flag_cases() {
         {"--check-language-notice", &Options::check_language_notice, {}},
         {"--check-first-run", &Options::check_first_run, {}},
         {"--check-setup-window", &Options::check_setup_window, {}},
+        {"--check-progress", &Options::check_progress, {}},
         {"--check-text-fit", &Options::check_text_fit, {}},
         {"--check-folder-chooser", &Options::check_folder_chooser, {}},
         {"--check-patrol-reclaim", &Options::check_patrol_reclaim, {}},

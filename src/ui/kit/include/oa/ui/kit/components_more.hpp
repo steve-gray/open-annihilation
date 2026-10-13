@@ -6,10 +6,12 @@
 // A notice and a question: a box in the window's chrome that tells the
 // player something, with a button that opens a folder and OK, or asks with
 // one to three buttons of its own, and the progress bar a question can show
-// under its text. Their models, where their parts lie, their display lists,
-// what a pointer, a finger and the keys do to them, and their drawing. Texts
-// arrive as they are to be shown; a notice's pass through the look-up its
-// caller gives, when it gives one.
+// under its text. A work dialog is that box with a title, one line and a
+// bar or a spinner, and no buttons: it tells the player what a long moment
+// is for and closes on its own. Their models, where their parts lie, their
+// display lists, what a pointer, a finger and the keys do to a notice and a
+// question, and their drawing. Texts arrive as they are to be shown; a
+// notice's pass through the look-up its caller gives, when it gives one.
 #pragma once
 
 #include "oa/ui/kit/components.hpp"
@@ -429,5 +431,75 @@ void draw_progress(const Canvas& canvas, const Rect& bar, int32_t done, int32_t 
 /// @param done how far it has come
 /// @param whole the whole
 void add_progress(DisplayList& list, const Rect& bar, int32_t done, int32_t whole);
+
+/// The word a work dialog is named by. Its text's control is `<word>.body`.
+inline constexpr std::string_view work_dialog_word = "progress";
+
+/// The spinner's side, in points, when a work dialog does not know how far
+/// the work has come.
+inline constexpr int32_t work_spinner_side = 28;
+
+/// One work dialog: a notice's panel and header, one line, and either a
+/// progress bar or a spinner. It has no buttons. Its texts are given
+/// finished and drawn as given.
+struct WorkDialog {
+    std::string title{}; ///< the header's title, as given
+    std::string line{};  ///< the one line under the header, as given
+    /// A bar under the line, 0 to question_progress_whole filled. -1 draws
+    /// the spinner instead (work_spinner_side).
+    int32_t progress{-1};
+    /// Which of the spinner's eight places is brightest (draw_spinner).
+    /// Ignored while a bar is shown.
+    uint32_t turn{};
+    /// The size class it is laid out at, as a notice's (Notice::size_class).
+    SizeClass size_class{SizeClass::compact};
+};
+
+/// A work dialog, placed, in points from its top left corner.
+struct PlacedWorkDialog {
+    int32_t height{};  ///< the dialog's height
+    Rect title{};      ///< the title's place in the header
+    PlacedLine line{}; ///< the one line
+    Rect bar{};        ///< the progress bar; empty when the spinner is shown
+    Rect spinner{};    ///< the spinner; empty when the bar is shown
+};
+
+/// Places a work dialog at its size class: the title in the header, the line
+/// fitted to one row under it, and the bar or the spinner. Its height is the
+/// text and the indicator, from the class's least to its greatest notice
+/// height. When the text is shorter than the least height, the indicator
+/// sits near the bottom, a text_bottom_gap above the edge.
+///
+/// @param dialog the dialog
+/// @param measure a text's width in the small font
+/// @return the placed dialog
+[[nodiscard]] PlacedWorkDialog place_work_dialog(const WorkDialog& dialog, const Measure& measure);
+
+/// Places a work dialog in its fonts, or at estimated widths without them.
+///
+/// @param dialog the dialog
+/// @param fonts the fonts it is drawn in; null to estimate widths (estimated_width)
+/// @return the placed dialog
+[[nodiscard]] PlacedWorkDialog place_work_dialog(const WorkDialog& dialog, const Fonts* fonts);
+
+/// Returns a work dialog's display list: the window's face, its header, the
+/// line, the bar when the amount is known, and the window's edge. The text
+/// is one control, `<progress>.body` unless the word changes, of kind area,
+/// neither enabled nor focusable. The Tab order is empty. The spinner is
+/// not a role of the list: draw_work_dialog draws it. No button is added.
+///
+/// @param dialog the dialog
+/// @param fonts the fonts it is placed in; null to estimate widths
+/// @return the display list
+[[nodiscard]] DisplayList work_dialog_list(const WorkDialog& dialog, const Fonts* fonts);
+
+/// Draws a work dialog at the canvas's origin: the window's face, its header
+/// with the header mark and the title, the line in the small font, the
+/// progress bar or the spinner, and the window's edge. It has no footer and
+/// no buttons. The spinner is drawn directly (draw_spinner), not as a role.
+///
+/// @param canvas where it is drawn; its icon is the header mark's
+/// @param dialog the dialog
+void draw_work_dialog(const Canvas& canvas, const WorkDialog& dialog);
 
 } // namespace oa::ui::kit

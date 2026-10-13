@@ -673,10 +673,18 @@ void Runtime::set_language_choice(std::string_view choice) {
     if (state.choice == choice)
         return;
     state.choice = std::string(choice);
-    apply_language();
-    // The modern fonts lay out the new language's warm-up text ahead of
-    // its first screen.
-    warm_game_text();
+    // The notice of the change stays on this thread, after the dialog.
+    const auto apply_and_warm = [this] {
+        apply_language();
+        // The modern fonts lay out the new language's warm-up text ahead of
+        // its first screen.
+        warm_game_text();
+    };
+    if (long_work_running() || options_.headless_check || sdl_.window == nullptr ||
+        sdl_.renderer == nullptr)
+        apply_and_warm();
+    else
+        run_progress("Applying your changes", [apply_and_warm](LongWork&) { apply_and_warm(); });
     show_language_change();
 }
 
@@ -705,6 +713,15 @@ void Runtime::show_language_change() {
 }
 
 void Runtime::apply_language() {
+    if (long_work_running() || options_.headless_check || sdl_.window == nullptr ||
+        sdl_.renderer == nullptr) {
+        apply_language_now();
+        return;
+    }
+    run_progress("Applying your changes", [this](LongWork&) { apply_language_now(); });
+}
+
+void Runtime::apply_language_now() {
     auto& state = language_state();
     const char* word = oa::app::command_line::launch_language(options_.launch);
     const languages::Language* named =

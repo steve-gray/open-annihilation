@@ -67,9 +67,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <system_error>
 #include <map>
 #include <memory>
@@ -2203,6 +2205,33 @@ struct Runtime::LibraryScreen final : LayerScreen {
         request.bundles = oa::data::content_bundles::bundles();
         request.news = &std::cerr;
         CopyResult copied;
+        const auto copy_named = [&](ContentSource& source) {
+            runtime_.run_progress("Applying your changes", [&](LongWork& work) {
+                request.on_progress = [](void* context, const CopyProgress& copy_progress) {
+                    auto& held = *static_cast<LongWork*>(context);
+                    if (copy_progress.files_total == 0) {
+                        held.done.store(-1, std::memory_order_release);
+                        return;
+                    }
+                    const int32_t whole =
+                        copy_progress.files_total >
+                                static_cast<uint32_t>(std::numeric_limits<int32_t>::max())
+                            ? std::numeric_limits<int32_t>::max()
+                            : static_cast<int32_t>(copy_progress.files_total);
+                    int32_t finished_files =
+                        copy_progress.files_done >
+                                static_cast<uint32_t>(std::numeric_limits<int32_t>::max())
+                            ? whole
+                            : static_cast<int32_t>(copy_progress.files_done);
+                    if (finished_files > whole)
+                        finished_files = whole;
+                    held.whole.store(whole, std::memory_order_release);
+                    held.done.store(finished_files, std::memory_order_release);
+                };
+                request.progress_context = &work;
+                copied = copy_content(source, request);
+            });
+        };
         if (id == "totala-demo") {
             const DemoInstallerPick pick = ask_demo_installer(
                 runtime_.sdl_.window, runtime_.options_.unattended, runtime_.options_.headless_check
@@ -2217,7 +2246,7 @@ struct Runtime::LibraryScreen final : LayerScreen {
                 return;
             }
             DemoInstallerSource source(pick.path);
-            copied = copy_content(source, request);
+            copy_named(source);
         } else {
             fs::path chosen;
             std::string dialog_error;
@@ -2233,7 +2262,7 @@ struct Runtime::LibraryScreen final : LayerScreen {
                 return;
             }
             FolderContentSource source(std::move(chosen), request.bundles);
-            copied = copy_content(source, request);
+            copy_named(source);
         }
         if (copied.status != CopyStatus::finished) {
             library::note_base_copy_problem(

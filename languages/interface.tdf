@@ -754,6 +754,14 @@
 	it=Si applica alla prossima partita;
 	}
 
+[Applying your changes]
+	{
+	de=Deine Änderungen werden übernommen;
+	fr=Application de tes changements;
+	es=Aplicando tus cambios;
+	it=Applicazione delle tue modifiche;
+	}
+
 [Archives are loose in Open Annihilation's folder. Gather them into Total Annihilation?]
 	{
 	de=Archive liegen lose in Open Annihilations Ordner. In Total Annihilation zusammenführen?;
@@ -1592,6 +1600,14 @@
 	fr=Vérification des fichiers copiés avec la vérification du jeu…;
 	es=Comprobando los archivos copiados con la comprobación del juego…;
 	it=Controllo dei file copiati con il controllo del gioco…;
+	}
+
+[Checking your copy of Total Annihilation]
+	{
+	de=Deine Kopie von Total Annihilation wird geprüft;
+	fr=Vérification de ta copie de Total Annihilation;
+	es=Comprobando tu copia de Total Annihilation;
+	it=Controllo della tua copia di Total Annihilation;
 	}
 
 [Checking {address}…]
@@ -4704,6 +4720,14 @@
 	fr=Chargement de l'aperçu;
 	es=Cargando vista previa;
 	it=Caricamento anteprima;
+	}
+
+[Loading the game's archives]
+	{
+	de=Die Spielarchive werden geladen;
+	fr=Chargement des archives du jeu;
+	es=Cargando los archivos del juego;
+	it=Caricamento degli archivi del gioco;
 	}
 
 [Locked during a game]

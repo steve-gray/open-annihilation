@@ -1073,6 +1073,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_language_notice.cpp
   src/app/runtime_first_run.cpp
   src/app/setup_before_game.cpp
+  src/app/long_work.cpp
   src/app/language_packs.cpp
   src/app/runtime_picture_captions.cpp
   src/app/runtime_renderer.cpp
@@ -1110,6 +1111,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_language_registry_check.cpp
   src/app/runtime_language_notice_check.cpp
   src/app/runtime_first_run_check.cpp
+  src/app/runtime_progress_check.cpp
   src/app/runtime_text_fit_check.cpp
   src/app/runtime_side_column_check.cpp src/app/runtime_match_bars_check.cpp
   src/app/runtime_unit_pages_check.cpp src/app/runtime_frontend_controls_check.cpp
@@ -1699,6 +1701,18 @@ if(OA_BUILD_PLATFORM)
         --preferences-file "${oa_user_folder_dir}/user-folder.conf")
       set_tests_properties(native-user-folder PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
         WORKING_DIRECTORY "${oa_user_folder_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      # The progress dialog: a short job shows nothing, a long spinner and a
+      # long bar animate and close with no input, the four languages have
+      # the lines, and pictures of both states are written at three sizes.
+      set(oa_progress_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/progress")
+      file(MAKE_DIRECTORY "${oa_progress_dir}")
+      add_test(NAME native-progress COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-progress
+        --preferences-file "${oa_progress_dir}/progress.conf"
+        --user-folder "${oa_progress_dir}/Open Annihilation")
+      set_tests_properties(native-progress PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_progress_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       # The Library switches the mod ten times, between no mod and two test
       # profiles it writes into the player's own Mods folder: each switch

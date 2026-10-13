@@ -95,7 +95,11 @@ void draw_line(
     Colour ink,
     int32_t tracking
 ) {
-    if (!drawable(canvas) || canvas.fonts == nullptr || text.empty())
+    // A crisp canvas draws with the game's fonts. A smooth one draws with
+    // its own, so a header still has its title when those are the only fonts.
+    if (!drawable(canvas) || text.empty())
+        return;
+    if (canvas.smooth.painter == nullptr && canvas.fonts == nullptr)
         return;
     box_text(canvas, role, text, box, align, ink, tracking);
 }

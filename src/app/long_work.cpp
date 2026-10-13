@@ -1,0 +1,328 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// The progress dialog while a piece of work runs off the thread that draws.
+#include "oa/app/long_work.hpp"
+
+#include "render_state.hpp"
+#include "window_pixels.hpp"
+
+#include "oa/data/languages/interface_text.hpp"
+#include "oa/platform/log_files.hpp"
+#include "oa/platform/system.hpp"
+#include "oa/platform/text_font.hpp"
+#include "oa/ui/frontend_renderer.hpp"
+#include "oa/ui/kit/canvas.hpp"
+#include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/components_more.hpp"
+#include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/theme.hpp"
+#include "oa/ui/paint/painter.hpp"
+
+#include <SDL3/SDL.h>
+
+#include <atomic>
+#include <cmath>
+#include <cstdint>
+#include <exception>
+#include <stdexcept>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <tuple>
+#include <utility>
+
+namespace oa::app {
+namespace {
+
+namespace kit = oa::ui::kit;
+namespace paint = oa::ui::paint;
+namespace renderer = oa::ui::frontend_renderer;
+namespace text_font = oa::platform::text_font;
+
+std::atomic<bool>& progress_running_flag() noexcept {
+    static std::atomic<bool> running{false};
+    return running;
+}
+
+/// Set for the whole of a dialog's job, including the wait before it shows.
+struct RunningFlag {
+    RunningFlag() { progress_running_flag().store(true, std::memory_order_release); }
+
+    ~RunningFlag() { progress_running_flag().store(false, std::memory_order_release); }
+
+    RunningFlag(const RunningFlag&) = delete;
+    RunningFlag& operator=(const RunningFlag&) = delete;
+};
+
+/// Joins a worker however the drawing thread leaves the dialog.
+struct JoinWorker {
+    std::thread& worker;
+
+    explicit JoinWorker(std::thread& held) noexcept : worker(held) {}
+
+    ~JoinWorker() {
+        if (worker.joinable())
+            worker.join();
+    }
+
+    JoinWorker(const JoinWorker&) = delete;
+    JoinWorker& operator=(const JoinWorker&) = delete;
+};
+
+/// The bundled fonts the dialog's line is drawn in. One thread draws it.
+text_font::FontStack& progress_fonts() {
+    static std::unique_ptr<text_font::FontStack> stack;
+    if (!stack) {
+        stack = text_font::FontStack::open(text_font::bundled_font_directory());
+        if (!stack)
+            throw std::runtime_error("the progress dialog's fonts did not open");
+    }
+    return *stack;
+}
+
+/// Copies one RGB picture onto a canvas, stretched to the canvas when the
+/// sizes differ. `under` has pixels.
+void blit_behind(paint::Canvas& canvas, const renderer::Surface& under) {
+    const int source_width = static_cast<int>(under.width);
+    const int source_height = static_cast<int>(under.height);
+    if (source_width <= 0 || source_height <= 0 || canvas.width <= 0 || canvas.height <= 0)
+        return;
+    const std::size_t source_pixels =
+        static_cast<std::size_t>(under.width) * static_cast<std::size_t>(under.height);
+    if (under.rgb.size() / 3 < source_pixels)
+        return;
+    const bool same = source_width == canvas.width && source_height == canvas.height;
+    for (int row = 0; row < canvas.height; ++row) {
+        const int source_row =
+            same ? row : static_cast<int>((int64_t{row} * source_height) / canvas.height);
+        for (int column = 0; column < canvas.width; ++column) {
+            const int source_column =
+                same ? column : static_cast<int>((int64_t{column} * source_width) / canvas.width);
+            const std::size_t from =
+                (static_cast<std::size_t>(source_row) * static_cast<std::size_t>(source_width) +
+                 static_cast<std::size_t>(source_column)) *
+                3;
+            const std::size_t to =
+                (static_cast<std::size_t>(row) * static_cast<std::size_t>(canvas.width) +
+                 static_cast<std::size_t>(column)) *
+                4;
+            canvas.rgba[to] = under.rgb[from];
+            canvas.rgba[to + 1] = under.rgb[from + 1];
+            canvas.rgba[to + 2] = under.rgb[from + 2];
+            canvas.rgba[to + 3] = 255;
+        }
+    }
+}
+
+/// The bar's fill, or -1 for the spinner. `done` and `whole` scale to a full bar.
+int32_t bar_amount(const LongWork& work) noexcept {
+    const int32_t done = work.done.load(std::memory_order_acquire);
+    const int32_t whole = work.whole.load(std::memory_order_acquire);
+    if (done < 0 || whole <= 0)
+        return -1;
+    int64_t scaled = int64_t{done} * kit::question_progress_whole / whole;
+    if (scaled < 0)
+        scaled = 0;
+    if (scaled > kit::question_progress_whole)
+        scaled = kit::question_progress_whole;
+    return static_cast<int32_t>(scaled);
+}
+
+/// The frame the dialog is centred in, and a canvas of the window's pixels.
+kit::Frame progress_room(SDL_Window* window, SDL_Renderer* renderer, paint::Canvas& pixels) {
+    oa::ui::game_files::Viewport read;
+    std::ignore = read_window_viewport(window, renderer, read);
+    if (read.width <= 0 || read.height <= 0)
+        return {};
+    if (pixels.width != read.width || pixels.height != read.height)
+        pixels = paint::make_canvas(read.width, read.height);
+    kit::Viewport view;
+    view.width = static_cast<int32_t>(read.width);
+    view.height = static_cast<int32_t>(read.height);
+    view.density = read.px_per_point;
+    const long percent = std::lround(static_cast<double>(read.px_per_point) * 100.0);
+    view.scale_percent = static_cast<int32_t>(percent < 100 ? long{100} : percent);
+    view.safe.left = static_cast<int32_t>(read.safe.left);
+    view.safe.top = static_cast<int32_t>(read.safe.top);
+    view.safe.right = static_cast<int32_t>(read.safe.right);
+    view.safe.bottom = static_cast<int32_t>(read.safe.bottom);
+    return kit::frame_of(view);
+}
+
+/// Dims the frame and draws the dialog in its middle. The canvas already holds
+/// the picture behind it.
+void paint_progress_dialog(
+    paint::Canvas& canvas,
+    const kit::Frame& room,
+    std::string_view title,
+    std::string_view line,
+    int32_t progress,
+    uint32_t turn
+) {
+    if (room.area.width <= 0 || room.area.height <= 0)
+        return;
+    paint::Painter painter(canvas);
+    kit::Canvas drawn;
+    drawn.smooth.painter = &painter;
+    drawn.smooth.fonts = &progress_fonts();
+    drawn.smooth.scale_percent = room.scale_percent;
+    kit::WorkDialog dialog;
+    dialog.title = std::string(title);
+    dialog.line = std::string(line);
+    dialog.progress = progress;
+    dialog.turn = turn;
+    dialog.size_class = room.size_class;
+    kit::blend_rect(drawn, room.area, kit::colour::backdrop, kit::menu_backdrop_opacity);
+    const kit::PlacedWorkDialog placed = kit::place_work_dialog(dialog, nullptr);
+    const int32_t box = kit::metrics_of(room.size_class).notice_width;
+    const int32_t x = room.area.x + (room.area.width - box) / 2;
+    const int32_t y = room.area.y + (room.area.height - placed.height) / 2;
+    kit::draw_work_dialog(kit::placed_at(drawn, {x, y}), dialog);
+}
+
+/// Puts a quit back and drops every other event. The job is not stopped.
+void pump_progress_events() {
+    SDL_Event polled;
+    while (SDL_PollEvent(&polled)) {
+        if (polled.type == SDL_EVENT_QUIT || polled.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+            std::ignore = SDL_PushEvent(&polled);
+            break;
+        }
+    }
+}
+
+} // namespace
+
+bool long_work_running() noexcept {
+    return progress_running_flag().load(std::memory_order_acquire);
+}
+
+void fill_progress_behind(paint::Canvas& canvas, const renderer::Surface* under) {
+    if (canvas.width <= 0 || canvas.height <= 0)
+        return;
+    paint::Painter painter(canvas);
+    const kit::Colour quiet = kit::colour::panel;
+    painter.fill_rect(
+        {0, 0, canvas.width, canvas.height}, paint::Rgba{quiet.r, quiet.g, quiet.b, 255}
+    );
+    if (under != nullptr && under->width > 0 && under->height > 0 && !under->rgb.empty())
+        blit_behind(canvas, *under);
+}
+
+void paint_progress_frame(
+    paint::Canvas& canvas,
+    const kit::Frame& room,
+    std::string_view title,
+    std::string_view line,
+    int32_t progress,
+    uint32_t turn,
+    const renderer::Surface* under
+) {
+    fill_progress_behind(canvas, under);
+    paint_progress_dialog(canvas, room, title, line, progress, turn);
+}
+
+LongWorkResult run_long_work(
+    SDL_Window* window,
+    SDL_Renderer* renderer,
+    RendererHost* host,
+    std::string_view title,
+    std::string_view line,
+    const std::function<void(paint::Canvas&)>& behind,
+    const std::function<void(LongWork&)>& job
+) {
+    if (window == nullptr || renderer == nullptr || long_work_running()) {
+        LongWork inline_work;
+        job(inline_work);
+        return {};
+    }
+
+    // Copied before the job, which may change the language the catalogue shows.
+    std::string title_shown(oa::data::languages::interface_text(title));
+    std::string line_shown(oa::data::languages::interface_text(line));
+    LongWorkResult result;
+    std::exception_ptr failure;
+    {
+        RunningFlag running;
+        LongWork work;
+        std::atomic<bool> finished{false};
+        std::thread worker([&] {
+            try {
+                job(work);
+            } catch (...) {
+                failure = std::current_exception();
+            }
+            finished.store(true, std::memory_order_release);
+        });
+        JoinWorker joined{worker};
+
+        const uint32_t began = oa::platform::tick_ms();
+        bool showing = false;
+        uint32_t shown_at = 0;
+        int last_eighth = -1;
+        WindowFrame window_frame(renderer, "the progress dialog");
+        paint::Canvas pixels;
+        while (true) {
+            pump_progress_events();
+            const bool done = finished.load(std::memory_order_acquire);
+            const uint32_t now = oa::platform::tick_ms();
+            if (!showing) {
+                if (done || now - began < long_work_show_after_ms) {
+                    if (done)
+                        break;
+                    SDL_Delay(16);
+                    continue;
+                }
+                showing = true;
+                shown_at = now;
+                result.shown = true;
+                std::cerr << "open-annihilation: progress dialog: shown\n";
+                oa::platform::log_files::note_timing("progress dialog shown");
+            }
+            if (done) {
+                title_shown = std::string(oa::data::languages::interface_text(title));
+                line_shown = std::string(oa::data::languages::interface_text(line));
+            }
+            const int32_t amount = bar_amount(work);
+            const uint32_t turn = kit::refresh_eighth(now - shown_at);
+            if (amount < 0) {
+                if (static_cast<int>(turn) != last_eighth) {
+                    last_eighth = static_cast<int>(turn);
+                    ++result.distinct_turns;
+                    std::cerr << "open-annihilation: progress dialog: spinner\n";
+                }
+            } else {
+                result.bar = true;
+                if (result.least_bar < 0 || amount < result.least_bar)
+                    result.least_bar = amount;
+                if (amount > result.most_bar)
+                    result.most_bar = amount;
+            }
+            const kit::Frame dialog_frame = progress_room(window, renderer, pixels);
+            if (dialog_frame.area.width > 0 && pixels.width > 0) {
+                behind(pixels);
+                paint_progress_dialog(pixels, dialog_frame, title_shown, line_shown, amount, turn);
+                const RenderState kept(renderer);
+                std::ignore = window_frame.show(pixels, kept, host);
+            }
+            if (done && now - shown_at >= long_work_stay_ms)
+                break;
+            SDL_Delay(16);
+        }
+    }
+    if (result.shown) {
+        std::cerr << "open-annihilation: progress dialog: closed\n";
+        oa::platform::log_files::note_timing("progress dialog closed");
+    } else {
+        std::cerr << "open-annihilation: progress dialog: not shown\n";
+    }
+    if (failure)
+        std::rethrow_exception(failure);
+    return result;
+}
+
+} // namespace oa::app

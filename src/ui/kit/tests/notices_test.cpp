@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The kit's notice and question: where six notices and six questions place
-// their parts, their display lists' names, kinds and Tab order, their words
-// and their text's control, which no press reaches, where a finger's press
-// lands, every key (the editing keys among them), paint against a direct
-// draw, and the progress bar's fill.
+// The kit's notice, question and work dialog: where six notices and six
+// questions place their parts, their display lists' names, kinds and Tab
+// order, their words and their text's control, which no press reaches,
+// where a finger's press lands, every key (the editing keys among them),
+// paint against a direct draw, the progress bar's fill, and the work
+// dialog, which has no buttons.
 //
 // The placements and the finger's landings below are literal values,
 // computed once with the settings dialog's own notice and prompt placement
@@ -1242,6 +1243,96 @@ void the_progress_bar_fills_as_far_as_it_came() {
     OA_CHECK(empty.rgb == black(380, 12).rgb);
 }
 
+bool button_role(kit::Role role) {
+    return role == kit::Role::button || role == kit::Role::oa_button ||
+           role == kit::Role::button_main || role == kit::Role::button_danger ||
+           role == kit::Role::call_to_action;
+}
+
+bool button_kind(kit::ControlKind kind) {
+    return kind == kit::ControlKind::button || kind == kit::ControlKind::buttons;
+}
+
+void the_work_dialog_has_no_buttons() {
+    const std::array<int32_t, 2> amounts{-1, 400};
+    for (const int32_t amount : amounts) {
+        kit::WorkDialog dialog;
+        dialog.title = "Open Annihilation";
+        dialog.line = "Loading the game's archives";
+        dialog.progress = amount;
+        dialog.turn = 2;
+        const kit::DisplayList list = kit::work_dialog_list(dialog, &fonts());
+        const kit::PlacedWorkDialog placed = kit::place_work_dialog(dialog, &fonts());
+        OA_CHECK(list.tab_order.empty());
+        OA_CHECK(list.controls.size() == 1);
+        OA_CHECK(list.controls[0].kind == kit::ControlKind::area);
+        OA_CHECK(!list.controls[0].enabled);
+        OA_CHECK(!list.controls[0].focusable);
+        OA_CHECK(list.controls[0].name == "progress.body");
+        for (const kit::Item& item : list.items)
+            OA_CHECK(!button_role(item.role));
+        for (const kit::Control& control : list.controls)
+            OA_CHECK(!button_kind(control.kind));
+        bool progress = false;
+        for (const kit::Item& item : list.items)
+            if (item.role == kit::Role::progress)
+                progress = true;
+        if (amount >= 0) {
+            OA_CHECK(progress);
+            OA_CHECK(placed.bar.width > 0);
+            OA_CHECK(placed.spinner.width == 0);
+        } else {
+            OA_CHECK(!progress);
+            OA_CHECK(placed.bar.width == 0);
+            OA_CHECK(placed.spinner.width > 0);
+            const kit::Metrics& compact = kit::metrics_of(kit::SizeClass::compact);
+            OA_CHECK(
+                placed.spinner.y ==
+                placed.height - compact.edge - compact.text_bottom_gap - kit::work_spinner_side
+            );
+        }
+    }
+
+    kit::WorkDialog bar;
+    bar.title = "Open Annihilation";
+    bar.line = "Checking your copy of Total Annihilation";
+    bar.progress = 400;
+    const int32_t height = kit::place_work_dialog(bar, &fonts()).height;
+    const int32_t width = kit::notice_width + 6;
+    const int32_t rows = height + 6;
+    renderer::Surface drawn = black(width, rows);
+    renderer::Surface painted = black(width, rows);
+    const kit::Canvas draw_on{&drawn, {3, 3, 1, {}}, &fonts(), red_icon()};
+    const kit::Canvas paint_on{&painted, {3, 3, 1, {}}, &fonts(), red_icon()};
+    kit::draw_work_dialog(draw_on, bar);
+    kit::paint(paint_on, kit::work_dialog_list(bar, &fonts()));
+    same(drawn, painted, "work dialog");
+
+    kit::WorkDialog spinning;
+    spinning.title = "Open Annihilation";
+    spinning.line = "Loading the game's archives";
+    spinning.progress = -1;
+    const kit::PlacedWorkDialog spinning_placed = kit::place_work_dialog(spinning, &fonts());
+    renderer::Surface first = black(width, rows);
+    renderer::Surface later = black(width, rows);
+    spinning.turn = 0;
+    kit::draw_work_dialog({&later, {3, 3, 1, {}}, &fonts(), red_icon()}, spinning);
+    spinning.turn = 2;
+    kit::draw_work_dialog({&first, {3, 3, 1, {}}, &fonts(), red_icon()}, spinning);
+    bool turned = false;
+    for (int32_t y = spinning_placed.spinner.y;
+         y < spinning_placed.spinner.y + spinning_placed.spinner.height && !turned;
+         ++y) {
+        for (int32_t x = spinning_placed.spinner.x;
+             x < spinning_placed.spinner.x + spinning_placed.spinner.width;
+             ++x) {
+            if (pixel(first, x + 3, y + 3) != pixel(later, x + 3, y + 3))
+                turned = true;
+        }
+    }
+    OA_CHECK(turned);
+}
+
 } // namespace
 
 int main() {
@@ -1258,5 +1349,6 @@ int main() {
     paint_draws_what_draw_notice_draws();
     paint_draws_what_draw_question_draws();
     the_progress_bar_fills_as_far_as_it_came();
+    the_work_dialog_has_no_buttons();
     return oa::test::check_exit_status();
 }

@@ -17,6 +17,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/content_copy.hpp"
+#include "oa/app/long_work.hpp"
 #include "oa/app/setup_before_game.hpp"
 #include "oa/app/disk_image_source.hpp"
 #include "oa/app/game_files_import.hpp"
@@ -71,7 +72,6 @@
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -243,7 +243,6 @@ struct LaunchFrame {
     SDL_Renderer* renderer = nullptr;
     bool shown = false;
     bool released = false;
-    uint32_t shown_ms = 0;
 };
 
 LaunchFrame& launch_frame() {
@@ -251,44 +250,20 @@ LaunchFrame& launch_frame() {
     return frame;
 }
 
-/// How long the quiet frame stays plain before a bar shows the launch is working.
-constexpr uint32_t kWorkingAfterMs = 200;
-
-/// Clears the window to the setup's backdrop, and draws a bar once the launch
-/// has been working for a moment. The window's first frame is recorded when
-/// the present succeeds.
+/// Clears the window to the quiet launch colour. The window's first frame is
+/// recorded when the present succeeds. A long moment after this shows the
+/// progress dialog instead of a bar on this frame.
 void draw_launch_frame() {
-    LaunchFrame& frame = launch_frame();
-    if (frame.renderer == nullptr || frame.released)
+    LaunchFrame& shown = launch_frame();
+    if (shown.renderer == nullptr || shown.released)
         return;
-    if (!SDL_SetRenderDrawColor(frame.renderer, 0x1b, 0x1e, 0x19, 255) ||
-        !SDL_RenderClear(frame.renderer))
+    if (!SDL_SetRenderDrawColor(shown.renderer, 0x1b, 0x1e, 0x19, 255) ||
+        !SDL_RenderClear(shown.renderer))
         return;
-    const uint32_t now = oa::platform::tick_ms();
-    if (frame.shown && now - frame.shown_ms > kWorkingAfterMs) {
-        int output_width = 0;
-        int output_height = 0;
-        if (SDL_GetRenderOutputSize(frame.renderer, &output_width, &output_height) &&
-            output_width > 0 && output_height > 0) {
-            const int bar_width = std::max(output_width / 5, 40);
-            const int travel = std::max(output_width - bar_width, 1);
-            const int bar_x = static_cast<int>((now / 16U) % static_cast<uint32_t>(travel));
-            if (SDL_SetRenderDrawColor(frame.renderer, 0xc8, 0xc2, 0xb0, 255)) {
-                const SDL_FRect bar{
-                    static_cast<float>(bar_x),
-                    static_cast<float>(std::max(output_height - 48, 0)),
-                    static_cast<float>(bar_width),
-                    8.F
-                };
-                std::ignore = SDL_RenderFillRect(frame.renderer, &bar);
-            }
-        }
-    }
-    if (!SDL_RenderPresent(frame.renderer))
+    if (!SDL_RenderPresent(shown.renderer))
         return;
-    if (!frame.shown) {
-        frame.shown = true;
-        frame.shown_ms = now;
+    if (!shown.shown) {
+        shown.shown = true;
         oa::platform::log_files::note_timing("window first frame");
     }
 }
@@ -1424,23 +1399,19 @@ int run_once(
     };
     const bool folder_aside = display.initialized && (options.unattended || options.headless_check);
     if (folder_aside) {
-        std::exception_ptr folder_error;
-        std::atomic<bool> folder_done{false};
-        std::thread folder_thread([&] {
-            try {
-                resolve_folder();
-            } catch (...) {
-                folder_error = std::current_exception();
-            }
-            folder_done.store(true);
-        });
-        while (!folder_done.load()) {
-            pump_launch_window();
-            SDL_Delay(16);
-        }
-        folder_thread.join();
-        if (folder_error)
-            std::rethrow_exception(folder_error);
+        // A folder dialog stays on this thread. A run nobody watches can look
+        // aside, and the progress dialog covers a look that lasts.
+        const char* folder_line =
+            options.restarts > 0 ? "Applying your changes" : "Loading the game's archives";
+        std::ignore = run_long_work(
+            display.window,
+            display.renderer_host.renderer(),
+            &display.renderer_host,
+            "Open Annihilation",
+            folder_line,
+            [](oa::ui::paint::Canvas& canvas) { fill_progress_behind(canvas, nullptr); },
+            [&](LongWork&) { resolve_folder(); }
+        );
     } else {
         resolve_folder();
     }
@@ -1587,10 +1558,36 @@ int run_once(
     if (archives.empty())
         throw std::runtime_error("no game archives were selected");
     const uint32_t mount_began = oa::platform::tick_ms();
-    for (const auto& candidate : archives) {
-        const auto archive = candidate.is_absolute() ? candidate : options.game_dir / candidate;
-        assets.mount(archive);
-    }
+    const bool mount_shown = display.window != nullptr && !options.headless_check;
+    const char* mount_line =
+        options.restarts > 0 ? "Applying your changes" : "Loading the game's archives";
+    std::ignore = run_long_work(
+        mount_shown ? display.window : nullptr,
+        mount_shown ? display.renderer_host.renderer() : nullptr,
+        mount_shown ? &display.renderer_host : nullptr,
+        "Open Annihilation",
+        mount_line,
+        [](oa::ui::paint::Canvas& canvas) { fill_progress_behind(canvas, nullptr); },
+        [&](LongWork& work) {
+            const std::size_t count = archives.size();
+            const int32_t whole =
+                count > static_cast<std::size_t>(std::numeric_limits<int32_t>::max())
+                    ? std::numeric_limits<int32_t>::max()
+                    : static_cast<int32_t>(count);
+            work.whole.store(whole > 0 ? whole : 1, std::memory_order_release);
+            work.done.store(0, std::memory_order_release);
+            int32_t mounted = 0;
+            for (const auto& candidate : archives) {
+                work.done.store(mounted, std::memory_order_release);
+                const auto archive =
+                    candidate.is_absolute() ? candidate : options.game_dir / candidate;
+                assets.mount(archive);
+                if (mounted < whole)
+                    ++mounted;
+            }
+            work.done.store(whole > 0 ? whole : 1, std::memory_order_release);
+        }
+    );
     oa::platform::log_files::note_timing_span("mounting", mount_began);
     if (game_directory->demo.outcome == DemoOutcome::ready)
         std::cout << "open-annihilation: " << describe_ready(game_directory->demo) << '\n';
@@ -1920,17 +1917,16 @@ void publish_managed_copy(
 } // namespace
 
 void note_launch_frame() {
-    LaunchFrame& frame = launch_frame();
-    if (frame.shown)
+    LaunchFrame& shown = launch_frame();
+    if (shown.shown)
         return;
-    frame.shown = true;
-    frame.shown_ms = oa::platform::tick_ms();
+    shown.shown = true;
     oa::platform::log_files::note_timing("window first frame");
 }
 
 void pump_launch_window() {
-    LaunchFrame& frame = launch_frame();
-    if (!frame.shown || frame.released || frame.renderer == nullptr)
+    LaunchFrame& shown = launch_frame();
+    if (!shown.shown || shown.released || shown.renderer == nullptr)
         return;
     SDL_Event event;
     while (SDL_PollEvent(&event)) {

@@ -36,6 +36,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <system_error>
 #include <optional>
 #include <stdexcept>
@@ -399,7 +400,31 @@ Runtime::Runtime(
     // stays closed then. A bundle this start's setup already copied and
     // checked is answered from that result and is not read again.
     phase_began = oa::platform::tick_ms();
-    content_check_ = check_managed_content(user_folder_, {});
+    const char* content_line = options_.restarts > 0 ? "Applying your changes"
+                                                     : "Checking your copy of Total Annihilation";
+    run_progress(content_line, [this](LongWork& work) {
+        const auto note = [](uint32_t files_done, uint32_t files_total, void* context) -> bool {
+            auto& held = *static_cast<LongWork*>(context);
+            if (files_total == 0) {
+                held.done.store(-1, std::memory_order_release);
+                return true;
+            }
+            const int32_t whole =
+                files_total > static_cast<uint32_t>(std::numeric_limits<int32_t>::max())
+                    ? std::numeric_limits<int32_t>::max()
+                    : static_cast<int32_t>(files_total);
+            int32_t finished_files =
+                files_done > static_cast<uint32_t>(std::numeric_limits<int32_t>::max())
+                    ? whole
+                    : static_cast<int32_t>(files_done);
+            if (finished_files > whole)
+                finished_files = whole;
+            held.whole.store(whole, std::memory_order_release);
+            held.done.store(finished_files, std::memory_order_release);
+            return true;
+        };
+        content_check_ = check_managed_content(user_folder_, {}, note, &work);
+    });
     mark_phase("content check", phase_began);
     // Stored after the one-time legacy import, which runs only while no
     // preferences file exists. An unwritable preferences file only costs the
@@ -419,7 +444,7 @@ Runtime::Runtime(
     // table and the fonts: 3.1c's command line, else the setting, else the
     // operating system's.
     phase_began = oa::platform::tick_ms();
-    start_language();
+    run_progress("Applying your changes", [this](LongWork&) { start_language(); });
     mark_phase("language", phase_began);
     // SIDEDATA, and the sides' interface art and fonts it names, from the
     // language's folders first.
@@ -484,6 +509,24 @@ Runtime::ExtensionRelease::~ExtensionRelease() {
             std::fprintf(stderr, "open-annihilation: extension hook %s: %s\n", hook, message);
         },
         runtime
+    );
+}
+
+void Runtime::run_progress(std::string_view line, const std::function<void(LongWork&)>& job) {
+    SDL_Window* window = nullptr;
+    SDL_Renderer* renderer = nullptr;
+    if (!options_.headless_check) {
+        window = sdl_.window;
+        renderer = sdl_.renderer;
+    }
+    std::ignore = run_long_work(
+        window,
+        renderer,
+        nullptr,
+        "Open Annihilation",
+        line,
+        [this](oa::ui::paint::Canvas& canvas) { fill_progress_behind(canvas, &surface_); },
+        job
     );
 }
 
@@ -786,6 +829,11 @@ int Runtime::run() {
         }
         if (options_.check_setup_window) {
             check_setup_window();
+            flush_preferences();
+            return 0;
+        }
+        if (options_.check_progress) {
+            check_progress();
             flush_preferences();
             return 0;
         }
