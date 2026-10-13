@@ -47,6 +47,10 @@ constexpr DWORD kStatusError = 0x00200000;
 constexpr DWORD kStatusSend = 0x00400000;
 constexpr DWORD kCallbackFlags =
     kStatusSecureFailure | kStatusHeaders | kStatusData | kStatusRead | kStatusError | kStatusSend;
+/// Every notification, used when the callback is removed. Zero leaves the
+/// notifications the request already has, so a later one can arrive after
+/// the handles are closed.
+constexpr DWORD kAllNotifications = 0xFFFFFFFFu;
 constexpr DWORD kInsufficient = 122;
 constexpr DWORD kPending = 997;
 constexpr DWORD kErrorTimeout = 12002;
@@ -494,7 +498,7 @@ void close_all(AsyncNote& note, void* request, void* connection, void* session) 
         note.closing = true;
     }
     if (request != nullptr && g_api.set_callback != nullptr)
-        g_api.set_callback(request, nullptr, 0, 0);
+        g_api.set_callback(request, nullptr, kAllNotifications, 0);
     if (request != nullptr)
         g_api.close(request);
     if (connection != nullptr)
