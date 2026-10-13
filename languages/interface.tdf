@@ -2890,6 +2890,14 @@
 	it=Filtra;
 	}
 
+[Filter names]
+	{
+	de=Namen filtern;
+	fr=Filtrer les noms;
+	es=Filtrar nombres;
+	it=Filtra i nomi;
+	}
+
 [Finder's Get Info › Open with chooses another opener.]
 	{
 	de=Finder: Informationen › Öffnen mit wählt ein anderes Programm zum Öffnen.;

@@ -615,23 +615,24 @@ static_assert(
 /// banner's or a button's. Its own painter draws it, as strokes on a square;
 /// the crisp canvas draws none.
 enum class Glyph : uint8_t {
-    none,    ///< no mark
-    folder,  ///< a folder
-    device,  ///< the device
-    disk,    ///< a disk
-    clock,   ///< a clock
-    warning, ///< a warning triangle
-    check,   ///< a check mark
-    cross,   ///< a cross
-    dash,    ///< a dash
-    info,    ///< an information mark
-    stop,    ///< a stop square
-    play,    ///< a play triangle
-    trash,   ///< a bin
-    refresh, ///< a circular arrow
-    plus,    ///< a plus
-    file,    ///< a file
-    oa,      ///< the Open Annihilation icon, or the OA mark without it
+    none,      ///< no mark
+    folder,    ///< a folder
+    device,    ///< the device
+    disk,      ///< a disk
+    clock,     ///< a clock
+    warning,   ///< a warning triangle
+    check,     ///< a check mark
+    cross,     ///< a cross
+    dash,      ///< a dash
+    info,      ///< an information mark
+    stop,      ///< a stop square
+    play,      ///< a play triangle
+    trash,     ///< a bin
+    refresh,   ///< a circular arrow
+    plus,      ///< a plus
+    file,      ///< a file
+    oa,        ///< the Open Annihilation icon, or the OA mark without it
+    magnifier, ///< a magnifying glass, before a search field's text
 };
 
 /// The part a text plays on a screen drawn in the modern fonts. The painter

@@ -532,31 +532,53 @@ Layout lay_out(
     const int32_t up_width =
         std::min(px(type, 88.0f), std::max<int32_t>(px(type, 44.0f), list_w / 4));
     kit::button_part(parts, type, {list_x, top + list_pad, up_width, tool}, up, 13.0f);
-    const std::string filter_label =
-        model.filter.empty() ? tr("Filter") : tr("Filter") + ": " + model.filter;
-    kit::ButtonSpec filter{};
-    filter.label = filter_label;
-    filter.control = control_id({TargetKind::filter, 0});
-    const int32_t filter_cap = model.filter.empty() ? px(type, 160.0f) : px(type, 280.0f);
-    const int32_t filter_share = model.filter.empty() ? list_w / 3 : list_w / 2;
-    const int32_t filter_width =
-        std::min(filter_cap, std::max<int32_t>(px(type, 88.0f), filter_share));
-    kit::button_part(
-        parts,
-        type,
-        {list_x + list_w - filter_width, top + list_pad, filter_width, tool},
-        filter,
-        13.0f
-    );
     const int32_t path_x = list_x + up_width + px(type, 8.0f);
-    const int32_t path_room =
-        std::max<int32_t>(0, list_w - up_width - filter_width - px(type, 16.0f));
+    const int32_t path_room = std::max<int32_t>(0, list_w - up_width - px(type, 8.0f));
     const Lettering path_look{12.0f, false, gf::dim_colour, kit::TextStyle::small};
     add_text(
         parts, type, {path_x, top + list_pad + px(type, 14.0f)}, path_room, model.path, path_look
     );
 
-    const int32_t rows_top = top + list_pad + tool + px(type, 6.0f);
+    // The filter is a search field on its own line, the width of the list:
+    // a filled well, a magnifier and the placeholder, not a button beside Up.
+    const int32_t filter_gap = px(type, 6.0f);
+    const int32_t filter_top = top + list_pad + tool + filter_gap;
+    const int32_t filter_h = tool;
+    kit::Item field{};
+    field.role = Role::panel;
+    field.rect = {list_x, filter_top, list_w, filter_h};
+    field.control = control_id({TargetKind::filter, 0});
+    field.colour = gf::line_colour;
+    parts.push_back(field);
+    const int32_t mag = std::min(px(type, 16.0f), std::max(filter_h - px(type, 12.0f), int32_t{0}));
+    const int32_t mag_pad = px(type, 12.0f);
+    if (mag > 0)
+        kit::icon_part(
+            parts,
+            {list_x + mag_pad, filter_top + (filter_h - mag) / 2, mag, mag},
+            Glyph::magnifier,
+            gf::dim_colour,
+            false
+        );
+    const bool filtering = !model.filter.empty();
+    const std::string filter_words = filtering ? model.filter : tr("Filter names");
+    const Lettering filter_look{
+        13.0f, false, filtering ? gf::text_colour : gf::dim_colour, kit::TextStyle::body
+    };
+    const int32_t filter_text_x = list_x + mag_pad + mag + px(type, 8.0f);
+    const int32_t filter_text_room =
+        std::max<int32_t>(0, list_x + list_w - mag_pad - filter_text_x);
+    const int32_t filter_text_h = px(type, 16.0f);
+    add_text(
+        parts,
+        type,
+        {filter_text_x, filter_top + std::max((filter_h - filter_text_h) / 2, int32_t{0})},
+        filter_text_room,
+        filter_words,
+        filter_look
+    );
+
+    const int32_t rows_top = filter_top + filter_h + filter_gap;
     const int32_t rows_height = std::max<int32_t>(row_height, content_bottom - rows_top - list_pad);
     const kit::Rect rows_area{list_x, rows_top, list_w, rows_height};
     std::vector<kit::Item> rows;
