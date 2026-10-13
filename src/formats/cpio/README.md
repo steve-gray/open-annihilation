@@ -32,12 +32,17 @@ first header.
 - The `070702` checksum is the sum of the file's data bytes. Padding is not
   part of it. A visitor that returns false stops the read and is not a
   broken archive.
+- `File` records the device and inode. odc stores one device number. newc
+  stores the major in the high half and the minor in the low half. Two names
+  with one device and inode are one file: one name may carry no bytes while
+  another carries them.
 
 ## Tests
 
 `formats-cpio` builds odc and newc archives in the test, including a newc
-name that needs padding and a `070702` checksum that matches and one that
-does not. It also checks a short archive and `name_is_safe`.
+name that needs padding, a `070702` checksum that matches and one that does
+not, and the device and inode of both layouts. It also checks a short
+archive and `name_is_safe`.
 
 ## Limitations
 

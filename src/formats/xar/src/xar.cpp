@@ -520,16 +520,17 @@ struct TocParser {
     }
 
     [[nodiscard]] bool markup() {
-        if (xml.substr(at).starts_with("<!--")) {
-            at += 4;
+        // The caller has already taken the '<'.
+        if (xml.substr(at).starts_with("!--")) {
+            at += 3;
             return skip_until("-->");
         }
-        if (xml.substr(at).starts_with("<?")) {
-            at += 2;
+        if (xml.substr(at).starts_with("?")) {
+            ++at;
             return skip_until("?>");
         }
-        if (xml.substr(at).starts_with("<![CDATA[")) {
-            at += 9;
+        if (xml.substr(at).starts_with("![CDATA[")) {
+            at += 8;
             const std::size_t end = xml.find("]]>", at);
             if (end == std::string_view::npos) {
                 fault = Fault::bad_toc;

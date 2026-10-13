@@ -107,7 +107,10 @@ void header_and_entries() {
     const std::string heap_text = "stored-bytes";
     std::vector<uint8_t> heap(heap_text.begin(), heap_text.end());
     heap.insert(heap.end(), gzip.begin(), gzip.end());
-    const std::string xml = "<xar><toc>"
+    const std::string xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                            "<!-- table -->"
+                            "<xar><toc>"
+                            "<checksum style=\"sha1\"><offset>0</offset><size>20</size></checksum>"
                             "<file id=\"1\"><name>package.pkg</name><type>directory</type>"
                             "<file id=\"2\"><name>Scripts</name><type>file</type><data>"
                             "<length>" +

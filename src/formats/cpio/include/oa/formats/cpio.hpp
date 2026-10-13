@@ -29,6 +29,11 @@ struct File {
     int64_t modified{};
     /// The mode bits the header stores.
     uint32_t mode{};
+    /// Device the header records. odc stores one number; newc stores the
+    /// major in the high half and the minor in the low half.
+    uint64_t device{};
+    /// Inode the header records. Two names with one device and inode are one file.
+    uint64_t inode{};
     /// True for the archive's trailer entry.
     bool trailer{};
     /// True when the mode names a directory.
@@ -92,7 +97,7 @@ class Reader {
 
     enum class Phase : uint8_t { header, name, name_pad, data, data_pad, done };
 
-    enum class Layout : uint8_t { unknown, odc, newc };
+    enum class HeaderFormat : uint8_t { unknown, odc, newc };
 
     /// Copies a failure into `error` and remembers it.
     ///
@@ -140,7 +145,7 @@ class Reader {
     bool taking_{};
     bool in_file_{};
     bool halted_{};
-    Layout layout_{Layout::unknown};
+    HeaderFormat format_{HeaderFormat::unknown};
     Phase phase_{Phase::header};
     File file_{};
     bool failed_{};

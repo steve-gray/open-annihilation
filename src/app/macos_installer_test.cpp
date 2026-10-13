@@ -65,11 +65,16 @@ void put_text(std::vector<uint8_t>& out, std::string_view text) {
 }
 
 void odc_file(
-    std::vector<uint8_t>& out, uint32_t mode, std::string_view name, std::string_view data
+    std::vector<uint8_t>& out,
+    uint32_t mode,
+    std::string_view name,
+    std::string_view data,
+    uint64_t device = 0,
+    uint64_t inode = 0
 ) {
     put_text(out, "070707");
-    put_octal(out, 0, 6);
-    put_octal(out, 0, 6);
+    put_octal(out, device, 6);
+    put_octal(out, inode, 6);
     put_octal(out, mode, 6);
     put_octal(out, 0, 6);
     put_octal(out, 0, 6);
@@ -326,6 +331,49 @@ void resumes_a_partial_file() {
     );
 }
 
+const oa::data::content_bundles::Bundle* totala_bundle() {
+    for (const oa::data::content_bundles::Bundle& bundle : oa::app::copy_check_bundles()) {
+        if (bundle.id == "totala")
+            return &bundle;
+    }
+    return nullptr;
+}
+
+void hard_link_and_second_tree() {
+    const Scratch scratch;
+    std::vector<uint8_t> archive;
+    odc_file(archive, 0040755, "./payload", "");
+    odc_file(archive, 0040755, "./payload/drive_c/Total Annihilation", "");
+    odc_file(archive, 0040755, "./payload/drive_c/Total Annihilation/Data", "");
+    odc_file(archive, 0100644, "./payload/drive_c/Total Annihilation/rev31.gp3", "", 1, 9);
+    odc_file(
+        archive, 0100644, "./payload/drive_c/Total Annihilation/holder", "rev31-fixture\n", 1, 9
+    );
+    odc_file(archive, 0120000, "./payload/drive_c/Total Annihilation/rev31.gp3", "link");
+    odc_file(archive, 0100644, "./payload/drive_c/Total Annihilation/rev31.gp3", "rev31-fixturX\n");
+    odc_file(archive, 0100644, "./payload/drive_c/Total Annihilation/Data/2.zrb", "zrb-fixture\n");
+    odc_file(
+        archive, 0100644, "./payload/drive_c/Total Annihilation/totala4.hpi", "campaign-fixture\n"
+    );
+    odc_file(archive, 0100644, "TRAILER!!!", "");
+    const fs::path pkg = scratch.root / "installer.pkg";
+    const fs::path user = scratch.root / "user";
+    fs::create_directories(user);
+    OA_CHECK(write_bytes(pkg, package_of(gzip_of(archive), false)));
+    oa::app::MacosInstallerSource source(pkg, oa::app::copy_check_bundles(), false);
+    oa::app::CopyRequest request;
+    request.user_folder = user;
+    request.bundles = oa::app::copy_check_bundles();
+    const oa::app::CopyResult copied = oa::app::copy_content(source, request);
+    OA_CHECK(copied.status == oa::app::CopyStatus::finished);
+    OA_CHECK(copied.files_copied == 3);
+    const oa::data::content_bundles::Bundle* totala = totala_bundle();
+    OA_CHECK(totala != nullptr);
+    if (totala == nullptr)
+        return;
+    OA_CHECK(read_bytes(oa::app::bundle_folder(user, *totala) / "rev31.gp3") == "rev31-fixture\n");
+}
+
 void outer_gzip_member() {
     const Scratch scratch;
     std::vector<uint8_t> archive;
@@ -352,6 +400,7 @@ void outer_gzip_member() {
 int main() {
     copy_and_check();
     resumes_a_partial_file();
+    hard_link_and_second_tree();
     outer_gzip_member();
     return oa::test::check_exit_status();
 }

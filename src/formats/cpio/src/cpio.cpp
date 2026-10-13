@@ -86,17 +86,27 @@ bool Reader::open_header(const Visit&, std::string* error) {
     uint64_t namesize = 0;
     uint64_t filesize = 0;
     uint64_t checksum = 0;
-    if (layout_ == Layout::odc) {
-        if (!digits(header_ + 18, 6, 8, mode) || !digits(header_ + 48, 11, 8, modified) ||
+    uint64_t device = 0;
+    uint64_t inode = 0;
+    if (format_ == HeaderFormat::odc) {
+        if (!digits(header_ + 6, 6, 8, device) || !digits(header_ + 12, 6, 8, inode) ||
+            !digits(header_ + 18, 6, 8, mode) || !digits(header_ + 48, 11, 8, modified) ||
             !digits(header_ + 59, 6, 8, namesize) || !digits(header_ + 65, 11, 8, filesize))
             return fail(error, "the archive is broken");
     } else {
-        if (!digits(header_ + 6 + 8, 8, 16, mode) ||
+        uint64_t major = 0;
+        uint64_t minor = 0;
+        if (!digits(header_ + 6, 8, 16, inode) || !digits(header_ + 6 + 8, 8, 16, mode) ||
             !digits(header_ + 6 + 5 * 8, 8, 16, modified) ||
             !digits(header_ + 6 + 6 * 8, 8, 16, filesize) ||
+            !digits(header_ + 6 + 7 * 8, 8, 16, major) ||
+            !digits(header_ + 6 + 8 * 8, 8, 16, minor) ||
             !digits(header_ + 6 + 11 * 8, 8, 16, namesize) ||
             !digits(header_ + 6 + 12 * 8, 8, 16, checksum))
             return fail(error, "the archive is broken");
+        if (major > 0xffffffffu || minor > 0xffffffffu)
+            return fail(error, "the archive is broken");
+        device = (major << 32) | minor;
     }
     if (namesize == 0 || namesize > max_name_bytes)
         return fail(error, namesize == 0 ? "the archive is broken" : "the file name is too long");
@@ -106,6 +116,8 @@ bool Reader::open_header(const Visit&, std::string* error) {
     file_.bytes = filesize;
     file_.modified = static_cast<int64_t>(modified);
     file_.mode = static_cast<uint32_t>(mode);
+    file_.device = device;
+    file_.inode = inode;
     const uint32_t kind = file_.mode & 0170000u;
     file_.directory = kind == 0040000u;
     file_.regular = kind == 0100000u;
@@ -133,7 +145,7 @@ bool Reader::open_file(const Visit& visit, std::string* error) {
     }
     if (!file_.trailer)
         in_file_ = true;
-    const uint64_t pad = layout_ == Layout::newc ? (4 - (accepted_ % 4)) % 4 : 0;
+    const uint64_t pad = format_ == HeaderFormat::newc ? (4 - (accepted_ % 4)) % 4 : 0;
     if (pad > 0) {
         phase_ = Phase::name_pad;
         data_left_ = pad;
@@ -168,18 +180,18 @@ bool Reader::feed(std::span<const uint8_t> input, const Visit& visit, std::strin
             at += step;
             accepted_ += step;
             if (header_need_ == 6 && header_got_ == 6) {
-                Layout next = Layout::unknown;
+                HeaderFormat next = HeaderFormat::unknown;
                 if (magic_is(header_, "070707"))
-                    next = Layout::odc;
+                    next = HeaderFormat::odc;
                 else if (magic_is(header_, "070701") || magic_is(header_, "070702"))
-                    next = Layout::newc;
+                    next = HeaderFormat::newc;
                 else
                     return fail(error, "the archive is not a cpio this reader reads");
-                if (layout_ != Layout::unknown && next != layout_)
+                if (format_ != HeaderFormat::unknown && next != format_)
                     return fail(error, "the archive is broken");
-                layout_ = next;
+                format_ = next;
                 check_checksum_ = magic_is(header_, "070702");
-                header_need_ = layout_ == Layout::odc ? k_odc_header : k_newc_header;
+                header_need_ = format_ == HeaderFormat::odc ? k_odc_header : k_newc_header;
             }
             if (header_got_ == header_need_ && header_need_ > 6) {
                 if (!open_header(visit, error))
@@ -269,7 +281,7 @@ bool Reader::finish_file(const Visit& visit, std::string* error) {
     }
     in_file_ = false;
     taking_ = false;
-    const uint64_t pad = layout_ == Layout::newc ? (4 - (accepted_ % 4)) % 4 : 0;
+    const uint64_t pad = format_ == HeaderFormat::newc ? (4 - (accepted_ % 4)) % 4 : 0;
     if (pad > 0) {
         phase_ = Phase::data_pad;
         data_left_ = pad;

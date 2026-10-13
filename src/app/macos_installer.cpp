@@ -411,8 +411,7 @@ struct Slot {
     bool have_digest{};
 };
 
-struct Active {
-    bool on{};
+struct Target {
     std::size_t slot{std::numeric_limits<std::size_t>::max()};
     OwnedFile part{};
     bool comparing{};
@@ -421,6 +420,17 @@ struct Active {
     uint64_t prefix{};
     uint64_t filled{};
     oa::base::sha256::Hasher hasher{};
+};
+
+struct Active {
+    bool on{};
+    std::vector<Target> targets{};
+};
+
+struct PendingLink {
+    uint64_t device{};
+    uint64_t inode{};
+    std::size_t slot{};
 };
 
 struct Pump {
@@ -434,6 +444,7 @@ struct Pump {
     StreamResult* stream_result{};
     std::string* error{};
     std::vector<Slot> slots{};
+    std::vector<PendingLink> pending{};
     std::vector<ContentRecord> records{};
     Active active{};
     Halt halt{Halt::none};
@@ -450,7 +461,7 @@ struct Pump {
         set_error(error, text);
     }
 
-    [[nodiscard]] std::size_t match_index(std::string_view name, uint64_t size) const {
+    [[nodiscard]] std::size_t match_name(std::string_view name) const {
         std::vector<std::string_view> parts;
         std::size_t start = 0;
         for (std::size_t index = 0; index <= name.size(); ++index) {
@@ -477,8 +488,6 @@ struct Pump {
                 suffix.append(parts[index]);
             }
             for (std::size_t slot = 0; slot < slots.size(); ++slot) {
-                if (slots[slot].file->size != size)
-                    continue;
                 if (names_match(suffix, *slots[slot].file))
                     return slot;
             }
@@ -491,8 +500,10 @@ struct Pump {
             return;
         CopyProgress progress;
         progress.bytes_done = done_bytes;
-        if (!finished && active.on)
-            add_bytes(progress.bytes_done, active.filled);
+        if (!finished && active.on) {
+            for (const Target& target : active.targets)
+                add_bytes(progress.bytes_done, target.filled);
+        }
         progress.bytes_total = bytes_total;
         progress.files_done = done_files;
         progress.files_total = narrow_count(slots.size());
@@ -583,81 +594,77 @@ struct Pump {
         return true;
     }
 
-    [[nodiscard]] bool open_active(std::size_t index) {
-        Slot& slot = slots[index];
-        if (job == Job::check) {
-            active = {};
-            active.on = true;
-            active.slot = index;
-            active.hashing_only = true;
-            return true;
-        }
-        if (job == Job::stream) {
-            if (found_stream)
-                return true;
-            if (!names_match(stream_request->name, *slot.file) &&
-                stream_request->name != slot.file->copy_name)
-                return true;
-            found_stream = true;
-            active = {};
-            active.on = true;
-            active.slot = index;
-            active.prefix = regular_size(stream_request->destination);
-            if (active.prefix > slot.file->size) {
-                remove_file(stream_request->destination);
-                active.prefix = 0;
+    void skip_slot(Slot& slot) {
+        if (job != Job::copy || result == nullptr)
+            return;
+        result->files_skipped = narrow_count(static_cast<std::size_t>(result->files_skipped) + 1);
+        add_bytes(done_bytes, slot.file->size);
+        done_files = narrow_count(static_cast<std::size_t>(done_files) + 1);
+        note_progress(slot, true);
+    }
+
+    [[nodiscard]] bool open_targets(const std::vector<std::size_t>& chosen) {
+        active = {};
+        for (const std::size_t index : chosen) {
+            Slot& slot = slots[index];
+            Target target;
+            target.slot = index;
+            if (job == Job::check) {
+                target.hashing_only = true;
+                active.targets.push_back(std::move(target));
+                continue;
             }
-            const char* mode = active.prefix == 0 ? "wb" : "r+b";
-            active.part = OwnedFile(oa::platform::open_file(stream_request->destination, mode));
-            if (active.part.file == nullptr) {
+            if (job == Job::stream) {
+                found_stream = true;
+                target.prefix = regular_size(stream_request->destination);
+                if (target.prefix > slot.file->size) {
+                    remove_file(stream_request->destination);
+                    target.prefix = 0;
+                }
+                const char* mode = target.prefix == 0 ? "wb" : "r+b";
+                target.part = OwnedFile(oa::platform::open_file(stream_request->destination, mode));
+                if (target.part.file == nullptr) {
+                    fail("the copy could not be written");
+                    return false;
+                }
+                target.comparing = target.prefix > 0;
+                active.targets.push_back(std::move(target));
+                continue;
+            }
+            if (stopped_now()) {
+                halt = Halt::stop;
+                return false;
+            }
+            std::error_code failure;
+            fs::create_directories(slot.dest.parent_path(), failure);
+            if (failure) {
+                fail("the folder could not be created");
+                return false;
+            }
+            remove_file(slot.dest);
+            target.prefix = slot.prefix;
+            const char* mode = target.prefix == 0 ? "wb" : "r+b";
+            target.part = OwnedFile(oa::platform::open_file(slot.partial, mode));
+            if (target.part.file == nullptr) {
                 fail("the copy could not be written");
                 return false;
             }
-            active.comparing = active.prefix > 0;
-            return true;
+            target.comparing = target.prefix > 0;
+            active.targets.push_back(std::move(target));
+            if (!told) {
+                say_line(request->news, "Copying the game into Open Annihilation...");
+                told = true;
+            }
         }
-        if (slot.complete) {
-            result->files_skipped =
-                narrow_count(static_cast<std::size_t>(result->files_skipped) + 1);
-            add_bytes(done_bytes, slot.file->size);
-            done_files = narrow_count(static_cast<std::size_t>(done_files) + 1);
-            note_progress(slot, true);
-            return true;
-        }
-        if (stopped_now()) {
-            halt = Halt::stop;
-            return false;
-        }
-        std::error_code failure;
-        fs::create_directories(slot.dest.parent_path(), failure);
-        if (failure) {
-            fail("the folder could not be created");
-            return false;
-        }
-        remove_file(slot.dest);
-        active = {};
-        active.on = true;
-        active.slot = index;
-        active.prefix = slot.prefix;
-        const char* mode = active.prefix == 0 ? "wb" : "r+b";
-        active.part = OwnedFile(oa::platform::open_file(slot.partial, mode));
-        if (active.part.file == nullptr) {
-            fail("the copy could not be written");
-            return false;
-        }
-        active.comparing = active.prefix > 0;
-        if (!told) {
-            say_line(request->news, "Copying the game into Open Annihilation...");
-            told = true;
-        }
+        active.on = !active.targets.empty();
         return true;
     }
 
-    [[nodiscard]] bool write_bytes(std::span<const uint8_t> bytes) {
+    [[nodiscard]] bool write_bytes(std::FILE* file, std::span<const uint8_t> bytes) {
         if (bytes.empty())
             return true;
         errno = 0;
-        if (std::fwrite(bytes.data(), 1, bytes.size(), active.part.file) != bytes.size()) {
+        if (std::fwrite(bytes.data(), 1, bytes.size(), file) != bytes.size()) {
             if (disk_is_full(errno)) {
                 no_space = true;
                 fail("the disk filled while the game was copied");
@@ -669,60 +676,81 @@ struct Pump {
         return true;
     }
 
-    [[nodiscard]] bool take_bytes(std::span<const uint8_t> bytes) {
+    [[nodiscard]] bool accept_bytes(Target& target, std::span<const uint8_t> bytes) {
         while (!bytes.empty()) {
-            if (stopped_now()) {
-                if (!active.hashing_only && active.part.file != nullptr &&
-                    !sync_file(active.part.file)) {
-                    fail("the copy could not be stored");
-                    return false;
-                }
-                halt = Halt::stop;
-                return false;
-            }
             std::size_t step = std::min<std::size_t>(bytes.size(), static_cast<std::size_t>(chunk));
-            if (active.comparing) {
-                const uint64_t remain = active.prefix - active.filled;
+            if (target.comparing) {
+                const uint64_t remain = target.prefix - target.filled;
                 step = std::min<std::size_t>(step, static_cast<std::size_t>(remain));
                 std::vector<uint8_t> have(step);
-                const std::size_t got = std::fread(have.data(), 1, step, active.part.file);
-                if (std::ferror(active.part.file) != 0) {
+                const std::size_t got = std::fread(have.data(), 1, step, target.part.file);
+                if (std::ferror(target.part.file) != 0) {
                     fail("the copy could not be read");
                     return false;
                 }
                 std::size_t same = 0;
                 while (same < got && have[same] == bytes[same])
                     ++same;
-                oa::base::sha256::update(active.hasher, bytes.first(same));
-                active.filled += same;
+                oa::base::sha256::update(target.hasher, bytes.first(same));
+                target.filled += same;
                 if (same < step) {
-                    active.rewound = true;
-                    active.comparing = false;
-                    if (!truncate_file(active.part.file, active.filled) ||
-                        !seek_file(active.part.file, active.filled)) {
+                    target.rewound = true;
+                    target.comparing = false;
+                    if (!truncate_file(target.part.file, target.filled) ||
+                        !seek_file(target.part.file, target.filled)) {
                         fail("the copy could not be written");
                         return false;
                     }
                     const auto rest = bytes.subspan(same, step - same);
-                    oa::base::sha256::update(active.hasher, rest);
-                    if (!write_bytes(rest))
+                    oa::base::sha256::update(target.hasher, rest);
+                    if (!write_bytes(target.part.file, rest))
                         return false;
-                    active.filled += rest.size();
-                } else if (active.filled >= active.prefix) {
-                    active.comparing = false;
+                    target.filled += rest.size();
+                } else if (target.filled >= target.prefix) {
+                    target.comparing = false;
                 }
             } else {
                 const auto piece = bytes.first(step);
-                oa::base::sha256::update(active.hasher, piece);
-                if (!active.hashing_only && !write_bytes(piece))
+                oa::base::sha256::update(target.hasher, piece);
+                if (!target.hashing_only && !write_bytes(target.part.file, piece))
                     return false;
-                active.filled += step;
+                target.filled += step;
             }
             bytes = bytes.subspan(step);
-            if (job == Job::copy)
-                note_progress(slots[active.slot], false);
-            if (job == Job::stream && stream_request->on_chunk != nullptr)
-                stream_request->on_chunk(stream_request->chunk_context, active.filled);
+        }
+        return true;
+    }
+
+    [[nodiscard]] bool take_bytes(std::span<const uint8_t> bytes) {
+        while (!bytes.empty()) {
+            if (stopped_now()) {
+                for (Target& target : active.targets) {
+                    if (!target.hashing_only && target.part.file != nullptr &&
+                        !sync_file(target.part.file)) {
+                        fail("the copy could not be stored");
+                        return false;
+                    }
+                }
+                halt = Halt::stop;
+                return false;
+            }
+            const std::size_t step =
+                std::min<std::size_t>(bytes.size(), static_cast<std::size_t>(chunk));
+            const auto piece = bytes.first(step);
+            for (Target& target : active.targets) {
+                if (!accept_bytes(target, piece))
+                    return false;
+            }
+            bytes = bytes.subspan(step);
+            if (job == Job::copy) {
+                for (const Target& target : active.targets)
+                    note_progress(slots[target.slot], false);
+            }
+            if (job == Job::stream && stream_request->on_chunk != nullptr &&
+                !active.targets.empty())
+                stream_request->on_chunk(
+                    stream_request->chunk_context, active.targets.front().filled
+                );
         }
         return true;
     }
@@ -770,32 +798,27 @@ struct Pump {
         return true;
     }
 
-    [[nodiscard]] bool finish_active() {
-        if (!active.on)
-            return true;
-        Slot& slot = slots[active.slot];
-        if (active.filled != slot.file->size) {
+    [[nodiscard]] bool finish_one(Target& target) {
+        Slot& slot = slots[target.slot];
+        if (target.filled != slot.file->size) {
             fail("the installer could not be read");
             return false;
         }
-        slot.digest = oa::base::sha256::finish(active.hasher);
+        slot.digest = oa::base::sha256::finish(target.hasher);
         slot.have_digest = true;
-        if (active.hashing_only) {
-            active.on = false;
+        if (target.hashing_only)
             return true;
-        }
         if (job == Job::stream) {
-            if (!sync_file(active.part.file)) {
+            if (!sync_file(target.part.file)) {
                 fail("the copy could not be stored");
                 return false;
             }
-            active.part.close();
+            target.part.close();
             stream_result->digest = slot.digest;
             stream_result->bytes = slot.file->size;
-            active.on = false;
             return true;
         }
-        if (!sync_file(active.part.file)) {
+        if (!sync_file(target.part.file)) {
             if (disk_is_full(errno)) {
                 no_space = true;
                 fail("the disk filled while the game was copied");
@@ -804,7 +827,7 @@ struct Pump {
             fail("the copy could not be stored");
             return false;
         }
-        active.part.close();
+        target.part.close();
         int64_t stored_time = 0;
         if (!stamp(slot.partial, cpio_modified, stored_time))
             return false;
@@ -822,18 +845,37 @@ struct Pump {
             return false;
         if (!remember(slot, stored_time))
             return false;
-        const uint64_t fresh = active.rewound ? slot.file->size : slot.file->size - active.prefix;
+        const uint64_t fresh = target.rewound ? slot.file->size : slot.file->size - target.prefix;
         add_bytes(result->bytes_copied, fresh);
         result->files_copied = narrow_count(static_cast<std::size_t>(result->files_copied) + 1);
         add_bytes(done_bytes, slot.file->size);
         done_files = narrow_count(static_cast<std::size_t>(done_files) + 1);
         note_progress(slot, true);
+        return true;
+    }
+
+    [[nodiscard]] bool finish_active() {
+        if (!active.on)
+            return true;
+        for (Target& target : active.targets) {
+            if (!finish_one(target))
+                return false;
+        }
         active.on = false;
+        active.targets.clear();
         return true;
     }
 
     int64_t cpio_modified{};
 };
+
+void choose_slot(std::size_t index, std::vector<std::size_t>& chosen) {
+    for (const std::size_t have : chosen) {
+        if (have == index)
+            return;
+    }
+    chosen.push_back(index);
+}
 
 bool on_begin(void* context, const oa::formats::cpio::File& file, bool& take) {
     auto* pump = static_cast<Pump*>(context);
@@ -842,31 +884,69 @@ bool on_begin(void* context, const oa::formats::cpio::File& file, bool& take) {
         return true;
     if (!oa::formats::cpio::name_is_safe(file.name))
         return true;
-    const std::size_t index = pump->match_index(file.name, file.bytes);
-    if (index == std::numeric_limits<std::size_t>::max())
-        return true;
-    Slot& slot = pump->slots[index];
-    if (slot.seen) {
-        pump->fail("the installer names a file twice");
-        return false;
+    std::vector<std::size_t> chosen;
+    const std::size_t named = pump->match_name(file.name);
+    if (named != std::numeric_limits<std::size_t>::max()) {
+        Slot& slot = pump->slots[named];
+        if (!slot.seen && file.bytes == slot.file->size) {
+            slot.seen = true;
+            if (slot.complete)
+                pump->skip_slot(slot);
+            else
+                choose_slot( named, chosen);
+        } else if (!slot.seen && file.bytes == 0 && slot.file->size > 0) {
+            PendingLink link;
+            link.device = file.device;
+            link.inode = file.inode;
+            link.slot = named;
+            pump->pending.push_back(link);
+        }
     }
-    slot.seen = true;
-    if (pump->job == Job::list) {
-        ContentSourceFile listed;
-        listed.name = std::string(slot.file->copy_name);
-        listed.size = file.bytes;
-        listed.modified = file.modified;
-        pump->listed->push_back(std::move(listed));
-        return true;
+    if (file.bytes > 0) {
+        std::vector<PendingLink> still;
+        for (const PendingLink& link : pump->pending) {
+            Slot& slot = pump->slots[link.slot];
+            const bool same = link.device == file.device && link.inode == file.inode &&
+                              slot.file->size == file.bytes;
+            if (slot.seen || !same) {
+                if (!slot.seen)
+                    still.push_back(link);
+                continue;
+            }
+            slot.seen = true;
+            if (slot.complete)
+                pump->skip_slot(slot);
+            else
+                choose_slot( link.slot, chosen);
+        }
+        pump->pending = std::move(still);
     }
     if (pump->job == Job::stream) {
-        const bool named = pump->stream_request->name == slot.file->copy_name ||
-                           names_match(pump->stream_request->name, *slot.file);
-        if (!named || pump->found_stream)
-            return true;
+        std::vector<std::size_t> wanted;
+        for (const std::size_t index : chosen) {
+            const Slot& slot = pump->slots[index];
+            const bool matches = pump->stream_request->name == slot.file->copy_name ||
+                                 names_match(pump->stream_request->name, *slot.file);
+            if (matches && !pump->found_stream)
+                wanted.push_back(index);
+        }
+        chosen = std::move(wanted);
+    }
+    if (chosen.empty())
+        return true;
+    if (pump->job == Job::list) {
+        for (const std::size_t index : chosen) {
+            const Slot& slot = pump->slots[index];
+            ContentSourceFile listed;
+            listed.name = std::string(slot.file->copy_name);
+            listed.size = slot.file->size;
+            listed.modified = file.modified;
+            pump->listed->push_back(std::move(listed));
+        }
+        return true;
     }
     pump->cpio_modified = file.modified;
-    if (!pump->open_active(index))
+    if (!pump->open_targets(chosen))
         return false;
     take = pump->active.on;
     return true;
@@ -1177,7 +1257,7 @@ bool MacosInstallerSource::stream_file(
     if (!InstallerWalk::run(*this, pump)) {
         if (pump.halt == Halt::stop) {
             result.stopped = true;
-            result.bytes = pump.active.filled;
+            result.bytes = pump.active.targets.empty() ? 0 : pump.active.targets.front().filled;
             return true;
         }
         result.no_space = pump.no_space;

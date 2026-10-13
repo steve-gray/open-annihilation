@@ -42,11 +42,13 @@ void odc_file(
     uint32_t mode,
     std::string_view name,
     std::string_view data,
-    uint64_t modified
+    uint64_t modified,
+    uint64_t device = 0,
+    uint64_t inode = 0
 ) {
     put_text(out, "070707");
-    put_octal(out, 0, 6);
-    put_octal(out, 0, 6);
+    put_octal(out, device, 6);
+    put_octal(out, inode, 6);
     put_octal(out, mode, 6);
     put_octal(out, 0, 6);
     put_octal(out, 0, 6);
@@ -66,18 +68,21 @@ void newc_file(
     uint32_t mode,
     std::string_view name,
     std::string_view data,
-    uint32_t checksum
+    uint32_t checksum,
+    uint64_t inode = 0,
+    uint64_t major = 0,
+    uint64_t minor = 0
 ) {
     put_text(out, magic);
-    put_hex(out, 0, 8);
+    put_hex(out, inode, 8);
     put_hex(out, mode, 8);
     put_hex(out, 0, 8);
     put_hex(out, 0, 8);
     put_hex(out, 1, 8);
     put_hex(out, 1700000000, 8);
     put_hex(out, data.size(), 8);
-    put_hex(out, 0, 8);
-    put_hex(out, 0, 8);
+    put_hex(out, major, 8);
+    put_hex(out, minor, 8);
     put_hex(out, 0, 8);
     put_hex(out, 0, 8);
     put_hex(out, name.size() + 1, 8);
@@ -94,6 +99,8 @@ void newc_file(
 struct Collected {
     std::vector<std::string> names{};
     std::vector<std::string> data{};
+    std::vector<uint64_t> devices{};
+    std::vector<uint64_t> inodes{};
     std::string current{};
     bool taking{};
 };
@@ -101,6 +108,8 @@ struct Collected {
 bool on_begin(void* context, const File& file, bool& take) {
     auto* collected = static_cast<Collected*>(context);
     collected->names.push_back(file.name);
+    collected->devices.push_back(file.device);
+    collected->inodes.push_back(file.inode);
     take = file.regular && !file.trailer;
     collected->taking = take;
     collected->current.clear();
@@ -183,6 +192,26 @@ void newc_padding_and_checksum() {
     OA_CHECK(checksum_error.find("checksum") != std::string::npos);
 }
 
+void device_and_inode() {
+    std::vector<uint8_t> odc;
+    odc_file(odc, 0100644, "rev31.gp3", "abc", 1, 7, 9);
+    odc_file(odc, 0100644, "TRAILER!!!", "", 0);
+    Collected odc_files;
+    std::string error;
+    OA_CHECK(read_all(odc, odc_files, error));
+    OA_CHECK(odc_files.devices.size() == 1 && odc_files.devices[0] == 7);
+    OA_CHECK(odc_files.inodes.size() == 1 && odc_files.inodes[0] == 9);
+
+    std::vector<uint8_t> neu;
+    newc_file(neu, "070701", 0100644, "ab", "XY", 0, 0x11, 0x22, 0x33);
+    newc_file(neu, "070701", 0100644, "TRAILER!!!", "", 0);
+    Collected neu_files;
+    OA_CHECK(read_all(neu, neu_files, error));
+    OA_CHECK(neu_files.inodes.size() == 1 && neu_files.inodes[0] == 0x11);
+    const uint64_t device = (uint64_t{0x22} << 32) | 0x33;
+    OA_CHECK(neu_files.devices.size() == 1 && neu_files.devices[0] == device);
+}
+
 void truncated_and_names() {
     std::vector<uint8_t> archive;
     odc_file(archive, 0100644, "only", "abc", 1);
@@ -206,6 +235,7 @@ void truncated_and_names() {
 int main() {
     odc_round_trip();
     newc_padding_and_checksum();
+    device_and_inode();
     truncated_and_names();
     return oa::test::check_exit_status();
 }
