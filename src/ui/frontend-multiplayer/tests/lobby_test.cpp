@@ -4789,6 +4789,111 @@ void test_rules_dot() {
     }
 }
 
+/// A presence record that names a base game and expansions.
+///
+/// @param hash the sim hash
+/// @param expansions the expansion ids
+/// @param differs a chosen bundle differs from a known hash
+/// @param base the base game
+/// @return the record
+oa::netgame::PresenceRecord content_presence(
+    const oa::netgame::PresenceDigest& hash,
+    std::vector<std::string> expansions,
+    bool differs = false,
+    const char* base = "totala"
+) {
+    oa::netgame::PresenceRecord record;
+    record.engine = oa::netgame::PresenceEngine{"0.8.0", "macOS", "arm64"};
+    record.sim_hash = hash;
+    record.bundles = oa::netgame::PresenceBundles{base, std::move(expansions), differs};
+    return record;
+}
+
+// Equal sim hashes, and the bundles field: a missing expansion dots the
+// guest and refuses the start; music does not; a record that omits the
+// field does not; a 3.1c guest is still outside the comparison.
+void test_content_difference() {
+    const auto hash = filled_hash(0x5a);
+    auto room = std::make_unique<Room>(true);
+    auto& lobby = room->lobby;
+    expect(
+        mp::lobby_apply_event(lobby, record_event(kRoomGuest, setup_block(kRoomGuest, 1, 2))),
+        "the OA guest's block applies"
+    );
+    bind_presence_source(
+        lobby, encoded_presence(content_presence(hash, {"campaign", "battle-tactics"}))
+    );
+    mp::presence_refresh(lobby);
+    expect(
+        mp::lobby_apply_event(
+            lobby,
+            presence_event(kRoomGuest, encoded_presence(content_presence(hash, {"campaign"})))
+        ),
+        "the guest's record is kept"
+    );
+    expect(shows_dot(lobby, 1), "a missing expansion puts the dot on the guest");
+    expect(!shows_dot(lobby, 0), "the host's row has no dot");
+    expect(!mp::lobby_sim_hash_differs_from_host(lobby, 1), "the sim hashes still match");
+    expect(!mp::lobby_content_allows_start(lobby), "the host cannot start");
+
+    expect(
+        mp::lobby_apply_event(
+            lobby,
+            presence_event(
+                kRoomGuest,
+                encoded_presence(content_presence(hash, {"campaign", "battle-tactics", "music"}))
+            )
+        ),
+        "music on the wire is kept"
+    );
+    expect(!shows_dot(lobby, 1), "music alone does not differ");
+    expect(mp::lobby_content_allows_start(lobby), "music does not refuse the start");
+
+    expect(
+        mp::lobby_apply_event(
+            lobby,
+            presence_event(
+                kRoomGuest,
+                encoded_presence(content_presence(hash, {"campaign", "battle-tactics"}, true))
+            )
+        ),
+        "a hash flag is kept"
+    );
+    expect(
+        shows_dot(lobby, 1) && !mp::lobby_content_allows_start(lobby),
+        "a file that does not match refuses the start"
+    );
+
+    expect(
+        mp::lobby_apply_event(lobby, presence_event(kRoomGuest, presence_with_hash(hash))),
+        "a record without bundles is kept"
+    );
+    expect(
+        !shows_dot(lobby, 1) && mp::lobby_content_allows_start(lobby),
+        "a record that does not name content does not refuse the start"
+    );
+
+    auto* info = mp::slot_info(lobby, 1);
+    info->engine_signature[0] = 0;
+    info->engine_signature[1] = 0;
+    info->status = static_cast<uint16_t>(info->status | mp::status::has_disc);
+    bind_presence_source(
+        lobby, encoded_presence(content_presence(hash, {"campaign", "battle-tactics"}))
+    );
+    mp::presence_refresh(lobby);
+    expect(mp::lobby_row_badge(lobby, 1).badge == mp::RowBadge::disc, "the guest is on 3.1c");
+    expect(
+        !shows_dot(lobby, 1) && mp::lobby_content_allows_start(lobby),
+        "a 3.1c player is not compared by expansions"
+    );
+
+    Room joiner(false);
+    expect(
+        mp::lobby_content_allows_start(joiner.lobby),
+        "a player who is not the host is not refused by this gate"
+    );
+}
+
 // The battle room with Unicode chat on: the blocks it sends say so, and a
 // line goes to the machine whose block says UTF-8 in UTF-8 and to the one
 // whose block does not in the code page, '?' for each hanzi. A line from a
@@ -6180,6 +6285,7 @@ int main(int argc, char** argv) {
         test_no_presence_bytes_in_the_battle_room();
         test_presence_records_in_the_battle_room();
         test_rules_dot();
+        test_content_difference();
         test_unicode_chat_in_the_battle_room();
         test_recorder_commands_in_the_battle_room();
         test_recorder_prebuilt_base_in_the_battle_room();

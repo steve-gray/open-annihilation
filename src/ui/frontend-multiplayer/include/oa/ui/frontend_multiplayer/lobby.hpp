@@ -1253,21 +1253,21 @@ struct RowBadgeState {
 /// carries the 'OA' signature; else the CD icon when its block says it has
 /// the game disc (status::has_disc); else nothing. OA asks for no disc, so
 /// an OA player never shows the CD icon, though its block reports one for a
-/// 3.1c host's count before START. The dot is lobby_rules_differ_from_host.
-/// Reads only the presence records' sim hashes and allocates nothing.
+/// 3.1c host's count before START. The dot is lobby_rules_differ_from_host:
+/// the sim hashes, or the base game and rule-changing expansions when both
+/// records name them. It allocates nothing.
 ///
 /// @param lobby Lobby state.
 /// @param slot Player slot, 0..9; any other shows nothing.
 /// @return The row's badge and its dot.
 [[nodiscard]] RowBadgeState lobby_row_badge(Lobby& lobby, int32_t slot) noexcept;
 
-/// Tells whether a row's player plays by rules other than the host's, as the dot on its OA badge says.
+/// Tells whether a row's sim hash differs from the host's.
 ///
-/// Decided from the presence records alone (lobby_presence_record): a setup
-/// block carries no presence and is never read for rules. Never for the
-/// host's own row, a row without the OA badge, or when no host slot is found
-/// (lobby_host_slot). Otherwise:
-/// 1. when the row's record and the host's each carry a sim hash, the rules
+/// This is the sim-hash half of the rules dot. The Rules line of the OA tip
+/// uses it on its own. Never for the host's own row, a row without the OA
+/// badge, or when no host slot is found (lobby_host_slot). Otherwise:
+/// 1. when the row's record and the host's each carry a sim hash, they
 ///    differ exactly when the two hashes do;
 /// 2. else, when the host is a 3.1c machine (not this machine, and its block
 ///    without the 'OA' signature), the host plays 3.1c's own rules, and the
@@ -1280,8 +1280,34 @@ struct RowBadgeState {
 ///
 /// @param lobby Lobby state.
 /// @param slot Player slot, 0..9; any other gives false.
+/// @return True when the sim hashes differ.
+[[nodiscard]] bool lobby_sim_hash_differs_from_host(Lobby& lobby, int32_t slot) noexcept;
+
+/// Tells whether a row's player plays by rules other than the host's, as the dot on its OA badge says.
+///
+/// The sim-hash half is lobby_sim_hash_differs_from_host. The content half
+/// is the bundles field (netgame::presence_content_match): the same base
+/// game and the same rule-changing expansions, and neither side's
+/// differs-from-known flag. Music is not compared. A record that omits the
+/// field does not differ for that reason, so an OA 0.7 machine and a 3.1c
+/// player are unchanged. A setup block carries no presence and is never
+/// read for rules. Allocates nothing.
+///
+/// @param lobby Lobby state.
+/// @param slot Player slot, 0..9; any other gives false.
 /// @return True when the row's OA badge carries the dot.
 [[nodiscard]] bool lobby_rules_differ_from_host(Lobby& lobby, int32_t slot) noexcept;
+
+/// Tells whether this host may start, from the OA players' content.
+///
+/// True when this machine is not the host. Otherwise every remote OA player
+/// whose record names bundles must match the host's (presence_content_match).
+/// A player without the field, a 3.1c player, and this machine's own players
+/// do not refuse the start. Unit sync is a separate gate. Allocates nothing.
+///
+/// @param lobby Lobby state.
+/// @return True when content does not refuse the start.
+[[nodiscard]] bool lobby_content_allows_start(Lobby& lobby) noexcept;
 
 // ---------------------------------------------------------------------------
 // Machine groups: the players one machine seats share Player.machine_group

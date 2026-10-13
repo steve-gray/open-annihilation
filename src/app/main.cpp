@@ -886,6 +886,7 @@ int run_once(
             game_directory = std::move(copied);
         options.game_dir = game_directory->installation;
     }
+    options.managed_content = game_directory->source == GameDirectorySource::managed;
     options.game_folders = game_directory->folders;
     if (options.game_folders.empty())
         options.game_folders = {options.game_dir};

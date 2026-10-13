@@ -82,9 +82,13 @@ inline constexpr int32_t presence_card_edge_gap = 8;
 /// - Platform, under Engine: "<platform> · <architecture>". A field the
 ///   record leaves empty is left out, and the line goes when both are empty;
 /// - Mod: "<name> <version> · rev <packaging revision>", or "Total
-///   Annihilation 3.1c" for a record without a mod;
+///   Annihilation 3.1c" for a record without a mod. A record that names its
+///   bundles says "No Mod" instead when it names no mod, and before Mod it
+///   adds Base game and Expansions (music left out; "None" when there is no
+///   other expansion). Language follows Mod when the record names one;
 /// - Rules: "The host's" on the host's card; otherwise "Differ from the
-///   host's" in amber (lobby_rules_differ_from_host), with " (rev <n>)" when
+///   host's" in amber when the sim hashes differ
+///   (lobby_sim_hash_differs_from_host), with " (rev <n>)" when
 ///   the host's record names the same mod at packaging revision n, another;
 ///   "Same as the host's" when the two sim hashes are known and equal (a
 ///   3.1c host plays the plain baseline's); "Unknown" otherwise;
@@ -96,6 +100,9 @@ inline constexpr int32_t presence_card_edge_gap = 8;
 ///   the key> <version>", then by `pack_state` " ✓ installed" in lime,
 ///   " · another release here" in amber, " · not installed", or nothing
 ///   when the state is not known.
+/// When both records name bundles and they differ, unlabelled amber lines
+/// name the difference and say the game cannot start. The Rules line stays
+/// the sim-hash comparison above.
 /// The first presence_card_listed_hacks game hacks' ids follow, and
 /// "· <n> more" for the rest. Every label and fixed word goes through the
 /// lobby's translation (lobby_translated).
