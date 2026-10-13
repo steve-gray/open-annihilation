@@ -1212,12 +1212,19 @@ inline constexpr int32_t first_menu_item_control = no_control - 1;
 ///
 /// @param dialog the dialog
 /// @param scroll the rows the list is scrolled by from its top; not clamped
+/// @param switch_columns a measured Off/On switch; 0 keeps the class's switch
+/// @param small_width a text's width in the small font; null keeps the class's boxes
+/// @param regular_width a text's width in the regular font; null keeps an area
+///     name beside its count
+/// @param sizes the dialog's sizes; null uses the class's own
 /// @return the list
 [[nodiscard]] List place_list(
     const Dialog& dialog,
     int32_t scroll = 0,
     int32_t switch_columns = 0,
-    const TextWidth* small_width = nullptr
+    const TextWidth* small_width = nullptr,
+    const TextWidth* regular_width = nullptr,
+    const Sizes* sizes = nullptr
 );
 
 /// Returns where Developer's list scrolls: its size class's

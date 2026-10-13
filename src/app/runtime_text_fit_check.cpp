@@ -30,7 +30,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -201,13 +200,6 @@ void Runtime::check_text_fit() {
             line += " / ";
             line += noted.text;
             line += noted.wider ? " (wider than its box)" : " (across other text)";
-            {
-                // G24 diagnosis: every record, including those past the report's cap.
-                static std::ofstream fit_log("/tmp/G24-text-fit-all.txt", std::ios::app);
-                if (fit_log)
-                    fit_log << line << " tw=" << noted.text_width << " bw=" << noted.box_width
-                            << '\n';
-            }
             bool seen = false;
             for (const FitFailure& earlier : failures) {
                 if (earlier.line == line)

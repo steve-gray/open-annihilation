@@ -35,6 +35,8 @@ inline constexpr int32_t manage_registries_action = 7;
 /// @param width how wide a text is in the small font; empty estimates
 /// @param[out] placed the kit's rows, when not null
 /// @param sizes the dialog's sizes; null uses the class's own
+/// @param regular how wide a text is in the regular font; null leaves a
+///     drop-down at the class's width
 /// @return the rows, one for the check, two for each install ID, one for the
 ///     files, and on the main menu one for the Library's Registries tab
 [[nodiscard]] geometry::Rows place(
@@ -42,7 +44,8 @@ inline constexpr int32_t manage_registries_action = 7;
     const Locks& locks,
     const geometry::TextWidth& width,
     oa::ui::kit::PlacedRows* placed,
-    const geometry::Sizes* sizes = nullptr
+    const geometry::Sizes* sizes = nullptr,
+    const geometry::TextWidth* regular = nullptr
 );
 
 /// Returns what a Downloads row is.

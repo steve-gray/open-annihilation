@@ -1101,8 +1101,8 @@
 	{
 	de=Bauwerkzeuge;
 	fr=outils de construction;
-	es=herramientas de construcción;
-	it=strumenti di costruzione;
+	es=Herramientas;
+	it=Strumenti;
 	}
 
 [Builder Patrol and Guard Options]
@@ -2445,7 +2445,7 @@
 	{
 	de=Entwicklermodus einschalten;
 	fr=Activer le mode développeur;
-	es=Activar el modo de desarrollo;
+	es=Modo de desarrollo;
 	it=Attiva la modalità sviluppatore;
 	}
 
@@ -3620,7 +3620,7 @@
 [Include in device backups]
 	{
 	de=In Gerätesicherungen aufnehmen;
-	fr=Inclure dans les sauvegardes de l'appareil;
+	fr=Inclure dans les sauvegardes;
 	es=Incluir en las copias del dispositivo;
 	it=Includi nei backup del dispositivo;
 	}
@@ -4846,7 +4846,7 @@
 	de=Einrastradius für Metallextraktoren;
 	fr=Rayon d'aimantation de l'extracteur;
 	es=Radio de ajuste del extractor de metal;
-	it=Raggio di aggancio dell'estrattore di metallo;
+	it=Raggio di aggancio dell'estrattore;
 	}
 
 [Minus]
@@ -5708,7 +5708,7 @@
 [Only when I open the Library]
 	{
 	de=Nur wenn ich die Bibliothek öffne;
-	fr=Seulement quand j'ouvre la Bibliothèque;
+	fr=À l'ouverture de la Bibliothèque;
 	es=Solo cuando abro la Biblioteca;
 	it=Solo quando apro la Biblioteca;
 	}
@@ -7276,8 +7276,8 @@
 [Show Active Only ({active}/{total})]
 	{
 	de=Nur Aktive zeigen ({active}/{total});
-	fr=Afficher seulement les actifs ({active}/{total});
-	es=Mostrar solo activos ({active}/{total});
+	fr=Actifs seulement ({active}/{total});
+	es=Solo activos ({active}/{total});
 	it=Mostra solo attivi ({active}/{total});
 	}
 
@@ -7285,7 +7285,7 @@
 	{
 	de=Leistungsstatistik zeigen;
 	fr=Afficher les statistiques de performance;
-	es=Mostrar estadísticas de rendimiento;
+	es=Ver el rendimiento;
 	it=Mostra le statistiche di prestazione;
 	}
 
@@ -9091,9 +9091,9 @@
 
 [Use modern fonts for game text]
 	{
-	de=Moderne Schriften für den Spieltext verwenden;
-	fr=Utiliser des polices modernes pour le texte du jeu;
-	es=Usar fuentes modernas para el texto del juego;
+	de=Moderne Schriften für den Spieltext;
+	fr=Polices modernes pour le jeu;
+	es=Fuentes modernas para el juego;
 	it=Usa font moderni per il testo di gioco;
 	}
 

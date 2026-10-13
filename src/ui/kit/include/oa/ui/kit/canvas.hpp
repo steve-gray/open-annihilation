@@ -344,6 +344,16 @@ void perspective_blit(
     Canvas offscreen = begin_offscreen(dest, drawn.width, drawn.height);
     if (!can_draw(offscreen))
         return;
+
+    // The buffer's text is copied onto the screen as pixels. Its notes stay
+    // out of the screen's ink, or a card's words would cross the title.
+    struct Space {
+        Space() { begin_text_fit_space(); }
+
+        ~Space() { end_text_fit_space(); }
+    } space;
+
+    static_cast<void>(space);
     draw(offscreen);
     warp_offscreen(dest, drawn.width, drawn.height, place, how);
 }

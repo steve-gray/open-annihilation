@@ -841,17 +841,21 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
         const Rect right_lock{placement.right - lock_width, label_top, lock_width, line_height};
         int32_t label_right = placement.right;
         const int32_t control_width = label_line_control_width(view);
-        // A label that does not fit beside its control takes the whole line.
-        // The control, and the lock, stand on the line under it.
-        const bool drop_control = view.control_below && control_width > 0;
+        // A label that does not fit beside its control, or beside its lock,
+        // takes the whole line. The control and the lock stand under it. A
+        // slider's track stays on its own line either way.
+        const bool drop_line = view.control_below && (control_width > 0 || locked);
         int32_t control_top = label_top;
-        if (drop_control)
+        if (drop_line)
             control_top = label_top + line_height + kMetrics.hint_gap;
-        if (drop_control) {
-            row.control_area = {
-                placement.right - control_width, control_top, control_width, line_height
-            };
-            if (locked && !view.hint_is_status) {
+        if (drop_line) {
+            const bool control_here = control_width > 0 && !view.hint_is_status;
+            if (control_here) {
+                row.control_area = {
+                    placement.right - control_width, control_top, control_width, line_height
+                };
+            }
+            if (locked && !view.hint_is_status && control_here) {
                 row.lock_area = {
                     row.control_area.x - kMetrics.label_gap - lock_width,
                     control_top,
@@ -897,7 +901,7 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
         } else {
             row.label = {placement.left, label_top, label_right - placement.left, line_height};
         }
-        int32_t bottom = (drop_control ? control_top : label_top) + line_height + kMetrics.hint_gap;
+        int32_t bottom = (drop_line ? control_top : label_top) + line_height + kMetrics.hint_gap;
         for (std::size_t line = 0; line < view.hints.size(); ++line) {
             if (line > 0 && placement.tall)
                 bottom += kMetrics.tall_hint_line_gap;
@@ -907,16 +911,18 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
         switch (view.kind) {
         case RowKind::slider: {
             bottom += kMetrics.slider_gap;
-            const int32_t value_left = placement.right - kMetrics.slider_value_width;
+            const int32_t wanted =
+                view.value_columns > 0 ? view.value_columns : kMetrics.slider_value_width;
+            const int32_t room = std::max(width - kMetrics.slider_value_gap, int32_t{1});
+            const int32_t value_width = std::min(std::max(wanted, int32_t{1}), room);
+            const int32_t value_left = placement.right - value_width;
             row.control_area = {
                 placement.left,
                 bottom,
-                value_left - kMetrics.slider_value_gap - placement.left,
+                std::max(value_left - kMetrics.slider_value_gap - placement.left, int32_t{0}),
                 kMetrics.slider_line_height
             };
-            row.value = {
-                value_left, bottom, kMetrics.slider_value_width, kMetrics.slider_line_height
-            };
+            row.value = {value_left, bottom, value_width, kMetrics.slider_line_height};
             bottom += kMetrics.slider_line_height;
             break;
         }
@@ -937,6 +943,21 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
             break;
         }
         case RowKind::value_and_button:
+            // A label and a value that do not fit on one line with the button:
+            // the label keeps the first line and the value stands with the
+            // button on the next. An empty label leaves the value the first line.
+            if (drop_line && !view.label.empty() && has_area(row.control_area)) {
+                const int32_t value_right = row.control_area.x - kMetrics.label_gap;
+                row.value = {
+                    placement.left,
+                    row.control_area.y,
+                    std::max(value_right - placement.left, int32_t{0}),
+                    line_height
+                };
+            } else {
+                row.value = row.label;
+            }
+            break;
         case RowKind::text:
             // The value shares the label's box on the label line.
             row.value = row.label;

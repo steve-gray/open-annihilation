@@ -448,6 +448,9 @@ struct FitState {
     std::string screen{};
     std::vector<TextFitRecord> records{};
     std::vector<FitInk> ink{};
+    /// Notes drawn into a buffer that is copied onto the screen, shifted so
+    /// they are not compared with the screen's own text.
+    int32_t space{};
 };
 
 FitState& fit_state() {
@@ -477,6 +480,16 @@ void begin_text_fit_frame() {
     FitState& state = fit_state();
     state.records.clear();
     state.ink.clear();
+    state.space = 0;
+}
+
+void begin_text_fit_space() {
+    fit_state().space += 100000;
+}
+
+void end_text_fit_space() {
+    FitState& state = fit_state();
+    state.space = std::max(state.space - 100000, int32_t{0});
 }
 
 void text_fit_begin_paint() {
@@ -499,15 +512,18 @@ void note_text_fit(
     if (text.empty())
         return;
     FitState& state = fit_state();
-    FitInk ink{ink_x, box_y, std::max(text_width, int32_t{0}), std::max(box_height, int32_t{0})};
+    const int32_t space = state.space;
+    FitInk ink{
+        ink_x + space, box_y, std::max(text_width, int32_t{0}), std::max(box_height, int32_t{0})
+    };
     // A negative clip hides the ink. A positive one keeps the part inside it.
     if (clip_width < 0 || clip_height < 0) {
         ink.width = 0;
         ink.height = 0;
     } else if (clip_width > 0 && clip_height > 0 && ink.width > 0 && ink.height > 0) {
-        const int32_t left = std::max(ink.x, clip_x);
+        const int32_t left = std::max(ink.x, clip_x + space);
         const int32_t top = std::max(ink.y, clip_y);
-        const int32_t right = std::min(ink.x + ink.width, clip_x + clip_width);
+        const int32_t right = std::min(ink.x + ink.width, clip_x + space + clip_width);
         const int32_t bottom = std::min(ink.y + ink.height, clip_y + clip_height);
         ink.x = left;
         ink.y = top;
@@ -540,6 +556,7 @@ void note_text_fit(
 void cover_text_fit(int32_t x, int32_t y, int32_t width, int32_t height) {
     if (width <= 0 || height <= 0)
         return;
+    x += fit_state().space;
     const int32_t cover_right = x + width;
     const int32_t cover_bottom = y + height;
     FitState& state = fit_state();
@@ -573,6 +590,12 @@ void set_text_fit_screen(std::string_view) {
 }
 
 void begin_text_fit_frame() {
+}
+
+void begin_text_fit_space() {
+}
+
+void end_text_fit_space() {
 }
 
 void text_fit_begin_paint() {

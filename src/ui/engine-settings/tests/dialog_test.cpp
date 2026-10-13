@@ -5595,7 +5595,9 @@ void the_developer_section_draws_its_parts() {
     settings::Dialog closed_list = developer_dialog(true);
     Canvas closed_canvas = blank(settings::dialog_width, settings::dialog_height);
     settings::draw_dialog(closed_canvas.surface, {0, 0, 1}, closed_list, fonts, kNoIcon);
-    const auto closed_arrow = geometry::open_rows(closed_list).list.rows[0].arrow;
+    // The list starts at the view the fonts leave, which an estimate of the
+    // same rows can place lower. The probe follows the rows that were drawn.
+    const auto closed_arrow = rows_as_drawn(closed_list, fonts).list.rows[0].arrow;
     CHECK(closed_canvas.at(closed_arrow.x + 1, closed_arrow.y) == kHint);
     CHECK(closed_canvas.at(closed_arrow.x, closed_arrow.y + 1) == kPanel);
     settings::Dialog dialog = developer_dialog(true);
@@ -5618,8 +5620,8 @@ void the_developer_section_draws_its_parts() {
     CHECK(canvas.at(active.x + 2, active.y + 2) == kOffSelected);
     CHECK(canvas.at(473, geometry::developer_view.y + 2) == kControlHover);
     CHECK(canvas.at(470, geometry::developer_view.y + 20) == kControlBorder);
-    // Open, it points down.
-    const auto open = geometry::open_rows(dialog);
+    // Open, it points down. The same drawn rows as the closed arrow above.
+    const auto open = rows_as_drawn(dialog, fonts);
     const auto& first = open.list.rows[0];
     CHECK(canvas.at(first.arrow.x, first.arrow.y + 1) == kHint);
     // Nothing of the list is drawn below its view.

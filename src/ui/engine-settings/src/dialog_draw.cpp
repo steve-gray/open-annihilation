@@ -609,8 +609,12 @@ void add_developer(Building& building, const Dialog& dialog, const layout::Scrol
     const auto hot = [&](int32_t control) {
         return dialog.hovered == control || dialog.pressed == control;
     };
-    for (std::size_t index = 0; index < open.list.rows.size(); ++index)
-        add_list_row(building, dialog, open.list.rows[index], index == 0, open.area.view);
+    // A view with no height has an empty clip, and an empty clip draws the
+    // whole dialog: the list would paint across the rows and the footer.
+    if (open.area.view.height > 0) {
+        for (std::size_t index = 0; index < open.list.rows.size(); ++index)
+            add_list_row(building, dialog, open.list.rows[index], index == 0, open.area.view);
+    }
     // Scrolled from its top, the view's first row keeps a line.
     if (open.scroll > 0)
         fill(

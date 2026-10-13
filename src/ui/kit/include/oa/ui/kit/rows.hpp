@@ -860,6 +860,9 @@ struct RowView {
     std::vector<int32_t> button_widths{};
     /// The lock's columns when a real font measures it. 0 keeps the class's lock.
     int32_t lock_columns{};
+    /// A slider's value box when a real font measures the value wider than the
+    /// class's box. 0 keeps that box.
+    int32_t value_columns{};
     /// The control and the lock stand on the line under the label, because the
     /// label does not fit beside them.
     bool control_below{};

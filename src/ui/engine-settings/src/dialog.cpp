@@ -348,10 +348,47 @@ void fit_measured(
         const int32_t need = small(shown.lock) + padlock_width + padlock_gap;
         shown.lock_columns = std::max(need, int32_t{1});
     }
-    if (regular == nullptr || estimated_measure(*regular) || shown.label.empty())
+    if (regular == nullptr || estimated_measure(*regular))
+        return;
+    if (shown.kind == kit::RowKind::choice && !shown.captions.empty()) {
+        int32_t widest = 0;
+        for (const std::string& caption : shown.captions)
+            widest = std::max(widest, (*regular)(caption));
+        // The closed field keeps its inset and the arrow. An open row keeps
+        // the menu's inset and the margin after the words. The field takes
+        // whichever is wider, and stays inside the section.
+        constexpr int32_t menu_margin = 4;
+        const int32_t field = widest + oa::ui::kit::compact_metrics.choice_text_inset +
+                              oa::ui::kit::compact_metrics.choice_arrow_room;
+        const int32_t menu =
+            widest + oa::ui::kit::compact_metrics.choice_item_text_inset + menu_margin;
+        shown.control_width = std::min(
+            std::max(shown.control_width, std::max(field, menu)),
+            std::max(content_width, int32_t{1})
+        );
+    }
+    if (shown.kind == kit::RowKind::slider && !shown.value.empty()) {
+        // The value is drawn in the regular font. The class's box stays when
+        // the value fits it.
+        const int32_t wanted = (*regular)(shown.value) + 8;
+        if (wanted > oa::ui::kit::compact_metrics.slider_value_width)
+            shown.value_columns = wanted;
+    }
+    if (shown.kind == kit::RowKind::value_and_button && !shown.value.empty()) {
+        const int32_t value_width = (*regular)(shown.value);
+        const int32_t label_w = shown.label.empty() ? 0 : (*regular)(shown.label);
+        const int32_t button = shown.control_width > 0
+                                   ? shown.control_width
+                                   : oa::ui::kit::compact_metrics.button_row_width;
+        const int32_t side =
+            (label_w > 0 ? label_w + label_gap : 0) + value_width + label_gap + button;
+        if (side > content_width)
+            shown.control_below = true;
+    }
+    if (shown.label.empty())
         return;
     const int32_t label_width = (*regular)(shown.label);
-    if (label_width <= 0 || label_width > content_width)
+    if (label_width <= 0)
         return;
     auto reserved = [&]() {
         const int32_t control = [&]() {
@@ -380,21 +417,36 @@ void fit_measured(
                      label_gap;
         return width;
     };
+    const auto lock_span = [&]() {
+        if (shown.lock.empty())
+            return int32_t{0};
+        return (shown.lock_columns > 0 ? shown.lock_columns
+                                       : oa::ui::kit::compact_metrics.lock_width) +
+               label_gap;
+    };
     if (shown.kind == kit::RowKind::levels && shown.count > 0) {
-        const int32_t lock_width =
-            shown.lock.empty() ? 0
-                               : (shown.lock_columns > 0 ? shown.lock_columns
-                                                         : oa::ui::kit::compact_metrics.lock_width);
-        const int32_t beside = lock_width > 0 ? lock_width + label_gap : 0;
-        const int32_t room = content_width - label_width - label_gap - beside;
-        const int32_t segment = (room - 2) / shown.count;
         int32_t least = 1;
         for (const std::string& caption : shown.captions)
             least = std::max(least, small(caption) + 8);
-        if (segment >= least && segment < shown.control_width)
+        const int32_t beside = shown.lock.empty() ? 0 : lock_span();
+        // Beside the label. A caption that does not fit there takes the line
+        // under the label, as wide as the caption. The lock stands on that
+        // line too, so the caption stays inside what the section leaves it.
+        const int32_t room = content_width - label_width - label_gap - beside;
+        const int32_t segment = (room - 2) / shown.count;
+        const int32_t full = std::max((content_width - beside - 2) / shown.count, int32_t{1});
+        if (segment < least) {
+            shown.control_below = true;
+            shown.control_width = std::min(std::max(least, shown.control_width), full);
+        } else if (segment < shown.control_width) {
             shown.control_width = segment;
+        }
     }
-    if (reserved() > content_width)
+    // A label wider than the section still takes the whole line, rather than
+    // the sliver beside its control. A lock on a slider's or a drop-down's
+    // label line is counted here too: that control stands on a line of its own.
+    if (label_width > content_width || label_width + lock_span() > content_width ||
+        reserved() > content_width)
         shown.control_below = true;
 }
 
@@ -452,7 +504,7 @@ Rows place_section(
 ) {
     const Sizes& sized_here = sizes != nullptr ? *sizes : sizes_of(dialog);
     if (page == Page::downloads)
-        return downloads::place(dialog, locks, small_width, placed, &sized_here);
+        return downloads::place(dialog, locks, small_width, placed, &sized_here, regular_width);
     const auto settings = section_settings(page, section, row_context(dialog));
     std::vector<kit::RowView> views;
     std::vector<Lock> row_locks;
@@ -806,7 +858,10 @@ ScrolledRows open_rows(
         }
         const TextWidth* measured_small =
             small_width != nullptr && !estimated_measure(*small_width) ? small_width : nullptr;
-        open.list = place_list(dialog, 0, switch_columns, measured_small);
+        const TextWidth* measured_regular =
+            regular_width != nullptr && !estimated_measure(*regular_width) ? regular_width
+                                                                           : nullptr;
+        open.list = place_list(dialog, 0, switch_columns, measured_small, measured_regular, &sized);
         open.content_height = open.list.bottom + end_gap - open.area.view.y;
         open.limit = std::max(open.content_height - open.area.view.height, int32_t{0});
         open.scroll = std::clamp(dialog.scroll[scroll_index(dialog.page)], int32_t{0}, open.limit);

@@ -932,6 +932,57 @@ void place_text(
     top += row.height;
 }
 
+/// Stands a switch under a name that does not fit beside it, and gives the
+/// name the whole of that line. A missing measure leaves the class's row.
+///
+/// @param[in,out] row the row
+/// @param[in,out] switch_rect the switch
+/// @param small_width a text's width in the small font; null leaves the row
+void drop_switch_under_name(
+    geometry::ListRow& row,
+    geometry::SourceRect& switch_rect,
+    const geometry::TextWidth* small_width
+) {
+    if (small_width == nullptr || row.label.width <= 0)
+        return;
+    const int32_t need = (*small_width)(std::string(geometry::shown_text(row.text)));
+    if (need <= row.label.width)
+        return;
+    const int32_t right = switch_rect.x + switch_rect.width;
+    const int32_t extra = geometry::label_line_height + 2;
+    row.label.width = std::max(right - row.label.x, int32_t{1});
+    switch_rect.y += extra;
+    row.height += extra;
+    if (row.kind == geometry::ListRowKind::hack)
+        row.control_area.height += extra;
+}
+
+/// Gives a slider's value the width it measures, and the name what remains
+/// on the line. A missing measure leaves the class's boxes.
+///
+/// @param[in,out] row the slider
+/// @param small_width a text's width in the small font; null leaves the row
+/// @param right the section's right column
+void fit_slider_words(
+    geometry::ListRow& row, const geometry::TextWidth* small_width, int32_t right
+) {
+    if (small_width == nullptr)
+        return;
+    const int32_t gap = geometry::label_gap;
+    const int32_t width = std::max(right - row.label.x, int32_t{1});
+    const int32_t value_need =
+        row.shown.empty() ? 0 : (*small_width)(std::string(geometry::shown_text(row.shown))) + 8;
+    const int32_t name_need = (*small_width)(std::string(geometry::shown_text(row.text)));
+    int32_t value_columns = std::min(std::max(value_need, int32_t{1}), width);
+    int32_t name_columns = name_need;
+    if (name_columns + gap + value_columns > width)
+        name_columns = std::max(width - gap - value_columns, int32_t{0});
+    row.label.width = name_columns;
+    const int32_t value_left = row.label.x + name_columns + (name_columns > 0 ? gap : 0);
+    row.value.x = value_left;
+    row.value.width = std::max(right - value_left, int32_t{0});
+}
+
 /// Places a parameter's switch: a switch parameter's, or one of a set's values.
 ///
 /// @param sized the dialog's sizes at its size class
@@ -948,7 +999,8 @@ geometry::ListRow& place_toggle(
     std::string text,
     int32_t top,
     int32_t& control,
-    int32_t switch_columns
+    int32_t switch_columns,
+    const geometry::TextWidth* small_width
 ) {
     const int32_t columns = switch_columns > 0 ? switch_columns : geometry::switch_width;
     geometry::ListRow& row = list.rows.emplace_back();
@@ -963,6 +1015,7 @@ geometry::ListRow& place_toggle(
     row.label = {
         left, top + 2, row.control_area.x - geometry::label_gap - left, geometry::label_line_height
     };
+    drop_switch_under_name(row, row.control_area, small_width);
     return row;
 }
 
@@ -1018,11 +1071,12 @@ void place_hack(
     geometry::List& list,
     int32_t& top,
     int32_t& control,
-    int32_t switch_columns
+    int32_t switch_columns,
+    const geometry::TextWidth* small_width,
+    const geometry::Sizes& sized
 ) {
     using geometry::ListRow;
     using geometry::ListRowKind;
-    const geometry::Sizes& sized = geometry::sizes_of(dialog);
     const registry::Entry& entry = *mod_profile::standard_hacks()[hack];
     const HackState& state = shown[hack];
     const bool editable = dialog.chosen.developer_mode;
@@ -1055,6 +1109,7 @@ void place_hack(
         header.open = is_open(dialog.developer.hacks_open, hack);
         header.on = state.on;
         header.locked = !editable || (!entry.implemented && !state.on);
+        drop_switch_under_name(header, header.toggle, small_width);
         top += header.height;
         if (!header.open)
             return;
@@ -1111,6 +1166,7 @@ void place_hack(
             row.stop = stop_nearest(scale, value);
             row.shown = geometry::list_value_text(value, unit);
         }
+        fit_slider_words(row, small_width, sized.content_right);
     };
     for (std::size_t index = 0; index < parameters.size(); ++index) {
         const registry::Parameter& parameter = parameters[index];
@@ -1119,7 +1175,14 @@ void place_hack(
         const ValueType type = parameter.value.type;
         if (type == ValueType::boolean) {
             ListRow& row = place_toggle(
-                sized, list, left, std::string(parameter.name), top, control, switch_columns
+                sized,
+                list,
+                left,
+                std::string(parameter.name),
+                top,
+                control,
+                switch_columns,
+                small_width
             );
             own(row, number, geometry::whole_parameter);
             row.on = value.kind == ValueKind::boolean && value.boolean;
@@ -1142,7 +1205,14 @@ void place_hack(
             const auto words = registry::enum_values_of(parameter.value);
             for (std::size_t word = 0; word < words.size(); ++word) {
                 ListRow& row = place_toggle(
-                    sized, list, item_left, std::string(words[word]), top, control, switch_columns
+                    sized,
+                    list,
+                    item_left,
+                    std::string(words[word]),
+                    top,
+                    control,
+                    switch_columns,
+                    small_width
                 );
                 own(row, number, static_cast<int32_t>(word));
                 row.on =
@@ -1216,13 +1286,20 @@ bool developer_page(const Dialog& dialog) noexcept {
 }
 
 List place_list(
-    const Dialog& dialog, int32_t scroll, int32_t switch_columns, const TextWidth* small_width
+    const Dialog& dialog,
+    int32_t scroll,
+    int32_t switch_columns,
+    const TextWidth* small_width,
+    const TextWidth* regular_width,
+    const Sizes* sizes
 ) {
     List list{};
-    const Sizes& sized = sizes_of(dialog);
+    const Sizes& sized = sizes != nullptr ? *sizes : sizes_of(dialog);
     const std::vector<HackState> shown = shown_hacks(dialog);
     const auto& areas = gathered_areas();
-    int32_t top = developer_list_scroll(dialog).view.y;
+    // The same view open_rows clips to: under the measured rows, not the
+    // class's rule, or a longer translation is drawn across those rows.
+    int32_t top = developer_list_scroll(dialog, small_width, &sized, regular_width).view.y;
     int32_t control = first_hack_list_control;
     for (const std::size_t area : shown_area_order()) {
         const HackArea& group = areas[area];
@@ -1264,7 +1341,18 @@ List place_list(
             label_line_height
         };
         header.value = {sized.content_right - count_width, top + 2, count_width, label_line_height};
-        header.control_area = {sized.content_left, top, sized.content_width, list_header_height};
+        // A translated area name that does not fit beside the count takes the
+        // line, and the count stands under it.
+        if (regular_width != nullptr) {
+            const int32_t title = (*regular_width)(std::string(shown_text(header.text)));
+            if (title > header.label.width) {
+                const int32_t extra = label_line_height;
+                header.label.width = std::max(sized.content_width - area_text_offset, int32_t{1});
+                header.value.y += extra;
+                header.height += extra;
+            }
+        }
+        header.control_area = {sized.content_left, top, sized.content_width, header.height};
         header.open = is_open(dialog.developer.areas_open, area);
         top += header.height;
         if (!header.open)
@@ -1272,7 +1360,9 @@ List place_list(
         for (const std::size_t hack : shown_hack_order(group)) {
             if (dialog.developer.active_only && !shown[hack].on)
                 continue;
-            place_hack(dialog, shown, area, hack, list, top, control, switch_columns);
+            place_hack(
+                dialog, shown, area, hack, list, top, control, switch_columns, small_width, sized
+            );
         }
     }
     list.bottom = top;

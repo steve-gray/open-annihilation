@@ -24,6 +24,18 @@
 #include <utility>
 #include <vector>
 
+namespace oa::ui::engine_settings::geometry {
+
+void fit_control(oa::ui::kit::RowView& shown, int32_t content_width, const TextWidth& measure);
+void fit_measured(
+    oa::ui::kit::RowView& shown,
+    int32_t content_width,
+    const TextWidth& small,
+    const TextWidth* regular
+);
+
+} // namespace oa::ui::engine_settings::geometry
+
 namespace oa::ui::engine_settings::downloads {
 
 static_assert(
@@ -505,7 +517,8 @@ geometry::Rows place(
     const Locks& locks,
     const geometry::TextWidth& width,
     kit::PlacedRows* placed,
-    const geometry::Sizes* sizes
+    const geometry::Sizes* sizes,
+    const geometry::TextWidth* regular
 ) {
     const geometry::Sizes& sized = sizes != nullptr ? *sizes : geometry::sizes_of(dialog);
     const geometry::TextWidth measure =
@@ -525,6 +538,8 @@ geometry::Rows place(
         const kit::RowSpec<RowModel> spec = spec_for(model);
         kit::RowView shown = kit::view_of(spec, model, &geometry::shown_text);
         wrap_shown_hints(shown, room, measure);
+        geometry::fit_control(shown, sized.content_width, measure);
+        geometry::fit_measured(shown, sized.content_width, measure, regular);
         const Role role = role_of(dialog, index);
         if (role == Role::toggle || role == Role::id_value) {
             const InstallIdRow* row = offered(dialog, registry_of(index));

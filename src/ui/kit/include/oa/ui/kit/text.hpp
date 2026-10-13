@@ -350,6 +350,14 @@ void set_text_fit_screen(std::string_view screen);
 /// Clears the records and this paint's ink. The screen name stays.
 void begin_text_fit_frame();
 
+/// Puts later notes in a space of their own. A drawing copied onto the screen
+/// from another buffer is not compared with the screen's text. Each end undoes
+/// one begin. Release builds record nothing.
+void begin_text_fit_space();
+
+/// Ends the space begin_text_fit_space opened.
+void end_text_fit_space();
+
 /// Starts one paint: the ink used to notice text crossing other text is
 /// cleared, and the records stay, so a check can read every text of a screen
 /// after several paints.
