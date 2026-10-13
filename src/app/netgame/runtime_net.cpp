@@ -1985,6 +1985,10 @@ void NetworkPlay::net_bind_multiplayer() {
             config.host.stream_port_first = 0;
             config.host.datagram_port_first = 0;
         }
+        if (const auto& guid = net_options().dplay_guid) {
+            config.application_named = true;
+            std::memcpy(config.application.bytes, guid->data(), guid->size());
+        }
         net_->connected = nm::net_connection_create(&net_->connection, config);
         if (!net_->connected)
             std::cerr << "multiplayer: session storage is unavailable\n";

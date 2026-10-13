@@ -25,7 +25,7 @@ target_include_directories(oa-app-netgame-options PUBLIC "${CMAKE_CURRENT_SOURCE
 target_link_libraries(oa-app-netgame-options PUBLIC oa::app::headers oa-app-netgame-launch oa-netgame-frontend
   oa-app-command-line oa-ui-frontend-renderer oa-ui-frontend-state oa-sim-scenario oa-ui-screen-registry
   oa-core-types
-  PRIVATE oa-options)
+  PRIVATE oa-netgame oa-options)
 
 # The network rules a mod profile gives network play, which their test
 # reads without a running app.
@@ -110,7 +110,7 @@ if(BUILD_TESTING)
   target_link_libraries(oa-netgame-launch-switches-test PRIVATE oa-app-netgame-launch oa-options)
   add_test(NAME net-launch-switches COMMAND oa-netgame-launch-switches-test)
   add_executable(oa-netgame-options-test tests/options_test.cpp)
-  target_link_libraries(oa-netgame-options-test PRIVATE oa-app-netgame-options oa-app-game-options oa-options)
+  target_link_libraries(oa-netgame-options-test PRIVATE oa-app-netgame-options oa-app-game-options oa-netgame oa-options)
   add_test(NAME netgame-game-options COMMAND oa-netgame-options-test)
   add_executable(oa-netgame-close-handlers-test tests/close_handlers_test.cpp)
   target_link_libraries(oa-netgame-close-handlers-test PRIVATE oa-app-netgame-launch-binding oa-ui-frontend-state)

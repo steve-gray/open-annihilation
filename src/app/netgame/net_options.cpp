@@ -8,7 +8,9 @@
 #include "oa/app/app.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/core/game_state.h"
+#include "oa/netgame/dplay.hpp"
 
+#include <array>
 #include <charconv>
 #include <stdexcept>
 #include <string>
@@ -31,6 +33,21 @@ namespace {
         value > 65535)
         throw std::runtime_error("--dplay-port expects a port from 1 through 65535");
     return static_cast<uint16_t>(value);
+}
+
+/// Parses an application GUID.
+///
+/// Anything but eight-four-four-four-twelve hexadecimal digits, any case,
+/// with or without braces, throws std::runtime_error
+/// "--dplay-guid expects a GUID, with or without braces".
+///
+/// @param text The option's value.
+/// @return The GUID in wire byte order.
+[[nodiscard]] std::array<uint8_t, 16> parse_guid(std::string_view text) {
+    std::array<uint8_t, 16> bytes{};
+    if (!oa::netgame::parse_application_guid(text, bytes.data()))
+        throw std::runtime_error("--dplay-guid expects a GUID, with or without braces");
+    return bytes;
 }
 
 /// Returns the NetgameContext behind an extension context pointer.
@@ -71,6 +88,8 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
         effects |= option_effect::unattended | option_effect::skip_intro;
     } else if (argument == "--dplay-port")
         result.dplay_port = parse_port(value());
+    else if (argument == "--dplay-guid")
+        result.dplay_guid = parse_guid(value());
     else if (argument == "--play-demo")
         result.play_demo = path_from_utf8(value());
     else if (argument == "--check-recording-hook") {
@@ -153,7 +172,8 @@ const char* text(void* /*context*/, ExtensionText which) {
         return "[--host | --join ADDRESS] [--player-name NAME] [--game-name NAME] "
                "[--game-password PASSWORD] "
                "[--net-loopback-check TICKS] [--net-loopback-watcher] [--net-loopback-computer] "
-               "[--check-host-not-found] [--dplay-port PORT] [--play-demo FILE.tad] "
+               "[--check-host-not-found] [--dplay-port PORT] [--dplay-guid GUID] "
+               "[--play-demo FILE.tad] "
                "[--demo-unit-table strict|ignore] [--net-record FILE] [--replay-viewer] ";
     case ExtensionText::usage_switches:
         return "-t SECONDS -n TYPE[:ADDRESS] -hNAME ";
