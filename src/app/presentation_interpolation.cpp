@@ -219,8 +219,92 @@ int16_t angle_along_step(int16_t angle, int16_t step, uint32_t ticks, uint32_t f
     );
 }
 
+namespace {
+
+/// Half a revolution, in angle words. A larger turn a tick is past the
+/// shorter way between two wrapped angles.
+constexpr int32_t half_revolution = 32768;
+
+/// Splits a signed turn into whole revolutions and a remainder in
+/// 0..65535, rounding the whole count toward negative infinity.
+///
+/// @param span the turn, in angle words
+/// @param[out] revolutions whole turns toward negative infinity
+/// @param[out] remainder the rest, 0..65535
+void split_turn(int64_t span, int64_t& revolutions, int64_t& remainder) noexcept {
+    constexpr int64_t circle = static_cast<int64_t>(whole_tick);
+    if (span >= 0) {
+        revolutions = span / circle;
+        remainder = span % circle;
+        return;
+    }
+    const int64_t magnitude = -span;
+    revolutions = -(magnitude / circle);
+    remainder = span - revolutions * circle;
+    if (remainder < 0) {
+        --revolutions;
+        remainder += circle;
+    }
+}
+
+/// Returns `previous` plus the part of `span` the fraction covers, wrapped
+/// to an angle word. The part rounds toward negative infinity.
+///
+/// @param previous the angle the turn starts from
+/// @param span the whole turn, in angle words
+/// @param fraction the part of the way, 0 to whole_tick
+/// @return the angle at that part
+int16_t angle_along_span(int16_t previous, int64_t span, uint32_t fraction) noexcept {
+    if (fraction == 0)
+        return previous;
+    const auto wrapped = [](int16_t from, int64_t turn) {
+        return static_cast<int16_t>(
+            static_cast<uint16_t>(static_cast<uint16_t>(from) + static_cast<uint16_t>(turn))
+        );
+    };
+    if (fraction >= whole_tick)
+        return wrapped(previous, span);
+    int64_t revolutions = 0;
+    int64_t remainder = 0;
+    split_turn(span, revolutions, remainder);
+    constexpr int64_t circle = static_cast<int64_t>(whole_tick);
+    const int64_t scaled = static_cast<int64_t>(fraction);
+    const int64_t remainder_part = (remainder * scaled) / circle;
+    int64_t revolution_part = revolutions % circle;
+    if (revolution_part < 0)
+        revolution_part += circle;
+    revolution_part = (revolution_part * scaled) % circle;
+    return wrapped(previous, remainder_part + revolution_part);
+}
+
+} // namespace
+
+int16_t blend_piece_turn(
+    int16_t previous, int16_t current, int32_t speed_per_tick, uint32_t ticks, uint32_t fraction
+) noexcept {
+    if (fraction >= whole_tick)
+        return current;
+    if (speed_per_tick != 0 && ticks != 0) {
+        const int64_t span = static_cast<int64_t>(speed_per_tick) * static_cast<int64_t>(ticks);
+        const auto landed = static_cast<int16_t>(
+            static_cast<uint16_t>(static_cast<uint16_t>(previous) + static_cast<uint16_t>(span))
+        );
+        if (landed == current)
+            return angle_along_span(previous, span, fraction);
+        // The rate changed during the batch, so it no longer adds up to the
+        // two angles. Past half a revolution a tick the shorter way would
+        // turn backwards; show the tick's angle instead.
+        if (speed_per_tick >= half_revolution || speed_per_tick <= -half_revolution)
+            return fraction == 0 ? previous : current;
+    }
+    return blend_angle(previous, current, fraction);
+}
+
 void capture_unit_pose(
-    const oa::Unit& unit, const oa::sim::model_runtime::Instance& instance, UnitPose& pose
+    const oa::Unit& unit,
+    const oa::sim::model_runtime::Instance& instance,
+    UnitPose& pose,
+    std::span<const int32_t> piece_turns
 ) {
     pose.position = unit.position;
     pose.heading = unit.heading;
@@ -229,8 +313,15 @@ void capture_unit_pose(
     pose.attach_parent = unit.attach_parent;
     const auto pieces = instance.pieces();
     pose.pieces.resize(pieces.size());
-    for (std::size_t index = 0; index < pieces.size(); ++index)
-        pose.pieces[index] = {pieces[index].translation, pieces[index].rotation};
+    for (std::size_t index = 0; index < pieces.size(); ++index) {
+        pose.pieces[index] = {pieces[index].translation, pieces[index].rotation, {}};
+        const std::size_t at = index * 3;
+        if (at + 2 < piece_turns.size()) {
+            pose.pieces[index].turn_per_tick = {
+                piece_turns[at], piece_turns[at + 1], piece_turns[at + 2]
+            };
+        }
+    }
 }
 
 bool poses_equal(const UnitPose& a, const UnitPose& b) noexcept {
@@ -264,7 +355,8 @@ void blend_unit_pose(
     const UnitPose& current,
     uint32_t fraction,
     oa::Unit& record,
-    oa::sim::model_runtime::Instance& instance
+    oa::sim::model_runtime::Instance& instance,
+    uint32_t ticks
 ) {
     record.position = blend_point(previous.position, current.position, fraction);
     record.heading = static_cast<uint16_t>(blend_angle(
@@ -272,14 +364,15 @@ void blend_unit_pose(
     ));
     record.pitch = blend_angle(previous.pitch, current.pitch, fraction);
     record.bank = blend_angle(previous.bank, current.bank, fraction);
-    blend_unit_pieces(previous, current, fraction, instance);
+    blend_unit_pieces(previous, current, fraction, instance, ticks);
 }
 
 void blend_unit_pieces(
     const UnitPose& previous,
     const UnitPose& current,
     uint32_t fraction,
-    oa::sim::model_runtime::Instance& instance
+    oa::sim::model_runtime::Instance& instance,
+    uint32_t ticks
 ) {
     auto pieces = instance.pieces();
     const std::size_t count =
@@ -294,9 +387,13 @@ void blend_unit_pieces(
             blend_fixed(from.translation.z, to.translation.z, fraction)
         };
         piece.rotation = {
-            blend_angle(from.rotation.xy, to.rotation.xy, fraction),
-            blend_angle(from.rotation.xz, to.rotation.xz, fraction),
-            blend_angle(from.rotation.yz, to.rotation.yz, fraction)
+            blend_piece_turn(
+                from.rotation.xy, to.rotation.xy, to.turn_per_tick[0], ticks, fraction
+            ),
+            blend_piece_turn(
+                from.rotation.xz, to.rotation.xz, to.turn_per_tick[1], ticks, fraction
+            ),
+            blend_piece_turn(from.rotation.yz, to.rotation.yz, to.turn_per_tick[2], ticks, fraction)
         };
     }
 }
@@ -333,7 +430,8 @@ void observe_unit(
     uint32_t tick,
     uint32_t instance_generation,
     const oa::Unit& unit,
-    const oa::sim::model_runtime::Instance& instance
+    const oa::sim::model_runtime::Instance& instance,
+    std::span<const int32_t> piece_turns
 ) {
     if (!motion.seen || motion.instance_generation != instance_generation) {
         // A unit the slot did not hold before: its first pose, and a draw
@@ -341,7 +439,7 @@ void observe_unit(
         motion.instance_generation = instance_generation;
         motion.state = {};
         motion.blended_draw = 0;
-        capture_unit_pose(unit, instance, motion.current);
+        capture_unit_pose(unit, instance, motion.current, piece_turns);
         motion.tick = tick;
         motion.seen = true;
         motion.continued = false;
@@ -354,7 +452,7 @@ void observe_unit(
     const bool follows = batch_ticks(motion.tick, tick) != 0;
     if (follows)
         std::swap(motion.previous, motion.current);
-    capture_unit_pose(unit, instance, motion.current);
+    capture_unit_pose(unit, instance, motion.current, piece_turns);
     motion.tick = tick;
     motion.continued = follows && pose_continues(motion.previous, motion.current);
     motion.moved = motion.continued && !poses_equal(motion.previous, motion.current);
