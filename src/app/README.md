@@ -835,7 +835,10 @@ hosts them on the OA layer.
   tier draws the filler at any zoom. The features, trees, rocks and wrecks,
   are cut off at the same edges in every tier, nothing of them drawn on
   the black (`shown_map_span`, `region_on_map`, `shown_map_scissor`);
-  units, shots and effects past the edges are drawn whole. The view may go
+  units, shots and effects past the edges are drawn whole. A wreck's
+  picture follows its record (`follow_feature_draw`): while the wreck
+  sinks it is drawn lower each frame, the underwater tint with it, and
+  once the wreck rests the picture stays at that height. The view may go
   past the map's edges as far as View past the map's edge lets it
   (`past_map_edge_share`): at 50% its centre stays on the map, so that a
   map's edge or corner can be brought to the battlefield's middle, or,

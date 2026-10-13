@@ -824,6 +824,12 @@ if(BUILD_TESTING)
   target_link_libraries(oa-match-model-draws-test PRIVATE oa-app-headers oa-present-model oa-sim-feature-runtime
     oa-options)
   add_test(NAME match-model-draws COMMAND oa-match-model-draws-test)
+  # A wreck's picture follows its record down through deep water until it
+  # rests, and a wreck on land stays where it was placed.
+  add_executable(oa-match-wreck-draw-test src/app/runtime_match_render_test.cpp)
+  target_link_libraries(oa-match-wreck-draw-test PRIVATE oa-app-headers oa-present-model
+    oa-sim-feature-runtime oa-options)
+  add_test(NAME match-wreck-draw COMMAND oa-match-wreck-draw-test)
   # What frames between two ticks show: the blends of places, angles and
   # piece poses, the poses each tick leaves, and projectiles and debris
   # followed from one tick to the next.

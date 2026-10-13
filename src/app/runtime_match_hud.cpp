@@ -796,6 +796,8 @@ void Runtime::place_catalog_feature_draw(int32_t cell_x, int32_t cell_z, uint16_
         if (object == 0 || object > feature_assets_.models.size())
             return;
         MatchFeatureDraw draw;
+        // Where the record stands now. Each later frame copies it again
+        // while the wreck sinks (follow_feature_draw).
         if ((plot->flags & OA_PLOT_FLAG_ANIMATING_FEATURE) != 0)
             if (const auto* record =
                     oa::sim::feature_runtime::feature_record(world, plot->feature_record)) {
