@@ -964,6 +964,26 @@ std::vector<std::string> copied_content_bundles(const fs::path& folder) {
     return ids;
 }
 
+std::vector<std::string> registry_content_bundles(const fs::path& user) {
+    std::vector<std::string> ids;
+    std::error_code failure;
+    if (user.empty() || !fs::is_directory(user, failure) || failure)
+        return ids;
+    constexpr std::string_view registry_source = "registry ";
+    for (const auto& bundle : oa::data::content_bundles::bundles()) {
+        const oa::data::content_bundles::ContentRecord record =
+            oa::data::content_bundles::read_bundle_folder_record(
+                bundle_directory(user, bundle), nullptr
+            );
+        if (!record.valid || record.bundle_id != bundle.id)
+            continue;
+        if (record.source.rfind(registry_source, 0) != 0)
+            continue;
+        ids.emplace_back(bundle.id);
+    }
+    return ids;
+}
+
 std::optional<GameDirectory> compose_managed_content(
     const ManagedMount& request, const oa::platform::preferences::Values& values
 ) {

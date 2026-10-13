@@ -438,6 +438,14 @@ void remember_mod_directory(oa::platform::preferences::Values& values, const fs:
 /// @return the copied bundle ids, in the built-in order
 [[nodiscard]] std::vector<std::string> copied_content_bundles(const fs::path& folder);
 
+/// Returns the bundles in the player's folder that a registry delivered: each
+/// managed bundle folder whose content record names a registry as its source
+/// ("registry <id>"), not the bundles copied from an installation.
+///
+/// @param user the player's folder; empty, or not a folder, lists none
+/// @return those bundle ids, in the built-in order
+[[nodiscard]] std::vector<std::string> registry_content_bundles(const fs::path& user);
+
 /// What a composed mount is built from: the player's folder and the choice.
 struct ManagedMount {
     /// The player's folder, which holds `Games/` and `Expansions/`.

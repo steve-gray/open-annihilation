@@ -1693,6 +1693,7 @@ library::Inputs Runtime::library_inputs() {
     inputs.content.locked = choice.command_line;
     inputs.content.enabled = choice.expansions;
     inputs.content.copied = copied_content_bundles(options_.game_dir);
+    inputs.content.downloaded = registry_content_bundles(user_folder_);
     if (const oa::data::content_bundles::Bundle* music =
             oa::data::content_bundles::find_bundle("music")) {
         const oa::app::ContentRecord music_record = oa::app::read_content_record(
