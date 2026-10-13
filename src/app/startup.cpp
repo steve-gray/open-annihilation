@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
@@ -1234,8 +1235,12 @@ void write_parent_console(std::string_view text) {
     if (kernel == nullptr)
         return;
     using AttachConsoleFunction = BOOL(WINAPI*)(DWORD);
-    const auto attach =
-        reinterpret_cast<AttachConsoleFunction>(GetProcAddress(kernel, "AttachConsole"));
+    // A direct cast of GetProcAddress is a cast between function types, which
+    // this build rejects. Copy the pointer instead.
+    const auto looked_up = GetProcAddress(kernel, "AttachConsole");
+    AttachConsoleFunction attach = nullptr;
+    static_assert(sizeof(attach) == sizeof(looked_up));
+    std::memcpy(&attach, &looked_up, sizeof(attach));
     if (attach == nullptr || attach(kParentConsole) == FALSE)
         return;
     const HANDLE console = CreateFileW(
