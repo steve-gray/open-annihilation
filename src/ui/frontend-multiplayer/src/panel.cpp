@@ -296,6 +296,7 @@ void panel_fill_list(Panel& panel, std::string_view name, std::vector<std::strin
     auto& list = at(panel, index);
     list.items = std::move(rows);
     list.item_keys.clear();
+    list.item_grey.clear();
     auto filled = list_of(list);
     const bool overflow =
         gui_input::scroll_list_fill(filled, static_cast<int32_t>(filled.count), panel.line_height);
@@ -324,6 +325,17 @@ void panel_set_item_keys(Panel& panel, std::string_view name, std::vector<std::s
         control->item_keys = std::move(keys);
     else
         control->item_keys.clear();
+    panel.dirty = true;
+}
+
+void panel_set_item_grey(Panel& panel, std::string_view name, std::vector<uint8_t> grey) {
+    auto* control = panel_control(panel, name);
+    if (control == nullptr)
+        return;
+    if (grey.size() == control->items.size())
+        control->item_grey = std::move(grey);
+    else
+        control->item_grey.clear();
     panel.dirty = true;
 }
 

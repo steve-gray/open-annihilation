@@ -10,6 +10,7 @@
 #include "oa/app/package_install/origin.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/base/sha256.hpp"
+#include "oa/data/content_bundles.hpp"
 #include "oa/data/defs/layout.hpp"
 #include "oa/data/map_pack/map_name.hpp"
 #include "oa/formats/hpi.hpp"
@@ -18,6 +19,7 @@
 #include <cstdint>
 #include <exception>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -321,6 +323,331 @@ fit::Fit check_base_game_fit(
     } catch (...) {
         return store_failure("the base game cannot be read");
     }
+}
+
+namespace {
+
+namespace bundles = oa::data::content_bundles;
+
+/// The old key of Total Annihilation with no mod.
+constexpr std::string_view kLegacyBaseKey = "ta-3.1c";
+
+/// The sentence a catalogue miss uses when no other mod fits.
+constexpr std::string_view kCatalogueDetail = "Its catalogue says it does not fit {game}.";
+
+/// Tells whether a list holds an id.
+///
+/// @param ids the ids
+/// @param id the id
+/// @return true when it is there
+bool id_listed(std::span<const std::string> ids, std::string_view id) {
+    for (const std::string& one : ids)
+        if (one == id)
+            return true;
+    return false;
+}
+
+/// The base game a missing id stands for.
+///
+/// @param base_game the id; empty means Total Annihilation
+/// @return the id
+std::string_view base_id(std::string_view base_game) {
+    return base_game.empty() ? bundles::default_base_game_id : base_game;
+}
+
+/// The name a player sees for a bundle.
+///
+/// Total Annihilation drops the version the bundle table carries. Any other
+/// id uses the table's name, or the id when the table has none.
+///
+/// @param id the bundle's id
+/// @return the name
+std::string bundle_name(std::string_view id) {
+    if (id == bundles::default_base_game_id)
+        return "Total Annihilation";
+    if (const bundles::Bundle* bundle = bundles::find_bundle(id))
+        return std::string(bundle->english_name);
+    return std::string(id);
+}
+
+/// Tells whether an expansion extends a base game.
+///
+/// @param bundle the expansion
+/// @param game the base game's id
+/// @return true when it extends that game
+bool extends_game(const bundles::Bundle& bundle, std::string_view game) {
+    for (const std::string_view extended : bundle.extends)
+        if (extended == game)
+            return true;
+    return false;
+}
+
+/// Fills each "{name}" of a text with its value.
+///
+/// @param text the text
+/// @param fields each field's name and value
+/// @return the text with its fields filled
+std::string filled(
+    std::string text, std::initializer_list<std::pair<std::string_view, std::string_view>> fields
+) {
+    for (const auto& [name, value] : fields) {
+        const std::string field = "{" + std::string(name) + "}";
+        for (std::size_t at = text.find(field); at != std::string::npos;
+             at = text.find(field, at + value.size()))
+            text.replace(at, field.size(), value);
+    }
+    return text;
+}
+
+/// The mod a compatible key names, when its last part is `<id>@<release>`.
+///
+/// @param key the row's name
+/// @return `<id>@<release>`; empty when the key names no mod
+std::string_view mod_part(std::string_view key) {
+    const std::size_t plus = key.rfind('+');
+    const std::string_view last = plus == std::string_view::npos ? key : key.substr(plus + 1);
+    if (last.find('@') == std::string_view::npos)
+        return {};
+    return last;
+}
+
+/// The id of a mod key, the part before `@`.
+///
+/// @param mod_key `<id>@<release>`
+/// @return the id; the whole key when it has no `@`
+std::string_view mod_id(std::string_view mod_key) {
+    const std::size_t at = mod_key.find('@');
+    return at == std::string_view::npos ? mod_key : mod_key.substr(0, at);
+}
+
+/// Another mod a true compatible row names, when it is not the one being played.
+///
+/// @param rows the map's rows
+/// @param mod_key the mod being played; empty when none is
+/// @return that mod's id; empty when no other mod fits
+std::string other_mod(std::span<const CompatibleFlag> rows, std::string_view mod_key) {
+    for (const CompatibleFlag& row : rows) {
+        if (!row.fits)
+            continue;
+        const std::string_view part = mod_part(row.key);
+        if (part.empty() || part == mod_key)
+            continue;
+        return std::string(mod_id(part));
+    }
+    return {};
+}
+
+/// Splits a key on `+`.
+///
+/// @param key the key
+/// @return its parts, in order
+std::vector<std::string_view> key_parts(std::string_view key) {
+    std::vector<std::string_view> parts;
+    std::size_t start = 0;
+    for (std::size_t at = key.find('+'); at != std::string_view::npos; at = key.find('+', start)) {
+        parts.push_back(key.substr(start, at - start));
+        start = at + 1;
+    }
+    parts.push_back(key.substr(start));
+    return parts;
+}
+
+} // namespace
+
+std::string map_compatibility_key(
+    std::string_view base_game, std::span<const std::string> expansions, std::string_view mod_key
+) {
+    const std::string_view game = base_id(base_game);
+    std::string key(game);
+    for (const bundles::Bundle& bundle : bundles::bundles()) {
+        if (bundle.kind != bundles::Kind::expansion || !extends_game(bundle, game))
+            continue;
+        if (!id_listed(expansions, bundle.id))
+            continue;
+        key.push_back('+');
+        key.append(bundle.id);
+    }
+    if (!mod_key.empty()) {
+        key.push_back('+');
+        key.append(mod_key);
+    }
+    return key;
+}
+
+std::string legacy_compatibility_key(std::string_view base_game, std::string_view mod_key) {
+    if (!mod_key.empty())
+        return std::string(mod_key);
+    if (base_id(base_game) == bundles::default_base_game_id)
+        return std::string(kLegacyBaseKey);
+    return {};
+}
+
+std::optional<bool> compatible_answer(
+    std::span<const CompatibleFlag> rows,
+    std::string_view base_game,
+    std::span<const std::string> expansions_on,
+    std::string_view mod_key
+) {
+    const auto recorded = [&](std::string_view key) -> std::optional<bool> {
+        if (key.empty())
+            return std::nullopt;
+        for (const CompatibleFlag& row : rows)
+            if (row.key == key)
+                return row.fits;
+        return std::nullopt;
+    };
+
+    const std::string session = map_compatibility_key(base_game, expansions_on, mod_key);
+    if (const std::optional<bool> exact = recorded(session))
+        return exact;
+
+    const std::string_view game = base_id(base_game);
+    const std::string prefix = std::string(game) + "+";
+    int best_count = -1;
+    std::optional<bool> best;
+    for (const CompatibleFlag& row : rows) {
+        if (row.key != game && !row.key.starts_with(prefix))
+            continue;
+        const std::vector<std::string_view> parts = key_parts(row.key);
+        if (parts.empty() || parts.front() != game)
+            continue;
+        std::string_view named_mod;
+        std::size_t expansion_end = parts.size();
+        if (parts.back().find('@') != std::string_view::npos) {
+            named_mod = parts.back();
+            expansion_end = parts.size() - 1;
+        }
+        if (mod_key.empty()) {
+            if (!named_mod.empty())
+                continue;
+        } else if (named_mod != mod_key) {
+            continue;
+        }
+        bool covered = true;
+        int count = 0;
+        for (std::size_t index = 1; index < expansion_end; ++index) {
+            ++count;
+            if (!id_listed(expansions_on, parts[index]))
+                covered = false;
+        }
+        if (!covered || count <= best_count)
+            continue;
+        best_count = count;
+        best = row.fits;
+    }
+    if (best)
+        return best;
+    return recorded(legacy_compatibility_key(base_game, mod_key));
+}
+
+MapListVerdict map_list_verdict(
+    std::span<const std::string> supported_games,
+    std::span<const std::string> required_expansions,
+    std::string_view base_game,
+    std::span<const std::string> expansions_on,
+    std::string_view mod_key,
+    ListedFit catalogue,
+    std::span<const CompatibleFlag> compatible,
+    FileFit files
+) {
+    const std::string_view game = base_id(base_game);
+    const bool supports = supported_games.empty() ? game == bundles::default_base_game_id
+                                                  : id_listed(supported_games, game);
+    if (!supports) {
+        MapListVerdict verdict;
+        verdict.block = MapListBlock::other_game;
+        const bool only_demo =
+            supported_games.size() == 1 && supported_games.front() == "totala-demo";
+        verdict.demo = only_demo;
+        if (!only_demo) {
+            const std::string_view shown = supported_games.empty()
+                                               ? bundles::default_base_game_id
+                                               : std::string_view(supported_games.front());
+            verdict.name = bundle_name(shown);
+        }
+        return verdict;
+    }
+
+    for (const bundles::Bundle& bundle : bundles::bundles()) {
+        if (bundle.kind != bundles::Kind::expansion)
+            continue;
+        if (!id_listed(required_expansions, bundle.id) || id_listed(expansions_on, bundle.id))
+            continue;
+        MapListVerdict verdict;
+        verdict.block = MapListBlock::needs_expansion;
+        verdict.name = std::string(bundle.english_name);
+        return verdict;
+    }
+    for (const std::string& required : required_expansions) {
+        if (id_listed(expansions_on, required) || bundles::find_bundle(required) != nullptr)
+            continue;
+        MapListVerdict verdict;
+        verdict.block = MapListBlock::needs_expansion;
+        verdict.name = required;
+        return verdict;
+    }
+
+    if (catalogue == ListedFit::fits) {
+        MapListVerdict verdict;
+        verdict.block = MapListBlock::playable;
+        return verdict;
+    }
+    if (catalogue == ListedFit::unfit) {
+        MapListVerdict verdict;
+        verdict.block = MapListBlock::unfit;
+        verdict.final_note = true;
+        verdict.name = other_mod(compatible, mod_key);
+        if (verdict.name.empty())
+            verdict.detail = std::string(kCatalogueDetail);
+        return verdict;
+    }
+    if (!files.known) {
+        MapListVerdict verdict;
+        verdict.block = MapListBlock::ask_files;
+        return verdict;
+    }
+    if (files.fits) {
+        MapListVerdict verdict;
+        verdict.block = MapListBlock::playable;
+        return verdict;
+    }
+    MapListVerdict verdict;
+    verdict.block = MapListBlock::unfit;
+    verdict.final_note = catalogue != ListedFit::unlisted;
+    verdict.detail = std::string(files.detail);
+    return verdict;
+}
+
+std::string map_list_row_reason(const MapListVerdict& verdict) {
+    if (verdict.block == MapListBlock::other_game && verdict.demo)
+        return "for the TA demo";
+    if (verdict.block == MapListBlock::other_game ||
+        (verdict.block == MapListBlock::unfit && !verdict.name.empty()))
+        return filled("for {name}", {{"name", verdict.name}});
+    if (verdict.block == MapListBlock::needs_expansion)
+        return filled("needs {name}", {{"name", verdict.name}});
+    if (verdict.block == MapListBlock::unfit)
+        return "doesn't fit";
+    return {};
+}
+
+std::string map_list_explanation(const MapListVerdict& verdict, std::string_view game_name) {
+    if (verdict.block == MapListBlock::other_game && verdict.demo)
+        return "This map is for the TA demo.";
+    if (verdict.block == MapListBlock::other_game ||
+        (verdict.block == MapListBlock::unfit && !verdict.name.empty()))
+        return filled("This map is for {name}.", {{"name", verdict.name}});
+    if (verdict.block == MapListBlock::needs_expansion)
+        return filled(
+            "Needs {name}, which is off. Turn it on in the Library.", {{"name", verdict.name}}
+        );
+    if (verdict.block != MapListBlock::unfit)
+        return {};
+    const std::string reason = filled(
+        verdict.detail.empty() ? std::string("it does not fit") : verdict.detail,
+        {{"game", game_name}}
+    );
+    return filled("Doesn't fit {game}: {reason}", {{"game", game_name}, {"reason", reason}});
 }
 
 } // namespace oa::app

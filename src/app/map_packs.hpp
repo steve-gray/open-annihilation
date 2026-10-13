@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -132,5 +133,147 @@ class MapPacks {
     const oa::data::map_pack::MapEntry& map,
     std::string_view id
 );
+
+/// The compatibility key of a base game, the expansions that are on, and a mod.
+///
+/// The base game comes first. An empty base game is Total Annihilation.
+/// Each expansion that extends that base game and is on is appended, in the
+/// built-in order, as `+<id>`. A mod key is appended last, as `+<mod key>`.
+/// An expansion that does not extend the base game is left out, so the demo
+/// with any expansions still on is `totala-demo`.
+///
+/// @param base_game the base game's id; empty means Total Annihilation
+/// @param expansions the expansion ids that are on, in any order
+/// @param mod_key `<id>@<release>` of the mod being played; empty when none is
+/// @return the key, such as `totala+core-contingency+ridge@28`
+[[nodiscard]] std::string map_compatibility_key(
+    std::string_view base_game, std::span<const std::string> expansions, std::string_view mod_key
+);
+
+/// The compatibility key engines before this one look up.
+///
+/// A mod's key is that mod's `<id>@<release>`. Total Annihilation with no mod
+/// is `ta-3.1c`. The demo with no mod has none.
+///
+/// @param base_game the base game's id; empty means Total Annihilation
+/// @param mod_key `<id>@<release>`; empty when no mod is played
+/// @return the old key; empty when that game has none
+[[nodiscard]] std::string
+legacy_compatibility_key(std::string_view base_game, std::string_view mod_key);
+
+/// One row of a map's compatible table.
+struct CompatibleFlag {
+    std::string_view key{}; ///< the row's name
+    bool fits = false;      ///< true when that target fits
+};
+
+/// How a catalogue answers for the game being played.
+///
+/// The new names are tried first (`totala`, `totala+core-contingency`,
+/// `totala+<mod>@<release>`, expansions in the built-in order). A row whose
+/// expansions are all on matches, and the longest such row wins, so a pack
+/// published as `totala` still matches when more expansions are on. The old
+/// names (`ta-3.1c`, `<mod>@<release>`) are used only when no new name matches,
+/// and a new name that is present is never overruled by an old one.
+///
+/// @param rows the map's compatible rows
+/// @param base_game the base game's id; empty means Total Annihilation
+/// @param expansions_on the expansion ids that are on
+/// @param mod_key `<id>@<release>`; empty when no mod is played
+/// @return whether the map fits; nothing when the table does not say
+[[nodiscard]] std::optional<bool> compatible_answer(
+    std::span<const CompatibleFlag> rows,
+    std::string_view base_game,
+    std::span<const std::string> expansions_on,
+    std::string_view mod_key
+);
+
+/// Why a listed map cannot be chosen.
+enum class MapListBlock : uint8_t {
+    playable,        ///< the map can be played
+    other_game,      ///< the pack does not support the base game being played
+    needs_expansion, ///< a required expansion is off
+    unfit,           ///< the map does not fit the mod, or the files say so
+    ask_files,       ///< the catalogue does not say; the files have not been read
+};
+
+/// What the catalogue has already said about a map.
+enum class ListedFit : uint8_t {
+    unlisted,  ///< the catalogue has not listed this release; a file miss is not final
+    unchecked, ///< no row for this game; the files decide, and a miss is final
+    fits,      ///< the catalogue says the map fits
+    unfit,     ///< the catalogue says the map does not fit
+};
+
+/// What a file check found, when one has been run.
+struct FileFit {
+    bool known = false;        ///< a check was run
+    bool fits = false;         ///< the files fit
+    std::string_view detail{}; ///< the first failure; empty when the files fit
+};
+
+/// Why a map is greyed, or that it can be played.
+struct MapListVerdict {
+    MapListBlock block = MapListBlock::playable;
+    /// The pack supports only the demo, so the row reads "for the TA demo".
+    bool demo = false;
+    /// The other game's name, the expansion's name, or the other mod's id.
+    std::string name{};
+    /// The file check's or the catalogue's detail, when the row is "doesn't fit".
+    std::string detail{};
+    /// A miss the log names once. A content block, and a release the catalogue
+    /// has not listed, are not.
+    bool final_note = false;
+};
+
+/// Decides whether a map can be played, and why the list greys it.
+///
+/// The pack must support the base game, then every required expansion must be
+/// on. The catalogue is final when it has answered: a fit is playable and a
+/// miss is not, and the files are not read either way. A true row that names
+/// another mod is the reason "for <id>". When the catalogue has not answered,
+/// `files.known` false asks for a file check; a miss then is final unless the
+/// release is not listed yet.
+///
+/// @param supported_games base games the pack supports; empty means Total Annihilation
+/// @param required_expansions expansions that must be on
+/// @param base_game the base game being played; empty means Total Annihilation
+/// @param expansions_on the expansions that are on
+/// @param mod_key `<id>@<release>` of the mod being played; empty when none is
+/// @param catalogue what the catalogue has said
+/// @param compatible the map's compatible rows, read when the catalogue says it does not fit
+/// @param files the file check, when one has been run
+/// @return the verdict
+[[nodiscard]] MapListVerdict map_list_verdict(
+    std::span<const std::string> supported_games,
+    std::span<const std::string> required_expansions,
+    std::string_view base_game,
+    std::span<const std::string> expansions_on,
+    std::string_view mod_key,
+    ListedFit catalogue,
+    std::span<const CompatibleFlag> compatible,
+    FileFit files
+);
+
+/// The short reason a greyed row shows, in English.
+///
+/// A playable map has none. The words are "for the TA demo", "for {name}",
+/// "needs {name}" or "doesn't fit", with the name filled in.
+///
+/// @param verdict the verdict
+/// @return the reason; empty when the map can be played
+[[nodiscard]] std::string map_list_row_reason(const MapListVerdict& verdict);
+
+/// The sentence choosing a greyed map shows, in English.
+///
+/// A pack for another game says which. A required expansion that is off says
+/// to turn it on in the Library. A map that does not fit names the other mod,
+/// or "Doesn't fit {game}: {reason}".
+///
+/// @param verdict the verdict
+/// @param game_name the game being played, as the player sees it
+/// @return the sentence; empty when the map can be played
+[[nodiscard]] std::string
+map_list_explanation(const MapListVerdict& verdict, std::string_view game_name);
 
 } // namespace oa::app

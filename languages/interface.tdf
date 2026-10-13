@@ -5136,6 +5136,14 @@
 	it=Richiede il gioco di base {base};
 	}
 
+[Needs {name}, which is off.]
+	{
+	de=Braucht {name}, und das ist aus.;
+	fr=Il faut {name}, et c'est désactivé.;
+	es=Necesita {name}, y está desactivada.;
+	it=Serve {name}, ed è disattivata.;
+	}
+
 [Network]
 	{
 	de=Netzwerk;
@@ -8640,6 +8648,22 @@
 	it=Questo non è l'installer della demo;
 	}
 
+[This map is for the TA demo.]
+	{
+	de=Diese Karte ist für die TA-Demo.;
+	fr=Cette carte est pour la démo de TA.;
+	es=Este mapa es para la demo de TA.;
+	it=Questa mappa è per la demo di TA.;
+	}
+
+[This map is for {name}.]
+	{
+	de=Diese Karte ist für {name}.;
+	fr=Cette carte est pour {name}.;
+	es=Este mapa es para {name}.;
+	it=Questa mappa è per {name}.;
+	}
+
 [This mod cannot be used]
 	{
 	de=Dieser Mod lässt sich nicht verwenden;
@@ -8774,6 +8798,14 @@
 	fr=Réessayer;
 	es=Reintentar;
 	it=Riprova;
+	}
+
+[Turn it on in the Library.]
+	{
+	de=Schalte es in der Bibliothek ein.;
+	fr=Active-le dans la Bibliothèque.;
+	es=Actívala en la Biblioteca.;
+	it=Attivala nella Biblioteca.;
 	}
 
 [Turn off {name}?]
@@ -10000,6 +10032,14 @@
 	it=differisce solo per le maiuscole;
 	}
 
+[doesn't fit]
+	{
+	de=passt nicht;
+	fr=ne convient pas;
+	es=no encaja;
+	it=non va bene;
+	}
+
 [downloading]
 	{
 	de=wird heruntergeladen;
@@ -10086,6 +10126,22 @@
 	fr=pour des bords plus lisses.;
 	es=para bordes más suaves.;
 	it=per bordi più lisci.;
+	}
+
+[for the TA demo]
+	{
+	de=für die TA-Demo;
+	fr=pour la démo de TA;
+	es=para la demo de TA;
+	it=per la demo di TA;
+	}
+
+[for {name}]
+	{
+	de=für {name};
+	fr=pour {name};
+	es=para {name};
+	it=per {name};
 	}
 
 [fps]
@@ -10310,6 +10366,14 @@
 	fr=musique;
 	es=música;
 	it=musica;
+	}
+
+[needs {name}]
+	{
+	de=braucht {name};
+	fr=nécessite {name};
+	es=necesita {name};
+	it=serve {name};
 	}
 
 [never refreshed]

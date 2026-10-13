@@ -26,6 +26,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -466,12 +468,137 @@ void test_base_fit() {
     OA_CHECK(redefined);
 }
 
+/// The compatibility key, the catalogue's answer and the greyed reasons.
+void test_list_rules() {
+    const std::vector<std::string> music_then_core{"music", "core-contingency"};
+    OA_CHECK(
+        oa::app::map_compatibility_key("totala", music_then_core, "") ==
+        "totala+core-contingency+music"
+    );
+    OA_CHECK(
+        oa::app::map_compatibility_key("totala", music_then_core, "ridge@28") ==
+        "totala+core-contingency+music+ridge@28"
+    );
+    OA_CHECK(oa::app::map_compatibility_key("totala-demo", music_then_core, "") == "totala-demo");
+    OA_CHECK(oa::app::map_compatibility_key("", {}, "ridge@28") == "totala+ridge@28");
+    OA_CHECK(oa::app::legacy_compatibility_key("totala", "") == "ta-3.1c");
+    OA_CHECK(oa::app::legacy_compatibility_key("", "") == "ta-3.1c");
+    OA_CHECK(oa::app::legacy_compatibility_key("totala", "ridge@28") == "ridge@28");
+    OA_CHECK(oa::app::legacy_compatibility_key("totala-demo", "").empty());
+
+    const std::vector<std::string> demo_only{"totala-demo"};
+    const oa::app::MapListVerdict demo = oa::app::map_list_verdict(
+        demo_only, {}, "totala", {}, "", oa::app::ListedFit::fits, {}, {}
+    );
+    OA_CHECK(demo.block == oa::app::MapListBlock::other_game && demo.demo);
+    OA_CHECK(oa::app::map_list_row_reason(demo) == "for the TA demo");
+    OA_CHECK(oa::app::map_list_explanation(demo, "No Mod") == "This map is for the TA demo.");
+
+    const oa::app::MapListVerdict full_on_demo =
+        oa::app::map_list_verdict({}, {}, "totala-demo", {}, "", oa::app::ListedFit::fits, {}, {});
+    OA_CHECK(
+        full_on_demo.block == oa::app::MapListBlock::other_game && !full_on_demo.demo &&
+        full_on_demo.name == "Total Annihilation"
+    );
+    OA_CHECK(oa::app::map_list_row_reason(full_on_demo) == "for Total Annihilation");
+
+    const std::vector<std::string> totala{"totala"};
+    const std::vector<std::string> tactics{"battle-tactics"};
+    const oa::app::MapListVerdict needs = oa::app::map_list_verdict(
+        totala, tactics, "totala", {}, "", oa::app::ListedFit::fits, {}, {}
+    );
+    OA_CHECK(needs.block == oa::app::MapListBlock::needs_expansion);
+    OA_CHECK(oa::app::map_list_row_reason(needs) == "needs Battle Tactics");
+    OA_CHECK(
+        oa::app::map_list_explanation(needs, "No Mod") ==
+        "Needs Battle Tactics, which is off. Turn it on in the Library."
+    );
+    const oa::app::FileFit missed{true, false, "a feature is already defined"};
+    const oa::app::MapListVerdict tactics_on = oa::app::map_list_verdict(
+        totala, tactics, "totala", tactics, "", oa::app::ListedFit::fits, {}, missed
+    );
+    OA_CHECK(tactics_on.block == oa::app::MapListBlock::playable);
+
+    const oa::app::CompatibleFlag ridge_rows[] = {
+        {"ta-3.1c", false},
+        {"ridge@28", true},
+    };
+    const oa::app::MapListVerdict for_ridge = oa::app::map_list_verdict(
+        totala, {}, "totala", {}, "", oa::app::ListedFit::unfit, ridge_rows, missed
+    );
+    OA_CHECK(
+        for_ridge.block == oa::app::MapListBlock::unfit && for_ridge.final_note &&
+        for_ridge.name == "ridge"
+    );
+    OA_CHECK(oa::app::map_list_row_reason(for_ridge) == "for ridge");
+    OA_CHECK(oa::app::map_list_explanation(for_ridge, "No Mod") == "This map is for ridge.");
+
+    const oa::app::MapListVerdict catalogue_miss = oa::app::map_list_verdict(
+        totala, {}, "totala", {}, "", oa::app::ListedFit::unfit, {}, missed
+    );
+    OA_CHECK(catalogue_miss.final_note && catalogue_miss.name.empty());
+    OA_CHECK(oa::app::map_list_row_reason(catalogue_miss) == "doesn't fit");
+    OA_CHECK(
+        oa::app::map_list_explanation(catalogue_miss, "No Mod") ==
+        "Doesn't fit No Mod: Its catalogue says it does not fit No Mod."
+    );
+
+    const oa::app::MapListVerdict ask = oa::app::map_list_verdict(
+        totala, {}, "totala", {}, "", oa::app::ListedFit::unchecked, {}, {}
+    );
+    OA_CHECK(ask.block == oa::app::MapListBlock::ask_files);
+    const oa::app::MapListVerdict file_miss = oa::app::map_list_verdict(
+        totala, {}, "totala", {}, "", oa::app::ListedFit::unchecked, {}, missed
+    );
+    OA_CHECK(
+        file_miss.block == oa::app::MapListBlock::unfit && file_miss.final_note &&
+        file_miss.detail == "a feature is already defined"
+    );
+    const oa::app::MapListVerdict provisional = oa::app::map_list_verdict(
+        totala, {}, "totala", {}, "", oa::app::ListedFit::unlisted, {}, missed
+    );
+    OA_CHECK(provisional.block == oa::app::MapListBlock::unfit && !provisional.final_note);
+
+    const oa::app::CompatibleFlag newer_false[] = {
+        {"totala", false},
+        {"ta-3.1c", true},
+    };
+    const std::optional<bool> newer = oa::app::compatible_answer(newer_false, "totala", {}, "");
+    OA_CHECK(newer.has_value() && !*newer);
+    const std::vector<std::string> extra{"core-contingency", "music"};
+    const std::optional<bool> still_totala =
+        oa::app::compatible_answer(newer_false, "totala", extra, "");
+    OA_CHECK(still_totala.has_value() && !*still_totala);
+
+    const oa::app::CompatibleFlag contingency[] = {
+        {"totala+core-contingency", true},
+        {"ta-3.1c", false},
+    };
+    const std::optional<bool> without = oa::app::compatible_answer(contingency, "totala", {}, "");
+    OA_CHECK(without.has_value() && !*without);
+    const std::vector<std::string> with_core{"core-contingency"};
+    const std::optional<bool> with =
+        oa::app::compatible_answer(contingency, "totala", with_core, "");
+    OA_CHECK(with.has_value() && *with);
+
+    const oa::app::CompatibleFlag longest[] = {
+        {"totala", false},
+        {"totala+core-contingency", true},
+    };
+    const std::optional<bool> specific =
+        oa::app::compatible_answer(longest, "totala", with_core, "");
+    OA_CHECK(specific.has_value() && *specific);
+    const oa::app::CompatibleFlag absent[] = {{"ridge@28", true}};
+    OA_CHECK(!oa::app::compatible_answer(absent, "totala", {}, "").has_value());
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     if (oa::test::game_data_requested(argc, argv))
         test_base_fit();
     else {
+        test_list_rules();
         const Scratch scratch;
         test_index(scratch);
     }

@@ -22,6 +22,8 @@ struct MapListFact {
     std::string_view file_title{}; ///< the map file's title, when the source already holds it
     std::string_view pack_name{};  ///< the pack's name
     bool pack = false;             ///< a pack map; a base map's row stays `key`
+    /// The short reason a greyed row shows, in English; empty when it can be played.
+    std::string_view blocked_reason{};
 };
 
 /// The words each row shows, in the same order as `rows`.
@@ -29,7 +31,8 @@ struct MapListFact {
 /// A pack map shows its index name, or the map file's title when the index
 /// has none, or `key` when neither is known. A pack row whose words would
 /// match another row adds the pack's name in brackets, or the pack's id when
-/// the pack has no name. Nothing is sorted.
+/// the pack has no name. A greyed row then adds its reason after two spaces.
+/// Nothing is sorted.
 ///
 /// @param rows the maps, in list order
 /// @return one string per row
@@ -48,5 +51,29 @@ struct MapListFact {
 [[nodiscard]] int32_t map_list_row(
     std::span<const std::string> texts, std::span<const std::string> keys, std::string_view query
 );
+
+/// How a stored refusal should be shown.
+enum class MapRefusalKind : uint8_t {
+    ready_demo,  ///< "This map is for the TA demo."
+    ready_for,   ///< "This map is for {name}."
+    ready_needs, ///< "Needs {name}, which is off." and the Library sentence
+    detail,      ///< a fit detail, wrapped as "Doesn't fit …: {reason}"
+};
+
+/// The parts of a refusal stored in English.
+struct MapRefusalParts {
+    MapRefusalKind kind = MapRefusalKind::detail;
+    /// The name in a "for" or "needs" sentence; empty otherwise.
+    std::string_view name{};
+};
+
+/// Reads a refusal stored in English.
+///
+/// A sentence that starts "This map is " or "Needs " is shown as it is,
+/// translated. Anything else is a fit detail.
+///
+/// @param reason the stored refusal; empty is a detail
+/// @return how to show it; `name` points into `reason`
+[[nodiscard]] MapRefusalParts map_refusal_parts(std::string_view reason);
 
 } // namespace oa::ui::frontend_multiplayer

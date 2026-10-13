@@ -101,8 +101,6 @@ constexpr std::string_view cancel_sound = "Previous";
 /// The sound Select plays.
 constexpr std::string_view select_sound = "SmallButton";
 
-/// The compatible table's key for TA 3.1c with no mod.
-constexpr std::string_view base_game_key = "ta-3.1c";
 /// The side of the square a card's picture is fitted into, in pixels.
 constexpr int32_t preview_side = 160;
 /// The pictures the browser's preview cache keeps.
@@ -515,21 +513,28 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
         return cards;
     }
 
-    /// Returns a fit the catalogue's compatible table gives for a key.
+    /// Returns a fit the catalogue's compatible table gives for the game being played.
+    ///
+    /// The new names are read first, then `ta-3.1c` and `<id>@<release>`.
     ///
     /// @param table the map's compatible table
-    /// @param game_key the game's key, or none when it is not known
-    /// @return fits, does not fit, or unknown when the table has no such key
+    /// @param target the base game, the expansions that are on, and the mod's key
+    /// @param mod_key the mod's key; empty asks about the base game alone
+    /// @return fits, does not fit, or unknown when the table does not say
     [[nodiscard]] static mb::MapCard::Fit catalogue_fit(
         const std::vector<std::pair<std::string, bool>>& table,
-        const std::optional<std::string>& game_key
+        const PlayedMapTarget& target,
+        std::string_view mod_key
     ) {
-        if (!game_key)
-            return mb::MapCard::Fit::unknown;
+        std::vector<CompatibleFlag> rows;
+        rows.reserve(table.size());
         for (const auto& [game, fitting] : table)
-            if (game == *game_key)
-                return fitting ? mb::MapCard::Fit::fits : mb::MapCard::Fit::does_not_fit;
-        return mb::MapCard::Fit::unknown;
+            rows.push_back(CompatibleFlag{game, fitting});
+        const std::optional<bool> answer =
+            compatible_answer(rows, target.base_game, target.expansions, mod_key);
+        if (!answer)
+            return mb::MapCard::Fit::unknown;
+        return *answer ? mb::MapCard::Fit::fits : mb::MapCard::Fit::does_not_fit;
     }
 
     /// Returns the cards of the map packs the catalogues offer, and records
@@ -562,9 +567,11 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
                 card.players = map.players;
                 card.player_counts = {map.players};
                 card.download_bytes = package.size;
-                card.base_fit = catalogue_fit(map.compatible, std::string(base_game_key));
+                const PlayedMapTarget target = runtime_.played_map_target();
+                card.base_fit = catalogue_fit(map.compatible, target, {});
                 card.mod_fit = model_.mod_name.empty() ? mb::MapCard::Fit::fits
-                                                       : catalogue_fit(map.compatible, mod_key_);
+                               : !mod_key_ ? mb::MapCard::Fit::unknown
+                                           : catalogue_fit(map.compatible, target, *mod_key_);
                 if (card.base_fit == mb::MapCard::Fit::does_not_fit)
                     card.fit_reason =
                         shown_with(word_catalogue_unfit, "game", shown(word_game_short));
