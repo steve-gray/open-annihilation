@@ -1284,25 +1284,23 @@ bool FolderContentSource::stream_file(
         return false;
     }
     if (prefix > 0) {
-        OwnedFile existing(oa::platform::open_file(request.destination, "rb"));
-        if (existing.file == nullptr) {
-            set_error(error, "the copy could not be read");
-            return false;
+        PrefixCheck compared = PrefixCheck::failed;
+        {
+            // The copy so far is closed before it is removed or appended to.
+            OwnedFile existing(oa::platform::open_file(request.destination, "rb"));
+            if (existing.file == nullptr) {
+                set_error(error, "the copy could not be read");
+                return false;
+            }
+            compared = match_prefix(source.file, existing.file, prefix, hasher, error);
         }
-        const PrefixCheck compared =
-            match_prefix(source.file, existing.file, prefix, hasher, error);
         if (compared == PrefixCheck::failed)
             return false;
         if (compared == PrefixCheck::different) {
-            std::fclose(source.file);
-            source.file = nullptr;
-            std::fclose(existing.file);
-            existing.file = nullptr;
             remove_file(request.destination);
             prefix = 0;
             hasher = oa::base::sha256::Hasher{};
-            source.file = oa::platform::open_file(source_path, "rb");
-            if (source.file == nullptr) {
+            if (std::fseek(source.file, 0, SEEK_SET) != 0) {
                 set_error(error, "the file could not be read");
                 return false;
             }
