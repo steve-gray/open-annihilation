@@ -942,11 +942,11 @@ PlacedWorkDialog place_work_dialog(const WorkDialog& dialog, const Measure& meas
     const Metrics& sized = metrics_of(dialog.size_class);
     const bool spinner = dialog.progress < 0;
     const int32_t indicator = spinner ? work_spinner_side : metrics.progress_bar_height;
-    const int32_t content_bottom =
-        metrics.text_top + metrics.small_line + metrics.paragraph_gap + indicator;
+    const int32_t indicator_y = metrics.text_top + metrics.small_line + metrics.paragraph_gap;
+    const int32_t content_bottom = indicator_y + indicator;
     const int32_t natural = content_bottom + metrics.text_bottom_gap + metrics.edge;
     PlacedWorkDialog placed;
-    placed.height = std::clamp(natural, sized.least_notice_height, sized.greatest_notice_height);
+    placed.height = std::min(natural, sized.greatest_notice_height);
     placed.title = title_rect(width);
     const int32_t line_width = line_width_in(width);
     placed.line = PlacedLine{
@@ -955,9 +955,6 @@ PlacedWorkDialog place_work_dialog(const WorkDialog& dialog, const Measure& meas
         false,
         {text_left, metrics.text_top, line_width, metrics.small_line}
     };
-    int32_t indicator_y = metrics.text_top + metrics.small_line + metrics.paragraph_gap;
-    if (natural < sized.least_notice_height)
-        indicator_y = placed.height - metrics.edge - metrics.text_bottom_gap - indicator;
     if (spinner) {
         placed.spinner = {
             text_left + (line_width - work_spinner_side) / 2,

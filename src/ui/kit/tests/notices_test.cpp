@@ -1277,18 +1277,26 @@ void the_work_dialog_has_no_buttons() {
         for (const kit::Item& item : list.items)
             if (item.role == kit::Role::progress)
                 progress = true;
+        const kit::Metrics& compact = kit::metrics_of(kit::SizeClass::compact);
+        const int32_t under_the_line =
+            compact.text_top + compact.small_line + compact.paragraph_gap;
         if (amount >= 0) {
             OA_CHECK(progress);
             OA_CHECK(placed.bar.width > 0);
             OA_CHECK(placed.spinner.width == 0);
+            OA_CHECK(placed.bar.y == under_the_line);
+            OA_CHECK(
+                placed.height == under_the_line + compact.progress_bar_height +
+                                     compact.text_bottom_gap + compact.edge
+            );
         } else {
             OA_CHECK(!progress);
             OA_CHECK(placed.bar.width == 0);
             OA_CHECK(placed.spinner.width > 0);
-            const kit::Metrics& compact = kit::metrics_of(kit::SizeClass::compact);
+            OA_CHECK(placed.spinner.y == under_the_line);
             OA_CHECK(
-                placed.spinner.y ==
-                placed.height - compact.edge - compact.text_bottom_gap - kit::work_spinner_side
+                placed.height ==
+                under_the_line + kit::work_spinner_side + compact.text_bottom_gap + compact.edge
             );
         }
     }
