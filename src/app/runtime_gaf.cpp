@@ -525,6 +525,7 @@ bool Runtime::pointer_over_top_panel() {
 }
 
 void Runtime::tick_and_draw_cursor() {
+    clear_menu_button_cursor_hold();
     if (!cursors_loaded_ || frame_without_cursor_)
         return;
     const auto tick = frontend_tick();
@@ -540,8 +541,13 @@ void Runtime::tick_and_draw_cursor() {
     if (match_use_layers_ && screen_ == Screen::match)
         return;
     // Over a screen of the OA layer the cursor is presented above the layer
-    // (present_front_end), never under it in the frame.
+    // (present_front_end), never under it in the frame. Over a main-menu
+    // button a larger window draws again, it is presented above that button
+    // too: in the picture it would cover the button, and the window-pixel
+    // icon would not replace it.
     if (sdl_.renderer != nullptr && screen_ != Screen::match && oa_layer().shows(false))
+        return;
+    if (hold_menu_button_cursor())
         return;
     if (surface_.rgb.empty() || cursor_image_ == nullptr)
         return;

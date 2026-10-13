@@ -725,17 +725,18 @@ std::string_view library_word(void* /*context*/, std::string_view english) {
 }
 
 /// Returns the main menu's OA button's text for automation, in the language
-/// shown. While the mod count is final it is "Library · 1 mod" or
-/// "Library · N mods", and "Library · N mods · 1 update" or
-/// "Library · N mods · M updates" while updates wait. While the count is
-/// not final the mod count is left out: "Library", or "Library · 1 update"
-/// and "Library · N updates".
+/// shown. While the package count is final it is "Library · 1 package" or
+/// "Library · N packages", and "Library · N packages · 1 update" or
+/// "Library · N packages · M updates" while updates wait. A package is a
+/// mod, a map pack, a language pack or a downloaded expansion. While the
+/// count is not final the package count is left out: "Library", or
+/// "Library · 1 update" and "Library · N updates".
 ///
 /// @param updates the updates that wait (Runtime::library_update_count)
-/// @param mods_ready the mod count is the one the Mods tab's All will show
-/// @param mods that count
+/// @param packages_ready the package count is final
+/// @param packages how many packages the player has added
 /// @return the text
-std::string library_button_text(std::size_t updates, bool mods_ready, std::size_t mods) {
+std::string library_button_text(std::size_t updates, bool packages_ready, std::size_t packages) {
     namespace words = oa::ui::library::words;
     const oa::ui::library::TextHooks lookup{nullptr, library_word};
     std::string text(oa::ui::library::shown(lookup, words::title_library));
@@ -743,8 +744,11 @@ std::string library_button_text(std::size_t updates, bool mods_ready, std::size_
         text += " \u00B7 ";
         text += oa::ui::library::filled(lookup, pattern, {{"count", number}});
     };
-    if (mods_ready)
-        join(mods == 1 ? words::mod_count_one : words::mod_count_many, std::to_string(mods));
+    if (packages_ready)
+        join(
+            packages == 1 ? words::package_count_one : words::package_count_many,
+            std::to_string(packages)
+        );
     if (updates != 0)
         join(
             updates == 1 ? words::update_count_one : words::update_count_many,
@@ -3616,10 +3620,11 @@ void OaLayer::automation_controls(std::vector<AutomationControl>& controls) cons
         controls.push_back(std::move(button));
     };
     // The OA button, on the main menu's picture or in the in-game menu's
-    // column. On the main menu it opens the Library, and says how many mods
-    // it lists and how many updates wait; the Settings button beside it
-    // opens Settings. In the in-game menu the OA button opens Settings and
-    // its text stays empty.
+    // column. On the main menu it opens the Library, and says how many
+    // packages the player has added (mods, map packs, language packs and
+    // downloaded expansions) and how many updates wait; the Settings button
+    // beside it opens Settings. In the in-game menu the OA button opens
+    // Settings and its text stays empty.
     const std::string button_name = std::string(kAutomationPrefix) + "button";
     if (seen.match) {
         if (match_button_shown(runtime_))

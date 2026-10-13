@@ -11,6 +11,7 @@
 #include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -35,9 +36,38 @@ bool drawable(const Canvas& canvas) noexcept {
     return can_draw(canvas);
 }
 
+/// A smooth line's width, in points, with the header's tracking. The smooth
+/// form draws the modern face even when the game's font has glyphs, and
+/// that face is wider than the game font the columns were kept for.
+///
+/// @param canvas a smooth canvas
+/// @param text the line
+/// @param tracking extra points after each character but the last
+/// @return the width; 0 when the modern fonts are not open
+int32_t smooth_header_width(const Canvas& canvas, std::string_view text, int32_t tracking) {
+    if (text.empty() || canvas.smooth.fonts == nullptr)
+        return 0;
+    if (tracking == 0)
+        return measure_text(canvas, FontRole::regular, text);
+    int32_t width = 0;
+    bool any = false;
+    for (std::size_t at = 0; at < text.size();) {
+        const std::size_t bytes = character_bytes(text.substr(at));
+        if (bytes == 0)
+            break;
+        if (any)
+            width += tracking;
+        width += measure_text(canvas, FontRole::regular, text.substr(at, bytes));
+        any = true;
+        at += bytes;
+    }
+    return width;
+}
+
 /// The title's right column: the columns kept for it, or, when the modern
 /// fonts stand in for the game's font wholly, the wider of that and the
-/// width they draw.
+/// width they draw. A smooth canvas is measured apart from this, in
+/// draw_header, because the game font still has glyphs there.
 int32_t title_right(const Canvas& canvas, const Rect& title, const HeaderLook& look) {
     const bool modern_only =
         canvas.fonts != nullptr && !std::any_of(
@@ -100,20 +130,32 @@ void draw_header(const Canvas& canvas, const HeaderLook& look) {
         compact_metrics.mark_side,
     };
     draw_header_mark(canvas, mark);
+    // On the smooth form the modern face is wider than the game font the
+    // columns were kept for. Measure that face, or the second word starts
+    // inside the title ("Open AnnihilationLibrary"). A crisp canvas keeps
+    // the columns it was given.
+    const bool smooth = canvas.smooth.painter != nullptr;
+    const int32_t title_span =
+        smooth ? std::max(look.title_width, smooth_header_width(canvas, look.title, look.tracking))
+               : look.title_width;
+    const int32_t second_span =
+        smooth
+            ? std::max(look.second_width, smooth_header_width(canvas, look.second, look.tracking))
+            : look.second_width;
     const Rect title{
         mark.x + mark.width + compact_metrics.header_gap,
         header_top,
-        look.title_width,
+        title_span,
         header_height,
     };
     draw_line(
         canvas, FontRole::regular, look.title, title, Align::left, colour::text, look.tracking
     );
-    const int32_t drawn_right = title_right(canvas, title, look);
+    const int32_t drawn_right = smooth ? title.x + title.width : title_right(canvas, title, look);
     const Rect second{
         drawn_right + compact_metrics.header_gap,
         header_top,
-        look.second_width,
+        second_span,
         header_height,
     };
     draw_line(

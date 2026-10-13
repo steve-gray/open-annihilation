@@ -3847,14 +3847,19 @@ IdentityTile base_tile(Building& building, const ActiveContent& content) {
     return tile;
 }
 
-/// Returns a pill's words cut so the pill fits a width.
+/// Returns a pill's words cut so the pill fits a width. An icon is counted
+/// in the width, as the pill draws it.
 ///
 /// @param building the layout
 /// @param text the pill's words
 /// @param room the width, in points
+/// @param icon the icon inside the pill; none for the text alone
 /// @return the words, with "..." when they do not fit
-std::string fit_pill_text(const Building& building, std::string text, int32_t room) {
+std::string fit_pill_text(
+    const Building& building, std::string text, int32_t room, std::optional<kit::StateIcon> icon
+) {
     kit::PillLook look;
+    look.icon = icon;
     look.text = text;
     if (room <= 0)
         return {};
@@ -3914,29 +3919,28 @@ wrap_expansions(const Building& building, const ActiveContent& content, int32_t 
     const int32_t room = std::max(inner, int32_t{0});
     const int32_t gap = metrics.button_gap;
     const int32_t pill_height = kit::pill_height();
-    const int32_t arrow_side = metrics.state_icon_side;
     ExpansionRow row;
     int32_t across = 0;
     for (std::size_t index = 0; index < content.pills.size(); ++index) {
         const ExpansionPill& pill = content.pills[index];
-        const int32_t extra = pill.arrow ? gap + arrow_side : 0;
-        const int32_t pill_room = std::max(room - extra, int32_t{0});
+        const std::optional<kit::StateIcon> icon =
+            pill.arrow ? std::optional<kit::StateIcon>{kit::StateIcon::download_arrow}
+                       : std::nullopt;
         kit::PillLook look;
-        look.text = fit_pill_text(building, pill.text, pill_room);
-        int32_t width = pill_room <= 0 ? 0 : kit::pill_width(*building.fonts, look);
-        if (pill_room > 0)
-            width = std::min(width, pill_room);
-        const int32_t cluster = width + extra;
-        if (!row.indexes.empty() && across + gap + cluster > room) {
+        look.icon = icon;
+        look.text = fit_pill_text(building, pill.text, room, icon);
+        int32_t width = room <= 0 ? 0 : kit::pill_width(*building.fonts, look);
+        if (room > 0)
+            width = std::min(width, room);
+        if (!row.indexes.empty() && across + gap + width > room) {
             wrap.rows.push_back(std::move(row));
             row = {};
             across = 0;
         }
         row.indexes.push_back(index);
         row.widths.push_back(width);
-        const int32_t band = pill.arrow ? std::max(pill_height, arrow_side) : pill_height;
-        row.band = std::max(row.band, band);
-        across += cluster;
+        row.band = std::max(row.band, pill_height);
+        across += width;
         if (row.indexes.size() > 1)
             across += gap;
     }
@@ -4009,7 +4013,6 @@ void place_expansions(
     const ExpansionWrap wrap = wrap_expansions(building, content, inner_width);
     int32_t row_y = tile.y + inset;
     const int32_t pill_height = kit::pill_height();
-    const int32_t arrow_side = metrics.state_icon_side;
     for (const ExpansionRow& row : wrap.rows) {
         int32_t column = inner_left;
         const int32_t band = std::max(row.band, pill_height);
@@ -4017,20 +4020,25 @@ void place_expansions(
             const std::size_t index = row.indexes[place];
             const ExpansionPill& pill = content.pills[index];
             const int32_t width = row.widths[place];
-            const int32_t extra = pill.arrow ? metrics.button_gap + arrow_side : 0;
             if (width <= 0 || index >= controls::most_expansions) {
-                column += width + extra + metrics.button_gap;
+                column += width + metrics.button_gap;
                 continue;
             }
             const kit::ControlId id =
                 controls::first_expansion + static_cast<kit::ControlId>(index);
+            // The arrow is part of the pill. GET and RETRY take a press only
+            // while the arrow is on. CANCEL stays on. A copied pill has no
+            // arrow, and its own enabled flag decides.
+            const bool pressable = pill.arrow ? pill.arrow_enabled : pill.enabled;
             kit::PillLook look;
-            look.text = fit_pill_text(building, pill.text, width);
+            look.icon = pill.arrow ? std::optional<kit::StateIcon>{kit::StateIcon::download_arrow}
+                                   : std::nullopt;
+            look.text = fit_pill_text(building, pill.text, width, look.icon);
             look.state =
                 pill.face == ExpansionFace::on ? kit::PillState::active : kit::PillState::inactive;
-            look.hovered = hovered(building, id);
-            look.focused = focused(building, id);
-            look.disabled = !pill.enabled;
+            look.hovered = pressable && hovered(building, id);
+            look.focused = pressable && focused(building, id);
+            look.disabled = !pressable;
             const kit::Rect rect{column, row_y, width, pill_height};
             const std::size_t before = building.list.controls.size();
             kit::add_pill(
@@ -4045,48 +4053,10 @@ void place_expansions(
             kit::Control& control = building.detail.back();
             control.clip = clip;
             control.group = -1;
-            control.focusable = pill.enabled;
-            control.enabled = pill.enabled;
+            control.focusable = pressable;
+            control.enabled = pressable;
             tab_stop(building, control);
-            column += width;
-            if (pill.arrow) {
-                const Action arrow_action = action_of(*pill.arrow);
-                const kit::ControlId arrow_id =
-                    controls::first_expansion_arrow + static_cast<kit::ControlId>(index);
-                kit::ChipLook chip;
-                chip.text = std::string(action_text(arrow_action, building.library->text));
-                chip.state = kit::ChipState::get;
-                chip.hovered = pill.arrow_enabled && hovered(building, arrow_id);
-                chip.disabled = !pill.arrow_enabled;
-                chip.icon = kit::StateIcon::download_arrow;
-                const kit::Rect arrow_rect{
-                    column + metrics.button_gap, row_y, arrow_side, arrow_side
-                };
-                const std::size_t arrow_before = building.list.controls.size();
-                kit::add_chip(
-                    building.list,
-                    arrow_rect,
-                    chip,
-                    arrow_id,
-                    unique_name(
-                        building,
-                        named(
-                            "active.expansion." + pill.id + "." +
-                            std::string(action_word(arrow_action))
-                        )
-                    )
-                );
-                building.list.items.back().clip = clip;
-                move_controls(building.list, arrow_before, building.detail);
-                kit::Control& arrow = building.detail.back();
-                arrow.clip = clip;
-                arrow.group = -1;
-                arrow.focusable = pill.arrow_enabled;
-                arrow.enabled = pill.arrow_enabled;
-                tab_stop(building, arrow);
-                column += extra;
-            }
-            column += metrics.button_gap;
+            column += width + metrics.button_gap;
         }
         row_y += band + metrics.button_gap;
     }
@@ -5415,16 +5385,27 @@ void add_base_chooser(Building& building, const Window& window) {
             add_item(building.list, kit::Role::fill, dot, {}).colour = kit::colour::accent;
         }
         const kit::Rect badge_rect{radio.x + radio.width + 8, rect.y + 8, badge, badge};
-        add_item(building.list, kit::Role::fill, badge_rect, {}).colour = kit::colour::off_selected;
-        add_text(
-            building,
-            kit::FontRole::small,
-            row.letters,
-            badge_rect,
-            kit::Align::centre,
-            kit::colour::text,
-            {}
-        );
+        oa::ui::frontend_renderer::RgbaPicture picture = picture_of(row.badge);
+        if (base_picture(*building.library, picture))
+            picture = fitted_base_picture(building, picture, badge_rect);
+        if (oa::ui::frontend_renderer::picture_drawable(picture)) {
+            add_item(building.list, kit::Role::picture, badge_rect, {}).look =
+                kit::PictureLook{picture};
+            add_item(building.list, kit::Role::outline, badge_rect, {}).colour =
+                kit::colour::control_border;
+        } else {
+            add_item(building.list, kit::Role::fill, badge_rect, {}).colour =
+                kit::colour::off_selected;
+            add_text(
+                building,
+                kit::FontRole::small,
+                row.letters,
+                badge_rect,
+                kit::Align::centre,
+                kit::colour::text,
+                {}
+            );
+        }
         const int32_t text_x = badge_rect.x + badge + 8;
         const int32_t text_w = std::max(rect.x + rect.width - text_x - 8, int32_t{1});
         add_text(
@@ -5845,14 +5826,12 @@ kit::DisplayList library_layout(
             );
         }
     } else {
-        add_tabs(
-            building,
-            {window.left,
-             top,
-             content_width - wide_search_width - window.padding,
-             metrics.tab_height},
-            false
-        );
+        // Active and Registries draw no search, so the tabs take the whole
+        // row and the full names fit. A catalogue tab keeps room for the
+        // search, and takes the short names when the full ones do not fit.
+        const int32_t tab_width =
+            catalogue ? content_width - wide_search_width - window.padding : content_width;
+        add_tabs(building, {window.left, top, tab_width, metrics.tab_height}, false);
         if (catalogue)
             add_search(
                 building,

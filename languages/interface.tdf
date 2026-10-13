@@ -3322,12 +3322,12 @@
 	it=Ottieni pacchetti di lingua, mod e pacchetti di mappe da Core Prime.;
 	}
 
-[Get, update and switch mods, map packs and languages. The number is how many mods you have.]
+[Get, update and switch mods, map packs and languages. The number counts every package you have added: mods, map packs, language packs and expansions.]
 	{
-	de=Hol, aktualisiere und wechsle Mods, Kartenpakete und Sprachen. Die Zahl ist, wie viele Mods du hast.;
-	fr=Obtiens, mets à jour et change les mods, les packs de cartes et les langues. Le nombre indique combien de mods tu as.;
-	es=Obtén, actualiza y cambia mods, paquetes de mapas e idiomas. El número es cuántos mods tienes.;
-	it=Ottieni, aggiorna e cambia mod, pacchetti di mappe e lingue. Il numero indica quanti mod hai.;
+	de=Hol, aktualisiere und wechsle Mods, Kartenpakete und Sprachen. Die Zahl zählt jedes Paket, das du hinzugefügt hast: Mods, Kartenpakete, Sprachpakete und Erweiterungen.;
+	fr=Obtiens, mets à jour et change les mods, les packs de cartes et les langues. Le nombre compte chaque paquet que tu as ajouté : mods, packs de cartes, packs de langue et extensions.;
+	es=Obtén, actualiza y cambia mods, paquetes de mapas e idiomas. El número cuenta cada paquete que has añadido: mods, paquetes de mapas, paquetes de idioma y expansiones.;
+	it=Ottieni, aggiorna e cambia mod, pacchetti di mappe e lingue. Il numero conta ogni pacchetto che hai aggiunto: mod, pacchetti di mappe, pacchetti di lingua ed espansioni.;
 	}
 
 [Gives this order at the held point.]
@@ -11234,28 +11234,28 @@
 	it={count} min fa;
 	}
 
-[{count} mod]
-	{
-	de={count} Mod;
-	fr={count} mod;
-	es={count} mod;
-	it={count} mod;
-	}
-
-[{count} mods]
-	{
-	de={count} Mods;
-	fr={count} mods;
-	es={count} mods;
-	it={count} mod;
-	}
-
 [{count} of {total} files differ]
 	{
 	de={count} von {total} Dateien weichen ab;
 	fr={count} fichiers sur {total} diffèrent;
 	es={count} de {total} archivos difieren;
 	it={count} di {total} file sono diversi;
+	}
+
+[{count} package]
+	{
+	de={count} Paket;
+	fr={count} paquet;
+	es={count} paquete;
+	it={count} pacchetto;
+	}
+
+[{count} packages]
+	{
+	de={count} Pakete;
+	fr={count} paquets;
+	es={count} paquetes;
+	it={count} pacchetti;
 	}
 
 [{count} player]

@@ -33,7 +33,8 @@ inline constexpr std::string_view interface_words[] = {
     "Downloads, updates and a number only you hold",
     "Get",
     "Get language packs, mods and map packs from Core Prime.",
-    "Get, update and switch mods, map packs and languages. The number is how many mods you have.",
+    "Get, update and switch mods, map packs and languages. The number counts every package you "
+    "have added: mods, map packs, language packs and expansions.",
     "Installed",
     "Library",
     "Lists of what is new are checked as the game starts and when the Library opens.",

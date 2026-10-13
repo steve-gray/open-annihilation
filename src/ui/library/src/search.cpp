@@ -4,6 +4,7 @@
 // The Library's search, run on the player's machine: which entries a tab's
 // filter and a search keep and how they rank, and the order of the visible
 // list.
+#include "oa/data/content_bundles.hpp"
 #include "oa/data/languages.hpp"
 #include "visible.hpp"
 
@@ -473,6 +474,68 @@ std::size_t tab_count(const Library& library, Tab tab) {
             !is_built_in_language(entry.id))
             ++count;
     return count;
+}
+
+namespace {
+
+/// Tells whether an installed package is the base game entry.
+///
+/// @param item the package
+/// @return true for the base game
+bool installed_base_game(const Installed& item) {
+    return is_base_game(EntryId{item.registry, item.kind, item.key});
+}
+
+/// Tells whether an installed package is a language built into the game.
+///
+/// @param item the package
+/// @return true for a built-in language
+bool installed_built_in_language(const Installed& item) {
+    return is_built_in_language(EntryId{item.registry, item.kind, item.key});
+}
+
+/// Tells whether a map pack the Active tab lists is already one of the
+/// installed packages.
+///
+/// @param inputs the inputs
+/// @param pack the pack
+/// @return true when an installed map pack is the same package
+bool map_pack_already_installed(const Inputs& inputs, const InstalledMaps& pack) {
+    for (const Installed& item : inputs.installed) {
+        if (item.kind != Kind::map_pack)
+            continue;
+        if (!pack.key.empty()) {
+            if (item.key == pack.key && item.registry == pack.registry)
+                return true;
+        } else if (item.registry.empty() && item.name == pack.name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+std::size_t added_package_count(const Inputs& inputs) {
+    std::size_t total = 0;
+    for (const Installed& item : inputs.installed) {
+        if (item.kind != Kind::mod && item.kind != Kind::map_pack && item.kind != Kind::language)
+            continue;
+        if (installed_base_game(item) || installed_built_in_language(item))
+            continue;
+        ++total;
+    }
+    for (const InstalledMaps& pack : inputs.map_packs) {
+        if (!map_pack_already_installed(inputs, pack))
+            ++total;
+    }
+    for (const std::string& copied : inputs.content.copied) {
+        const oa::data::content_bundles::Bundle* bundle =
+            oa::data::content_bundles::find_bundle(copied);
+        if (bundle != nullptr && bundle->kind == oa::data::content_bundles::Kind::expansion)
+            ++total;
+    }
+    return total;
 }
 
 } // namespace oa::ui::library

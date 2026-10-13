@@ -155,7 +155,8 @@ This step has no setup frame. It lies over the real main menu, dimmed
 except a spotlight around both buttons. Two coach marks name them:
 
 1. **Library.** "Get, update and switch mods, map packs and languages. The
-   number is how many mods you have."
+   number counts every package you have added: mods, map packs, language
+   packs and expansions."
 2. **Settings.** "Open Annihilation's own settings: controls, graphics, the
    interface's size, downloads and your files."
 
@@ -168,6 +169,12 @@ Everything else on this menu is the game's own."
 **Back** returns to online features. **Start playing** finishes the walk.
 This step has no **Skip** or **Quit**. Escape and Enter do what **Start playing**
 does.
+
+The logo and the intro play after that finish, or after **Skip setup** when
+the walk will not return, and before the menu can be used. They do not play
+between the steps. A switch that skips the movies skips them on this start
+too. A start that does not show the setup plays the movies first, before
+the menu, as it always has.
 
 ## Keys and controllers
 

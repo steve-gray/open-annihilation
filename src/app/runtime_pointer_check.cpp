@@ -6,6 +6,7 @@
 // factory queue's right click, then
 // the on-screen unit list, the pointer's pick and what they drive, and the
 // commander placement, through synthetic SDL input.
+#include "engine_settings_state.hpp"
 #include "oa/app/runtime.hpp"
 #include "panel_first_draw.hpp"
 #include "oa/data/defs/layout.hpp"
@@ -2131,7 +2132,11 @@ void Runtime::check_edge_scroll() {
     };
     probe_edges(full_screen() ? "in full screen" : "in a window");
 
-    // The pointer that leaves the window scrolls nothing until it comes back.
+    // With Window edge Free, the pointer that leaves the window scrolls
+    // nothing until it comes back. Sticky, the default, holds it on the edge
+    // and keeps scrolling; the frontend-controls check covers that.
+    const auto saved_edge = engine_settings_state().current.window_edge;
+    engine_settings_state().current.window_edge = oa::ui::engine_settings::WindowEdge::free;
     move_to(0.0F, 0.0F);
     window_event(SDL_EVENT_WINDOW_MOUSE_LEAVE);
     expect({}, "the pointer that left the window");
@@ -2139,6 +2144,7 @@ void Runtime::check_edge_scroll() {
     expect({}, "the pointer back in the window before it moved");
     move_to(0.0F, 0.0F);
     expect({-1, -1}, "the pointer back in the top-left corner");
+    engine_settings_state().current.window_edge = saved_edge;
 
     // Alt+Enter to the other mode and back: the edges scroll in full screen
     // and in a window alike, and on a screen laid out at another size the
