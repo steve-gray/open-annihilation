@@ -153,6 +153,7 @@ add_subdirectory(src/data/mission-types)
 add_subdirectory(src/data/limits)
 add_subdirectory(src/data/languages)
 add_subdirectory(src/data/content-bundles)
+add_subdirectory(src/data/saves)
 add_subdirectory(src/data/registry)
 add_subdirectory(src/data/catalogue)
 add_subdirectory(src/data/match-rules)
@@ -1000,7 +1001,8 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_megamap.cpp
   src/app/runtime_skirmish_host.cpp
   src/app/runtime_skirmish_start.cpp src/app/runtime_map_units.cpp src/app/runtime_world_draw.cpp src/app/world_draws.cpp src/app/runtime_benchmark.cpp src/app/runtime_music.cpp
-  src/app/runtime_saveload.cpp src/app/runtime_sides.cpp src/app/asset_files.cpp
+  src/app/runtime_saveload.cpp src/app/runtime_saves.cpp src/app/runtime_recordings.cpp
+  src/app/runtime_sides.cpp src/app/asset_files.cpp
   src/app/runtime_platform.cpp
   src/app/runtime_endgame.cpp src/app/runtime_radar.cpp
   src/app/runtime_kill_board.cpp
@@ -1124,7 +1126,8 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-app-map-packs
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
   oa-data-content-bundles
-  oa-ui-frontend-multiplayer oa-ui-library oa-ui-map-browser oa-ui-first-run)
+  oa-ui-frontend-multiplayer oa-ui-library oa-ui-map-browser oa-ui-first-run
+  oa-data-saves)
 # The table that combines the extensions' tables of oa-game
 # (extension_list.hpp); the extensions themselves are registered with
 # oa_add_extension (cmake/OaExtensions.cmake).
