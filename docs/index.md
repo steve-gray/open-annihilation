@@ -73,6 +73,10 @@ Every document in the repository, by what you want to do.
   presence record behind them, hosting a TCP/IP game with `--host` or
   joining one with `--join ADDRESS`, with `--player-name`, `--game-name`
   and `--game-password`, and what the game prints as it goes.
+  [command-line.md](command-line.md) is `--dplay-guid`, the application
+  GUID a game is hosted under and looked for.
+- [multiplayer/application-guid.md](multiplayer/application-guid.md):
+  which games a search lists, and a launcher's per-mod GUID.
 - [Demo Recorder](../README.md#demo-recorder) in the README: playing back a
   recorded game (`.tad`) from the command line with `--play-demo`, what a
   recording needs to play, and recording network games.

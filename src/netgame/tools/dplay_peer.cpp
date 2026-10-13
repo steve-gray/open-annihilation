@@ -8,8 +8,11 @@
 // host leaves that way may take its place, and then answers searches and
 // takes new machines in.
 //
-//   oa-netgame-dplay-peer host [name]        create a session and wait
-//   oa-netgame-dplay-peer join [ipv4]        enumerate (broadcast or ipv4), join the first game
+//   oa-netgame-dplay-peer [--dplay-guid GUID] host [name]
+//   oa-netgame-dplay-peer [--dplay-guid GUID] join [ipv4]
+//
+// --dplay-guid is the application GUID to host under and to look for,
+// with or without braces. Without it the peer uses Total Annihilation's.
 
 #include "oa/netgame/frame.hpp"
 #include "oa/netgame/session.hpp"
@@ -23,6 +26,7 @@
 #include <cstring>
 #include <exception>
 #include <memory>
+#include <vector>
 
 using namespace oa::netgame;
 
@@ -119,34 +123,85 @@ void print_frame(uint32_t from, uint32_t to, const uint8_t* bytes, uint32_t size
     std::printf("\n");
 }
 
+/// Prints how to run the peer.
+///
+/// @param program The program's name, as argv[0].
+void print_usage(const char* program) {
+    std::fprintf(stderr, "usage: %s [--dplay-guid GUID] host [name] | join [ipv4]\n", program);
+}
+
+/// Reads host or join, an optional address or name, and --dplay-guid.
+///
+/// A missing mode prints the usage. A GUID that is not eight-four-four-four-twelve
+/// hexadecimal digits, with or without braces, is refused. Without --dplay-guid
+/// the application GUID is Total Annihilation's.
+///
+/// @param argc Argument count.
+/// @param argv Arguments; argv[0] is the program name.
+/// @param[out] hosting True when the peer hosts.
+/// @param[out] extra The session name or the address, or null when omitted.
+/// @param[out] application The application GUID to host under and to look for.
+/// @return False when the arguments are refused; a message is already printed.
+bool read_arguments(
+    int argc, char** argv, bool& hosting, const char*& extra, dplay::Guid& application
+) {
+    std::memcpy(application.bytes, application_guid, 16);
+    std::vector<const char*> positional;
+    for (int index = 1; index < argc; ++index) {
+        if (std::strcmp(argv[index], "--dplay-guid") == 0) {
+            if (index + 1 >= argc) {
+                std::fprintf(stderr, "--dplay-guid requires a value\n");
+                return false;
+            }
+            ++index;
+            if (!parse_application_guid(argv[index], application.bytes)) {
+                std::fprintf(stderr, "--dplay-guid expects a GUID, with or without braces\n");
+                return false;
+            }
+            continue;
+        }
+        positional.push_back(argv[index]);
+    }
+    if (positional.empty() ||
+        (std::strcmp(positional[0], "host") != 0 && std::strcmp(positional[0], "join") != 0)) {
+        print_usage(argv[0]);
+        return false;
+    }
+    if (positional.size() > 2) {
+        print_usage(argv[0]);
+        return false;
+    }
+    hosting = std::strcmp(positional[0], "host") == 0;
+    extra = positional.size() == 2 ? positional[1] : nullptr;
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IOLBF, 0);
-    const bool hosting = argc >= 2 && std::strcmp(argv[1], "host") == 0;
-    if (argc < 2 || (!hosting && std::strcmp(argv[1], "join") != 0)) {
-        std::fprintf(stderr, "usage: %s host [name] | join [ipv4]\n", argv[0]);
+    bool hosting = false;
+    const char* extra = nullptr;
+    dplay::Guid app{};
+    if (!read_arguments(argc, argv, hosting, extra, app))
         return 2;
-    }
     auto machine = std::make_unique<sock::Host>();
     sock::HostConfig config{};
-    if (!hosting && argc >= 3 && !parse_ip(argv[2], config.enum_target)) {
-        std::fprintf(stderr, "bad address %s\n", argv[2]);
+    if (!hosting && extra != nullptr && !parse_ip(extra, config.enum_target)) {
+        std::fprintf(stderr, "bad address %s\n", extra);
         return 2;
     }
     if (!sock::host_open(machine.get(), config)) {
         std::fprintf(stderr, "open failed: %s\n", machine->error);
         return 1;
     }
-    dplay::Guid app{};
-    std::memcpy(app.bytes, application_guid, 16);
     auto session = std::make_unique<session::Session>();
     session::session_init_multiplay(session.get(), sock::host_session_backend(machine.get()), app);
     session::session_init_defaults(session.get());
     uint32_t player = 0;
     if (hosting) {
         if (!session::session_create_game(
-                session.get(), argc >= 3 ? argv[2] : "oa peer", "", 0, 0, 0, 0
+                session.get(), extra != nullptr ? extra : "oa peer", "", 0, 0, 0, 0
             )) {
             std::fprintf(stderr, "create failed: %s\n", machine->error);
             return 1;
