@@ -717,6 +717,14 @@ if(BUILD_TESTING)
   target_link_libraries(oa-game-directory-test PRIVATE oa-app-game-directory oa-app-headers oa-formats-hpi
     oa-platform-preferences oa-platform-shims oa-test-game-data oa-options)
   add_test(NAME game-directory COMMAND oa-game-directory-test)
+  # The composed mount of the chosen bundles, in the game's own order, matches
+  # a scan of one folder that holds the same files. Battle Tactics off keeps
+  # totala4.hpi inside the first ten plain archives. Music and movies are
+  # found in the bundle folders without regard to case.
+  add_executable(oa-app-content-mount-test src/app/content_mount_test.cpp)
+  target_link_libraries(oa-app-content-mount-test PRIVATE oa-app-game-directory oa-formats-hpi
+    oa-audio oa-test-support oa-options)
+  add_test(NAME app-content-mount COMMAND oa-app-content-mount-test)
   # A profile names installation archives: a file resolves from the mod's
   # archive, then the named archive, then the base archive, the same for a
   # mod folder and a copied install. A missing named archive makes the

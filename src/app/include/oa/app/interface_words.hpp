@@ -15,6 +15,8 @@ namespace oa::app {
 /// lists together and keeps one of each text.
 inline constexpr std::string_view interface_words[] = {
     "1 UNIT",
+    "1 file differs",
+    "1 of {total} files differs",
     "2",
     "3",
     "A graphics driver failed, so the game now uses another one. You can try it again under "
@@ -28,6 +30,7 @@ inline constexpr std::string_view interface_words[] = {
     "ATTACK",
     "AVAILABLE TO DOWNLOAD",
     "After zoom",
+    "All files match",
     "Applies from the next start.",
     "Attack Wave Size",
     "Auto",
@@ -56,6 +59,7 @@ inline constexpr std::string_view interface_words[] = {
     "D-pad right",
     "D-pad up",
     "DEFEND",
+    "DETAILS…",
     "DONE",
     "DOUBLE TAP OR HOLD TO BUILD",
     "DOUBLE TAP OR HOLD TO BUILD · QUEUE ON",
@@ -72,12 +76,14 @@ inline constexpr std::string_view interface_words[] = {
     "FOLDER IN USE",
     "FOLLOW",
     "FORCE",
+    "Files that differ:",
     "Font outline",
     "Font shadow",
     "Full",
     "Full in use: the graphics card draws the view.",
     "GAME FOLDER FOUND",
     "GUARD",
+    "Game content",
     "Game files",
     "Game text background",
     "HUD scaling",
@@ -200,7 +206,11 @@ inline constexpr std::string_view interface_words[] = {
     "The download could not start: {reason}",
     "The file manager could not open it.",
     "The folder cannot be made.",
+    "The following content for your game does not match our expected sizes:",
     "The game reloads its data for the mod and returns to the main menu.",
+    "The game still plays with these files, but network games with other players may not start, "
+    "and recordings may not replay the same. Copy the content again from another source to fix "
+    "it.",
     "The graphics card could not be used, so the processor draws the game. You can try it again "
     "under Graphics in the OA settings.",
     "The graphics card could not draw the battlefield, so it only scales it now. You can try Full "
@@ -256,6 +266,8 @@ inline constexpr std::string_view interface_words[] = {
     "unchanged",
     "unknown",
     "x5",
+    "{count} files differ",
+    "{count} of {total} files differ",
     "{file} cannot be installed.",
     "{folder} is a folder of your own, not {name}. Move or rename it, then RETRY.",
     "{name} from {installed} is installed. Replace it with {name} from {new}? The one from "

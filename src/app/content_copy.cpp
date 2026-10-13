@@ -11,6 +11,7 @@
 
 #include "oa/app/game_directory.hpp"
 #include "oa/base/sha256.hpp"
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/platform/file_clone.hpp"
 #include "oa/platform/files.hpp"
 #include "oa/platform/preferences.hpp"
@@ -818,6 +819,57 @@ void append_line(std::string& text, std::string_view line) {
     return true;
 }
 
+/// Hashes every byte of a regular file. A file that cannot be read fails,
+/// and the outs are left unset.
+///
+/// @param path the file
+/// @param[out] digest its SHA-256
+/// @param[out] size how many bytes were hashed
+/// @param[out] modified its modification time, seconds since 1970
+/// @return true when the file was hashed
+[[nodiscard]] bool hash_whole_file(
+    const fs::path& path, oa::base::sha256::Digest& digest, uint64_t& size, int64_t& modified
+) {
+    std::error_code failure;
+    if (!fs::is_regular_file(path, failure))
+        return false;
+    const auto stamp = fs::last_write_time(path, failure);
+    if (failure)
+        return false;
+    OwnedFile input(oa::platform::open_file(path, "rb"));
+    if (input.file == nullptr)
+        return false;
+    oa::base::sha256::Hasher hasher;
+    std::vector<uint8_t> buffer(64 * 1024);
+    uint64_t got = 0;
+    while (true) {
+        const std::size_t read = std::fread(buffer.data(), 1, buffer.size(), input.file);
+        if (read > 0) {
+            oa::base::sha256::update(hasher, std::span<const uint8_t>(buffer.data(), read));
+            if (got > std::numeric_limits<uint64_t>::max() - static_cast<uint64_t>(read))
+                got = std::numeric_limits<uint64_t>::max();
+            else
+                got += static_cast<uint64_t>(read);
+        }
+        if (read < buffer.size())
+            break;
+    }
+    if (std::ferror(input.file) != 0)
+        return false;
+    digest = oa::base::sha256::finish(hasher);
+    size = got;
+    modified = modified_seconds(stamp);
+    return true;
+}
+
+[[nodiscard]] std::size_t recorded_index(const ContentRecord& record, std::string_view copy_name) {
+    for (std::size_t index = 0; index < record.files.size(); ++index) {
+        if (record.files[index].copy_name == copy_name)
+            return index;
+    }
+    return record.files.size();
+}
+
 [[nodiscard]] bool set_modified(const fs::path& path, int64_t modified, std::string* error) {
     std::error_code failure;
     fs::last_write_time(path, time_from_seconds(modified), failure);
@@ -1232,25 +1284,23 @@ bool FolderContentSource::stream_file(
         return false;
     }
     if (prefix > 0) {
-        OwnedFile existing(oa::platform::open_file(request.destination, "rb"));
-        if (existing.file == nullptr) {
-            set_error(error, "the copy could not be read");
-            return false;
+        PrefixCheck compared = PrefixCheck::failed;
+        {
+            // The copy so far is closed before it is removed or appended to.
+            OwnedFile existing(oa::platform::open_file(request.destination, "rb"));
+            if (existing.file == nullptr) {
+                set_error(error, "the copy could not be read");
+                return false;
+            }
+            compared = match_prefix(source.file, existing.file, prefix, hasher, error);
         }
-        const PrefixCheck compared =
-            match_prefix(source.file, existing.file, prefix, hasher, error);
         if (compared == PrefixCheck::failed)
             return false;
         if (compared == PrefixCheck::different) {
-            std::fclose(source.file);
-            source.file = nullptr;
-            std::fclose(existing.file);
-            existing.file = nullptr;
             remove_file(request.destination);
             prefix = 0;
             hasher = oa::base::sha256::Hasher{};
-            source.file = oa::platform::open_file(source_path, "rb");
-            if (source.file == nullptr) {
+            if (std::fseek(source.file, 0, SEEK_SET) != 0) {
                 set_error(error, "the file could not be read");
                 return false;
             }
@@ -1941,6 +1991,194 @@ int run_content_copy_check(const fs::path& documents) {
     }
     std::cout << "content copy check: passed\n";
     return 0;
+}
+
+namespace {
+
+/// Replaces every `token` in `text` with `value`.
+std::string replace_token(std::string_view text, std::string_view token, std::string_view value) {
+    std::string out;
+    out.reserve(text.size() + value.size());
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const std::size_t at = text.find(token, start);
+        if (at == std::string_view::npos) {
+            out.append(text.substr(start));
+            break;
+        }
+        out.append(text.substr(start, at - start));
+        out.append(value);
+        start = at + token.size();
+    }
+    return out;
+}
+
+/// "1 of {total} files differs" or "{count} of {total} files differ".
+std::string differ_count_line(uint32_t files_differ, uint32_t file_count) {
+    const std::string total = std::to_string(file_count);
+    if (files_differ == 1) {
+        const std::string_view pattern =
+            oa::data::languages::interface_text("1 of {total} files differs");
+        return replace_token(pattern, "{total}", total);
+    }
+    const std::string_view pattern =
+        oa::data::languages::interface_text("{count} of {total} files differ");
+    return replace_token(
+        replace_token(pattern, "{count}", std::to_string(files_differ)), "{total}", total
+    );
+}
+
+void count_up(uint32_t& count) noexcept {
+    if (count < std::numeric_limits<uint32_t>::max())
+        ++count;
+}
+
+} // namespace
+
+bool content_notice_due(const ContentCheck& check) noexcept {
+    for (const ContentBundleCheck& bundle : check.bundles) {
+        if (bundle.files_differ > 0)
+            return true;
+    }
+    return false;
+}
+
+bool show_content_notice(
+    bool game_dir_named, bool unwatched, bool closed_this_run, const ContentCheck& check
+) noexcept {
+    if (game_dir_named || unwatched || closed_this_run)
+        return false;
+    return content_notice_due(check);
+}
+
+ContentNoticeCopy content_difference_notice(const ContentCheck& check) {
+    ContentNoticeCopy copy;
+    copy.title = std::string(oa::data::languages::interface_text("Game content"));
+    copy.lines.push_back(
+        std::string(
+            oa::data::languages::interface_text(
+                "The following content for your game does not match our expected sizes:"
+            )
+        )
+    );
+    for (const ContentBundleCheck& bundle : check.bundles) {
+        if (bundle.files_differ == 0)
+            continue;
+        copy.lines.push_back(
+            bundle.english_name + " / " + differ_count_line(bundle.files_differ, bundle.file_count)
+        );
+    }
+    copy.lines.push_back(
+        std::string(
+            oa::data::languages::interface_text(
+                "The game still plays with these files, but network games with other players may "
+                "not "
+                "start, and recordings may not replay the same. Copy the content again from "
+                "another "
+                "source to fix it."
+            )
+        )
+    );
+    copy.details = std::string(oa::data::languages::interface_text("DETAILS…"));
+    copy.ok = std::string(oa::data::languages::interface_text("OK"));
+    return copy;
+}
+
+ContentNoticeCopy content_file_notice(const ContentCheck& check) {
+    ContentNoticeCopy copy;
+    copy.title = std::string(oa::data::languages::interface_text("Game content"));
+    copy.lines.push_back(std::string(oa::data::languages::interface_text("Files that differ:")));
+    for (const ContentBundleCheck& bundle : check.bundles) {
+        for (const ContentFileDifference& file : bundle.differing)
+            copy.lines.push_back(bundle.english_name + ": " + file.copy_name);
+    }
+    copy.ok = std::string(oa::data::languages::interface_text("OK"));
+    return copy;
+}
+
+std::string content_match_line(uint32_t files_differ) {
+    if (files_differ == 0)
+        return std::string(oa::data::languages::interface_text("All files match"));
+    if (files_differ == 1)
+        return std::string(oa::data::languages::interface_text("1 file differs"));
+    return replace_token(
+        oa::data::languages::interface_text("{count} files differ"),
+        "{count}",
+        std::to_string(files_differ)
+    );
+}
+
+ContentCheck
+check_managed_content(const fs::path& user_folder, std::span<const bundles::Bundle> table) {
+    const std::span<const bundles::Bundle> known = table.empty() ? bundles::bundles() : table;
+    ContentCheck check;
+    for (const bundles::Bundle& bundle : known) {
+        const fs::path folder = bundle_folder(user_folder, bundle);
+        const fs::path record_path = folder / std::string(content_record_name);
+        const ContentRecord loaded = read_content_record(record_path, nullptr);
+        if (!loaded.present || !loaded.valid || loaded.files.empty() ||
+            loaded.bundle_id != bundle.id)
+            continue;
+        ContentRecord record = loaded;
+        ContentBundleCheck reported;
+        reported.id = std::string(bundle.id);
+        reported.english_name = std::string(bundle.english_name);
+        reported.kind = bundle.kind;
+        reported.file_count = narrow_count(bundle.files.size());
+        bool wrote = false;
+        for (const bundles::ContentFile& file : bundle.files) {
+            const std::size_t index = recorded_index(record, file.copy_name);
+            const bool recorded = index < record.files.size();
+            const fs::path dest = stored_path(folder, file.copy_name);
+            std::error_code failure;
+            const bool regular = fs::is_regular_file(dest, failure);
+            const auto disk_bytes = regular ? fs::file_size(dest, failure) : uintmax_t{0};
+            const bool sized = regular && !failure;
+            const auto stamp = sized ? fs::last_write_time(dest, failure) : fs::file_time_type{};
+            const bool timed = sized && !failure;
+            const bool unchanged = recorded && timed &&
+                                   narrow_size(disk_bytes) == record.files[index].size &&
+                                   modified_seconds(stamp) == record.files[index].modified;
+            oa::base::sha256::Digest digest{};
+            bool have_digest = false;
+            if (unchanged) {
+                digest = record.files[index].digest;
+                have_digest = true;
+            } else if (regular) {
+                uint64_t hashed_size = 0;
+                int64_t hashed_time = 0;
+                if (hash_whole_file(dest, digest, hashed_size, hashed_time)) {
+                    have_digest = true;
+                    count_up(check.files_hashed);
+                    ContentRecordFile updated;
+                    updated.copy_name = std::string(file.copy_name);
+                    updated.size = hashed_size;
+                    updated.modified = hashed_time;
+                    updated.digest = digest;
+                    if (recorded)
+                        record.files[index] = std::move(updated);
+                    else
+                        record.files.push_back(std::move(updated));
+                    wrote = true;
+                }
+            }
+            const bool differs = !have_digest || !bundles::known_hash(file, digest);
+            if (!differs)
+                continue;
+            count_up(reported.files_differ);
+            ContentFileDifference difference;
+            difference.copy_name = std::string(file.copy_name);
+            reported.differing.push_back(std::move(difference));
+        }
+        // A record that cannot be stored is hashed again next start. This
+        // start's answer stands either way.
+        if (wrote) {
+            const bool stored = write_content_record(record_path, record, nullptr);
+            static_cast<void>(stored);
+        }
+        check.bundles.push_back(std::move(reported));
+    }
+    return check;
 }
 
 } // namespace oa::app

@@ -6,7 +6,9 @@
 // written under the player's folder, in games/<bundle> and
 // expansions/<base>/<bundle>. Each bundle folder holds a .oa-content record
 // of where the files came from and each file's size, modification time and
-// SHA-256. The source is only read.
+// SHA-256. The source is only read. Each start checks a copied bundle against
+// that record: a file whose size and time still match is not read again, and
+// one whose SHA-256 is not in the table marks the bundle as differing.
 #pragma once
 
 #include "oa/data/content_bundles.hpp"
@@ -523,5 +525,116 @@ struct CopyCheckFile {
 /// @param documents the scratch Documents folder
 /// @return 0 when the check passed, 1 when it did not
 [[nodiscard]] int run_content_copy_check(const std::filesystem::path& documents);
+
+/// One file of a copied bundle whose bytes are not a hash the table knows.
+struct ContentFileDifference {
+    /// The name it is stored under, relative to the bundle folder.
+    std::string copy_name;
+};
+
+/// One copied bundle, after the start's check.
+struct ContentBundleCheck {
+    /// The bundle id.
+    std::string id;
+    /// The name shown to the player, in English, as the table writes it.
+    std::string english_name;
+    /// Base game or expansion.
+    oa::data::content_bundles::Kind kind{};
+    /// How many files the table gives the bundle.
+    uint32_t file_count{};
+    /// How many of those files differ: missing, or not a hash the table knows.
+    uint32_t files_differ{};
+    /// The files that differ, in the table's order.
+    std::vector<ContentFileDifference> differing;
+};
+
+/// What a start knows about the managed copy.
+struct ContentCheck {
+    /// Every copied bundle, in the table's order, matching and differing.
+    std::vector<ContentBundleCheck> bundles;
+    /// Files read and hashed because their size or time was not the record's.
+    uint32_t files_hashed{};
+};
+
+/// Reports whether any copied bundle differs.
+///
+/// @param check the start's check
+/// @return true when a bundle has a file that differs
+[[nodiscard]] bool content_notice_due(const ContentCheck& check) noexcept;
+
+/// Reports whether this start shows the content notice.
+///
+/// A named --game-dir, a run nobody watches, and a notice already closed
+/// this start stay quiet. Nothing is stored for a later start: while the
+/// files differ, the next start shows it again.
+///
+/// @param game_dir_named the command line named --game-dir
+/// @param unwatched nobody is watching this run
+/// @param closed_this_run OK or Escape already closed it this start
+/// @param check the start's check
+/// @return true when the notice is shown
+[[nodiscard]] bool show_content_notice(
+    bool game_dir_named, bool unwatched, bool closed_this_run, const ContentCheck& check
+) noexcept;
+
+/// The words of one notice, in the language the interface shows.
+struct ContentNoticeCopy {
+    /// The header's title.
+    std::string title;
+    /// The text, top to bottom.
+    std::vector<std::string> lines;
+    /// The caption of the button that opens the list of files.
+    std::string details;
+    /// OK's caption.
+    std::string ok;
+};
+
+/// The main menu's notice of the bundles that differ.
+///
+/// The first line says the sizes do not match, then one line for each
+/// differing base game or expansion and how many of its files differ, then
+/// one line on what that means. A bundle that matches is left out.
+///
+/// @param check the start's check
+/// @return the notice
+[[nodiscard]] ContentNoticeCopy content_difference_notice(const ContentCheck& check);
+
+/// The list of files that differ, one line for each, under its bundle's name.
+///
+/// Settings' Game Content page replaces this list. Until then, DETAILS on
+/// the content notice shows it.
+///
+/// @param check the start's check
+/// @return the list
+[[nodiscard]] ContentNoticeCopy content_file_notice(const ContentCheck& check);
+
+/// What the Library says of one bundle's check.
+///
+/// None differing is "All files match", one is "1 file differs", and more
+/// is "{count} files differ" with the count filled in.
+///
+/// @param files_differ how many of the bundle's files differ
+/// @return the line, in the language the interface shows
+[[nodiscard]] std::string content_match_line(uint32_t files_differ);
+
+/// Checks every copied bundle in the player's folder.
+///
+/// A bundle with no readable record, or a record of another id, or a record
+/// with no file, is not copied and is left out. Each file in the table is
+/// compared with the record: the same size and the same modification time
+/// keep the recorded SHA-256 and are not read. Any other file is hashed
+/// whole, and the record then stores that size, time and SHA-256, so the
+/// next start does not read it again while they still match. A missing file
+/// is named and not hashed. A SHA-256 the table does not know marks the
+/// bundle as differing and names the file. An empty `table` uses the
+/// built-in table.
+///
+/// @param user_folder the player's folder
+/// @param table the bundles to check; empty uses the built-in table
+/// @return the check
+[[nodiscard]] ContentCheck check_managed_content(
+    const std::filesystem::path& user_folder,
+    std::span<const oa::data::content_bundles::Bundle> table
+);
 
 } // namespace oa::app
