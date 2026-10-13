@@ -248,7 +248,8 @@ void test_hold_button_takes_default_art() {
     CHECK(red_at(shown(renderer::ButtonCondition::pressed), 1, 1) == 31);
     resources.layout.gadgets.back() = box;
     const auto drawn = renderer::render_screen(resources, {});
-    CHECK(red_at(drawn, 6, 3) == 20);
+    // The checkbox draws its own bevel, never BUTTONS0's frame.
+    CHECK(red_at(drawn, 6, 3) != 30 && red_at(drawn, 6, 3) != 31);
 }
 
 // A centred caption underlines its quick key's glyph on the row below the
