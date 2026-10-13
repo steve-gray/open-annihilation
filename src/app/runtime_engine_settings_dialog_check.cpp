@@ -522,17 +522,19 @@ std::size_t differing_outside(
 
 /// Counts the picture's pixels a letterboxed window frame does not show:
 /// each picture pixel is compared with the window pixel at its centre,
-/// leaving out the pixels round the pointer, where the cursor draws, and
-/// any other picture rectangles the caller names. A window larger than the
-/// picture draws the menu's buttons from a larger icon, so those squares
-/// are left out only then.
+/// leaving out the pixels round the pointer, where the cursor draws. A
+/// window larger than the picture draws the menu's buttons from a larger
+/// icon, over the window rectangles the caller names, so a sample that
+/// lands in one of those is left out. The picture's own 48-pixel squares
+/// are not those rectangles once the picture is scaled.
 ///
 /// @param presented the window's frame as presented
 /// @param picture the picture, at the display gamma
 /// @param area where the picture lands in the window
 /// @param window_width the window's width, in pixels
 /// @param pointer the pointer, in the picture's pixels
-/// @param also_left_out picture rectangles not compared
+/// @param sharp_buttons window rectangles the larger icons cover; empty at
+///        the picture's own size
 /// @return the pixels that differ; every pixel when the frame misses the area
 std::size_t letterbox_differences(
     const artless::Surface& presented,
@@ -540,7 +542,7 @@ std::size_t letterbox_differences(
     const SDL_FRect& area,
     int window_width,
     layout::Point pointer,
-    std::span<const artless::SourceRect> also_left_out = {}
+    std::span<const layout::Rect> sharp_buttons = {}
 ) {
     // The read-back holds the whole window, or the letterboxed area alone.
     const bool whole_window = static_cast<int>(presented.width) == window_width;
@@ -554,15 +556,6 @@ std::size_t letterbox_differences(
         for (uint32_t x = 0; x < picture.width; ++x) {
             if (inside(cursor, static_cast<int32_t>(x), static_cast<int32_t>(y)))
                 continue;
-            bool left_out = false;
-            for (const artless::SourceRect& skipped : also_left_out) {
-                if (inside(skipped, static_cast<int32_t>(x), static_cast<int32_t>(y))) {
-                    left_out = true;
-                    break;
-                }
-            }
-            if (left_out)
-                continue;
             const auto window_x = static_cast<std::size_t>(
                 left + (static_cast<float>(x) + 0.5F) * area.w / static_cast<float>(picture.width)
             );
@@ -571,6 +564,18 @@ std::size_t letterbox_differences(
             );
             if (window_x >= presented.width || window_y >= presented.height)
                 return static_cast<std::size_t>(picture.width) * picture.height;
+            bool sharp = false;
+            for (const layout::Rect& button : sharp_buttons) {
+                if (static_cast<int>(window_x) >= button.x &&
+                    static_cast<int>(window_y) >= button.y &&
+                    static_cast<int>(window_x) < button.x + button.width &&
+                    static_cast<int>(window_y) < button.y + button.height) {
+                    sharp = true;
+                    break;
+                }
+            }
+            if (sharp)
+                continue;
             const auto* shown = presented.rgb.data() + (window_y * presented.width + window_x) * 3U;
             const auto* expected =
                 picture.rgb.data() + (static_cast<std::size_t>(y) * picture.width + x) * 3U;
@@ -2059,23 +2064,25 @@ void Runtime::check_engine_settings_window_sizes() {
                 on
         );
         // Above the picture's size the window draws each button from a larger
-        // icon, so that square of the picture is not what the window shows.
-        // At the picture's size the window shows the picture, buttons included.
+        // icon, over the window rectangle, which is not the picture's
+        // 48-pixel square. A sample is left out only when it lands in that
+        // rectangle. At the picture's size the window shows the picture,
+        // buttons included.
         const auto windows = oa_layer().menu_button_windows();
-        std::array<artless::SourceRect, 2> sharp_squares{};
+        std::array<layout::Rect, 2> sharp_buttons{};
         std::size_t sharp_count = 0;
         if (windows.library.width != button.width || windows.library.height != button.height)
-            sharp_squares[sharp_count++] = button;
+            sharp_buttons[sharp_count++] = windows.library;
         if (windows.settings.width != settings_button.width ||
             windows.settings.height != settings_button.height)
-            sharp_squares[sharp_count++] = settings_button;
+            sharp_buttons[sharp_count++] = windows.settings;
         const auto differing = letterbox_differences(
             presented,
             picture,
             area,
             window_width,
             kRestingPointer,
-            std::span<const artless::SourceRect>(sharp_squares.data(), sharp_count)
+            std::span<const layout::Rect>(sharp_buttons.data(), sharp_count)
         );
         require(
             differing == 0,
@@ -2185,8 +2192,39 @@ void Runtime::check_engine_settings_window_sizes() {
                 );
             }
             apply_gamma_rgb(drawing.rgb.data(), drawing.rgb.size() / 3U, 3);
-            const auto expected = expected_layer_frame(closed, drawing, at);
+            auto expected = expected_layer_frame(closed, drawing, at);
             const auto shown = presented_frame();
+            // The closed frame holds the larger icons. Darkening that frame
+            // is not what the window draws when the dialog is open: the icon
+            // is darkened and blended on its own, over its window rectangle.
+            // Those pixels are left as the window shows them. The dialog
+            // covers its own place, which stays in the compare.
+            const auto windows_now = oa_layer().menu_button_windows();
+            const auto keep_icon = [&](const layout::Rect& window, int32_t source_side) {
+                if (window.width == source_side && window.height == source_side)
+                    return;
+                for (int row = window.y; row < window.y + window.height; ++row) {
+                    for (int column = window.x; column < window.x + window.width; ++column) {
+                        if (column >= at.shown.x && row >= at.shown.y &&
+                            column < at.shown.x + at.shown.width &&
+                            row < at.shown.y + at.shown.height)
+                            continue;
+                        if (column < 0 || row < 0 ||
+                            static_cast<uint32_t>(column) >= expected.width ||
+                            static_cast<uint32_t>(row) >= expected.height)
+                            continue;
+                        const std::size_t at_pixel =
+                            (static_cast<std::size_t>(row) * expected.width +
+                             static_cast<std::size_t>(column)) *
+                            3U;
+                        expected.rgb[at_pixel] = shown.rgb[at_pixel];
+                        expected.rgb[at_pixel + 1] = shown.rgb[at_pixel + 1];
+                        expected.rgb[at_pixel + 2] = shown.rgb[at_pixel + 2];
+                    }
+                }
+            };
+            keep_icon(windows_now.library, button.width);
+            keep_icon(windows_now.settings, settings_button.width);
             const auto differing_pixels =
                 layer_differences(shown, expected, window_pointer(seen, kRestingPointer));
             if (differing_pixels != 0 && !options_.snapshot.empty()) {

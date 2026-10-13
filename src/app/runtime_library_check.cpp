@@ -775,8 +775,34 @@ void Runtime::check_library() {
         const renderer::Surface shown = frame_without_cursor();
         renderer::Surface plain = shown;
         const auto square = EngineSettingsMenuHost::button_rect(*this);
-        // The same badge the frame drew, without the dot, so a frame with
-        // no update matches and a frame with updates differs only there.
+        // The icon's clear edge is not opaque. Drawing it again over the
+        // button blends that edge twice, so the menu under the button goes
+        // back first. The same badge the frame drew, without the dot: a
+        // frame with no update matches, and a frame with updates differs
+        // only there.
+        const EngineSettingsMenuHost::ButtonPixels& kept =
+            engine_settings_menu_host().library_pixels;
+        require(
+            kept.kept && kept.at.x == square.x && kept.at.y == square.y &&
+                kept.at.width == square.width && kept.at.height == square.height &&
+                kept.under.size() == static_cast<std::size_t>(square.width) *
+                                         static_cast<std::size_t>(square.height) * 3U,
+            "the menu under the OA button was not kept"
+        );
+        for (int32_t row = 0; row < square.height; ++row) {
+            for (int32_t column = 0; column < square.width; ++column) {
+                const std::size_t from =
+                    (static_cast<std::size_t>(row) * static_cast<std::size_t>(square.width) +
+                     static_cast<std::size_t>(column)) *
+                    3U;
+                const std::size_t to = (static_cast<std::size_t>(square.y + row) * plain.width +
+                                        static_cast<std::size_t>(square.x + column)) *
+                                       3U;
+                plain.rgb[to] = kept.under[from];
+                plain.rgb[to + 1] = kept.under[from + 1];
+                plain.rgb[to + 2] = kept.under[from + 2];
+            }
+        }
         kit::OaButtonMark mark = EngineSettingsMenuHost::library_mark(*this);
         mark.dot = false;
         oa::ui::frontend_renderer::RgbaPicture picture;
