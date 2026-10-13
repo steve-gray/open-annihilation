@@ -48,6 +48,7 @@
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/library/library.hpp"
+#include "oa/ui/library/mod_questions.hpp"
 #include "oa/ui/library/screen.hpp"
 #include "oa/ui/library/text.hpp"
 
@@ -1627,6 +1628,17 @@ library::Inputs Runtime::library_inputs() {
         inputs.map_packs[place].maps.push_back(std::move(line));
     }
     inputs.registries_notice = registry_edit_notice();
+    // The stored choice, read for the Active tab. A pill does not write it
+    // back: the draft stays on the Library until the Library closes.
+    const oa::data::content_bundles::ContentChoice choice = content_choice();
+    inputs.content.base_id = choice.base_game;
+    inputs.content.locked = choice.command_line;
+    inputs.content.enabled = choice.expansions;
+    inputs.content.copied = copied_content_bundles(options_.game_dir);
+    if (inputs.playing_mod) {
+        if (const oa::data::mod_profile::ModProfile* profile = mod_profile())
+            inputs.content.mod_required = profile->required_expansions;
+    }
     const fs::path& game_folder =
         options_.game_folders.empty() ? options_.game_dir : options_.game_folders.back();
     inputs.base_game_badge = base_game_icon(game_folder);
@@ -2119,6 +2131,37 @@ struct Runtime::LibraryScreen final : LayerScreen {
             if (entry != nullptr)
                 use_language_now(*entry);
             return false;
+        case library::Action::change_base_game:
+        case library::Action::add_expansion:
+            // G10 opens the chooser. G22 opens the locator. This press does neither.
+            return false;
+        case library::Action::ask_expansion_off: {
+            oa::ui::kit::Question asked = library::expansion_off_question(host.model);
+            int32_t turn_off = -1;
+            for (int32_t index = 0; index < static_cast<int32_t>(asked.buttons.size()); ++index) {
+                if (asked.buttons[static_cast<std::size_t>(index)].id ==
+                    library::turn_off_button_id)
+                    turn_off = index;
+            }
+            QuestionScreen::Host answers;
+            // The host outlives the question: it is the runtime's Library.
+            answers.answer = [&host, turn_off](int32_t button) {
+                if (button == turn_off)
+                    library::accept_expansion_off(host.model);
+                else
+                    library::cancel_expansion_off(host.model);
+                ++host.model_revision;
+                return true;
+            };
+            answers.tick = [this] { return runtime_.screen_ != Screen::main_menu; };
+            OaLayer& layer = runtime_.oa_layer();
+            layer.push(
+                std::make_unique<QuestionScreen>(
+                    layer, Screen::main_menu, std::move(asked), answers
+                )
+            );
+            return false;
+        }
         }
         return false;
     }

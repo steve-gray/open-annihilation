@@ -283,12 +283,6 @@ inline constexpr std::string_view note_playing_other =
 /// Why PLAY NOW and SWITCH OFF are off: --mod-dir or --base-game.
 inline constexpr std::string_view note_command_line = "The command line chose this run's mod.";
 
-/// The Mods list's first entry, which plays Total Annihilation 3.1c with no mod.
-inline constexpr std::string_view base_game_name = "Base Game (Disable Mods)";
-/// What that entry's details say under its name.
-inline constexpr std::string_view base_game_summary =
-    "Total Annihilation 3.1c as it was made, with no mod";
-
 // The download queue in the footer.
 inline constexpr std::string_view queue_package = "{name} {version}";
 inline constexpr std::string_view queue_downloading = "Downloading {package} · {progress}";
@@ -348,20 +342,32 @@ inline constexpr std::string_view update_count_many = "{count} updates";
 inline constexpr std::string_view mod_count_one = "{count} mod";
 inline constexpr std::string_view mod_count_many = "{count} mods";
 
-// The Active tab: the mod being played, the language in use and the
-// installed maps, under one heading each.
+// The Active tab: the base game, its expansions, the mod being played, the
+// language in use and the installed maps, under one heading each.
+inline constexpr std::string_view active_heading_base = "BASE GAME";
 inline constexpr std::string_view active_heading_mod = "MOD";
 inline constexpr std::string_view active_heading_language = "LANGUAGE";
+inline constexpr std::string_view active_heading_expansions = "EXPANSIONS";
+inline constexpr std::string_view active_expansions_count = "EXPANSIONS · {on} OF {count} ON";
 inline constexpr std::string_view active_heading_maps = "MAPS";
+inline constexpr std::string_view active_change = "CHANGE…";
+inline constexpr std::string_view active_add_from = "{name} · ADD FROM…";
+inline constexpr std::string_view active_files_match = "All files match";
+inline constexpr std::string_view active_file_differs = "{count} file differs";
+inline constexpr std::string_view active_files_differ = "{count} files differ";
+inline constexpr std::string_view active_version_source = "{version} · {source}";
+inline constexpr std::string_view active_turns_off = "{name} turns off when the Library closes.";
+inline constexpr std::string_view active_turns_on = "{name} turns on when the Library closes.";
+inline constexpr std::string_view active_needs = "{name} needs {need}.";
+inline constexpr std::string_view active_as_made = "{game} as it was made";
+inline constexpr std::string_view active_no_expansions = "This game has no expansions.";
+inline constexpr std::string_view active_game_name = "Total Annihilation";
+inline constexpr std::string_view active_version = "3.1c";
+inline constexpr std::string_view active_version_demo = "Demo";
 /// Beside MAPS while the maps search holds text: how many tiles show, of every installed map.
 inline constexpr std::string_view active_maps_count = "{shown} of {all}";
 /// The mod being played, or the language pack in use: its name, then its version.
 inline constexpr std::string_view active_package = "{name} {version}";
-/// The tile shown when no mod is played: the base game. Its badge is the
-/// game's icon, or the letters "3.1c" when that icon cannot be read.
-inline constexpr std::string_view active_base_game = "Base Game";
-/// The line on that tile.
-inline constexpr std::string_view active_no_mod = "No mod: the game as it was made";
 /// A language no pack holds, which the game shows from its own words.
 inline constexpr std::string_view active_language_built_in = "{language} · built in";
 /// A language pack's coverage, as its tile states it.
@@ -450,6 +456,13 @@ inline constexpr std::string_view switch_ask =
     "menu. Your other settings are kept.";
 /// The title the Switch Mod question gives the game played with no mod.
 inline constexpr std::string_view no_mod = "No Mod";
+inline constexpr std::string_view expansion_off_title = "Turn off {name}?";
+inline constexpr std::string_view expansion_off_too = "{name} turns off too: it needs {need}.";
+inline constexpr std::string_view expansion_off_mod =
+    "{mod} needs {name}, so it is unloaded and the game plays with No Mod.";
+inline constexpr std::string_view expansion_off_maps =
+    "{name}'s maps and campaigns leave the lists until you turn it on again. Nothing is deleted.";
+inline constexpr std::string_view action_turn_off = "TURN OFF";
 inline constexpr std::string_view action_switch = "SWITCH";
 inline constexpr std::string_view action_ok = "OK";
 inline constexpr std::string_view roll_back_title = "ROLL BACK MOD";

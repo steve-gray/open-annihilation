@@ -87,7 +87,7 @@ namespace {
 constexpr std::string_view kRefusedText = "Doesn't fit {game}: {reason}";
 
 /// The interface's name for the base game, when no mod is played.
-constexpr std::string_view kBaseGameText = "Total Annihilation 3.1c";
+constexpr std::string_view kBaseGameText = "No Mod";
 
 /// The compatible table's key for the base game, when no mod is played.
 constexpr std::string_view kBaseGameKey = "ta-3.1c";
