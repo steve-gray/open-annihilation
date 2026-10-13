@@ -124,12 +124,19 @@ void test_unpacks_and_reuses(const fs::path& temporary, const Synthetic& synthet
     const auto chosen_before = names_in(folder);
 
     const auto first = set_up_demo(folder, data, synthetic.release);
-    const auto archive = data / "games" / "demo-test" / "TADemo.hpi";
+    const auto archive =
+        data / std::string(oa::app::managed_games_folder) / "demo-test" / "TADemo.hpi";
     CHECK(first.outcome == DemoOutcome::ready && first.unpacked);
     CHECK(first.installer == folder / "setup copy.bin");
-    CHECK(first.folder == data / "games" / "demo-test" && first.archive == archive);
+    CHECK(
+        first.folder == data / std::string(oa::app::managed_games_folder) / "demo-test" &&
+        first.archive == archive
+    );
     CHECK(read_bytes(archive) == synthetic.archive);
-    CHECK(names_in(data / "games" / "demo-test") == std::set<std::string>{"TADemo.hpi"});
+    CHECK(
+        names_in(data / std::string(oa::app::managed_games_folder) / "demo-test") ==
+        std::set<std::string>{"TADemo.hpi"}
+    );
     CHECK(names_in(folder) == chosen_before);
     CHECK(read_bytes(folder / "setup copy.bin") == synthetic.installer);
     CHECK(archive_matches(archive, synthetic.release));
@@ -154,7 +161,10 @@ void test_unpacks_and_reuses(const fs::path& temporary, const Synthetic& synthet
     fs::remove(archive);
     CHECK(set_up_demo(folder, data, synthetic.release).unpacked);
     CHECK(read_bytes(archive) == synthetic.archive);
-    CHECK(names_in(data / "games" / "demo-test") == std::set<std::string>{"TADemo.hpi"});
+    CHECK(
+        names_in(data / std::string(oa::app::managed_games_folder) / "demo-test") ==
+        std::set<std::string>{"TADemo.hpi"}
+    );
 }
 
 // A data folder whose demo folder is a link to a folder elsewhere: the
@@ -165,15 +175,22 @@ void test_links_are_not_followed(const fs::path& temporary, const Synthetic& syn
     const auto data = temporary / "links" / "data";
     const auto elsewhere = temporary / "links" / "elsewhere";
     fs::create_directories(folder);
-    fs::create_directories(data / "games");
+    fs::create_directories(data / std::string(oa::app::managed_games_folder));
     fs::create_directories(elsewhere);
     write_bytes(folder / "setup.exe", synthetic.installer);
     write_bytes(elsewhere / "TADemo.hpi", synthetic.archive);
     std::error_code error;
-    fs::create_directory_symlink(elsewhere, data / "games" / "demo-test", error);
+    fs::create_directory_symlink(
+        elsewhere, data / std::string(oa::app::managed_games_folder) / "demo-test", error
+    );
     // Some systems report a link made and make none.
     std::error_code status_error;
-    if (!error && !fs::is_symlink(fs::symlink_status(data / "games" / "demo-test", status_error)))
+    if (!error &&
+        !fs::is_symlink(
+            fs::symlink_status(
+                data / std::string(oa::app::managed_games_folder) / "demo-test", status_error
+            )
+        ))
         error = std::make_error_code(std::errc::no_such_file_or_directory);
     if (error) {
         std::printf("skipped the link case: %s\n", error.message().c_str());
@@ -184,14 +201,20 @@ void test_links_are_not_followed(const fs::path& temporary, const Synthetic& syn
     CHECK(contains(through.problem, "link"));
     CHECK(names_in(elsewhere) == std::set<std::string>{"TADemo.hpi"});
 
-    fs::remove(data / "games" / "demo-test");
-    fs::create_directories(data / "games" / "demo-test");
+    fs::remove(data / std::string(oa::app::managed_games_folder) / "demo-test");
+    fs::create_directories(data / std::string(oa::app::managed_games_folder) / "demo-test");
     fs::create_symlink(
-        elsewhere / "TADemo.hpi", data / "games" / "demo-test" / "TADemo.hpi", error
+        elsewhere / "TADemo.hpi",
+        data / std::string(oa::app::managed_games_folder) / "demo-test" / "TADemo.hpi",
+        error
     );
-    if (!error && !fs::is_symlink(
-                      fs::symlink_status(data / "games" / "demo-test" / "TADemo.hpi", status_error)
-                  ))
+    if (!error &&
+        !fs::is_symlink(
+            fs::symlink_status(
+                data / std::string(oa::app::managed_games_folder) / "demo-test" / "TADemo.hpi",
+                status_error
+            )
+        ))
         error = std::make_error_code(std::errc::no_such_file_or_directory);
     if (error) {
         std::printf("skipped the archive link case: %s\n", error.message().c_str());
@@ -209,7 +232,7 @@ void test_links_are_not_followed(const fs::path& temporary, const Synthetic& syn
 void test_abandoned_temporaries(const fs::path& temporary, const Synthetic& synthetic) {
     const auto folder = temporary / "abandoned" / "Downloads";
     const auto data = temporary / "abandoned" / "data";
-    const auto unpacked = data / "games" / "demo-test";
+    const auto unpacked = data / std::string(oa::app::managed_games_folder) / "demo-test";
     fs::create_directories(folder);
     fs::create_directories(unpacked);
     write_bytes(folder / "Total Annihilation.exe", synthetic.installer);
@@ -245,7 +268,8 @@ void test_abandoned_temporaries(const fs::path& temporary, const Synthetic& synt
 void test_installer_by_size(const fs::path& temporary, const Synthetic& synthetic) {
     const auto folder = temporary / "by-size" / "Downloads";
     const auto data = temporary / "by-size" / "data";
-    const auto archive = data / "games" / "demo-test" / "TADemo.hpi";
+    const auto archive =
+        data / std::string(oa::app::managed_games_folder) / "demo-test" / "TADemo.hpi";
     fs::create_directories(folder);
     write_bytes(folder / "Total Annihilation.exe", synthetic.installer);
     CHECK(set_up_demo(folder, data, synthetic.release).unpacked);
@@ -349,16 +373,25 @@ void test_failed_unpacking(const fs::path& temporary, const Synthetic& synthetic
         release.archive_sha256[0] ^= 1;
         const auto setup = set_up_demo(folder, data, release);
         CHECK(setup.outcome == DemoOutcome::unpack_failed && contains(setup.problem, "SHA-256"));
-        CHECK(names_in(data / "games" / "demo-test").empty());
+        CHECK(names_in(data / std::string(oa::app::managed_games_folder) / "demo-test").empty());
     }
     {
         // A damaged archive left there fails the check and stays put.
-        write_bytes(data / "games" / "demo-test" / "TADemo.hpi", {'x'});
+        write_bytes(
+            data / std::string(oa::app::managed_games_folder) / "demo-test" / "TADemo.hpi", {'x'}
+        );
         auto release = synthetic.release;
         release.archive_sha256[0] ^= 1;
         (void)set_up_demo(folder, data, release);
-        CHECK(names_in(data / "games" / "demo-test") == std::set<std::string>{"TADemo.hpi"});
-        CHECK(read_bytes(data / "games" / "demo-test" / "TADemo.hpi") == std::vector<uint8_t>{'x'});
+        CHECK(
+            names_in(data / std::string(oa::app::managed_games_folder) / "demo-test") ==
+            std::set<std::string>{"TADemo.hpi"}
+        );
+        CHECK(
+            read_bytes(
+                data / std::string(oa::app::managed_games_folder) / "demo-test" / "TADemo.hpi"
+            ) == std::vector<uint8_t>{'x'}
+        );
     }
 }
 
@@ -369,10 +402,13 @@ void test_inspection(const fs::path& temporary, const Synthetic& synthetic) {
     write_bytes(folder / "Total Annihilation.exe", synthetic.installer);
     const auto install = inspect_game_install(folder, data, synthetic.release);
     CHECK(usable(install));
-    CHECK(install.installation == data / "games" / "demo-test");
+    CHECK(install.installation == data / std::string(oa::app::managed_games_folder) / "demo-test");
     CHECK(
         install.archives.size() == 1 && install.archives[0].filename() == "TADemo.hpi" &&
-        fs::equivalent(install.archives[0], data / "games" / "demo-test" / "TADemo.hpi")
+        fs::equivalent(
+            install.archives[0],
+            data / std::string(oa::app::managed_games_folder) / "demo-test" / "TADemo.hpi"
+        )
     );
     CHECK(install.demo.outcome == DemoOutcome::ready);
 
@@ -381,15 +417,20 @@ void test_inspection(const fs::path& temporary, const Synthetic& synthetic) {
     const std::vector<oa::HpiWriteFile> override_files{{"guis/mainmenu.gui", {'X'}}};
     const auto other_archive = oa::write_hpi(override_files);
     for (const auto* name : {"rev31.gp3", "extra.ccx", "extra.ufo", "extra.hpi"})
-        write_bytes(data / "games" / "demo-test" / name, other_archive);
+        write_bytes(
+            data / std::string(oa::app::managed_games_folder) / "demo-test" / name, other_archive
+        );
     const auto crowded = inspect_game_install(folder, data, synthetic.release);
     CHECK(usable(crowded) && crowded.demo.outcome == DemoOutcome::ready);
     CHECK(
         crowded.archives.size() == 1 &&
-        fs::equivalent(crowded.archives[0], data / "games" / "demo-test" / "TADemo.hpi")
+        fs::equivalent(
+            crowded.archives[0],
+            data / std::string(oa::app::managed_games_folder) / "demo-test" / "TADemo.hpi"
+        )
     );
     for (const auto* name : {"rev31.gp3", "extra.ccx", "extra.ufo", "extra.hpi"})
-        fs::remove(data / "games" / "demo-test" / name);
+        fs::remove(data / std::string(oa::app::managed_games_folder) / "demo-test" / name);
 
     // A folder that holds the archive itself is an ordinary installation.
     const auto installed = temporary / "inspect" / "installed";
@@ -450,7 +491,10 @@ void test_resolution(const fs::path& temporary, const Synthetic& synthetic) {
         const auto h = host.host();
         const auto result = resolve_game_directory({folder, std::nullopt, false, true}, h);
         CHECK(result && result->path == folder && result->source == GameDirectorySource::argument);
-        CHECK(result && result->installation == data / "games" / "demo-test");
+        CHECK(
+            result &&
+            result->installation == data / std::string(oa::app::managed_games_folder) / "demo-test"
+        );
         CHECK(result && result->archives.size() == 1 && result->demo.outcome == DemoOutcome::ready);
     }
     {
@@ -472,7 +516,10 @@ void test_resolution(const fs::path& temporary, const Synthetic& synthetic) {
         const auto h = host.host();
         const auto result = resolve_game_directory({}, h);
         CHECK(result && result->path == folder && result->source == GameDirectorySource::chosen);
-        CHECK(result && result->installation == data / "games" / "demo-test");
+        CHECK(
+            result &&
+            result->installation == data / std::string(oa::app::managed_games_folder) / "demo-test"
+        );
         CHECK(host.notices.size() == 2);
         CHECK(host.notices.size() == 2 && contains(host.notices[0], "demo (1997)"));
         CHECK(
@@ -492,7 +539,10 @@ void test_resolution(const fs::path& temporary, const Synthetic& synthetic) {
         const auto result = resolve_game_directory({{}, path_to_utf8(folder), false, false}, h);
         CHECK(result && result->source == GameDirectorySource::stored && result->path == folder);
         CHECK(
-            result && result->installation == data / "games" / "demo-test" && !result->demo.unpacked
+            result &&
+            result->installation ==
+                data / std::string(oa::app::managed_games_folder) / "demo-test" &&
+            !result->demo.unpacked
         );
         CHECK(host.asked == 0 && host.notices.empty());
     }
@@ -559,7 +609,7 @@ void check_managed_switch(const fs::path& installer, const fs::path& scratch) {
     copy.bundles = oa::data::content_bundles::bundles();
     const CopyResult copied = copy_content(source, copy);
     CHECK(copied.status == CopyStatus::finished && copied.files_copied == 1);
-    const fs::path demo_folder = user / "games" / "totala-demo";
+    const fs::path demo_folder = user / std::string(oa::app::managed_games_folder) / "totala-demo";
     const ContentRecord record = read_content_record(demo_folder / ".oa-content", nullptr);
     CHECK(record.valid && record.bundle_id == "totala-demo" && record.files.size() == 1);
     CHECK(
@@ -595,7 +645,7 @@ void check_managed_switch(const fs::path& installer, const fs::path& scratch) {
     CHECK(totala != nullptr);
     if (totala == nullptr)
         return;
-    const fs::path totala_folder = user / "games" / "totala";
+    const fs::path totala_folder = user / std::string(oa::app::managed_games_folder) / "totala";
     fs::create_directories(totala_folder);
     ContentRecord totala_record;
     totala_record.bundle_id = "totala";
@@ -647,7 +697,7 @@ void check_managed_switch(const fs::path& installer, const fs::path& scratch) {
 }
 
 // An earlier demo-1997/TADemo.hpi of the right size and SHA-256 is copied once
-// into games/<folder>, the record is written, and the earlier file stays.
+// into Games/<folder>, the record is written, and the earlier file stays.
 void test_adopts_legacy_demo(const fs::path& temporary, const Synthetic& synthetic) {
     DemoRelease release = synthetic.release;
     release.folder_name = "totala-demo";
@@ -659,7 +709,8 @@ void test_adopts_legacy_demo(const fs::path& temporary, const Synthetic& synthet
     CHECK(!error);
     write_bytes(earlier, synthetic.archive);
     CHECK(adopt_legacy_demo(data, player, release));
-    const fs::path archive = player / "games" / "totala-demo" / release.archive_name;
+    const fs::path archive =
+        player / std::string(oa::app::managed_games_folder) / "totala-demo" / release.archive_name;
     CHECK(archive_matches(archive, release));
     CHECK(archive_matches(earlier, release));
     CHECK(read_bytes(archive) == synthetic.archive);
@@ -683,7 +734,11 @@ void test_adopts_legacy_demo(const fs::path& temporary, const Synthetic& synthet
     DemoRelease damaged_release = release;
     damaged_release.archive_size = synthetic.archive.size();
     CHECK(!adopt_legacy_demo(wrong_data, wrong_player, damaged_release));
-    CHECK(!fs::exists(wrong_player / "games" / "totala-demo" / release.archive_name, error));
+    CHECK(!fs::exists(
+        wrong_player / std::string(oa::app::managed_games_folder) / "totala-demo" /
+            release.archive_name,
+        error
+    ));
     CHECK(fs::is_regular_file(wrong, error));
 }
 
@@ -707,18 +762,22 @@ void test_installed_release() {
     const auto first = set_up_demo(folder, data);
     CHECK(first.outcome == DemoOutcome::ready && first.unpacked);
     CHECK(fs::equivalent(first.installer, installer));
-    const auto archive = data / "games" / "totala-demo" / "TADemo.hpi";
+    const auto archive =
+        data / std::string(oa::app::managed_games_folder) / "totala-demo" / "TADemo.hpi";
     CHECK(first.archive == archive && fs::file_size(archive, error) == demo_1997.archive_size);
     CHECK(archive_matches(archive));
     CHECK(sha256::digest_of(read_bytes(archive)) == demo_1997.archive_sha256);
     CHECK(
-        names_in(data / "games" / "totala-demo") ==
+        names_in(data / std::string(oa::app::managed_games_folder) / "totala-demo") ==
         (std::set<std::string>{"TADemo.hpi", ".oa-content"})
     );
     const auto second = set_up_demo(folder, data);
     CHECK(second.outcome == DemoOutcome::ready && !second.unpacked);
     const auto install = inspect_game_install(folder, data);
-    CHECK(usable(install) && install.installation == data / "games" / "totala-demo");
+    CHECK(
+        usable(install) &&
+        install.installation == data / std::string(oa::app::managed_games_folder) / "totala-demo"
+    );
     check_managed_switch(installer, data);
     std::printf("%s\n", describe_ready(first).c_str());
     fs::remove_all(data, error);
