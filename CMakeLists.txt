@@ -3266,13 +3266,22 @@ if(TARGET oa-game)
   # The built-in registry descriptors, beside the fonts
   # (cmake/OaRegistries.cmake).
   oa_copy_registries(oa-game "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>")
-  # The engine ships no language packs. Builds before 0.8 copied zh-Hans into
-  # the languages folder beside the game, and the game reads a pack there as
-  # the packager's, so a build folder that held one would still offer it.
-  # The folder is removed after each link.
+  # The engine ships no language packs. It does ship the interface
+  # catalogue, languages/interface.tdf, the engine's own words in German,
+  # French, Spanish and Italian. The game reads that file with every other
+  # catalogue file in the languages folder beside the fonts, the same reader
+  # a pack's interface.tdf uses. Builds before 0.8 copied zh-Hans into that
+  # folder, and the game reads a pack there as the packager's, so the folder
+  # is cleared after each link and only the catalogue is put back.
+  set(oa_interface_catalogue "${CMAKE_CURRENT_SOURCE_DIR}/languages/interface.tdf")
+  set_property(TARGET oa-game APPEND PROPERTY LINK_DEPENDS "${oa_interface_catalogue}")
   add_custom_command(TARGET oa-game POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E rm -rf
       "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>/languages"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>/languages"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${oa_interface_catalogue}"
+      "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>/languages/interface.tdf"
     VERBATIM)
 endif()
 file(GLOB oa_notice_licenses CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/licenses/*")

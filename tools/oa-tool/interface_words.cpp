@@ -4,6 +4,7 @@
 // Joins the interface-catalogue texts each module exports and prints them.
 
 #include "command.hpp"
+#include "interface_words.hpp"
 
 #include "oa/app/interface_words.hpp"
 #include "oa/app/package_install/interface_words.hpp"
@@ -32,14 +33,8 @@ void append(std::vector<std::string_view>& words, std::span<const std::string_vi
     words.insert(words.end(), more.begin(), more.end());
 }
 
-} // namespace
-
-int run_interface_words(std::span<const std::string> arguments, Output& output) {
-    if (arguments.size() != 1 || arguments[0] != "--json") {
-        output.err << "oa-tool interface-words: the listing is written with --json\n";
-        output.err << "run 'oa-tool help interface-words'\n";
-        return exit_usage;
-    }
+/// Joins, sorts and keeps one of each text the modules export.
+std::vector<std::string_view> join_interface_words() {
     std::vector<std::string_view> words;
     append(words, oa::ui::library::interface_words);
     append(words, oa::ui::engine_settings::interface_words);
@@ -55,6 +50,22 @@ int run_interface_words(std::span<const std::string> arguments, Output& output) 
     std::erase(words, std::string_view{});
     std::sort(words.begin(), words.end());
     words.erase(std::unique(words.begin(), words.end()), words.end());
+    return words;
+}
+
+} // namespace
+
+std::vector<std::string_view> collected_interface_words() {
+    return join_interface_words();
+}
+
+int run_interface_words(std::span<const std::string> arguments, Output& output) {
+    if (arguments.size() != 1 || arguments[0] != "--json") {
+        output.err << "oa-tool interface-words: the listing is written with --json\n";
+        output.err << "run 'oa-tool help interface-words'\n";
+        return exit_usage;
+    }
+    const std::vector<std::string_view> words = collected_interface_words();
     oa::formats::json::JsonWriter writer;
     writer.begin_array();
     for (const std::string_view word : words)
