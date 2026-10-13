@@ -454,6 +454,35 @@ void test_falling_wreck() {
             sinking->model.velocity.z == 0,
         "wreck below sea level sinks slowly"
     );
+
+    // A slot freed while it is still falling must not hand that motion on.
+    auto* moving = place_feature(sea.world, host, sea.at(6, 6), 3, &start, nullptr, no_player);
+    require(moving != nullptr, "moving wreck placed");
+    if (moving == nullptr)
+        return;
+    moving->model.velocity = {9, wreck_sink_speed, -3};
+    auto* reused = place_feature(sea.world, host, sea.at(6, 6), 3, &start, nullptr, no_player);
+    require(
+        reused != nullptr && reused->model.velocity.x == 0 && reused->model.velocity.y == 0 &&
+            reused->model.velocity.z == 0,
+        "reused feature slot starts still"
+    );
+    // A remnant of a fall keeps that fall.
+    auto* falling = place_feature(sea.world, host, sea.at(8, 8), 3, &start, nullptr, no_player);
+    require(falling != nullptr, "falling wreck placed");
+    if (falling == nullptr)
+        return;
+    falling->model.velocity = {2, wreck_sink_speed, -4};
+    sea.defs[4].flags = 0;
+    sea.defs[4].footprint_x = 1;
+    sea.defs[4].footprint_z = 1;
+    replace_with_remnant(sea.world, host, 8, 8, false);
+    const auto* remnant = feature_record(sea.world, sea.plots[sea.at(8, 8)].feature_record);
+    require(
+        remnant != nullptr && remnant->def_index == 4 && remnant->model.velocity.x == 2 &&
+            remnant->model.velocity.y == wreck_sink_speed && remnant->model.velocity.z == -4,
+        "a remnant keeps the fall"
+    );
 }
 
 void test_reproduce_and_reclaim() {

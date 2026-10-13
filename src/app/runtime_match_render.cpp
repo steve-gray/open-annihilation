@@ -1790,6 +1790,9 @@ void Runtime::render_match_surface() {
     // A feature off the battlefield is passed over before its fog and its
     // frames are looked at.
     for (auto& feature : match_features_) {
+        // A sinking wreck's record moves after the draw was placed. The
+        // picture follows it, and stays where the record rests.
+        follow_feature_draw(feature, world_record);
         const auto feature_screen = project_match_point(
             viewport,
             {static_cast<uint32_t>(feature.position.x),

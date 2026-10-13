@@ -337,7 +337,9 @@ void move_feature_slot(World& world, int32_t slot, FeatureList to) noexcept;
 /// Puts a feature on a plot across its footprint, clearing what was there.
 ///
 /// A 3DO feature takes a pool record, positioned at `position` or the footprint
-/// centre, and model state from the host. The origin plot records the placing
+/// centre, and model state from the host. A reused record starts still: its
+/// velocity is cleared, so a wreck freed mid-descent does not hand that motion
+/// to whatever is placed next. The origin plot records the placing
 /// player in flags bits 3..6; the other footprint cells become continuations.
 /// A geothermal feature starts its vent smoke. The footprint's movement maps are
 /// refreshed. def_index feature_marker only writes the marker word.
@@ -379,7 +381,7 @@ bool clear_plot_feature(
 void clear_all_features(World& world, const FeatureHost& host) noexcept;
 /// Swaps a feature for its featuredead (or featurereclamate) remnant.
 ///
-/// A 3DO remnant keeps the freed record's position and orientation.
+/// A 3DO remnant keeps the freed record's position, orientation and fall.
 ///
 /// @param[in,out] world world holding the plots and pool
 /// @param host feature host
