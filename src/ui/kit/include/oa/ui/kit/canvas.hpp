@@ -178,9 +178,7 @@ void rule_rect(const Canvas& canvas, const Rect& rect, Colour ink);
 /// The smooth form draws it in the modern fonts, antialiased, at
 /// lround(smooth_text_points * scale) pixels per em, bold as
 /// smooth_text_bold says, its tracking lround(tracking * scale) pixels.
-/// Text wider than the box at that size steps down a pixel at a time until it
-/// fits, to three quarters of its size at the least, as the game font's text
-/// keeps to the boxes the layout measured it into.
+/// Text wider than the box at that size keeps its size and is recorded.
 ///
 /// @param canvas where it is drawn
 /// @param role which font
@@ -346,6 +344,16 @@ void perspective_blit(
     Canvas offscreen = begin_offscreen(dest, drawn.width, drawn.height);
     if (!can_draw(offscreen))
         return;
+
+    // The buffer's text is copied onto the screen as pixels. Its notes stay
+    // out of the screen's ink, or a card's words would cross the title.
+    struct Space {
+        Space() { begin_text_fit_space(); }
+
+        ~Space() { end_text_fit_space(); }
+    } space;
+
+    static_cast<void>(space);
     draw(offscreen);
     warp_offscreen(dest, drawn.width, drawn.height, place, how);
 }

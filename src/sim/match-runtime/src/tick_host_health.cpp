@@ -127,6 +127,16 @@ void Match::link_built_unit(sim::unit_spawn::Slot& unit, sim::unit_spawn::Slot& 
     const auto& definition = *fields(unit).definition;
     if (definition.activate_when_built)
         set_activation(unit, 1, true);
+    // A finished wall stops being a unit. It is marked to die at once,
+    // dismissed, so the feature named by its corpse takes the same footprint
+    // at that feature's own health, in the builder's colour. Every machine
+    // marks it, as one marks a wall placed already finished. The builder's
+    // order still finishes, because the wall is removed on its own turn,
+    // after the order has said the build is complete.
+    if (definition.is_feature) {
+        unit.record.flags |= death_pending_flag;
+        unit.record.damage_kind = static_cast<uint8_t>(DeathKind::dismissed);
+    }
     unit.unit->events =
         static_cast<uint16_t>(unit.unit->events | sim::unit_health::construction_event);
     if (simulated_here)

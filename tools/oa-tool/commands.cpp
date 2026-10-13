@@ -168,17 +168,18 @@ const Command command_table[] = {
     {
         "pack",
         "FOLDER [--out FILE] [--force] [--game-dir DIR]",
-        "Pack a folder as a mod, a language package or a map pack.",
-        "Reads FOLDER and writes a .oamod, a .oalang or a .oamap. The folder's top holds one "
-        "manifest, oamod.yaml, language.yaml or oamap.yaml. The manifest is written first, then "
-        "every other file in byte order of its path, with fixed times. A file whose extension, "
-        "without case, is png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, oamod, oalang or "
-        "oamap, and an empty file, is stored; every other file is deflated. The same files give "
-        "the same bytes on any machine with the same zlib. --out names the package file; without "
-        "it the name comes from the manifest and is written in the current folder. --force "
-        "replaces an existing file. A folder the installer would refuse is not packed. A map "
-        "pack reads the game's palette from --game-dir: map packs need the game's palette for "
-        "previews. --game-dir on a mod or a language pack is a usage error.",
+        "Pack a folder as a mod, a language package, a map pack or an expansion.",
+        "Reads FOLDER and writes a .oamod, a .oalang, a .oamap or a .oaexp. The folder's top holds "
+        "one manifest, oamod.yaml, language.yaml, oamap.yaml or oaexp.yaml. The manifest is "
+        "written first, then every other file in byte order of its path, with fixed times. A file "
+        "whose extension, without case, is png, jpg, jpeg, gif, ogg, mp3, zip, gz, bz2, xz, 7z, "
+        "oamod, oalang or oamap, and an empty file, is stored; every other file is deflated. An "
+        "expansion's files are all stored. The same files give the same bytes on any machine with "
+        "the same zlib. --out names the package file; without it the name comes from the manifest "
+        "and is written in the current folder. --force replaces an existing file. A folder the "
+        "installer would refuse is not packed. A map pack reads the game's palette from "
+        "--game-dir: map packs need the game's palette for previews. --game-dir on a mod, a "
+        "language pack or an expansion is a usage error.",
         1,
         any_count,
         run_pack,
@@ -195,11 +196,13 @@ const Command command_table[] = {
         "tags, supportedGames, requiredExpansions, author, requires, sim_hash, full_hash, hacks "
         "and packaging; for a language pack, supportedGames, requiredExpansions and language in "
         "place of those; for a map pack, summary, author, homepage, tags, supportedGames, "
-        "requiredExpansions, requires and packaging, then maps. Warnings may suggest writing "
+        "requiredExpansions, requires and packaging, then maps; for an expansion, extends, needs "
+        "and author. Warnings may suggest writing "
         "supportedGames instead of requires.base, or requiredExpansions instead of an expansion "
         "archive named in layout.installation-archives. A key the package does not have is left "
         "out, and revision "
-        "is null when a language pack has no packaging revision. A map pack needs --game-dir, "
+        "is null when a language pack has no packaging revision. An expansion does not take "
+        "--game-dir. A map pack needs --game-dir, "
         "the game folder. The check builds each target the way the game would. Each --mod "
         "FOLDER[=KEY] is one more target, after the base game ta-3.1c. The key is the text "
         "after the last =, or the folder's catalogue origin as id@release, or the profile's id "

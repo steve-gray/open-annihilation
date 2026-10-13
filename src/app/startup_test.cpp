@@ -8,8 +8,13 @@
 // and showcase options (arm-first-mission and skirmish-battle), the Game
 // files screen's check and its companions, and the options and switches an
 // extension takes; last, --help's listing of every option, read as the
-// program ends.
+// program ends. --version's line is checked before that, and a line that
+// carries it is not parsed: the program leaves before any other option runs.
 #include "oa/app/app.hpp"
+#if __has_include("oa_engine_build.hpp")
+#include "oa_engine_build.hpp"
+#endif
+#include "oa/app/version_line.hpp"
 #include "oa/app/extension.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/command_line.hpp"
@@ -414,6 +419,7 @@ const std::vector<FlagCase>& flag_cases() {
         {"--check-language-registry", &Options::check_language_registry, {}},
         {"--check-language-notice", &Options::check_language_notice, {}},
         {"--check-first-run", &Options::check_first_run, {}},
+        {"--check-text-fit", &Options::check_text_fit, {}},
         {"--check-folder-chooser", &Options::check_folder_chooser, {}},
         {"--check-patrol-reclaim", &Options::check_patrol_reclaim, {}},
         {"--check-reclaim-cursor", &Options::check_reclaim_cursor, {}},
@@ -510,7 +516,7 @@ const std::vector<ValueCase>& value_cases() {
 // The other options: --check-navigation, which takes a group's name when
 // one follows it, and the hardware acceleration flags, which must agree.
 constexpr const char* kOtherOptions[] = {
-    "--check-navigation", "--hardware-acceleration", "--no-hardware-acceleration"
+    "--version", "--check-navigation", "--hardware-acceleration", "--no-hardware-acceleration"
 };
 
 // An extension that takes every option it is offered, as a flag, and
@@ -734,6 +740,43 @@ void check_help_at_exit() {
         expect(known.contains(name), (name + ", listed by --help, is one of the test's").c_str());
     std::cout.rdbuf(nullptr);
     std::_Exit(failures == 0 ? 0 : 1);
+}
+
+// The version line names the game, the release's platform, the running
+// architecture and the commit, and --version is recognised beside other
+// options so those options are not parsed.
+void version_line_stands_alone() {
+    const std::string line = oa::app::running_engine_version_line();
+    expect(line.starts_with("Open Annihilation "), "the version line names the game");
+    expect(line.find('\n') == std::string::npos, "the version line is a single line");
+    const auto open = line.find('(');
+    const auto comma = line.find(", ", open == std::string::npos ? 0 : open);
+    const auto close = line.rfind(')');
+    expect(
+        open != std::string::npos && comma != std::string::npos && close == line.size() - 1 &&
+            line.find(' ', open) < comma,
+        "the version line names the platform build and the commit"
+    );
+    const std::string commit = line.substr(comma + 2, close - (comma + 2));
+    bool hex = commit.size() == 8;
+    for (const char digit : commit)
+        hex = hex && digit >= '0' && (digit <= '9' || (digit >= 'a' && digit <= 'f'));
+    expect(hex || commit == "unknown", "the commit is eight hex digits, or unknown");
+    const char* argv[] = {"open-annihilation", "--mute", "--version", "--game-dir", "ta"};
+    char* mutable_argv[] = {
+        const_cast<char*>(argv[0]),
+        const_cast<char*>(argv[1]),
+        const_cast<char*>(argv[2]),
+        const_cast<char*>(argv[3]),
+        const_cast<char*>(argv[4]),
+    };
+    expect(
+        oa::app::version_argument_present(5, mutable_argv),
+        "--version is seen beside other options, which are then not parsed"
+    );
+    expect(
+        !oa::app::version_argument_present(2, mutable_argv), "a line without --version is parsed"
+    );
 }
 
 // Writes --help into help_text and ends the program there, which
@@ -1663,6 +1706,7 @@ int main() {
             std::string_view(language_after.launch.language) == "german",
         "a word after --check-navigation that names no group is still the language"
     );
-    // Last: --help ends the program.
+    // --version's line, then --help, which ends the program.
+    version_line_stands_alone();
     help_lists_every_option();
 }

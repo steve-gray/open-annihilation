@@ -492,6 +492,10 @@ struct Options {
     // Walks the first-run setup over the main menu: a built-in language, a
     // pack that fails and then retries, Skip setup, and both online choices.
     bool check_first_run = false;
+    // Opens every Open Annihilation screen in English, German, French,
+    // Spanish, Italian and Simplified Chinese, at 640x480 and 1280x720, and
+    // fails when any text is wider than its box or crosses another text.
+    bool check_text_fit = false;
     // Opens the locator on --game-dir's parent, moves onto that folder with
     // Tab and chooses it. With --snapshot, writes that PNG and a Deck PNG.
     bool check_folder_chooser = false;
@@ -804,6 +808,17 @@ struct Options {
 };
 
 struct Extension;
+
+/// Writes one notice on the standard output and ends the process with status 0.
+///
+/// On Windows a program built without a console attaches to the console it was
+/// started from, when there is one and nothing is capturing the output, and
+/// writes the notice there as well. A captured stream, or a test that has
+/// replaced the output buffer, receives the notice only on the standard output.
+/// The text is written as given; a text with no newline gains one.
+///
+/// @param text the notice
+[[noreturn]] void write_startup_line(std::string_view text);
 
 /// Parses the command line into the run options.
 ///

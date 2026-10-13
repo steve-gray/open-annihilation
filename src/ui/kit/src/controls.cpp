@@ -361,14 +361,25 @@ void draw_row_badge(const Canvas& canvas, const Rect& badge, const ListRowLook& 
     }
     if (!look.badge_text.empty()) {
         fill(canvas, badge, look.badge_colour);
-        line(
-            clipped(canvas, badge),
-            FontRole::small,
-            look.badge_text,
-            badge,
-            Align::centre,
-            colour::on_accent
-        );
+        // A badge keeps as many letters as fit its square, from the start,
+        // and drops the rest. No ellipsis: the square has no room for one.
+        std::string_view letters = look.badge_text;
+        while (!letters.empty() && measure_text(canvas, FontRole::small, letters) > badge.width) {
+            std::size_t end = letters.size();
+            do {
+                --end;
+            } while (end > 0 && continuation_byte(letters[end]));
+            letters.remove_suffix(letters.size() - end);
+        }
+        if (!letters.empty())
+            line(
+                clipped(canvas, badge),
+                FontRole::small,
+                letters,
+                badge,
+                Align::centre,
+                colour::on_accent
+            );
         return;
     }
     const int32_t hairline = kMetrics.hairline;

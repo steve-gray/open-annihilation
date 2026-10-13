@@ -27,6 +27,7 @@
 #include "oa/platform/text_font.hpp"
 #include "oa/ui/folder_chooser.hpp"
 #include "oa/ui/game_files.hpp"
+#include "oa/ui/kit/text.hpp"
 #include "oa/ui/pad_controls.hpp"
 
 #include <algorithm>
@@ -48,6 +49,7 @@ namespace oa::app {
 namespace {
 
 namespace paint = oa::ui::paint;
+namespace kit = oa::ui::kit;
 namespace chooser = oa::ui::folder_chooser;
 namespace view = oa::ui::game_files;
 namespace installs = oa::platform::game_installs;
@@ -386,8 +388,14 @@ class ChooserScreen {
             return;
         tick_pads();
         refresh_viewport();
+        if (options_.check_text_fit)
+            kit::set_text_fit_screen("folder-chooser/locator");
         repaint();
         present();
+        // The text-fit check paints the locator once and leaves. A quit
+        // queued before the first paint would skip the frame.
+        if (options_.check_text_fit)
+            finish(false);
     }
 
     /// Returns how long the loop may wait for an event.

@@ -440,6 +440,33 @@ bool shows_text(const std::vector<settings::LayoutPart>& parts, std::string_view
     return false;
 }
 
+/// Tells whether the layout shows a sentence as one part or as the wrapped
+/// lines of it, joined by single spaces.
+///
+/// @param parts the dialog's layout
+/// @param sentence the sentence
+/// @return true when a part is the sentence, or consecutive parts join to it
+bool shows_sentence(const std::vector<settings::LayoutPart>& parts, std::string_view sentence) {
+    if (shows_text(parts, sentence))
+        return true;
+    for (std::size_t start = 0; start < parts.size(); ++start) {
+        std::string joined;
+        for (std::size_t index = start; index < parts.size(); ++index) {
+            if (parts[index].text.empty())
+                break;
+            if (!joined.empty())
+                joined.push_back(' ');
+            joined += parts[index].text;
+            if (joined == sentence)
+                return true;
+            if (joined.size() >= sentence.size() || !sentence.starts_with(joined) ||
+                sentence[joined.size()] != ' ')
+                break;
+        }
+    }
+    return false;
+}
+
 /// Returns the Open Annihilation settings' keys a preferences file holds.
 ///
 /// @param values the file's preferences
@@ -1040,7 +1067,10 @@ void Runtime::check_engine_settings_dialog() {
     expect("Native pixel density On");
     require(
         native_density_window() == dense &&
-            shows_text(settings::dialog_layout(*dialog), "Applies from the next start."),
+            shows_sentence(
+                settings::dialog_layout(*dialog),
+                "The display's own pixel density (Retina on a Mac). Applies from the next start."
+            ),
         "Native pixel density On changed the open window, or does not say when it applies"
     );
     // Explosion flash: Reduced is the level the next frame draws.
@@ -1402,13 +1432,24 @@ void Runtime::check_engine_settings_dialog() {
             require(half != nullptr, "Developer Mode shows no switch of " + std::string(hack));
             click_at(half->rect.x + half->rect.width / 2, half->rect.y + half->rect.height / 2);
         };
-        // Scrolls the list a page at a time until it shows a text.
+        // Scrolls the list a page at a time until it shows a text. A wrapped
+        // hint over the list shortens each page, so the walk continues until
+        // the list will not move, not for a fixed count of pages.
         const auto reveal = [&](std::string_view text) {
             tap(SDLK_HOME);
-            for (int32_t pages = 0; pages < 32; ++pages) {
+            for (int32_t pages = 0; pages < 400; ++pages) {
                 if (shows_text(parts_now(), text))
                     return true;
+                auto* scrolling = engine_settings_dialog();
+                require(scrolling != nullptr, "the dialog closed while its list scrolled");
+                const int32_t before =
+                    scrolling->scroll[static_cast<std::size_t>(settings::Page::developer)];
                 tap(SDLK_PAGEDOWN);
+                scrolling = engine_settings_dialog();
+                require(scrolling != nullptr, "the dialog closed while its list scrolled");
+                if (scrolling->scroll[static_cast<std::size_t>(settings::Page::developer)] ==
+                    before)
+                    break;
             }
             return shows_text(parts_now(), text);
         };
@@ -2163,16 +2204,24 @@ void Runtime::check_engine_settings_window_sizes() {
             }
             if (page != settings::Page::graphics)
                 continue;
-            // Graphics scrolls to its end, the class's own: a larger class
-            // shows more of its rows and scrolls less.
+            // Graphics scrolls to its end, the class's own. A wider class wraps
+            // each description onto fewer lines and its view is taller, so it
+            // scrolls less: Compact's end is its own, Regular scrolls less than
+            // that, and Large fits, so End leaves it where it is.
             tap(SDLK_END);
             const int32_t end_limit = settings::scroll_limit(*dialog);
+            const int32_t scrolled = dialog->scroll[static_cast<std::size_t>(page)];
+            const bool compact_end =
+                expected_layout.size_class == oa::ui::kit::SizeClass::compact &&
+                end_limit == kGraphicsScrollLimit;
+            const bool regular_end =
+                expected_layout.size_class == oa::ui::kit::SizeClass::regular && end_limit > 0 &&
+                end_limit < kGraphicsScrollLimit;
+            const bool large_end =
+                expected_layout.size_class == oa::ui::kit::SizeClass::large && end_limit == 0;
             require(
-                end_limit > 0 && dialog->scroll[static_cast<std::size_t>(page)] == end_limit &&
-                    (expected_layout.size_class != oa::ui::kit::SizeClass::compact ||
-                     end_limit == kGraphicsScrollLimit),
-                "End did not scroll Graphics to its end (" +
-                    std::to_string(dialog->scroll[static_cast<std::size_t>(page)]) + " of " +
+                scrolled == end_limit && (compact_end || regular_end || large_end),
+                "End did not scroll Graphics to its end (" + std::to_string(scrolled) + " of " +
                     std::to_string(end_limit) + ")" + on
             );
             shows_dialog("Graphics at its end");

@@ -165,6 +165,7 @@ inline constexpr std::string_view interface_words[] = {
     "x5",
     "x5: Shift for the build buttons, five at a time. Tap to latch, hold for one.",
     "{order} armed",
+    "·",
 };
 
 } // namespace oa::ui::touch_hud

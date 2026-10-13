@@ -43,6 +43,10 @@ size, hash or resource.
   `.oa-content` record. `parse_content_record` and `format_content_record`
   take bytes and return bytes. `read_bundle_folder_record` reads the record
   in one bundle folder. A field the reader does not know is ignored.
+- `oa/data/content_bundles/expansion_package.hpp` reads `oaexp.yaml` and
+  checks that the files offered with it are the expansion's files, by
+  name, size and SHA-256. `expansion_fixture.hpp` is the small table the
+  tests install against. The game does not.
 - `table_fault` is empty when every dependency names a real bundle and
   following the needs reaches no cycle.
 
