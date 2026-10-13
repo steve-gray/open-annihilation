@@ -425,7 +425,8 @@ struct SetupButtons {
 
 /// Draws the setup window from the canvas's origin: the face, the header
 /// (the mark, "Open Annihilation", the page word and the step indicator at
-/// the right), the footer, Skip setup, Back and Next, and the edge.
+/// the right), the footer, Skip setup, Back and the right-hand button, and
+/// the edge. The right-hand button is plain or the accent as the look says.
 ///
 /// @param canvas where it is drawn; its origin is the window's top left
 /// @param look the window, the page and the buttons

@@ -1410,9 +1410,7 @@ void draw_setup_chrome(const Canvas& canvas, const SetupChromeLook& look) {
     draw_button(
         canvas,
         buttons.next,
-        ButtonLook{
-            look.next, ButtonStyle::accent, look.next_hovered, look.next_held, look.next_enabled
-        }
+        ButtonLook{look.next, look.next_style, look.next_hovered, look.next_held, look.next_enabled}
     );
     draw_window_edge(canvas, whole);
 }

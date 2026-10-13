@@ -334,12 +334,12 @@ void chips_take_every_state() {
 /// A pill's corner at 1x is a step, its cap and its straight edge are the
 /// ground, and an outlined state keeps that ground inside its colour.
 void pills_are_rounded_and_stepped_at_1x() {
-    OA_CHECK(kit::pill_width(fonts(), {"GET"}) == 22);
+    OA_CHECK(kit::pill_width(fonts(), {"GET"}) == 30);
     OA_CHECK(kit::pill_width(fonts(), {""}) == 12);
     kit::PillLook with_icon;
     with_icon.text = "GET";
     with_icon.icon = kit::StateIcon::download_arrow;
-    OA_CHECK(kit::pill_width(fonts(), with_icon) == 34);
+    OA_CHECK(kit::pill_width(fonts(), with_icon) == 42);
     OA_CHECK(kit::pill_height() == 12);
 
     const kit::Rect pill{10, 10, 40, 12};

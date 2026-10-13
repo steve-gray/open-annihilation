@@ -492,7 +492,9 @@ struct SetupChromeLook {
     int32_t step_count{1};          ///< how many steps
     std::string skip{"Skip setup"}; ///< the quiet button on the left
     std::string back{"Back"};       ///< the plain button
-    std::string next{"Next"};       ///< the accent button
+    std::string next{"Next"};       ///< the right-hand button
+    /// Pause is plain. Continue, Next and Copy the game are the accent.
+    ButtonStyle next_style{ButtonStyle::accent};
     bool skip_hovered{};
     bool skip_held{};
     bool skip_enabled{true};

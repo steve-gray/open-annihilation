@@ -179,7 +179,9 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
     is never cut on either form;
   - a pill (`PillLook`, `pill_width`, `pill_height`, `draw_pill`,
     `add_pill`): a small-font word on a fully rounded ground
-    `chip_height` (12) points high. Playing and active fill the accent and
+    `chip_height` (12) points high. The word keeps `chip_padding` (4 points
+    at 1x) clear of each semicircle, and an empty pill stays a circle.
+    Playing and active fill the accent and
     write `on_accent`; neutral and inactive fill a muted ground
     (`control_hover`) and write the text colour, for "Built in" and for a
     filter that is off; installed, update and problem fill that same muted

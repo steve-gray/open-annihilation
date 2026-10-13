@@ -119,11 +119,13 @@ installation, never a folder of loose files such as Downloads. When a
 folder was only searched for installers, those installers are the rows.
 The fullest place is selected. A row names the file or the folder, the
 path shortened under the home folder, and the bundles that place holds.
-It does not name a bundle the place lacks. The list is ready when the
-step opens. Copying still checks each file as it reads it. **Locate
-another…** asks for a folder. **Copy the game** is available once a row
-is chosen. **Back** returns to the language. The left button is the
-walk's **Quit** or **Skip**.
+It does not name a bundle the place lacks. The selected row's bundles
+are accent pills, and every other row's are quiet pills. The list is
+ready when the step opens. Copying still checks each file as it reads
+it. **Locate another…** is centred under the rows, at the footer
+buttons' height, and asks for a folder. **Copy the game** is available
+once a row is chosen. **Back** returns to the language. The left button
+is the walk's **Quit** or **Skip**.
 
 The line under the rows says the copies go to Documents › Open
 Annihilation, and that the installation is left as it is.
@@ -141,9 +143,13 @@ The overall count is the files this copy takes from
 this source. A file the source does not hold is not in that count, so a
 finished copy reads 100%. The bundles the source holds sit in a panel
 under the bar. A bundle the source does not hold is not listed. While a
-file is being copied its name is on the row; once that bundle is complete
-the name goes. A track the music bundle never held is a note, such as
-"17 of 18 tracks", and is not a failure.
+file is being copied its name is the line under the bundle's name. Once
+that bundle is complete the file's name goes, and that same line says
+the result, such as "All files match" or "17 of 18 tracks". The row
+keeps its height, so the bundles under it stay put. A track the music
+bundle never held is a note, and is not a failure. While the copy runs
+the footer's right-hand button is **Pause**, drawn plain. Once the check
+is done it is **Continue**, in the accent, and counts down.
 
 Two centred lines say "If OA stops, the copy carries on from here next
 time." and "To Documents › Open Annihilation › Games and Expansions".
