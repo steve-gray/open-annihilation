@@ -12397,6 +12397,52 @@ class Runtime final : public menu::Host,
     /// @return false when the save cannot be started
     bool load_saved_game(const fs::path& path);
 
+    /// Writes the content note beside a save or a recording.
+    ///
+    /// The save or the recording itself is unchanged, so an older build still
+    /// reads it. The note names the base game and the rule-changing expansions.
+    ///
+    /// @param path the save or the recording
+    void note_content_beside(const fs::path& path) const;
+
+    /// Writes the content note in a film's folder, once for that folder.
+    ///
+    /// @param folder the film's folder
+    void note_film_content(const fs::path& folder);
+
+  public:
+
+    /// Shows the comparison when `path`'s note needs other content.
+    ///
+    /// TURN ON AND LOAD stores the choice and asks for a soft restart, then
+    /// the next start loads the save or plays the recording. CANCEL leaves
+    /// the question. A file with no note, and a note this run already matches,
+    /// show nothing.
+    ///
+    /// @param path the save, the recording or the film folder
+    /// @param title the name the question shows
+    /// @param recording true for a recording, false for a save
+    /// @return true when the question is showing
+    bool offer_content_switch(const fs::path& path, std::string_view title, bool recording);
+
+    /// The sentence the question would show, when the note needs other content.
+    ///
+    /// @param path the save or the recording
+    /// @return the sentence, or empty when nothing is asked
+    [[nodiscard]] std::string content_switch_sentence(const fs::path& path) const;
+
+    /// Takes a save or a recording TURN ON AND LOAD left for this start.
+    void take_pending_content();
+
+    /// The recording this start should play, after take_pending_content.
+    ///
+    /// @return its path, or empty
+    [[nodiscard]] const std::string& pending_demo_path() const noexcept {
+        return pending_demo_path_;
+    }
+
+  private:
+
     /// Reads the Summary fields a load needs from a save file.
     ///
     /// @param path savegame file
@@ -14342,6 +14388,12 @@ class Runtime final : public menu::Host,
     init::MapListState map_list_state_{};
     std::map<uintptr_t, int32_t> map_list_objects_;
     std::map<std::string, std::string> preference_values_;
+    /// The save TURN ON AND LOAD loads once the next start reaches the main menu.
+    std::string pending_save_path_{};
+    /// The recording TURN ON AND LOAD plays on this start.
+    std::string pending_demo_path_{};
+    /// The film folder whose content note this run already wrote.
+    std::string film_content_noted_{};
     /// The missing-language notice for this run (runtime_language_notice.cpp).
     friend class LanguageNoticeHost;
 

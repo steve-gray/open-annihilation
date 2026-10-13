@@ -3,12 +3,12 @@
 
 // The raw deflate decoder both readers use.
 
-#include "inflater.hpp"
+#include "oa/formats/zip/inflate.hpp"
 
 #include <algorithm>
 #include <climits>
 
-namespace oa::formats::zip::detail {
+namespace oa::formats::zip {
 
 namespace {
 
@@ -60,4 +60,4 @@ void Inflater::finish() noexcept {
     started_ = false;
 }
 
-} // namespace oa::formats::zip::detail
+} // namespace oa::formats::zip
