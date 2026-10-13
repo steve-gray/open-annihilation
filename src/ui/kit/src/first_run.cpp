@@ -91,11 +91,14 @@ int32_t mix_knots(int32_t abs_milli, int knots, const int32_t* at, const int32_t
 
 /// Returns a card's opacity in 256ths at a distance from the centre.
 ///
+/// The face stays opaque through two steps. It fades out over the third, so
+/// the floor shows around a card and not through its name.
+///
 /// @param abs_milli the distance, in thousandths of a step
 /// @return the opacity, 0 to 256
 int32_t carousel_opacity(int32_t abs_milli) noexcept {
     constexpr int32_t kAt[] = {0, 1000, 2000, 3000};
-    constexpr int32_t kValue[] = {256, 179, 77, 0};
+    constexpr int32_t kValue[] = {256, 256, 256, 0};
     return mix_knots(abs_milli, 4, kAt, kValue);
 }
 
@@ -792,6 +795,21 @@ void carousel_tick(CarouselModel& model, uint32_t dt_ms) noexcept {
     model.elapsed_ms += dt_ms < room ? dt_ms : room;
 }
 
+void carousel_settle(CarouselModel& model) noexcept {
+    if (model.count <= 0) {
+        model.selected = 0;
+        model.origin_milli = 0;
+        model.elapsed_ms = carousel_move_ms;
+        return;
+    }
+    if (model.selected < 0)
+        model.selected = 0;
+    if (model.selected >= model.count)
+        model.selected = model.count - 1;
+    model.origin_milli = model.selected * 1000;
+    model.elapsed_ms = carousel_move_ms;
+}
+
 int32_t carousel_index_milli(const CarouselModel& model) noexcept {
     if (model.count <= 0)
         return 0;
@@ -1133,17 +1151,13 @@ void draw_language_card(const Canvas& canvas, const Rect& rect, const LanguageCa
         }
     }
 
-    if (pill_h > 0 && !look.pill.empty() && content_w > 0) {
-        int32_t pill_w = pill_h * 2;
-        if (local.fonts != nullptr)
-            pill_w = pill_width(*local.fonts, PillLook{look.pill, pill_of(look.availability)});
-        pill_w = std::min(pill_w, content_w);
-        if (pill_w > 0) {
-            draw_pill(
-                local,
-                {measures.pad_side + (content_w - pill_w) / 2, pill_top, pill_w, pill_h},
-                PillLook{look.pill, pill_of(look.availability)}
-            );
+    if (pill_h > 0 && !look.pill.empty()) {
+        const PillLook pill{look.pill, pill_of(look.availability)};
+        // The words set the width. A capsule only as wide as it is tall clips
+        // "Active" and "Built in" when the game's fonts are not open yet.
+        const int32_t pill_w = pill_width_of(local, pill);
+        if (pill_w > 0 && pill_h > 0) {
+            draw_pill(local, {(rect.width - pill_w) / 2, pill_top, pill_w, pill_h}, pill);
         }
     }
     if (card_dimmed(look))

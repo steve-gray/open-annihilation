@@ -980,17 +980,21 @@ class FirstRunScreen final : public LayerScreen {
                 current_tag = card.tag;
         const int32_t selected_before = session_.carousel.selected;
         if (!selection_set_ || current_tag != bound_tag_) {
-            int32_t index = 0;
+            int32_t chosen = 0;
             const auto count = static_cast<int32_t>(session_.model.cards.size());
             for (int32_t at = 0; at < count; ++at) {
                 if (session_.model.cards[static_cast<std::size_t>(at)].current)
-                    index = at;
+                    chosen = at;
             }
-            session_.carousel.selected = index;
+            session_.carousel.selected = chosen;
             bound_tag_ = current_tag;
             selection_set_ = true;
+            first_run::bind(session_);
+            // The language in use starts in the middle. A later move eases.
+            kit::carousel_settle(session_.carousel);
+        } else {
+            first_run::bind(session_);
         }
-        first_run::bind(session_);
         return changed || session_.carousel.selected != selected_before;
     }
 

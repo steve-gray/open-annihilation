@@ -47,12 +47,27 @@ button on the right, and the header and footer sit inside the window.
 The title is "Welcome to Open Annihilation" and the line under it is
 "Choose your language."
 
+The language in use starts in the centre, in front of the cards beside it.
+A move eases to the next card over half a second, and the window draws
+every frame of that move. The place at a moment depends on how long the
+move has been running, not on how many times the window has been drawn.
+Cards one or two steps away stay readable, and the floor's grid is drawn
+behind them.
+
+![The language step of a first start, at 1280 by 720: English centred and ringed, Active and Built in whole, and a fixture pack offering Get.](images/first-run/language-large.png)
+
+![The same step at 960 by 540.](images/first-run/language-regular.png)
+
+![The same step at 640 by 480.](images/first-run/language-compact.png)
+
 The carousel lists the built-in languages in the order the game keeps them
 (English, Deutsch, Español, Français, Italiano), then language packs that
 are already installed, then each language pack Core Prime lists when
-downloads are on and that catalogue can be read. A pack that is not
-installed yet wears **Get** and its size. While a built-in language, or a pack already installed, sits in the
-middle, this step speaks that language before it is chosen: the title,
+downloads are on and that catalogue can be read. The pre-game window reads
+that catalogue the same way the welcome over the menu does. A pack that is
+not installed yet wears **Get** and its size. While a built-in language, or
+a pack already installed, sits in the middle, this step speaks that
+language before it is chosen: the title,
 "Choose your language.", the note and the offline lines under the
 carousel, a download's status, the step line, and **Skip** or **Quit**,
 **Back** and **Next**. Turning to a language the game cannot read yet

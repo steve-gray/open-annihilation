@@ -14,6 +14,7 @@
 #include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/canvas.hpp"
+#include "oa/ui/kit/controls.hpp"
 #include "oa/ui/kit/first_run.hpp"
 #include "oa/ui/kit/theme.hpp"
 #include "oa/ui/paint/painter.hpp"
@@ -295,7 +296,7 @@ void carousel_place_is_a_function_of_time() {
     expect(
         kit::carousel_centre_milli(0, 1000, kit::carousel_move_ms) == 1000, "the move never arrives"
     );
-    expect(kit::carousel_turn_degrees == 34, "the turn is not 34 degrees");
+    expect(kit::carousel_turn_degrees == 18, "the turn is not 18 degrees");
     expect(kit::carousel_move_ms == 500, "the move is not half a second");
     expect(kit::carousel_visible_side == 2, "the carousel shows other than two cards a side");
 
@@ -359,13 +360,37 @@ void carousel_place_is_a_function_of_time() {
             centre->opacity == 256 && centre->degrees == 0, "the centre card is not flat and full"
         );
         expect(
-            beside->opacity == 179 && beside->degrees == 34, "one step out is not 34 degrees at 0.7"
+            beside->opacity == 256 && beside->degrees == 18,
+            "one step out is not 18 degrees and fully readable"
         );
         expect(
-            further->opacity == 77 && further->degrees == 68,
-            "two steps out are not 68 degrees at 0.3"
+            further->opacity == 256 && further->degrees == 36,
+            "two steps out are not 36 degrees and fully readable"
         );
     }
+    {
+        kit::CarouselModel settled{5, 1, 0, 0};
+        kit::carousel_settle(settled);
+        expect(
+            kit::carousel_index_milli(settled) == 1000,
+            "settling does not put the centre on the chosen card"
+        );
+        expect(settled.elapsed_ms == kit::carousel_move_ms, "settling leaves a move running");
+        const std::vector<kit::CarouselSlot> resting =
+            kit::carousel_places(wide, fitted, 5, kit::carousel_index_milli(settled), false, true);
+        const kit::CarouselSlot* chosen = slot_of(resting, settled.selected);
+        expect(chosen != nullptr && chosen->centre, "the settled card is not the centre");
+        if (chosen != nullptr) {
+            const int32_t band_mid = wide.x + wide.width / 2;
+            const int32_t face_mid = chosen->face.x + chosen->face.width / 2;
+            expect(face_mid == band_mid, "the settled card is not centred on the band");
+            expect(
+                !resting.empty() && chosen == &resting.back(),
+                "the settled card is not drawn in front"
+            );
+        }
+    }
+
     for (std::size_t first = 0; first < turned.size(); ++first) {
         for (std::size_t second = first + 1; second < turned.size(); ++second) {
             const kit::Rect shared = kit::intersect(turned[first].face, turned[second].face);
@@ -995,6 +1020,17 @@ void carousel_wraps_one_step_and_a_double_click_picks() {
     }
 }
 
+void smooth_pill_keeps_its_words(text_font::FontStack* modern) {
+    Smooth smooth(160, 40, modern);
+    smooth.canvas.fonts = nullptr;
+    const int32_t active =
+        kit::pill_width_of(smooth.canvas, kit::PillLook{"Active", kit::PillState::playing});
+    const int32_t built_in =
+        kit::pill_width_of(smooth.canvas, kit::PillLook{"Built in", kit::PillState::neutral});
+    expect(active > 24, "Active is only as wide as the pill is tall");
+    expect(built_in > active, "Built in is not wider than Active");
+}
+
 int main() {
     perspective_keeps_edges_opacity_and_clip();
     carousel_place_is_a_function_of_time();
@@ -1006,6 +1042,7 @@ int main() {
     // The filtered blit draws no glyphs. A missing font stack still has to
     // exercise a smooth canvas, or the filter is never checked.
     smooth_copy_is_filtered(modern.get());
+    smooth_pill_keeps_its_words(modern.get());
     every_component_at_every_class_and_scale(modern.get());
     return oa::test::check_exit_status();
 }
