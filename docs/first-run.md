@@ -144,7 +144,8 @@ This step has no setup frame. It lies over the real main menu, dimmed
 except a spotlight around both buttons. Two coach marks name them:
 
 1. **Library.** "Get, update and switch mods, map packs and languages. The
-   number is how many mods you have."
+   number counts every package you have added: mods, map packs, language
+   packs and expansions."
 2. **Settings.** "Open Annihilation's own settings: controls, graphics, the
    interface's size, downloads and your files."
 

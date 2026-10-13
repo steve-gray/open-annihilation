@@ -905,6 +905,9 @@ void larger_classes_show_more() {
     OA_CHECK(last_stop != nullptr && last_stop->name == "library.close-x");
     const kit::Control* languages = fixture::named(compact, "library.tab.languages");
     OA_CHECK(languages != nullptr && languages->text == "Lang (2)");
+    // Compact forces the short names. Regular and Large, on a tab that shows
+    // the search, may still shorten them. Active and Registries give the
+    // tabs the whole row, so the full names fit there.
     const kit::Control* updates = fixture::named(compact, "library.tab.updates");
     OA_CHECK(
         updates != nullptr &&
@@ -1715,6 +1718,14 @@ void active_base_game_is_a_tile() {
         OA_CHECK(text_item(list, "Total Annihilation as it was made") != nullptr);
         OA_CHECK(text_item(list, "Total Annihilation") != nullptr);
         OA_CHECK(text_item(list, "TA") != nullptr);
+        const kit::Control* languages = fixture::named(list, "library.tab.languages");
+        const kit::Control* registries = fixture::named(list, "library.tab.registries");
+        const bool compact = named.frame.size_class == kit::SizeClass::compact;
+        OA_CHECK(languages != nullptr && registries != nullptr);
+        if (languages != nullptr)
+            OA_CHECK(languages->text.starts_with(compact ? "Lang (" : "Languages ("));
+        if (registries != nullptr)
+            OA_CHECK(registries->text.starts_with(compact ? "Reg (" : "Registries ("));
         OA_CHECK(text_item(list, "All files match") != nullptr);
         OA_CHECK(text_starts(list, "3.1c"));
         const kit::Control* change = fixture::named(list, "library.active.change");
@@ -2170,6 +2181,10 @@ void registries_tab_lists_every_registry() {
         OA_EXPECT_NONE(name_problems(list), named.name + " registries");
         OA_EXPECT_NONE(order_problems(list), named.name + " registries");
         OA_CHECK(fixture::named(list, "library.tab.registries") != nullptr);
+        const kit::Control* registries_tab = fixture::named(list, "library.tab.registries");
+        const bool compact_tabs = named.frame.size_class == kit::SizeClass::compact;
+        if (registries_tab != nullptr)
+            OA_CHECK(registries_tab->text.starts_with(compact_tabs ? "Reg (" : "Registries ("));
         OA_CHECK(fixture::named(list, "library.search") == nullptr);
         OA_CHECK(fixture::named(list, "library.registry.fixture-core") != nullptr);
         OA_CHECK(fixture::named(list, "library.registry.fixture-core.remove") == nullptr);
@@ -3641,8 +3656,9 @@ void active_maps_fill_scroll_and_filter() {
     }
 }
 
-/// An expansion a registry offers draws the download arrow beside its pill.
-void expansion_download_arrow_sits_beside_the_pill() {
+/// An expansion a registry offers draws the download arrow inside its pill.
+/// The whole pill is the press.
+void expansion_download_arrow_sits_inside_the_pill() {
     const kit::Frame regular = fixture::frames()[1].frame;
     lib::Inputs inputs = fixture::fixture_inputs();
     lib::DownloadableExpansion units;
@@ -3661,31 +3677,28 @@ void expansion_download_arrow_sits_beside_the_pill() {
     OA_EXPECT_NONE(name_problems(list), "expansion arrow");
     OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), "expansion arrow");
     const kit::Control* pill = fixture::named(list, "library.active.expansion.cavedog-units");
-    const kit::Control* arrow = fixture::named(list, "library.active.expansion.cavedog-units.get");
+    const kit::Control* separate =
+        fixture::named(list, "library.active.expansion.cavedog-units.get");
     const kit::Control* add = fixture::named(list, "library.active.expansion.campaign");
-    OA_CHECK(pill != nullptr && arrow != nullptr && add != nullptr);
+    OA_CHECK(pill != nullptr && separate == nullptr && add != nullptr);
     OA_CHECK(pill != nullptr && pill->text.find("ADD FROM") == std::string::npos);
+    OA_CHECK(pill != nullptr && pill->enabled && pill->focusable);
     OA_CHECK(add != nullptr && add->text.find("ADD FROM") != std::string::npos);
-    OA_CHECK(arrow != nullptr && arrow->text == "GET" && arrow->enabled && arrow->focusable);
-    if (pill != nullptr && arrow != nullptr) {
-        OA_CHECK(arrow->rect.x >= pill->rect.x + pill->rect.width);
-        OA_CHECK(arrow->rect.y == pill->rect.y);
-        OA_CHECK(arrow->rect.width == kit::compact_metrics.state_icon_side);
-    }
-    const kit::Item* chip_item = nullptr;
-    if (arrow != nullptr) {
+    const kit::Item* pill_item = nullptr;
+    if (pill != nullptr) {
         for (const kit::Item& item : list.items) {
-            if (item.control == arrow->id)
-                chip_item = &item;
+            if (item.control == pill->id && item.role == kit::Role::pill)
+                pill_item = &item;
         }
     }
-    OA_CHECK(chip_item != nullptr);
-    if (chip_item != nullptr) {
-        const auto* chip = std::get_if<kit::ChipLook>(&chip_item->look);
-        OA_CHECK(chip != nullptr && chip->icon == kit::StateIcon::download_arrow);
+    OA_CHECK(pill_item != nullptr);
+    if (pill_item != nullptr && pill != nullptr) {
+        const auto* look = std::get_if<kit::PillLook>(&pill_item->look);
+        OA_CHECK(look != nullptr && look->icon == kit::StateIcon::download_arrow);
+        OA_CHECK(pill_item->rect.x == pill->rect.x && pill_item->rect.width == pill->rect.width);
     }
     const lib::ScreenResult result =
-        click(library, state, list, "library.active.expansion.cavedog-units.get");
+        click(library, state, list, "library.active.expansion.cavedog-units");
     OA_CHECK(result.action == lib::Action::get);
     OA_CHECK(result.expansion == "cavedog-units");
     OA_CHECK(result.registry == fixture::core);
@@ -3719,7 +3732,7 @@ int main() {
     compact_expansions_hint_wraps();
     active_maps_fill_scroll_and_filter();
     active_base_game_is_a_tile();
-    expansion_download_arrow_sits_beside_the_pill();
+    expansion_download_arrow_sits_inside_the_pill();
     the_base_chooser_names_its_rows();
     base_badge_is_nearest_and_tabs_are_bracketed();
     unload_mod_asks_switch_off();

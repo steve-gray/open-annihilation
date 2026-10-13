@@ -271,6 +271,9 @@ struct PillLook {
     bool hovered{};                      ///< the pointer is over it, or holds it
     bool focused{};                      ///< the keyboard focus is on it
     bool disabled{};                     ///< it cannot act: muted ground, idle text
+    /// A state icon at the pill's right, inside the capsule, beside the text.
+    /// None draws the text alone. The text stays; the icon does not replace it.
+    std::optional<StateIcon> icon{};
 };
 
 /// A row of a list, in its full or its short form, which its rectangle's

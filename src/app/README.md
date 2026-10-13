@@ -618,9 +618,10 @@ runtime goes).
   `runtime_library_check.cpp`) gives the Library a feed of made-up
   packages and no network, with its data and the player's folder in the
   build tree, at 640x480 and 1920x1080: the button's count of the fixture's
-  four mods with no update (`oa.button` "Library · 4 mods"), the Library
-  opened on Active, its lines read and taking no press, and closed, the dot
-  and `oa.button`'s "Library · 4 mods · 2 updates" with two, the Library on
+  two mods and one map pack (`oa.button` "Library · 3 packages"), and of
+  that map pack alone ("Library · 1 package"), the Library opened on
+  Active, its lines read and taking no press, and closed, the dot and
+  `oa.button`'s "Library · 3 packages · 2 updates" with two, the Library on
   Active and its Updates tab on its two updates,
   GET and CANCEL reaching the feed, OPEN FOLDER and HOMEPAGE through the
   recorded openers, ROLL BACK's question over the Library, PLAY NOW's soft

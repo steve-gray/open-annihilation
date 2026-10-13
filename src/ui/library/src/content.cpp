@@ -937,6 +937,8 @@ void fill_chooser(Library& library, std::string_view marked) {
         const bool demo = game->id == "totala-demo";
         const bool retail = game->id == bundles::default_base_game_id;
         row.letters = demo ? "DEMO" : "TA";
+        if ((retail || demo) && library.inputs.base_game_badge)
+            row.badge = &*library.inputs.base_game_badge;
         if (retail)
             row.name = std::string(shown(text, words::active_game_name));
         else if (demo)

@@ -191,13 +191,14 @@ struct Runtime::EngineSettingsMenuHost {
     static void button_draw(oa::app::ScreenContext* context, void* state);
 
     /// Returns what the main menu's OA button wears: the attention dot while
-    /// updates can be installed, and in the bottom right the number of mods
-    /// the Library's Mods tab lists under All, or a spinner while that
-    /// number is not final. The first call builds the Library's model when
-    /// it has not been built yet, so a frame drawn before the Library's tick
-    /// still shows the count the catalogues already hold. A catalogue being
-    /// fetched over a list that is already in keeps the number; the spinner
-    /// shows only while no list has arrived and a fetch is still running.
+    /// updates can be installed, and in the bottom right how many packages
+    /// the player has added (mods, map packs, language packs and downloaded
+    /// expansions), or a spinner while that number is not final. The first
+    /// call builds the Library's model when it has not been built yet, so a
+    /// frame drawn before the Library's tick still shows the count the
+    /// catalogues already hold. A catalogue being fetched over a list that
+    /// is already in keeps the number; the spinner shows only while no list
+    /// has arrived and a fetch is still running.
     ///
     /// @param runtime the runtime
     /// @return the dot and the badge
