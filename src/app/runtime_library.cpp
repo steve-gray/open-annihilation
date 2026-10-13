@@ -23,6 +23,8 @@
 #include "oa/app/content/service.hpp"
 #include "oa/app/content/settings.hpp"
 #include "oa/app/content/updates.hpp"
+#include "oa/app/content_copy.hpp"
+#include "oa/app/demo_installer.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/mod_summary.hpp"
 #include "oa/app/package_install.hpp"
@@ -35,8 +37,10 @@
 #include "oa/data/pe_icon.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
+#include "oa/data/content_bundles.hpp"
 #include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/data/languages.hpp"
+#include "oa/platform/system.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/data/registry/descriptor.hpp"
 #include "oa/data/registry/trust.hpp"
@@ -57,6 +61,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -1666,6 +1671,123 @@ library::Inputs Runtime::library_inputs() {
     return inputs;
 }
 
+namespace {
+
+/// What asking for the demo's installer did.
+enum class DemoAsk : uint8_t {
+    none,      ///< nothing was named
+    cancelled, ///< the player closed the dialog
+    ready,     ///< a path was named
+};
+
+/// A path the demo's installer was asked for by.
+struct DemoInstallerPick {
+    DemoAsk ask{DemoAsk::none};
+    fs::path path{};
+    std::string error{};
+};
+
+#ifndef OA_NATIVE_FOLDER_DIALOG
+#error "OA_NATIVE_FOLDER_DIALOG (0 or 1) says whether the build offers the system's folder dialog"
+#endif
+
+#if OA_NATIVE_FOLDER_DIALOG
+/// How long a file dialog is polled, in milliseconds.
+constexpr uint32_t kFileDialogPollMs = 15;
+
+/// SDL answers inside the call on macOS and from event pumping elsewhere.
+/// The fields are written before `done` is released and read after it is acquired.
+struct FileWait {
+    std::atomic<bool> done{false};
+    bool failed = false;
+    std::string path{};
+    std::string error{};
+};
+
+void SDLCALL installer_chosen(void* userdata, const char* const* filelist, int) {
+    auto* wait = static_cast<FileWait*>(userdata);
+    if (filelist == nullptr) {
+        wait->failed = true;
+        const char* reason = SDL_GetError();
+        if (reason != nullptr)
+            wait->error = reason;
+    } else if (filelist[0] != nullptr && filelist[0][0] != '\0') {
+        wait->path = filelist[0];
+    }
+    wait->done.store(true, std::memory_order_release);
+}
+
+/// Asks for one installer file with the system's file dialog.
+///
+/// @param window the window the dialog belongs to
+/// @return the file, a cancel, or why the dialog failed
+DemoInstallerPick pick_installer_file(SDL_Window* window) {
+    DemoInstallerPick pick;
+    FileWait wait;
+    const SDL_DialogFileFilter filters[] = {
+        {"Installer", "exe;bin"},
+        {"All files", "*"},
+    };
+    SDL_ShowOpenFileDialog(installer_chosen, &wait, window, filters, 2, nullptr, false);
+    while (!wait.done.load(std::memory_order_acquire)) {
+        SDL_PumpEvents();
+        SDL_Delay(kFileDialogPollMs);
+    }
+    if (wait.failed) {
+        pick.error = wait.error;
+        return pick;
+    }
+    if (wait.path.empty()) {
+        pick.ask = DemoAsk::cancelled;
+        return pick;
+    }
+    pick.ask = DemoAsk::ready;
+    pick.path = path_from_utf8(wait.path);
+    return pick;
+}
+#endif
+
+/// Reports whether this run must not open a file dialog.
+///
+/// @param unattended the command line asked for no questions
+/// @param headless a check is running
+/// @return true when the installer is taken from the environment
+bool installer_from_environment(bool unattended, bool headless) {
+    if (unattended || headless)
+        return true;
+    const char* driver = SDL_GetCurrentVideoDriver();
+    return driver != nullptr && unattended_environment({}, driver);
+}
+
+/// Names the demo's installer: the file dialog when a display can show it,
+/// otherwise `OA_DEMO_INSTALLER`.
+///
+/// @param window the window the dialog belongs to
+/// @param unattended the command line asked for no questions
+/// @param headless a check is running
+/// @return the installer, a cancel, or nothing
+DemoInstallerPick ask_demo_installer(SDL_Window* window, bool unattended, bool headless) {
+    if (!installer_from_environment(unattended, headless)) {
+#if OA_NATIVE_FOLDER_DIALOG
+        const DemoInstallerPick picked = pick_installer_file(window);
+        if (picked.ask == DemoAsk::cancelled || picked.ask == DemoAsk::ready)
+            return picked;
+#else
+        (void)window;
+#endif
+    }
+    DemoInstallerPick pick;
+    if (const auto named = oa::platform::environment_value("OA_DEMO_INSTALLER");
+        named && !named->empty()) {
+        pick.ask = DemoAsk::ready;
+        pick.path = path_from_utf8(*named);
+        return pick;
+    }
+    return pick;
+}
+
+} // namespace
+
 // ---------------------------------------------------------------------------------------------
 // The Library as a screen of the layer
 
@@ -1926,7 +2048,11 @@ struct Runtime::LibraryScreen final : LayerScreen {
     [[nodiscard]] uint64_t revision() const override { return revision_; }
 
     /// Forgets the pictures the Library waits for and any drag or open menu.
+    /// A pending base game or expansion choice is stored now, and the files
+    /// are mounted again on the next start. A match, and a choice the command
+    /// line named, leave the draft where it is.
     void close(bool /*by_key*/) override {
+        apply_pending_content();
         if (!runtime_.library_)
             return;
         LibraryHost& host = *runtime_.library_;
@@ -1937,6 +2063,110 @@ struct Runtime::LibraryScreen final : LayerScreen {
     }
 
   private:
+
+    /// Stores a pending base game or expansion choice and asks for one soft
+    /// restart. A second close finds the draft already applied. A match, and
+    /// `--content`, leave the draft edited and mount nothing.
+    void apply_pending_content() {
+        if (runtime_.library_ == nullptr)
+            return;
+        LibraryHost& host = *runtime_.library_;
+        library::ContentDraft& draft = host.model.content;
+        if (!draft.edited || draft.applied)
+            return;
+        if (runtime_.screen_ == Screen::match || runtime_.match_ != nullptr)
+            return;
+        if (!runtime_.options_.content.empty())
+            return;
+        namespace bundles = oa::data::content_bundles;
+        bundles::ContentChangeResult result;
+        result.applied = true;
+        result.choice.base_game = draft.base_game.empty() ? draft.seed_base : draft.base_game;
+        result.choice.expansions = draft.expansions;
+        const bool command_owns_mod =
+            !runtime_.options_.mod_dir.empty() || runtime_.options_.base_game;
+        if (!command_owns_mod) {
+            if (draft.clear_reason == library::PendingClear::base_game_chosen)
+                result.mod_cleared = bundles::ModClearReason::base_game_chosen;
+            else if (draft.clear_reason == library::PendingClear::required_expansion_off)
+                result.mod_cleared = bundles::ModClearReason::required_expansion_off;
+        }
+        draft.applied = true;
+        draft.edited = false;
+        if (!store_content_change(runtime_.preference_values_, result))
+            return;
+        if (result.mod_cleared != bundles::ModClearReason::none && runtime_.engine_settings_) {
+            runtime_.engine_settings_->current.mod_folder.clear();
+            runtime_.engine_settings_->dropped_mod_folder.clear();
+        }
+        runtime_.preferences_dirty_ = true;
+        if (const auto failure = Runtime::EngineSettingsState::flush(runtime_))
+            Runtime::EngineSettingsState::report_failed_save(runtime_, *failure);
+        runtime_.request_soft_restart();
+    }
+
+    /// Copies the base game `id` from the source the player names, then marks
+    /// it on the pending choice. The files stay as they are until the Library
+    /// closes. A cancel leaves the chooser open.
+    ///
+    /// @param id the base game that is not copied yet
+    void copy_base_source(const std::string& id) {
+        if (id.empty() || runtime_.library_ == nullptr)
+            return;
+        LibraryHost& host = *runtime_.library_;
+        if (!host.model.chooser.open)
+            return;
+        CopyRequest request;
+        request.user_folder = runtime_.user_folder_;
+        request.bundles = oa::data::content_bundles::bundles();
+        request.news = &std::cerr;
+        CopyResult copied;
+        if (id == "totala-demo") {
+            const DemoInstallerPick pick = ask_demo_installer(
+                runtime_.sdl_.window, runtime_.options_.unattended, runtime_.options_.headless_check
+            );
+            if (pick.ask == DemoAsk::cancelled)
+                return;
+            if (pick.ask != DemoAsk::ready) {
+                const std::string_view problem = pick.error.empty()
+                                                     ? library::words::base_copy_failed
+                                                     : std::string_view{pick.error};
+                library::note_base_copy_problem(host.model, problem);
+                return;
+            }
+            DemoInstallerSource source(pick.path);
+            copied = copy_content(source, request);
+        } else {
+            fs::path chosen;
+            std::string dialog_error;
+            const FolderPick picked = pick_game_folder_with_dialog({}, &chosen, &dialog_error);
+            if (picked == FolderPick::cancelled)
+                return;
+            if (picked != FolderPick::chosen) {
+                library::note_base_copy_problem(
+                    host.model,
+                    dialog_error.empty() ? library::words::base_copy_failed
+                                         : std::string_view{dialog_error}
+                );
+                return;
+            }
+            FolderContentSource source(std::move(chosen), request.bundles);
+            copied = copy_content(source, request);
+        }
+        if (copied.status != CopyStatus::finished) {
+            library::note_base_copy_problem(
+                host.model,
+                copied.error.empty() ? library::words::base_copy_failed
+                                     : std::string_view{copied.error}
+            );
+            return;
+        }
+        host.rebuild(runtime_);
+        library::refresh_base_chooser(host.model);
+        const library::BaseUse used = library::use_marked_base_game(host.model);
+        if (used.kind == library::BaseUseKind::needs_source)
+            library::note_base_copy_problem(host.model, library::words::base_copy_failed);
+    }
 
     /// Lays the Library out from the host's model and state, and asks for the
     /// pictures of the rows it shows.
@@ -2154,14 +2384,26 @@ struct Runtime::LibraryScreen final : LayerScreen {
             if (entry != nullptr)
                 use_language_now(*entry);
             return false;
+        case library::Action::change_base_game: {
+            const library::BaseOpen opened = library::open_base_chooser(host.model);
+            if (opened.opened) {
+                host.state.interaction.focused = opened.focus;
+                host.state.interaction.focus_shown = opened.focus != kit::no_control;
+                ++host.model_revision;
+            }
+            return false;
+        }
+        case library::Action::copy_base_game:
+            copy_base_source(result.base_game);
+            ++host.model_revision;
+            return false;
         case library::Action::turn_on:
             if (entry != nullptr)
                 library::turn_on_required(host.model, *entry);
             ++host.model_revision;
             return false;
-        case library::Action::change_base_game:
         case library::Action::add_expansion:
-            // G10 opens the chooser. G22 opens the locator. This press does neither.
+            // G22 opens the locator. This press does not.
             return false;
         case library::Action::ask_expansion_off: {
             oa::ui::kit::Question asked = library::expansion_off_question(host.model);

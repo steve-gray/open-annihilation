@@ -103,8 +103,9 @@ under them, so the maps pane keeps a row.
   host knows is named on the version line ("3.1c · from GOG for macOS").
   A file check the host knows is the next line: "All files match", or
   "1 file differs", or "2 files differ". **CHANGE…** sits at the bottom
-  right. It is the control that will open the chooser; this tab does not
-  open it.
+  right. It opens the base game chooser over the Library. **CHANGE…** is
+  greyed during a game, while the command line named the choice for this
+  run, and while the command line chose the run's mod.
 - **EXPANSIONS**: one pill for each expansion of that base game. A pill
   that is on is filled. One that is copied and off is plain, in the
   expansion's name. One that is not copied reads "Campaign · ADD FROM…",
@@ -125,7 +126,16 @@ under them, so the maps pane keeps a row.
   says a mod was cleared for the same reason, and this tab has not edited
   the choice, the hint is "The mod was unloaded because an expansion it
   needs is off. The game plays with No Mod." The pills are greyed during
-  a game and while the command line named the choice for this run.
+  a game and while the command line named the choice for this run. When
+  the Library closes, a change of base game or of the expansions that are
+  on is mounted the way a mod switch is: the window stays and the intro
+  is skipped. The files are not mounted again while the Library stays
+  open, nor during a game. Choosing another base game turns on every
+  expansion of it that is copied and unloads the mod you are playing.
+  The chooser says so, and the change applies when the Library closes.
+  A base game that is not copied asks for its source and copies it before
+  that choice is kept. The demo asks for its installer. **USE THIS GAME**
+  keeps the marked game. **CANCEL** leaves the choice as it was.
 - **MOD**: a tile for the mod you are playing. Its badge is large, and the
   tile names the mod, its version and revision ("4.8 (rev 3)") and who made
   it ("by the Ridge team"). **Playing** is a rounded pill at the top right,

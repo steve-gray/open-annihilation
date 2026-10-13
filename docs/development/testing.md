@@ -76,6 +76,15 @@ at the size that source produces rather than the empty well shown while a
 picture is still missing. Its catalogue is served by the test fixture, and
 its Maps folder, data folder and preferences stay in the build tree.
 
+`native-library-content` (`--check-library-content`) turns Core Contingency
+off, closes the Library, and requires its maps out of the skirmish list.
+It then chooses the Total Annihilation demo and, on the next close,
+requires that demo mounted. `OA_DEMO_INSTALLER` names the demo's installer
+for that half. Without it the check prints that the demo was not checked
+and still passes the Core Contingency half; it does not skip with code 77.
+`--game-dir` is only the source the copy is made from. The check plays the
+player's copy, and its preferences and player folder stay in the build tree.
+
 `native-map-pack-lists` (`--check-map-pack-lists`) installs one map pack
 from the Library during the run and requires its fitting map in the
 skirmish list and the battle room's map list the next time each is shown,

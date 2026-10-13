@@ -2618,6 +2618,105 @@ void test_expansion_pills() {
     OA_CHECK(face.pills.empty());
 }
 
+/// The base game chooser marks a game and keeps the choice on the draft.
+void test_base_chooser() {
+    lib::Inputs inputs;
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"totala", "campaign", "core-contingency", "music"};
+    inputs.content.enabled = {"campaign"};
+    lib::Installed ridge;
+    ridge.kind = Kind::mod;
+    ridge.key = "ridge";
+    ridge.name = "Ridge";
+    ridge.playing = true;
+    inputs.installed.push_back(ridge);
+    lib::Library library;
+    lib::refresh(library, inputs);
+
+    library.inputs.in_match = true;
+    OA_CHECK(!lib::open_base_chooser(library).opened);
+    library.inputs.in_match = false;
+    library.inputs.content.locked = true;
+    OA_CHECK(!lib::open_base_chooser(library).opened);
+    library.inputs.content.locked = false;
+    library.inputs.mod_from_command_line = true;
+    OA_CHECK(!lib::open_base_chooser(library).opened);
+    library.inputs.mod_from_command_line = false;
+
+    const lib::BaseOpen opened = lib::open_base_chooser(library);
+    OA_CHECK(opened.opened && library.chooser.open);
+    OA_CHECK(library.chooser.marked == "totala");
+    bool saw_demo = false;
+    for (const lib::BaseGameRow& row : library.chooser.rows) {
+        if (row.id == "totala")
+            OA_CHECK(row.state == lib::BaseGameState::in_use && row.marked);
+        if (row.id == "totala-demo") {
+            saw_demo = true;
+            OA_CHECK(row.state == lib::BaseGameState::not_added);
+            OA_CHECK(row.name == "Total Annihilation demo");
+            OA_CHECK(row.version == "1997");
+            OA_CHECK(row.letters == "DEMO");
+            OA_CHECK(row.expansions.empty());
+        }
+    }
+    OA_CHECK(saw_demo);
+
+    lib::mark_base_game(library, "totala-demo");
+    OA_CHECK(library.chooser.marked == "totala-demo");
+    OA_CHECK(library.chooser.note.find("Ridge") != std::string::npos);
+    OA_CHECK(library.chooser.note.find("Library closes") != std::string::npos);
+    const lib::BaseUse needs = lib::use_marked_base_game(library);
+    OA_CHECK(needs.kind == lib::BaseUseKind::needs_source);
+    OA_CHECK(needs.id == "totala-demo");
+    OA_CHECK(!library.content.edited && library.chooser.open);
+
+    library.inputs.in_match = true;
+    const lib::BaseUse blocked = lib::use_marked_base_game(library);
+    OA_CHECK(blocked.kind == lib::BaseUseKind::refused);
+    library.inputs.in_match = false;
+
+    lib::mark_base_game(library, "totala");
+    OA_CHECK(library.chooser.note.empty());
+    const lib::BaseUse same = lib::use_marked_base_game(library);
+    OA_CHECK(same.kind == lib::BaseUseKind::none);
+    OA_CHECK(!library.chooser.open && !library.content.edited);
+
+    inputs.content.copied.push_back("totala-demo");
+    lib::refresh(library, inputs);
+    OA_CHECK(lib::open_base_chooser(library).opened);
+    lib::mark_base_game(library, "totala");
+    lib::close_base_chooser(library);
+    OA_CHECK(!library.chooser.open && !library.content.pending_base);
+
+    OA_CHECK(lib::open_base_chooser(library).opened);
+    lib::mark_base_game(library, "totala-demo");
+    const lib::BaseUse applied = lib::use_marked_base_game(library);
+    OA_CHECK(applied.kind == lib::BaseUseKind::applied);
+    OA_CHECK(!library.chooser.open);
+    OA_CHECK(library.content.pending_base);
+    OA_CHECK(library.content.base_game == "totala-demo");
+    OA_CHECK(library.content.expansions.empty());
+    OA_CHECK(library.content.unload_mod);
+    OA_CHECK(library.content.clear_reason == lib::PendingClear::base_game_chosen);
+    OA_CHECK_TEXT(
+        lib::active_content(library).hint, "This base game is used when the Library closes."
+    );
+
+    lib::Library asked;
+    lib::Inputs pill_inputs;
+    pill_inputs.content.base_id = "totala";
+    pill_inputs.content.copied = {"campaign"};
+    pill_inputs.content.enabled = {"campaign"};
+    pill_inputs.content.mod_required = {"campaign"};
+    pill_inputs.installed.push_back(ridge);
+    lib::refresh(asked, std::move(pill_inputs));
+    OA_CHECK(lib::press_expansion(asked, "campaign").kind == lib::ContentPressKind::ask);
+    lib::accept_expansion_off(asked);
+    OA_CHECK(asked.content.unload_mod);
+    OA_CHECK(!asked.content.pending_base);
+    OA_CHECK(asked.content.clear_reason == lib::PendingClear::required_expansion_off);
+}
+
 /// Returns a button of an action, or null.
 ///
 /// @param buttons the buttons
@@ -2980,6 +3079,70 @@ void test_package_needs() {
     }
 }
 
+/// A required expansion unloads the mod, then another base game is chosen.
+/// The draft holds one choice, so the close stores it once.
+void test_base_game_after_required_off() {
+    lib::Inputs inputs;
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"totala", "totala-demo", "campaign"};
+    inputs.content.enabled = {"campaign"};
+    inputs.content.mod_required = {"campaign"};
+    lib::Installed ridge;
+    ridge.kind = Kind::mod;
+    ridge.key = "ridge";
+    ridge.name = "Ridge";
+    ridge.playing = true;
+    inputs.installed.push_back(ridge);
+    lib::Library library;
+    lib::refresh(library, inputs);
+
+    OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::ask);
+    lib::accept_expansion_off(library);
+    OA_CHECK(library.content.unload_mod);
+    OA_CHECK(!library.content.pending_base);
+    OA_CHECK(!library.content.applied);
+    OA_CHECK(library.content.clear_reason == lib::PendingClear::required_expansion_off);
+    OA_CHECK(library.content.unloaded_mod == "Ridge");
+    OA_CHECK(library.content.unloaded_for == "campaign");
+    OA_CHECK_TEXT(
+        lib::active_content(library).hint,
+        "Ridge was unloaded because Campaign is off. The game plays with No Mod."
+    );
+    OA_CHECK_TEXT(lib::active_setup(library).mod_line, "No Mod");
+
+    OA_CHECK(lib::open_base_chooser(library).opened);
+    lib::mark_base_game(library, "totala-demo");
+    OA_CHECK(library.chooser.note.find("Ridge") == std::string::npos);
+    OA_CHECK(library.chooser.note.find("Library closes") != std::string::npos);
+    const lib::BaseUse used = lib::use_marked_base_game(library);
+    OA_CHECK(used.kind == lib::BaseUseKind::applied);
+    OA_CHECK(!library.chooser.open);
+    OA_CHECK(library.content.base_game == "totala-demo");
+    OA_CHECK(library.content.expansions.empty());
+    OA_CHECK(library.content.pending_base);
+    OA_CHECK(library.content.unload_mod);
+    OA_CHECK(library.content.clear_reason == lib::PendingClear::required_expansion_off);
+    OA_CHECK(library.content.unloaded_mod == "Ridge");
+    OA_CHECK(library.content.unloaded_for == "campaign");
+    OA_CHECK(library.content.edited);
+    OA_CHECK(!library.content.applied);
+    OA_CHECK_TEXT(
+        lib::active_content(library).hint, "This base game is used when the Library closes."
+    );
+    OA_CHECK_TEXT(lib::active_setup(library).mod_line, "No Mod");
+
+    // The host applies this one draft on close, then a second close finds it applied.
+    const bool first_close = library.content.edited && !library.content.applied;
+    OA_CHECK(first_close);
+    library.content.applied = true;
+    library.content.edited = false;
+    const bool second_close = library.content.edited && !library.content.applied;
+    OA_CHECK(!second_close);
+    OA_CHECK(library.content.clear_reason == lib::PendingClear::required_expansion_off);
+    OA_CHECK(library.content.base_game == "totala-demo");
+    OA_CHECK(library.content.unload_mod);
+}
+
 void test_lookup() {
     lib::TextHooks hooks;
     hooks.shown = reversed_words;
@@ -3016,6 +3179,8 @@ int main() {
     test_switch_off();
     test_base_game();
     test_expansion_pills();
+    test_base_chooser();
+    test_base_game_after_required_off();
     test_check_now();
     test_built_in_languages();
     test_tab_counts();

@@ -4798,6 +4798,13 @@ class Runtime final : public menu::Host,
     /// std::runtime_error naming the first step that failed.
     void check_library_map_previews();
 
+    /// Runs --check-library-content. The first run turns Core Contingency off
+    /// and closes the Library. The next requires its maps out of the skirmish
+    /// list, chooses the demo when its installer is named, and closes. The
+    /// last requires the demo mounted. Throws std::runtime_error naming the
+    /// first step that failed. With no installer, the demo half is not run.
+    void check_library_content();
+
     // The map browser on the OA layer (runtime_map_browser.cpp): MORE MAPS…
     // over the skirmish map list and over the host's map list in the battle
     // room opens it.

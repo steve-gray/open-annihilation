@@ -364,6 +364,43 @@ inline constexpr std::string_view active_no_expansions = "This game has no expan
 inline constexpr std::string_view active_game_name = "Total Annihilation";
 inline constexpr std::string_view active_version = "3.1c";
 inline constexpr std::string_view active_version_demo = "Demo";
+
+// The base game chooser, over the Library. CANCEL and "In use" are the
+// words the rest of the Library already uses.
+/// The chooser's title.
+inline constexpr std::string_view base_title = "Base game";
+/// The line under the title.
+inline constexpr std::string_view base_lead =
+    "The game OA plays. Mods, maps and languages say which base games they work with.";
+/// A base game that is not copied.
+inline constexpr std::string_view base_not_added = "Not added";
+/// A copied base game that is not the one in use.
+inline constexpr std::string_view base_copied = "Copied";
+/// The demo, as the chooser names it.
+inline constexpr std::string_view base_demo_name = "Total Annihilation demo";
+/// The demo's version on the chooser.
+inline constexpr std::string_view base_demo_version = "1997";
+/// The demo while it is not copied.
+inline constexpr std::string_view base_demo_detail =
+    "Choosing it asks for the demo installer, then copies it. It takes no expansions.";
+/// A base game that is not the demo, while it is not copied.
+inline constexpr std::string_view base_ask_game = "Choosing it asks for the game, then copies it.";
+/// Where a copied base game came from.
+inline constexpr std::string_view base_copied_from = "Copied from {source}";
+/// Shown when another base game is marked and a mod is being played.
+inline constexpr std::string_view base_note_mod =
+    "Choosing another base game turns on all of its expansions and unloads the mod you are playing "
+    "({mod}). The change applies when the Library closes.";
+/// Shown when another base game is marked and no mod is being played.
+inline constexpr std::string_view base_note_plain =
+    "Choosing another base game turns on all of its expansions. The change applies when the "
+    "Library closes.";
+/// The chooser's accent button.
+inline constexpr std::string_view base_use = "USE THIS GAME";
+/// The Active tab, after another base game was chosen.
+inline constexpr std::string_view base_applies = "This base game is used when the Library closes.";
+/// A copy the host could not finish.
+inline constexpr std::string_view base_copy_failed = "The game could not be copied.";
 /// Beside MAPS while the maps search holds text: how many tiles show, of every installed map.
 inline constexpr std::string_view active_maps_count = "{shown} of {all}";
 /// The mod being played, or the language pack in use: its name, then its version.
