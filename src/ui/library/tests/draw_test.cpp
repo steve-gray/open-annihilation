@@ -20,7 +20,7 @@
 // the tiles, the row and the details show those pictures and not a file
 // from the game. Given --frames DIR, it writes
 // library-<class>.png, library-details-compact.png, library-active-<class>.png,
-// library-active-many-regular.png,
+// library-active-compact-maps.png, library-active-many-regular.png,
 // library-updates-<class>.png, library-registries-<class>.png,
 // library-languages-compact.png, library-languages-zh-compact.png,
 // library-maps-one-large.png and library-maps-several-large.png there.
@@ -137,6 +137,9 @@ struct Scene {
     bool many{};
     /// On Languages, an installed pack of this key is the language in use.
     std::string in_use_language{};
+    /// How far the Active page is scrolled before it is drawn. The layout
+    /// clamps this to the page's limit, so a large value shows the maps.
+    int32_t maps_scroll{};
 };
 
 /// A drawing of a scene: the picture with its margin, and its scale.
@@ -522,6 +525,7 @@ Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
         lib::select(library, {scene.select_registry, kind, scene.select_key});
     }
     lib::ScreenState state;
+    state.maps_scroll = scene.maps_scroll;
     if (scene.details_page) {
         lib::open_details(library);
         state.details_page = true;
@@ -699,6 +703,16 @@ int main(int argc, char** argv) {
         {"large", window_of(2560, 1440, 200), false},
         {"details-compact", window_of(640, 480, 100), true},
         {"active-compact", window_of(640, 480, 100), false, lib::Tab::active, true},
+        {"active-compact-maps",
+         window_of(640, 480, 100),
+         false,
+         lib::Tab::active,
+         true,
+         {},
+         {},
+         false,
+         {},
+         100000},
         {"active-regular", window_of(1920, 1080, 200), false, lib::Tab::active, true},
         {"active-large", window_of(2560, 1440, 200), false, lib::Tab::active, true},
         {"active-many-regular",

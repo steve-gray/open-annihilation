@@ -862,19 +862,13 @@ void Runtime::check_library() {
         {
             const std::optional<AutomationControl> mod = named("oa.library.active.mod");
             const std::optional<AutomationControl> language = named("oa.library.active.language");
-            const std::optional<AutomationControl> first_map = named("oa.library.active.map.1");
-            const std::optional<AutomationControl> second_map = named("oa.library.active.map.2");
             // The mod sits on the MOD tile and the language on the LANGUAGE
-            // tile. Fixture Isles' maps are in the MAPS pane. Compact may
-            // show only the first until the pane scrolls; the second, when
-            // it is already in view, is Long Strait.
+            // tile. On a small window the tiles can leave the maps below the
+            // page, so the press is taken while those tiles still show.
             require(
                 mod.has_value() && mod->text == "Basalt 2.1" && language.has_value() &&
-                    language->text == "Deutsch 1.2" && first_map.has_value() &&
-                    first_map->text == "Isle Hop · 4 players · 16x16" &&
-                    (!second_map.has_value() ||
-                     second_map->text == "Long Strait · 2 players · 20x12"),
-                "the Active tab does not read Basalt, Deutsch 1.2 and Fixture Isles' maps" + on
+                    language->text == "Deutsch 1.2",
+                "the Active tab does not read Basalt and Deutsch 1.2" + on
             );
             require(
                 !named("oa.library.search").has_value() &&
@@ -888,6 +882,21 @@ void Runtime::check_library() {
                 top_is(library_screen_name) && host.model.tab == library::Tab::active &&
                     fixture.enqueued.size() == asked,
                 "a press on the Active tab's line did something" + on
+            );
+            // Page Down until Fixture Isles' first map is in view. On a large
+            // window it already is. The second map is read only when it is.
+            for (int step = 0; step < 8 && !named("oa.library.active.map.1"); ++step) {
+                tap(SDLK_PAGEDOWN);
+                run_frame(running);
+                require(running, "a frame ended the run");
+            }
+            const std::optional<AutomationControl> first_map = named("oa.library.active.map.1");
+            const std::optional<AutomationControl> second_map = named("oa.library.active.map.2");
+            require(
+                first_map.has_value() && first_map->text == "Isle Hop · 4 players · 16x16" &&
+                    (!second_map.has_value() ||
+                     second_map->text == "Long Strait · 2 players · 20x12"),
+                "the Active tab does not read Fixture Isles' maps" + on
             );
         }
         snapshot("active-" + size);

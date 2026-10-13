@@ -295,16 +295,22 @@ app removes the folder (`Runtime::library_uninstall`,
     fitted in its square, centred, and the letterbox is the list's well
     colour. Badge, title and lines start
     at the top of the tile, with the same padding above them and below the
-    last line or the button. Compact stacks the mod and the language and
-    lists the maps on one line each; Regular and Large put the mod and the
-    language side by side, the titles on one line and the tiles the same
-    height; Large puts the maps in two columns of equal height when more
-    than one is installed. The mod label stops above UNLOAD MOD, the
+    last line or the button. The four tiles stand two by two at every size.
+    Compact lists the maps on one line each; Regular and Large put the
+    titles on one line and the tiles the same height; Large puts the maps
+    in two columns of equal height when more than one is installed. The mod label stops above UNLOAD MOD, the
     language label covers its tile, and each map's label covers its title
     line, or the players-and-size line when the title is the link, and on
     a small window the part of the line after the title when that title is
-    the link, so it does not meet the link. The maps pane scrolls on its
-    own when the maps are taller than the room under the heading. The labels take
+    the link, so it does not meet the link. On Regular and Large the maps
+    pane scrolls on its own when the maps are taller than the room under
+    the heading, and the wheel over a tile above the maps does not scroll
+    them. On Compact, when the tiles leave the maps fewer than four rows,
+    the page scrolls as one, the tiles then the maps, by the wheel, a
+    finger, the scroll bar, the page keys, Home, End and the right stick.
+    Once the maps are in view, four rows fit. Focusing a map link, or the
+    maps search, scrolls that control into view. The expansions hint wraps
+    onto as many lines as it needs. The labels take
     no press. UNLOAD MOD does, while it is enabled, and so does a map's
     link while its line shows; Tab and the arrows reach both. A pack of one map
     wears that map's minimap on every row and in the details. A pack of
@@ -670,17 +676,21 @@ asks, the wheel and a finger's drag, typing and Backspace, the
 filter drop-down with its counts, each tab keeping its filter, New's
 pill, and a press outside the drop-down, the tag pills, MORE ▾, and the
 Active tab with forty more maps: the four tiles take no press on their
-labels and stay put, CHANGE… and the expansion pills take a press,
+labels, and on Compact the page scrolls as one by the wheel, a finger, its
+scroll bar, the page keys, Home, End and the right stick until four map
+rows are in view, and focusing a partly shown map link scrolls it wholly
+into view. On Regular the maps pane scrolls on its own and the tiles stay
+put. CHANGE… and the expansion pills take a press,
 UNLOAD MOD asking what SWITCH OFF asks and greyed during a
-game, the maps pane scrolling by the wheel, a finger, its scroll bar, the
-page keys, Home, End and the right stick, and the maps search filtering
+game, and the maps search filtering
 by map name and by pack name, counting the tiles that match and saying
 when nothing matches.
 
 `ui-library-draw-data` lays out and draws, in the installed game's fonts
 and the modern fonts beside the test, Compact in the 640x480 window,
 Regular in 1920x1080 and Large in 2560x1440 at 2x, Compact's details
-page, the Active tab at Compact, Regular and Large and with many maps at
+page, the Active tab at Compact, Regular and Large, Compact scrolled to
+its maps, and with many maps at
 Regular, the Updates tab at Compact and Large, the Registries tab at
 Compact, Regular and Large,
 Languages at Compact, and the Maps tab at Large for one map and for
@@ -705,7 +715,7 @@ Built in. `library-languages-zh-compact.png` is the same window with
 简体中文 installed and in use, on its details page.
 `oa-ui-library-draw-test --data --frames DIR` also writes
 `library-compact.png`, `library-regular.png`, `library-large.png`,
-`library-details-compact.png`, `library-active-compact.png`,
+`library-details-compact.png`, `library-active-compact.png`, `library-active-compact-maps.png`,
 `library-active-regular.png`, `library-active-large.png`,
 `library-active-many-regular.png`,
 `library-updates-compact.png`, `library-updates-large.png`,

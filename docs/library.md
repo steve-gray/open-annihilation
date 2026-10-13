@@ -167,22 +167,34 @@ a title line and the same height, and so do maps in one row. Extra room
 stays under the shorter tile's lines. A minimap keeps its shape: it is
 centred in its square, and the rest of the square is the list's well colour.
 
-The four tiles stand two by two at every size. On a small window the maps
-are one line each, several of them in the pane. On the largest the maps
-stand in two columns when you have more than one. The tab has no catalogue
-search and no filters. The base, expansions, mod and language labels and
-each map's title line take no press, except the title of a map whose pack
-holds only that map: that title is the link to the pack. **CHANGE…**,
-each expansion pill, **UNLOAD MOD**, each map's link to its pack while
-that link shows, and the maps search do take a press. Tab and the arrows
-reach them. The four tiles stay where they are. The maps pane runs from
-under the **MAPS** heading to the bottom of the window, and when the maps
-are taller than that pane they scroll inside it with the mouse wheel, a
-finger, the scroll bar, Page Up and Page Down, Home and End, and a
-controller's right stick. The wheel over a tile above the maps does not
-scroll them. The other tabs are where packages are got, updated and played.
+The four tiles stand two by two at every size. On a small window each map
+is one line. On the largest the maps stand in two columns when you have
+more than one. The tab has no catalogue search and no filters. The base,
+expansions, mod and language labels and each map's title line take no
+press, except the title of a map whose pack holds only that map: that
+title is the link to the pack. **CHANGE…**, each expansion pill, **UNLOAD
+MOD**, each map's link to its pack while that link shows, and the maps
+search do take a press. Tab and the arrows reach them. The expansions
+hint wraps onto as many lines as it needs.
 
-![The Active tab at Compact: base game and language on the first row, expansions and No Mod on the second, then maps on one line each. Battle Tactics is off until the Library closes. Atoll's title is the link and has no From line; the others keep From at the right of the line.](images/library/library-active-compact.png)
+On a regular or large window the four tiles stay where they are. The maps
+pane runs from under the **MAPS** heading to the bottom of the window,
+and when the maps are taller than that pane they scroll inside it with
+the mouse wheel, a finger, the scroll bar, Page Up and Page Down, Home
+and End, and a controller's right stick. The wheel over a tile above the
+maps does not scroll them.
+
+On a small window, when those tiles leave the maps fewer than four rows,
+the page scrolls as one: the tiles, then **MAPS**. The same wheel, finger,
+scroll bar, page keys, Home, End and right stick move it, and the scroll
+bar is the one the other pages use. Once the maps are scrolled into view,
+at least four rows fit. Moving the focus onto a map link, or onto the
+maps search, scrolls that control into view. No two texts are drawn over
+each other. The other tabs are where packages are got, updated and played.
+
+![The Active tab at Compact: base game and language on the first row, expansions and No Mod on the second, then the top of the page. Battle Tactics is off until the Library closes, and that hint wraps.](images/library/library-active-compact.png)
+
+![The same Compact page scrolled to MAPS. Four rows fit under the heading, and each map line is whole. Atoll's title is the link and has no From line; the others keep From at the right of the line.](images/library/library-active-compact-maps.png)
 
 ![The Active tab at Regular: the same four tiles, two by two, and under them each installed map with its minimap and a cut description. Atoll, alone in its pack, has no From line; the others keep one.](images/library/library-active-regular.png)
 
