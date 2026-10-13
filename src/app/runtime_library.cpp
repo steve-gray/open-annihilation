@@ -53,6 +53,7 @@
 #include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
+#include "oa/ui/library/game_icon.hpp"
 #include "oa/ui/library/library.hpp"
 #include "oa/ui/library/mod_questions.hpp"
 #include "oa/ui/library/screen.hpp"
@@ -262,6 +263,8 @@ std::string ascii_lowered(std::string_view text) {
 constexpr std::string_view program_extension = ".exe";
 /// The description the game's own program gives of itself.
 constexpr std::string_view game_description = "Total Annihilation";
+/// The description a demo's program may give of itself.
+constexpr std::string_view demo_description = "Total Annihilation Demo";
 /// The most program files in the game folder that are looked at.
 constexpr std::size_t most_program_files = 32;
 
@@ -307,17 +310,34 @@ std::optional<library::Badge> icon_of_program(std::span<const uint8_t> bytes) {
     return library::Badge{icon->rgba, icon->width, icon->height};
 }
 
+/// Returns the icon of the only program in `files` whose description is
+/// exactly `description`.
+///
+/// @param files the programs
+/// @param description the description
+/// @return the icon; nothing when none match, more than one matches, or the icon cannot be read
+std::optional<library::Badge>
+icon_described(std::span<const std::span<const uint8_t>> files, std::string_view description) {
+    const std::optional<std::size_t> program =
+        oa::data::pe_icon::only_described(files, description);
+    if (!program)
+        return std::nullopt;
+    return icon_of_program(files[*program]);
+}
+
 /// Returns the base game's icon from the game folder in use.
 ///
 /// The program is the one regular file directly in the folder, among at most
 /// 32 whose extension is a program's, whose FileDescription is exactly
-/// "Total Annihilation". A file longer than the reader accepts is skipped.
-/// None, or more than one, leaves the letters. The folder is read once. A
-/// folder with no icon is remembered too, and one line is logged the time it
+/// "Total Annihilation", or, failing that, "Total Annihilation Demo". A file
+/// longer than the reader accepts is skipped. None, or more than one of a
+/// description, uses the icon the Library keeps, which Total Annihilation
+/// and the demo share. The folder is read once. A folder whose program icon
+/// could not be read is remembered too, and one line is logged the time it
 /// is first found to have none. The icon stays in memory.
 ///
 /// @param folder the game folder
-/// @return the icon; nothing when it cannot be read, and the badge then shows its letters
+/// @return the icon. The letters show only when this picture cannot be drawn
 std::optional<library::Badge> base_game_icon(const fs::path& folder) {
     std::error_code error;
     const fs::path absolute = fs::absolute(folder, error);
@@ -351,14 +371,16 @@ std::optional<library::Badge> base_game_icon(const fs::path& folder) {
     views.reserve(files.size());
     for (const std::vector<uint8_t>& file : files)
         views.emplace_back(file);
-    std::optional<library::Badge> badge;
-    if (const std::optional<std::size_t> program =
-            oa::data::pe_icon::only_described(views, game_description))
-        badge = icon_of_program(views[*program]);
+    std::optional<library::Badge> badge = icon_described(views, game_description);
+    if (!badge)
+        badge = icon_described(views, demo_description);
+    const bool from_program = badge.has_value();
+    if (!badge)
+        badge = library::bundled_game_icon();
     held.key = key;
-    held.badge = badge;
+    held.badge = std::move(badge);
     held.ready = true;
-    if (!held.badge)
+    if (!from_program)
         std::cerr << "open-annihilation: library: the base game's icon could not be read\n";
     return held.badge;
 }

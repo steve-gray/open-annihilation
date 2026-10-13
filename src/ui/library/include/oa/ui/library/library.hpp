@@ -334,7 +334,8 @@ struct InstalledMaps {
 /// An expansion a registry offers for download.
 ///
 /// The Library does not list it as a package row. The Active tab draws a
-/// download arrow beside that expansion's pill.
+/// download arrow at the right of that expansion's pill. The whole pill is
+/// the press.
 struct DownloadableExpansion {
     std::string id{};              ///< the expansion's id
     std::string registry{};        ///< the registry that offers it
@@ -383,9 +384,11 @@ struct Inputs {
     /// The Registries tab shows it in amber; empty for none.
     std::string registries_notice{};
     /// The base game entry's badge: Total Annihilation's icon from the game
-    /// folder in use. Empty shows the entry's letters. The entry's `badge`
-    /// points here until the next refresh. On the Active tab the same icon
-    /// is the base game tile's, not the No Mod tile's.
+    /// folder in use, or the icon the Library keeps when that program cannot
+    /// be read. Empty shows the entry's letters. The entry's `badge` points
+    /// here until the next refresh. On the Active tab the same icon is the
+    /// base game tile's, for Total Annihilation and the demo, not the No Mod
+    /// tile's. The chooser's rows for those two games point here too.
     std::optional<Badge> base_game_badge{};
     /// The base game and expansions the Active tab shows. The host fills
     /// this from the stored choice. A pill does not write it back.
@@ -640,8 +643,11 @@ enum class BaseGameState : uint8_t {
 /// One base game in the chooser.
 struct BaseGameRow {
     std::string id{};
-    /// The letters on the badge ("TA", "DEMO").
+    /// The letters on the badge ("TA", "DEMO") when `badge` is null.
     std::string letters{};
+    /// The game's icon. Points into the inputs until the next refresh.
+    /// Null draws `letters`.
+    const Badge* badge{};
     std::string name{};
     std::string version{};
     BaseGameState state{BaseGameState::not_added};
@@ -883,6 +889,20 @@ void close_details(Library& library);
 /// @return how many
 [[nodiscard]] std::size_t tab_count(const Library& library, Tab tab);
 
+/// Counts the packages the player has added.
+///
+/// Installed mods, map packs and language packs, each once. The base game
+/// and the languages built into the game are left out. A map pack the Active
+/// tab lists and that is not already one of those installed packages counts
+/// too, once for the pack. A copied expansion counts. A copied base game
+/// does not, and neither does a mod only the catalogue lists, a mod played
+/// from a folder outside the player's Mods folder, or a language the game
+/// is showing from its own words.
+///
+/// @param inputs the Library's inputs
+/// @return how many
+[[nodiscard]] std::size_t added_package_count(const Inputs& inputs);
+
 /// Names a filter with its count, as the filter column shows it.
 ///
 /// @param library the Library
@@ -992,7 +1012,7 @@ enum class ExpansionFace : uint8_t {
     add, ///< not copied, and no registry offers it: ADD FROM…
 };
 
-/// The download arrow beside an expansion pill.
+/// The download arrow drawn inside an expansion pill.
 enum class ExpansionArrow : uint8_t {
     get,    ///< not copied, and not in the queue
     cancel, ///< the download is in the queue
@@ -1009,7 +1029,7 @@ struct ExpansionPill {
     bool enabled{true};
     /// The registry the download arrow uses. Empty when no registry offers it.
     std::string download_registry{};
-    /// GET, CANCEL or RETRY beside the pill. Unset when the pill has no arrow.
+    /// GET, CANCEL or RETRY, drawn inside the pill. Unset when the pill has no arrow.
     std::optional<ExpansionArrow> arrow{};
     /// The arrow takes a press. Off while that registry's downloads are off,
     /// during a match, and while `--content` locked the run. CANCEL stays on.
@@ -1063,7 +1083,7 @@ enum class ContentPressKind : uint8_t {
     retry_download,  ///< the download failed and can be tried again
 };
 
-/// The result of pressing an expansion pill or its download arrow.
+/// The result of pressing an expansion pill. The download arrow is part of it.
 struct ContentPress {
     ContentPressKind kind{ContentPressKind::none};
     /// The expansion, when `kind` is `ask`, `add`, or a download.
@@ -1072,7 +1092,7 @@ struct ContentPress {
     std::string registry{};
 };
 
-/// Presses one expansion pill, or the download arrow beside it.
+/// Presses one expansion pill. The download arrow sits inside that pill.
 ///
 /// A copied expansion is turned on or off by turn_content_expansion, and the
 /// result is kept on the pending draft. It is not written to the preferences.

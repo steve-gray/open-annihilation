@@ -1398,8 +1398,8 @@ void lay_buttons(
     const kit::Rect panel{panel_left, panel_top, panel_width, panel_height};
 
     const std::string library_body = show(
-        "Get, update and switch mods, map packs and languages. The number is how many mods you "
-        "have."
+        "Get, update and switch mods, map packs and languages. The number counts every package you "
+        "have added: mods, map packs, language packs and expansions."
     );
     const std::string settings_body = show(
         "Open Annihilation's own settings: controls, graphics, the interface's size, downloads and "

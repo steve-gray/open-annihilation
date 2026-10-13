@@ -20,6 +20,7 @@
 #include "oa/present/world_renderer/world_camera.hpp"
 #include "oa/ui/campaign/campaign.hpp"
 #include "oa/ui/campaign/single_player.hpp"
+#include "oa/ui/frontend/single_player_menu.hpp"
 #include "oa/ui/frontend_renderer/game_text.hpp"
 #include "oa/ui/gui_input/gadget_panel.hpp"
 #include "oa/ui/gui_layout/gui_gadget.hpp"
@@ -465,17 +466,39 @@ void Runtime::enter_single_player_panel() {
     const auto host = single_player_host();
     campaign::single_player_enter(&setup, &host, game_language());
     typed_key_hook_ = TypedKeyHook::single_player_code;
-    if (!offers_saved_games())
-        if (auto* gadget = widget("LoadGame"))
-            if (auto* button = std::get_if<oa::ui::gui_layout::ButtonFields>(&gadget->fields))
-                button->grayed_out = true;
-    if (!offers_any_mission())
-        if (auto* gadget = widget("AnyMsn"))
-            gadget->common.active = 0;
+    // Load Game, Any Mission and Skirmish follow what this base game can open.
+    oa::ui::frontend::Panel offers_panel;
+    oa::ui::frontend::panel_load_layout(offers_panel, resources_.layout);
+    oa::ui::frontend::SinglePlayerOffers offers;
+    offers.saved_games = offers_saved_games();
+    offers.any_mission = offers_any_mission();
+    offers.skirmish = offers_skirmish();
+    oa::ui::frontend::apply_single_player_offers(offers_panel, offers);
+    for (const std::string_view entry_name : {"LoadGame", "AnyMsn", "Skirmish"}) {
+        const auto found = oa::ui::frontend::panel_find(offers_panel, entry_name);
+        if (found < 0 || static_cast<std::size_t>(found) >= resources_.layout.gadgets.size())
+            continue;
+        const auto& control = offers_panel.controls[static_cast<std::size_t>(found)];
+        auto& gadget = resources_.layout.gadgets[static_cast<std::size_t>(found)];
+        gadget.common.active = static_cast<int8_t>(control.active);
+        if (auto* button = std::get_if<oa::ui::gui_layout::ButtonFields>(&gadget.fields))
+            button->grayed_out = control.grayed != 0;
+    }
 }
 
 bool Runtime::offers_saved_games() const {
     return assets_.file_size(oa::data::defs::gui_path("loadgame.gui")) != 0;
+}
+
+bool Runtime::offers_skirmish() const {
+    // A game folder chosen directly keeps skirmish. Only the demo chosen as
+    // the base game has no skirmish to offer.
+    if (!managed_content_mounted())
+        return true;
+    const oa::data::content_bundles::ContentChoice choice = content_choice();
+    if (!choice.error.empty())
+        return true;
+    return choice.base_game != "totala-demo";
 }
 
 bool Runtime::offers_any_mission() const {

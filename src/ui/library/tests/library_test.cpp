@@ -2293,6 +2293,43 @@ void test_tab_counts() {
     OA_CHECK(lib::find_entry(library, lib::base_game_id()) != nullptr);
 }
 
+void test_added_package_count() {
+    // The button counts packages the player has added, not catalogue rows.
+    lib::Inputs listed = base_inputs();
+    listed.listings.push_back(listing(core, Kind::mod, "counted-mod", "Counted Mod"));
+    listed.listings.push_back(listing(core, Kind::map_pack, "counted-maps", "Counted Maps"));
+    OA_CHECK(lib::added_package_count(listed) == 0);
+
+    listed.installed.push_back(installed(core, Kind::mod, "counted-mod", "Counted Mod"));
+    OA_CHECK(lib::added_package_count(listed) == 1);
+
+    listed.installed.push_back(installed({}, Kind::mod, std::string(lib::base_game_key), "Base"));
+    listed.installed.push_back(
+        installed({}, Kind::language, std::string(lib::built_in_language_prefix) + "en", "English")
+    );
+    OA_CHECK(lib::added_package_count(listed) == 1);
+
+    lib::InstalledMaps own;
+    own.name = "Fixture Isles";
+    own.maps.push_back({"Isle Hop", 4, "16x16", {}, {}, {}});
+    listed.map_packs.push_back(own);
+    OA_CHECK(lib::added_package_count(listed) == 2);
+
+    listed.installed.push_back(installed(core, Kind::map_pack, "counted-maps", "Counted Maps"));
+    lib::InstalledMaps same;
+    same.name = "Counted Maps";
+    same.key = "counted-maps";
+    same.registry = std::string(core);
+    listed.map_packs.push_back(same);
+    OA_CHECK(lib::added_package_count(listed) == 3);
+
+    listed.installed.push_back(installed(core, Kind::language, "de", "Deutsch"));
+    listed.language = {"Deutsch", "Deutsch", "1.2"};
+    listed.playing_mod = lib::PlayingMod{"Basalt", "2.1", std::nullopt};
+    listed.content.copied = {"totala", "totala-demo", "cavedog-units", "campaign"};
+    OA_CHECK(lib::added_package_count(listed) == 6);
+}
+
 void test_tabs_list_what_their_counts_hold() {
     // Mods can read "Mods (n)" and "Installed (n)" while the list says
     // "Nothing to show." That line is drawn only when the visible list is
@@ -2839,19 +2876,24 @@ void test_base_chooser() {
     OA_CHECK(!lib::open_base_chooser(library).opened);
     library.inputs.mod_from_command_line = false;
 
+    library.inputs.base_game_badge = lib::Badge{std::vector<uint8_t>(1 * 1 * 4, 9), 1, 1};
     const lib::BaseOpen opened = lib::open_base_chooser(library);
     OA_CHECK(opened.opened && library.chooser.open);
     OA_CHECK(library.chooser.marked == "totala");
     bool saw_demo = false;
     for (const lib::BaseGameRow& row : library.chooser.rows) {
-        if (row.id == "totala")
+        if (row.id == "totala") {
             OA_CHECK(row.state == lib::BaseGameState::in_use && row.marked);
+            OA_CHECK(row.badge == &*library.inputs.base_game_badge);
+            OA_CHECK(row.letters == "TA");
+        }
         if (row.id == "totala-demo") {
             saw_demo = true;
             OA_CHECK(row.state == lib::BaseGameState::not_added);
             OA_CHECK(row.name == "Total Annihilation demo");
             OA_CHECK(row.version == "1997");
             OA_CHECK(row.letters == "DEMO");
+            OA_CHECK(row.badge == &*library.inputs.base_game_badge);
             OA_CHECK(row.expansions.empty());
         }
     }
@@ -3397,6 +3439,7 @@ int main() {
     test_check_now();
     test_built_in_languages();
     test_tab_counts();
+    test_added_package_count();
     test_tabs_list_what_their_counts_hold();
     test_rolled_back_update_returns();
     test_own_mod_description();
