@@ -51,7 +51,7 @@ layout names, and acts on what the screen returns.
 - `browser_layout(browser, state, frame, fonts, previews)`: the window, the
   size class's dialog size (480×324 at Compact, 720×486 at Regular, 960×600
   at Large), with the kit's header ("Maps", and at its right "Skirmish ·
-  playing <mod>", "Battle room · playing <mod>", or Total Annihilation 3.1c
+  playing <mod>", "Battle room · playing <mod>", or "Skirmish · No Mod"
   with no mod), the filter bar (one line at Regular and Large when the
   search keeps 120 points; at Compact two: the sources and the search, then
   PLAYERS and SIZE), a scrolled grid of cards in 3, 4 or 6 columns
@@ -61,7 +61,7 @@ layout names, and acts on what the screen returns.
   greyed with a "Doesn't fit" chip), and the footer: the selected map's
   title and details
   ("<pack> <version> · <registry> · <players> players · <W>×<H> ·
-  <download>"), its fit chips ("Fits TA 3.1c ✓", "Doesn't fit <mod>", "Fit
+  <download>"), its fit chips ("Fits No Mod ✓", "Doesn't fit <mod>", "Fit
   with <mod> is checked when it's installed"…) and, for a map that does not
   fit or a download that failed, the reason under them, a progress bar in
   their place while a download runs, and Cancel and the primary button at

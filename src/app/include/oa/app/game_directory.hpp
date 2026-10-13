@@ -242,6 +242,10 @@ struct GameDirectoryRequest {
     /// The chooser comes before the system's folder dialog (Steam's Game Mode, where the
     /// dialog may not show).
     bool chooser_first = false;
+    /// The player chose the demo and it is not copied. A folder counts only when
+    /// it holds the demo's installer. The locator asks for it, or the system's
+    /// picker where the locator is not shown.
+    bool demo_only = false;
 };
 
 /// Why resolution found no folder to play when the Game files screen is offered.
@@ -273,6 +277,7 @@ enum class GameDirectorySource : uint8_t {
     chosen,   ///< the player chose it in the folder dialog; it is remembered
     platform, ///< the platform's default folder, which is not remembered
     found,    ///< the one usable folder found on this machine; it is remembered
+    managed,  ///< the player's copy of the chosen base game and expansions; it is not remembered
 };
 
 struct GameDirectory {
@@ -295,6 +300,9 @@ struct GameDirectory {
     std::vector<std::string> profile_warnings;
     /// Where the folder was found, for GameDirectorySource::found.
     std::optional<FoundInstall> found_from{};
+    /// True when `folders` begins with a mod folder. Expansion bundles are
+    /// not a mod folder.
+    bool mod_layered = false;
 };
 
 /// Resolves the game folder.
@@ -404,13 +412,60 @@ void remember_mod_directory(oa::platform::preferences::Values& values, const fs:
 
 /// Lists the base games and expansions wholly present in a folder.
 ///
-/// Each regular file under the folder is matched by its path relative to
-/// the folder and its size. A bundle is copied when every one of its files
+/// A player's folder, or one bundle folder inside it (`games/<id>` or
+/// `expansions/<base>/<id>`), is read from the `.oa-content` records of
+/// `games/` and `expansions/`. A record counts when it names that bundle and
+/// lists every one of its files. The game files are not walked. Any other
+/// folder is walked: each regular file is matched by its path relative to the
+/// folder and its size, and a bundle is copied when every one of its files
 /// matches.
 ///
-/// @param folder the folder to walk; empty, or not a folder, copies nothing
+/// @param folder the player's folder, one managed bundle folder, or a game
+///        folder to walk; empty, or not a folder, copies nothing
 /// @return the copied bundle ids, in the built-in order
 [[nodiscard]] std::vector<std::string> copied_content_bundles(const fs::path& folder);
+
+/// What a composed mount is built from: the player's folder and the choice.
+struct ManagedMount {
+    /// The player's folder, which holds `games/` and `expansions/`.
+    fs::path user_folder{};
+    /// `--content`, or empty to use the preferences.
+    std::string_view content{};
+    /// `--mod-dir`; empty to play the folder the preferences remember.
+    fs::path mod_dir{};
+    /// `--base-game`: play no remembered mod folder.
+    bool base_game = false;
+    /// `--mod`; empty for the folders' own profile.
+    fs::path mod_file{};
+    /// Accept hacks this build does not implement yet, with a warning each.
+    bool accept_unimplemented_hacks = false;
+};
+
+/// Mounts the chosen base game and expansions from the player's folder.
+///
+/// The loose roots are the mod folder, then each enabled expansion's bundle
+/// folder, then the base game's, and discovery mounts them in the game's own
+/// order. A mod's revision archive replaces the base game's. Nothing is
+/// mounted when the base game has no record and the run names no `--content`.
+/// `--content` that cannot be read, or that names a bundle with no record,
+/// throws std::runtime_error, as does a mod profile that cannot be used.
+///
+/// @param request the player's folder, `--content` and the mod
+/// @param values the preferences the stored choice and the mod folder are read from
+/// @return the folders and the archives in mount order; nullopt when there is
+///     no recorded base game to play
+[[nodiscard]] std::optional<GameDirectory> compose_managed_content(
+    const ManagedMount& request, const oa::platform::preferences::Values& values
+);
+
+/// Reports whether any of the folders holds a movie.
+///
+/// A movie is a file whose extension is `.zrb`, in a directory named `data`.
+/// The directory's name and the extension are matched without regard to case.
+///
+/// @param roots the folders, highest precedence first
+/// @return true when one of them holds such a file
+[[nodiscard]] bool roots_hold_movies(std::span<const fs::path> roots);
 
 /// Reads the content choice from the preferences.
 ///

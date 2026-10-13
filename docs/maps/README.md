@@ -172,7 +172,7 @@ offers, in one grid with previews, laid out for the window at your
 Interface size ([settings](../settings.md#graphics)):
 
 - **The header** says "Maps", where you came from and what you play:
-  "Skirmish · Total Annihilation 3.1c", "Battle room · playing Ridge".
+  "Skirmish · No Mod", "Battle room · playing Ridge".
 - **Filters**: All, Base game, Installed packs or Online; PLAYERS 2, 3, 4
   or 5–10; SIZE S, M or L (S up to 10 on its longer side, M up to 20, L
   above); and "Search maps", which finds a map by its title, its name or
@@ -184,9 +184,9 @@ Interface size ([settings](../settings.md#graphics)):
   and size. Previews are drawn only for the cards in view.
 - **The footer** shows the chosen map: its title; "Base game · 4 players ·
   16×16", or its pack, version and registry with its players, size and, for
-  a map online, the download's size; whether it fits, "Fits TA 3.1c ✓",
-  "Doesn't fit Ridge" with the reason, or, for a map online, "Fit with TA
-  3.1c is checked when it's installed" or what the registry's catalogue
+  a map online, the download's size; whether it fits, "Fits No Mod ✓",
+  "Doesn't fit Ridge" with the reason, or, for a map online, "Fit with No
+  Mod is checked when it's installed" or what the registry's catalogue
   says ("Its catalogue says it does not fit Ridge.").
 - **Select**, for a map you have, chooses it in the list you came from,
   where you then press LOAD or start as ever. **Download and select**, for a

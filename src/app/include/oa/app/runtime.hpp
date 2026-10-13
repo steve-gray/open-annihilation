@@ -67,6 +67,7 @@
 #include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/ui/pad_controls.hpp"
 #include "oa/app/acceleration_status.hpp"
+#include "oa/app/content_copy.hpp"
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/settings.hpp"
 #include "oa/app/renderer_records.hpp"
@@ -3921,6 +3922,21 @@ class Runtime final : public menu::Host,
     /// the pack; Use English records the answer; Escape closes it for this
     /// run only.
     void tell_missing_language();
+
+    /// The start's check of the managed copy. Empty when this start has no
+    /// copied bundle. The Library, Settings and setup read it.
+    ///
+    /// @return the check
+    [[nodiscard]] const ContentCheck& content_check() const noexcept;
+
+    /// Shows the notice that copied content differs, over the settled main
+    /// menu, once that menu has been up for a frame and stays, with no dialog
+    /// and no settings over it. DETAILS lists the files (Settings' Game
+    /// Content page replaces that list). OK and Escape close it for this
+    /// start only; the next start shows it again while the files differ.
+    /// A named --game-dir, and a run nobody watches, show none. Nothing is
+    /// written to skip it.
+    void tell_content_difference();
 
     /// Shows the first-run setup over the settled main menu, once that menu
     /// has been up for two frames and stays, with no dialog and no settings
@@ -15594,6 +15610,14 @@ class Runtime final : public menu::Host,
     std::unique_ptr<UserFolderState, void (*)(UserFolderState*) noexcept> user_folder_state_{
         nullptr, destroy_user_folder_state
     };
+    /// The managed copy's check for this start, filled once the player's
+    /// folder is known.
+    ContentCheck content_check_{};
+    /// OK or Escape closed the content notice for this start. The next start
+    /// shows it again while files differ. Leaving the main menu does not.
+    bool content_notice_closed_{};
+    /// Frames in a row the main menu has shown as itself while the notice waits.
+    uint32_t content_notice_frames_{};
     // The mod packages opened in the game and their prompt; null until first used.
     std::unique_ptr<ModInstallState, void (*)(ModInstallState*) noexcept> mod_install_state_{
         nullptr, destroy_mod_install_state

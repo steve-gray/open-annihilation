@@ -89,7 +89,8 @@ struct Fields {
 /// Folds an entry's fields.
 ///
 /// @param entry the entry
-/// @return its fields; a package no registry lists has only its name
+/// @return its fields; a package no registry lists has only its name,
+///     and the base game has its name and the summary on its row
 Fields fields_of(const Entry& entry) {
     Fields fields;
     if (is_built_in_language(entry.id)) {
@@ -106,6 +107,13 @@ Fields fields_of(const Entry& entry) {
         return fields;
     }
     fields.name = folded(entry_name(entry));
+    // No Mod has no catalogue listing. Its row still carries the summary
+    // ("Total Annihilation as it was made"), and a search of those words
+    // has to find it.
+    if (is_base_game(entry.id)) {
+        fields.summary = folded(entry_summary(entry));
+        return fields;
+    }
     if (entry.listing == nullptr)
         return fields;
     for (const std::string& tag : entry.listing->tags)
