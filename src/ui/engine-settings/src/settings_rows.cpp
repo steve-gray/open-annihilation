@@ -51,12 +51,14 @@ constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::welcome_
 // The sections' rows.
 
 /// Controls' rows: the zoom's limits right under the switch for the wheel,
-/// and how far past the map's edges the view goes under them.
-constexpr std::array<Setting, 5> kControlsRows{
+/// how far past the map's edges the view goes under them, and middle-click
+/// panning under that.
+constexpr std::array<Setting, 6> kControlsRows{
     Setting::wheel_zoom,
     Setting::max_zoom_out,
     Setting::max_zoom_in,
     Setting::view_past_map_edge,
+    Setting::middle_click_pan,
     Setting::switch_alt,
 };
 /// Engine Limits' rows: the unit limit, then pathfinding.
@@ -232,6 +234,7 @@ constexpr std::array<std::span<const Setting>, page_count> kPageRows{
     kGameFilesRows,
     kDownloadsRows,
     kSystemRows,
+    {},
     kModKeysRows,
     kModPatrolRows,
     kModGuardRows,
@@ -252,6 +255,7 @@ constexpr std::array<std::string_view, page_count> kPageNames{
     "Game files",
     "Downloads",
     "System",
+    "Game Content",
     "Keys",
     "Patrolling",
     "Guarding",
@@ -272,6 +276,7 @@ constexpr std::array<std::string_view, page_count> kPageHeadings{
     "GAME FILES",
     "DOWNLOADS",
     "SYSTEM",
+    "GAME CONTENT",
     "MOD KEYS",
     "PATROLLING BUILDERS",
     "GUARDING BUILDERS",
@@ -293,6 +298,7 @@ constexpr std::array<std::string_view, page_count> kPageWords{
     "game-files",
     "downloads",
     "system",
+    "game-content",
     "mod-keys",
     "mod-patrol",
     "mod-guard",
@@ -2080,6 +2086,10 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                                   LevelStrip<ViewPastMapEdge, 3, view_past_map_edge_choices, &E::view_past_map_edge, kViewPastMapEdgeCaptions, &table_word<view_past_map_edge_words, ViewPastMapEdge>>::stepper(),
                                   view_past_map_edge_level_width),
                       &view_past_map_edge_hint, &lines<1>)},
+    {.setting = S::middle_click_pan,
+     .spec = engine_switch<&E::middle_click_pan>(
+         "middle-click-pan", "Middle-click pans",
+         {"A middle click pans the view towards the pointer until you click or press a key.", {}})},
     {.setting = S::escape_opens_menu,
      .spec = engine_switch<&E::escape_opens_menu>("escape-opens-menu", "Escape opens the game menu",
                                                   {"The first press clears the selection, the second opens the menu."})},
@@ -2356,6 +2366,7 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "max-zoom-out",
     "max-zoom-in",
     "view-past-map-edge",
+    "middle-click-pan",
     "escape-opens-menu",
     "switch-alt",
     "unit-limit",

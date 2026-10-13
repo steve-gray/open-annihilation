@@ -17,6 +17,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/content_copy.hpp"
+#include "oa/app/setup_before_game.hpp"
 #include "oa/app/disk_image_source.hpp"
 #include "oa/app/game_files_import.hpp"
 #include "oa/app/input_hints.hpp"
@@ -592,6 +593,28 @@ FolderChooserDisplayHooks display_hooks(ChooserDisplay& chooser) {
     return hooks;
 }
 
+[[nodiscard]] std::optional<GameDirectory> compose_from_options(const Options& options);
+
+/// The player's folder, or empty when it cannot be resolved.
+///
+/// @param options the parsed command line
+/// @return the folder
+[[nodiscard]] fs::path resolved_user_folder(const Options& options) {
+    try {
+        const fs::path preferences = preference_file(options.preferences_file);
+        std::error_code error;
+        const oa::platform::preferences::Values values =
+            fs::exists(preferences, error) ? oa::platform::preferences::load(preferences)
+                                           : oa::platform::preferences::Values{};
+        std::string note;
+        return own_user_folder(
+            options.user_folder, options.preferences_file, preferences, values, note
+        );
+    } catch (const std::exception&) {
+        return {};
+    }
+}
+
 /// Runs the Game files screen until the game folder resolves: the window
 /// opens first, once, and stays for the game. Each PLAY resolves the folder
 /// again; a refused folder opens the screen again with the reason.
@@ -635,7 +658,27 @@ bool run_game_files_until_resolved(
             return false;
         // The continue banner shows once.
         start.recovery = {};
-        game_directory = find_game_directory(options, &needed);
+        // An import that finished wrote the managed folders and removed the
+        // staged game, so the start plays that copy. The check keeps the
+        // staged folder and resolves it as before.
+        if (!options.check_game_files) {
+            const fs::path user = resolved_user_folder(options);
+            if (!user.empty() && managed_base_present(user, oa::data::content_bundles::bundles())) {
+                if (std::optional<GameDirectory> managed = compose_from_options(options)) {
+                    game_directory = std::move(*managed);
+                    needed = {};
+                }
+            }
+        }
+        if (!game_directory)
+            game_directory = find_game_directory(options, &needed);
+        if (!game_directory && !options.check_game_files) {
+            const fs::path user = resolved_user_folder(options);
+            if (!user.empty() && managed_base_present(user, oa::data::content_bundles::bundles())) {
+                needed.needed = false;
+                std::cerr << "open-annihilation: the managed copy could not be mounted\n";
+            }
+        }
     }
     return true;
 }
@@ -1379,7 +1422,29 @@ int run_once(
             "game directory does not exist: " + path_to_utf8(options.game_dir) +
             " (name it with --game-dir PATH)"
         );
-    publish_managed_copy(options, options.game_dir, options.game_dir_named);
+    // Language, the game and the copy, in this window, before the menu.
+    // A player who already has the game, or who named a folder, skips them.
+    // Quit leaves before the silent copy. A copy that finished here is the
+    // one the start plays, so the silent copy does not run again.
+    bool copied_on_setup = false;
+    if (setup_before_game_due(options, mount_copy)) {
+        if (!display.initialized)
+            display.initialize(options);
+        fs::path found_install;
+        if (game_directory->source != GameDirectorySource::managed)
+            found_install = game_directory->installation;
+        const SetupBefore setup = run_setup_before_game(
+            options,
+            SetupDisplay{display.window, display.renderer_host.renderer(), &display.renderer_host},
+            mount_copy,
+            found_install
+        );
+        if (setup == SetupBefore::quit)
+            return game_files_status(options, 0);
+        copied_on_setup = setup == SetupBefore::copied;
+    }
+    if (!copied_on_setup)
+        publish_managed_copy(options, options.game_dir, options.game_dir_named);
     // A copy made on this start is what the start plays. --game-dir is left
     // on the folder it named.
     if (mount_copy) {

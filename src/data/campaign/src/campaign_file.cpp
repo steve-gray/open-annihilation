@@ -1035,11 +1035,13 @@ int32_t campaign_count_files(const CampaignFiles* files) {
 
 namespace {
 
-// True when the packed name list already holds this campaign file. Names
-// compare without case, the way a layered folder treats one path.
-bool campaign_name_already_kept(const char* listed, const char* name) {
-    for (const char* kept = listed; *kept != '\0'; kept += std::strlen(kept) + 1)
-        if (oa::formats::tdf::compare_nocase(kept, name) == 0)
+// True when the first `used` bytes of the packed name list, the names this
+// call has kept, hold this campaign file. Names compare without case, the way
+// a layered folder treats one path. The bytes past `used` are not read: they
+// hold what the caller's buffer held before.
+bool campaign_name_already_kept(const char* listed, std::size_t used, const char* name) {
+    for (std::size_t at = 0; at < used; at += std::strlen(listed + at) + 1)
+        if (oa::formats::tdf::compare_nocase(listed + at, name) == 0)
             return true;
     return false;
 }
@@ -1074,7 +1076,7 @@ campaign_load_names(const CampaignFiles* files, const char* side, char* out, std
         // Loose files come first, then each mount, and equal names keep that
         // order, so the first copy of a file is the top layer. A lower layer's
         // copy of the same path is the same campaign.
-        if (campaign_name_already_kept(out, name)) {
+        if (campaign_name_already_kept(out, used, name)) {
             name += std::strlen(name) + 1;
             continue;
         }
