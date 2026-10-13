@@ -2720,13 +2720,13 @@ is reported the same way.
 `DemoRelease` holds everything that identifies the release, in one place, so
 that the tests (`demo_installer_test.cpp`) substitute a synthetic one.
 
-Where the system's folder dialog cannot show, as in Steam's Game Mode, or
-when several folders are found or the remembered one has gone, the
-in-engine folder chooser picks the folder (`folder_chooser_screen.*`, over
-the model of the module in src/ui/folder-chooser): the folders
-found on this machine, a folder browser driven by touch, a gamepad, the keys
-or the pointer, the 1997 demo's folder and, outside Game Mode, the
-desktop's dialog. Like the Game files screen, the chooser is laid out, hit
+Where the in-engine locator is offered, it asks instead of opening the
+system's folder dialog (`folder_chooser_screen.*`, over the model in
+src/ui/folder-chooser). The player browses places, found installs, volumes
+and launcher prefixes, and the column says what each folder or file is.
+Touch, a pointer, the keys or a gamepad drive it. On the desktop the system's
+dialog stays a button on that screen. Steam's Game Mode does not offer the
+button and never opens the dialog. Like the Game files screen, the chooser is laid out, hit
 tested and focused by the UI kit, so every OA screen is one UI stack, and it
 reads the window, shows its frame and reads the pointer through the same
 window-pixel code (`window_pixels.*`, below); its gamepad handling is its

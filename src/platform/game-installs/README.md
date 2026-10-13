@@ -6,8 +6,11 @@ starts playing without choosing a folder. Resolution
 ([src/app](../../app/README.md), `resolve_game_directory`) plays the one
 usable folder found and remembers it, and offers several in the in-engine
 folder chooser; `--game-dir` and a usable remembered folder always come
-first. The module also gives a folder browser its starting places: the home
-folder, and the drives that are mounted.
+first. The module also gives the locator its places (`locator_places`,
+`locator_place_facts`): Home, Desktop, Documents, Downloads, Applications
+or Program Files, the volumes, a Steam Deck's microSD cards, and a Steam
+Proton prefix, Heroic, Lutris and Bottles when those folders exist.
+`path_under_home` writes a folder under the home folder as `~/…`.
 
 `oa/platform/game_installs.hpp` (namespace `oa::platform::game_installs`):
 

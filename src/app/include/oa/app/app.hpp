@@ -476,6 +476,9 @@ struct Options {
     // Walks the first-run setup over the main menu: a built-in language, a
     // pack that fails and then retries, Skip setup, and both online choices.
     bool check_first_run = false;
+    // Opens the locator on --game-dir's parent, moves onto that folder with
+    // Tab and chooses it. With --snapshot, writes that PNG and a Deck PNG.
+    bool check_folder_chooser = false;
     // Sends a construction kbot on PATROL through the SDL presenter with the
     // metal store low and checks it reclaims a feature on its way.
     bool check_patrol_reclaim = false;

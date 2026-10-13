@@ -597,10 +597,9 @@ std::optional<GameDirectory> resolve_game_directory(
             };
         }
     }
-    // The folders found on this machine fill the gap the dialog fills: one
-    // usable folder is played and remembered; several, or a remembered one
-    // that has gone, are offered in the in-engine chooser, as is a start
-    // where the system's dialog may not show (Game Mode) or does not exist.
+    // One usable folder is played and remembered. Otherwise, where the locator
+    // can be shown, it asks: the system's dialog is a button on the desktop
+    // and is not opened from here. Game Mode does not offer that button.
     const bool chooser = request.chooser_offered && needed != nullptr;
     std::vector<FoundInstall> usable_found;
     std::optional<GameDirectory> only_found;
@@ -619,8 +618,10 @@ std::optional<GameDirectory> resolve_game_directory(
     }
     if (!request.choose && usable_found.size() == 1 && !stored_refused)
         return only_found;
-    if (chooser && (request.chooser_first || !dialog || usable_found.size() > 1 ||
-                    (stored_refused && !usable_found.empty()))) {
+    // The locator is the ask whenever it can be shown. The system's dialog is
+    // not opened here: on the desktop it stays a button (dialog_offered), and
+    // in Game Mode dialog_offered stays false so the button is absent.
+    if (chooser) {
         ask_for_chooser(
             request, platform_refused, stored_refused, std::move(usable_found), dialog, {}, *needed
         );

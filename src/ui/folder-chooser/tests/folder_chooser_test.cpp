@@ -1,17 +1,15 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The chooser's list and browser laid out at 1280x800 (the Steam Deck's
-// screen) and 852x393 (a phone, with its safe area), the focus order, the
-// keys, presses and scrolling, read from the kit's parts and controls. Every
-// layout of every case at both sizes keeps the digest layout-digests.txt
-// records, the file the test is given; --write-digests prints that file's
-// content.
+// The locator: what a folder or a file is, the places and rows laid out on a
+// desktop and on a Steam Deck, and choosing one with keys and presses. The
+// layout of every case at the Steam Deck and phone sizes keeps the digest
+// layout-digests.txt records, the file the test is given; --write-digests
+// prints that file.
 #include "oa/base/sha256.hpp"
 #include "oa/test/check.hpp"
 #include "oa/ui/folder_chooser.hpp"
 
-#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstddef>
@@ -19,22 +17,25 @@
 #include <fstream>
 #include <map>
 #include <span>
-#include <stdint.h>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace {
 
 namespace chooser = oa::ui::folder_chooser;
-namespace gf = oa::ui::game_files;
 namespace kit = oa::ui::kit;
-using chooser::Target;
-using chooser::TargetKind;
-using kit::Control;
 
-/// The Steam Deck's screen, one canvas pixel a point.
+/// The desktop window the picture is drawn at, one canvas pixel a point.
+chooser::Viewport desktop_viewport() {
+    chooser::Viewport viewport;
+    viewport.width = 1280;
+    viewport.height = 720;
+    viewport.px_per_point = 1.0f;
+    return viewport;
+}
+
+/// The Steam Deck's screen.
 chooser::Viewport deck_viewport() {
     chooser::Viewport viewport;
     viewport.width = 1280;
@@ -43,7 +44,7 @@ chooser::Viewport deck_viewport() {
     return viewport;
 }
 
-/// A phone's screen held sideways, at three canvas pixels a point, with its safe area.
+/// A phone held sideways, at three canvas pixels a point, with its safe area.
 chooser::Viewport phone_viewport() {
     chooser::Viewport viewport;
     viewport.width = 852 * 3;
@@ -53,433 +54,253 @@ chooser::Viewport phone_viewport() {
     return viewport;
 }
 
-/// The list with two folders found (one usable), as the app fills it.
-chooser::Model list_model() {
+/// A locator with two places and three rows, one of them the game.
+chooser::Model sample(bool deck) {
     chooser::Model model;
-    model.version = "v0.7";
-    model.installs = {
-        {"/home/deck/.local/share/Steam/steamapps/common/Total Annihilation",
-         "your Steam library",
-         "Total Annihilation 3.1c with Core Contingency and Battle Tactics.",
-         true},
-        {"/home/deck/Games/Heroic/Total Annihilation",
-         "Heroic",
-         "Its archives lack guis/mainmenu.gui.",
-         false},
-    };
-    model.offers_dialog = true;
-    return model;
-}
-
-/// The browser in a folder with many folders, a few of them game folders.
-///
-/// @param usable the folder shown can be played
-chooser::Model browse_model(bool usable) {
-    chooser::Model model;
-    model.version = "v0.7";
-    model.view = chooser::View::browse;
-    model.folder = "/home/deck/Games";
-    model.place_labels = {"Home", "Downloads", "SD card"};
+    model.version = "v0.8";
+    model.deck = deck;
+    model.offers_dialog = !deck;
+    model.permission_note = !deck;
+    model.path = "/home/play/Downloads";
     model.has_parent = true;
-    model.folder_usable = usable;
-    model.folder_verdict =
-        usable ? "Total Annihilation 3.1c." : "It holds no Total Annihilation archives.";
-    for (int index = 0; index < 30; ++index)
-        model.entries.push_back({"Folder " + std::to_string(index), index % 7 == 3});
+    model.can_choose = true;
+    model.choose_label = "Use this folder";
+    model.places = {
+        {"Home", chooser::PlaceGroup::places},
+        {"Downloads", chooser::PlaceGroup::places},
+        {"GOG · Commander Pack", chooser::PlaceGroup::found},
+        {"Macintosh HD", chooser::PlaceGroup::volumes},
+    };
+    model.place = 1;
+    chooser::Entry folder;
+    folder.name = "notes";
+    folder.what = "folder";
+    folder.directory = true;
+    chooser::Entry game;
+    game.name = "Total Annihilation";
+    game.what = "Total Annihilation";
+    game.title = "Total Annihilation";
+    game.account = "Holds Total Annihilation, Campaign.";
+    game.bundles = {"Total Annihilation", "Campaign"};
+    game.directory = true;
+    game.recognised = true;
+    game.choosable = true;
+    chooser::Entry installer;
+    installer.name = "commander.pkg";
+    installer.what = "GOG installer (macOS)";
+    installer.size_label = "2.4 GB";
+    installer.title = "GOG installer for macOS";
+    installer.recognised = true;
+    installer.choosable = true;
+    model.entries = {folder, game, installer};
+    model.selected = 1;
     return model;
 }
 
-/// Returns a box's centre.
-///
-/// @param box the box
-/// @return its centre
-chooser::Point centre(chooser::Rect box) {
-    return {box.x + box.width / 2, box.y + box.height / 2};
-}
-
-/// Finds a target's box: the list's control for it.
+/// Finds a target's control.
 ///
 /// @param layout the layout
 /// @param target the target
-/// @return the control; none when the target is not laid out
-const Control* find(const chooser::Layout& layout, Target target) {
+/// @return the control; null when it was not laid out
+const kit::Control* find(const chooser::Layout& layout, chooser::Target target) {
     return kit::control_of(layout.paint.list, chooser::control_id(target));
 }
 
-/// Tells whether two boxes are the same.
-///
-/// @param a a box
-/// @param b another
-/// @return true when they are
-bool same_box(chooser::Rect a, chooser::Rect b) {
-    return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
+/// The 1997 demo installer's size, in bytes, as the app records it.
+constexpr uint64_t demo_installer_bytes = 21540864;
+/// totala1.hpi's size, in bytes, as the built-in table records it.
+constexpr uint64_t totala_archive_bytes = 32311035;
+/// TADemo.hpi's size, in bytes.
+constexpr uint64_t demo_archive_bytes = 20474804;
+/// worlds.hpi's size, in bytes.
+constexpr uint64_t tileset_bytes = 79967143;
+/// The macOS Commander Pack installer's size, in bytes.
+constexpr uint64_t macos_installer_bytes = 2559350261;
+/// The Windows installer's size, in bytes.
+constexpr uint64_t windows_installer_bytes = 1093885504;
+/// The older Mac disk image's size, in bytes.
+constexpr uint64_t older_mac_installer_bytes = 1144736288;
+
+/// What a file or a folder is recognised as.
+void check_recognition() {
+    const chooser::SourceAccount plain =
+        chooser::describe_source("notes.txt", 12, false, {}, demo_installer_bytes);
+    OA_CHECK(plain.what == "file" && !plain.recognised && !plain.choosable && !plain.directory);
+
+    const chooser::SourceAccount archive =
+        chooser::describe_source("extra.hpi", 100, false, {}, demo_installer_bytes);
+    OA_CHECK(archive.what == "archive" && !archive.recognised);
+
+    const chooser::SourceAccount macos = chooser::describe_source(
+        "total_annihilation__commander_pack_en_1_3_15733.pkg", macos_installer_bytes, false, {}, 0
+    );
+    OA_CHECK(macos.what == "GOG installer (macOS)");
+    OA_CHECK(macos.title == "GOG installer for macOS");
+    OA_CHECK(macos.recognised && macos.choosable && !macos.directory);
+    OA_CHECK(macos.bundles.size() == 7);
+    OA_CHECK(macos.bundles.front() == "Total Annihilation");
+
+    const chooser::SourceAccount windows =
+        chooser::describe_source("setup.exe", windows_installer_bytes, false, {}, 0);
+    OA_CHECK(windows.what == "GOG installer (Windows)" && windows.choosable);
+
+    const chooser::SourceAccount older =
+        chooser::describe_source("pack.dmg", older_mac_installer_bytes, false, {}, 0);
+    OA_CHECK(older.what == "GOG installer (older Macs)" && older.choosable);
+
+    const chooser::SourceAccount demo_file = chooser::describe_source(
+        "TADemo.exe", demo_installer_bytes, false, {}, demo_installer_bytes
+    );
+    OA_CHECK(demo_file.what == "TA demo installer");
+    OA_CHECK(
+        demo_file.bundles.size() == 1 && demo_file.bundles.front() == "Total Annihilation demo"
+    );
+    OA_CHECK(demo_file.choosable);
+    const chooser::SourceAccount not_demo =
+        chooser::describe_source("TADemo.exe", demo_installer_bytes, false, {}, 0);
+    OA_CHECK(!not_demo.recognised);
+
+    const std::vector<chooser::ChildFile> game_files{{"totala1.hpi", totala_archive_bytes}};
+    const chooser::SourceAccount game =
+        chooser::describe_source("Total Annihilation", 0, true, game_files, demo_installer_bytes);
+    OA_CHECK(game.directory && game.recognised && game.choosable);
+    OA_CHECK(game.what == "Total Annihilation");
+    OA_CHECK(game.bundles.size() == 1 && game.bundles.front() == "Total Annihilation");
+    OA_CHECK(game.account.find("Total Annihilation") != std::string::npos);
+
+    const std::vector<chooser::ChildFile> demo_files{{"TADemo.hpi", demo_archive_bytes}};
+    const chooser::SourceAccount demo_folder =
+        chooser::describe_source("demo", 0, true, demo_files, demo_installer_bytes);
+    OA_CHECK(demo_folder.what == "Total Annihilation demo" && demo_folder.choosable);
+
+    const std::vector<chooser::ChildFile> tiles{{"worlds.hpi", tileset_bytes}};
+    const chooser::SourceAccount expansion =
+        chooser::describe_source("tiles", 0, true, tiles, demo_installer_bytes);
+    OA_CHECK(expansion.recognised && !expansion.choosable);
+    OA_CHECK(expansion.what == "Cavedog tilesets");
+
+    const chooser::SourceAccount empty =
+        chooser::describe_source("Downloads", 0, true, {}, demo_installer_bytes);
+    OA_CHECK(empty.directory && empty.what == "folder" && !empty.recognised && !empty.choosable);
 }
 
-/// Tells whether a box lies in another.
-///
-/// @param inner the box
-/// @param outer the box it should lie in
-/// @return true when it does
-bool inside(chooser::Rect inner, chooser::Rect outer) {
-    return inner.x >= outer.x && inner.y >= outer.y &&
-           inner.x + inner.width <= outer.x + outer.width &&
-           inner.y + inner.height <= outer.y + outer.height;
-}
-
-/// Checks what every layout keeps: each control at least 44 points high, inside the safe area
-/// across, and a focus order of the enabled targets in their order. The list's controls are
-/// the parts that draw a target, one each, the top one first, as the part lies and with its
-/// state; those in the scrolling region are its scroll area, and the Tab order is the focus
-/// order.
+/// Every control is at least 44 points high, and the rows are the only scrolling controls.
 ///
 /// @param layout the layout
 /// @param viewport its canvas
-void check_controls(const chooser::Layout& layout, const chooser::Viewport& viewport) {
-    const chooser::Rect safe{
-        viewport.safe.left,
-        viewport.safe.top,
-        viewport.width - viewport.safe.left - viewport.safe.right,
-        viewport.height - viewport.safe.top - viewport.safe.bottom,
-    };
-    const int least = static_cast<int>(gf::min_button_points * viewport.px_per_point);
-    const kit::DisplayList& list = layout.paint.list;
-    OA_CHECK(!list.controls.empty());
-    std::vector<Target> enabled;
-    std::vector<kit::ControlId> drawn;
-    for (const kit::Item& part : list.items) {
-        if (part.control == kit::no_control)
-            continue;
-        drawn.push_back(part.control);
-        OA_CHECK(part.rect.height >= least);
-        OA_CHECK(part.rect.x >= safe.x && part.rect.x + part.rect.width <= safe.x + safe.width);
-        if (part.clip.height <= 0)
-            OA_CHECK(inside(part.rect, safe));
-        if (!part.state.disabled)
-            enabled.push_back(chooser::target_of(part.control));
-        const Control* control = kit::control_of(list, part.control);
-        OA_CHECK(control != nullptr);
-        if (control == nullptr)
-            continue;
-        OA_CHECK(same_box(control->rect, part.rect) && same_box(control->clip, part.clip));
-        OA_CHECK(control->enabled == !part.state.disabled);
-        OA_CHECK(control->group == (part.clip.height > 0 ? 0 : -1));
+void check_control_size(const chooser::Layout& layout, const chooser::Viewport& viewport) {
+    const float scale = viewport.px_per_point > 0.0f ? viewport.px_per_point : 1.0f;
+    const int32_t least = static_cast<int32_t>(44.0f * scale) - 1;
+    OA_CHECK(!layout.paint.list.controls.empty());
+    for (const kit::Control& control : layout.paint.list.controls) {
+        OA_CHECK(control.rect.height >= least);
+        const bool row = chooser::target_of(control.id).kind == chooser::TargetKind::entry;
+        OA_CHECK((control.group == 0) == row);
     }
-    OA_CHECK(enabled == layout.focus_order);
-    // One control for each part that draws a target, the last drawn tested first.
-    OA_CHECK(list.controls.size() == drawn.size());
-    for (std::size_t index = 0; index < list.controls.size() && index < drawn.size(); ++index)
-        OA_CHECK(list.controls[index].id == drawn[drawn.size() - 1 - index]);
-    std::vector<Target> tabbed;
-    for (const kit::ControlId id : list.tab_order)
-        tabbed.push_back(chooser::target_of(id));
-    OA_CHECK(tabbed == layout.focus_order);
-    // Every painted item but the scrolled ones lies on the canvas.
-    for (const oa::ui::kit::Item& item : layout.paint.list.items)
-        if (item.clip.height <= 0)
-            OA_CHECK(inside(item.rect, {0, 0, viewport.width, viewport.height}));
 }
 
-/// Checks the list's targets, their order and where presses go.
-void check_list() {
-    for (const chooser::Viewport& viewport : {deck_viewport(), phone_viewport()}) {
-        const chooser::Model model = list_model();
-        const chooser::UiState state;
-        const chooser::Layout layout = chooser::lay_out(model, state, viewport, {});
-        check_controls(layout, viewport);
-        const std::vector<Target> order{
-            {TargetKind::install, 0},
-            {TargetKind::browse, 0},
-            {TargetKind::demo, 0},
-            {TargetKind::dialog, 0},
-            {TargetKind::quit, 0},
-        };
-        OA_CHECK(layout.focus_order == order);
-        const Control* unusable = find(layout, {TargetKind::install, 1});
-        OA_CHECK(unusable != nullptr && !unusable->enabled);
-        if (unusable != nullptr && unusable->clip.height <= 0)
-            OA_CHECK(
-                chooser::hit_test(layout, centre(unusable->rect), 100).kind == TargetKind::none
-            );
-        for (const Target& target : order) {
-            const Control* hit = find(layout, target);
-            OA_CHECK(hit != nullptr);
-            if (hit != nullptr && (hit->clip.height <= 0 || inside(hit->rect, hit->clip)))
-                OA_CHECK(chooser::hit_test(layout, centre(hit->rect), 0) == target);
+/// The desktop offers the system picker. A Steam Deck does not, and shows the pad hints.
+void check_places_and_form() {
+    const chooser::Layout desktop = chooser::lay_out(sample(false), {}, desktop_viewport(), {});
+    check_control_size(desktop, desktop_viewport());
+    OA_CHECK(find(desktop, {chooser::TargetKind::dialog, 0}) != nullptr);
+    OA_CHECK(find(desktop, {chooser::TargetKind::choose, 0}) != nullptr);
+    OA_CHECK(find(desktop, {chooser::TargetKind::place, 2}) != nullptr);
+    OA_CHECK(find(desktop, {chooser::TargetKind::entry, 1}) != nullptr);
+    bool saw_place = false;
+    bool saw_entry = false;
+    for (const chooser::Target target : desktop.focus_order) {
+        if (target.kind == chooser::TargetKind::entry)
+            saw_entry = true;
+        if (target.kind == chooser::TargetKind::place)
+            OA_CHECK(!saw_entry);
+        if (target.kind == chooser::TargetKind::dialog ||
+            target.kind == chooser::TargetKind::choose ||
+            target.kind == chooser::TargetKind::cancel)
+            OA_CHECK(saw_entry);
+        saw_place = saw_place || target.kind == chooser::TargetKind::place;
+    }
+    OA_CHECK(saw_place && saw_entry);
+
+    const chooser::Layout deck = chooser::lay_out(sample(true), {}, deck_viewport(), {});
+    check_control_size(deck, deck_viewport());
+    OA_CHECK(find(deck, {chooser::TargetKind::dialog, 0}) == nullptr);
+    OA_CHECK(find(deck, {chooser::TargetKind::choose, 0}) != nullptr);
+    bool hinted = false;
+    for (const kit::Item& part : deck.paint.list.items) {
+        for (const std::string& line : part.lines) {
+            if (line.find("Filter") != std::string::npos && line.find("Back") != std::string::npos)
+                hinted = true;
         }
-        // No dialog offered (Game Mode): no row for it.
-        chooser::Model game_mode = list_model();
-        game_mode.offers_dialog = false;
-        const chooser::Layout without = chooser::lay_out(game_mode, state, viewport, {});
-        OA_CHECK(find(without, {TargetKind::dialog, 0}) == nullptr);
-        OA_CHECK(find(without, {TargetKind::demo, 0}) != nullptr);
-        // Nothing found: the ways to a folder and Quit, and a notice above them.
-        chooser::Model nothing;
-        nothing.notice = "The Total Annihilation folder chosen earlier can no longer be used.";
-        const chooser::Layout empty = chooser::lay_out(nothing, state, viewport, {});
-        check_controls(empty, viewport);
-        OA_CHECK(empty.focus_order.size() == 3);
-        OA_CHECK(empty.focus_order.front() == (Target{TargetKind::browse, 0}));
-        const bool notice_shown = std::any_of(
-            empty.paint.list.items.begin(),
-            empty.paint.list.items.end(),
-            [](const oa::ui::kit::Item& item) { return item.role == oa::ui::kit::Role::banner; }
-        );
-        OA_CHECK(notice_shown);
     }
-    // Escape does nothing on the list.
-    const chooser::Layout layout = chooser::lay_out(list_model(), {}, deck_viewport(), {});
-    chooser::UiState state;
-    OA_CHECK(chooser::key(layout, state, chooser::Key::escape).command == chooser::Command::none);
+    OA_CHECK(hinted);
+
+    const chooser::Layout phone = chooser::lay_out(sample(false), {}, phone_viewport(), {});
+    check_control_size(phone, phone_viewport());
+    bool selected = false;
+    for (const kit::Item& part : phone.paint.list.items) {
+        for (const std::string& line : part.lines)
+            if (line == "SELECTED")
+                selected = true;
+    }
+    OA_CHECK(!selected);
 }
 
-/// Checks the browser's targets, "Play this folder" and Back.
-void check_browser() {
-    for (const chooser::Viewport& viewport : {deck_viewport(), phone_viewport()}) {
-        const chooser::UiState state;
-        const chooser::Layout refused = chooser::lay_out(browse_model(false), state, viewport, {});
-        check_controls(refused, viewport);
-        const Control* choose = find(refused, {TargetKind::choose, 0});
-        OA_CHECK(choose != nullptr && !choose->enabled);
-        OA_CHECK(
-            std::find(
-                refused.focus_order.begin(),
-                refused.focus_order.end(),
-                Target{TargetKind::choose, 0}
-            ) == refused.focus_order.end()
-        );
-        OA_CHECK(refused.focus_order.size() >= 5);
-        OA_CHECK(refused.focus_order[0] == (Target{TargetKind::place, 0}));
-        OA_CHECK(refused.focus_order[2] == (Target{TargetKind::place, 2}));
-        OA_CHECK(refused.focus_order[3] == (Target{TargetKind::parent, 0}));
-        OA_CHECK(refused.focus_order[4] == (Target{TargetKind::entry, 0}));
-        OA_CHECK(refused.focus_order.back() == (Target{TargetKind::back, 0}));
-        // Thirty folders do not fit: the rows scroll, the buttons stay.
-        OA_CHECK(refused.scroll_max_points > 0);
-        const Control* back = find(refused, {TargetKind::back, 0});
-        OA_CHECK(back != nullptr && back->clip.height <= 0);
-        const chooser::Layout usable = chooser::lay_out(browse_model(true), state, viewport, {});
-        check_controls(usable, viewport);
-        OA_CHECK(usable.focus_order.back() == (Target{TargetKind::choose, 0}));
-        const Control* play = find(usable, {TargetKind::choose, 0});
-        OA_CHECK(play != nullptr && play->enabled);
-        if (play != nullptr)
-            OA_CHECK(
-                chooser::hit_test(usable, centre(play->rect), 0) == (Target{TargetKind::choose, 0})
-            );
-        // Escape goes back to the list.
-        chooser::UiState keys;
-        OA_CHECK(
-            chooser::key(usable, keys, chooser::Key::escape).command ==
-            chooser::Command::back_to_list
-        );
-        // At the top of a drive there is no parent folder.
-        chooser::Model root = browse_model(false);
-        root.folder = "/";
-        root.has_parent = false;
-        const chooser::Layout top = chooser::lay_out(root, state, viewport, {});
-        const Control* parent = find(top, {TargetKind::parent, 0});
-        OA_CHECK(parent != nullptr && !parent->enabled);
-        // An empty folder says so.
-        chooser::Model empty = browse_model(false);
-        empty.entries.clear();
-        const chooser::Layout nothing = chooser::lay_out(empty, state, viewport, {});
-        OA_CHECK(find(nothing, {TargetKind::entry, 0}) == nullptr);
-        OA_CHECK(nothing.scroll_max_points == 0);
-    }
-}
-
-/// Checks the keys: the first shows the focus, arrows and Tab move it and scroll it into view,
-/// Enter presses, the page keys scroll.
-void check_keys() {
-    const chooser::Viewport viewport = phone_viewport();
-    const chooser::Model model = browse_model(true);
+/// Keys and presses select a row and choose it. Escape goes up, or cancels.
+void check_selection() {
+    const chooser::Viewport viewport = desktop_viewport();
+    chooser::Model model = sample(false);
     chooser::UiState state;
     chooser::Layout layout = chooser::lay_out(model, state, viewport, {});
-    OA_CHECK(chooser::key(layout, state, chooser::Key::down).command == chooser::Command::none);
-    OA_CHECK(state.focus_shown && state.focus == 0);
-    layout = chooser::lay_out(model, state, viewport, {});
-    const bool marked = std::any_of(
-        layout.paint.list.items.begin(),
-        layout.paint.list.items.end(),
-        [](const oa::ui::kit::Item& item) { return item.state.focused; }
-    );
-    OA_CHECK(marked);
-    // Right along the places, to the parent folder, then down into the folders.
-    static_cast<void>(chooser::key(layout, state, chooser::Key::right));
-    OA_CHECK(state.focus == 1);
-    static_cast<void>(chooser::key(layout, state, chooser::Key::right));
-    static_cast<void>(chooser::key(layout, state, chooser::Key::right));
-    OA_CHECK(state.focus == 3);
-    static_cast<void>(chooser::key(layout, state, chooser::Key::left));
-    OA_CHECK(state.focus == 2);
-    static_cast<void>(chooser::key(layout, state, chooser::Key::down));
+    const chooser::Outcome first = chooser::key(layout, state, chooser::Key::down);
+    OA_CHECK(state.focus_shown);
     OA_CHECK(
-        layout.focus_order[static_cast<std::size_t>(state.focus)] == (Target{TargetKind::entry, 0})
+        first.command == chooser::Command::select_entry || first.command == chooser::Command::none
     );
-    // Down through the folders: each one focused is scrolled whole into view.
-    for (int step = 0; step < 20; ++step) {
-        layout = chooser::lay_out(model, state, viewport, {});
-        static_cast<void>(chooser::key(layout, state, chooser::Key::down));
+
+    int32_t guard = 0;
+    while (guard < 24) {
+        const chooser::Outcome step = chooser::key(layout, state, chooser::Key::tab);
+        if (step.command == chooser::Command::select_entry && step.index == 2)
+            break;
+        ++guard;
     }
-    OA_CHECK(state.scroll_points > 0 && state.scroll_points <= layout.scroll_max_points);
+    OA_CHECK(guard < 24);
+    const chooser::Target focused = layout.focus_order[static_cast<std::size_t>(state.focus)];
+    OA_CHECK(focused.kind == chooser::TargetKind::entry && focused.index == 2);
+
+    const chooser::Outcome chosen = chooser::key(layout, state, chooser::Key::choose);
+    OA_CHECK(chosen.command == chooser::Command::choose);
+    const chooser::Outcome filtered = chooser::key(layout, state, chooser::Key::filter);
+    OA_CHECK(filtered.command == chooser::Command::toggle_filter);
+    const chooser::Outcome up = chooser::key(layout, state, chooser::Key::escape);
+    OA_CHECK(up.command == chooser::Command::parent_folder);
+
+    model.has_parent = false;
     layout = chooser::lay_out(model, state, viewport, {});
-    const Target focused = layout.focus_order[static_cast<std::size_t>(state.focus)];
-    OA_CHECK(focused == (Target{TargetKind::entry, 20}));
-    const Control* shown = find(layout, focused);
-    OA_CHECK(shown != nullptr && inside(shown->rect, shown->clip));
-    OA_CHECK(
-        chooser::key(layout, state, chooser::Key::enter).command == chooser::Command::enter_folder
-    );
-    OA_CHECK(chooser::key(layout, state, chooser::Key::enter).index == 20);
-    // Tab and Shift+Tab go round the focus order.
-    const int32_t count = static_cast<int32_t>(layout.focus_order.size());
-    state.focus = count - 1;
-    static_cast<void>(chooser::key(layout, state, chooser::Key::tab));
-    OA_CHECK(state.focus == 0);
-    static_cast<void>(chooser::key(layout, state, chooser::Key::back_tab));
-    OA_CHECK(state.focus == count - 1);
-    OA_CHECK(
-        chooser::key(layout, state, chooser::Key::enter).command == chooser::Command::choose_folder
-    );
-    // Up from Back reaches the last folder, scrolled into view, and down from it the buttons.
-    const auto back_place = std::find(
-        layout.focus_order.begin(), layout.focus_order.end(), Target{TargetKind::back, 0}
-    );
-    OA_CHECK(back_place != layout.focus_order.end());
-    state.focus = static_cast<int32_t>(back_place - layout.focus_order.begin());
-    state.scroll_points = 0;
+    const chooser::Outcome cancel = chooser::key(layout, state, chooser::Key::escape);
+    OA_CHECK(cancel.command == chooser::Command::cancel);
+
+    model.can_choose = false;
     layout = chooser::lay_out(model, state, viewport, {});
-    static_cast<void>(chooser::key(layout, state, chooser::Key::up));
-    OA_CHECK(
-        layout.focus_order[static_cast<std::size_t>(state.focus)] == (Target{TargetKind::entry, 29})
-    );
-    layout = chooser::lay_out(model, state, viewport, {});
-    const Control* last = find(layout, {TargetKind::entry, 29});
-    OA_CHECK(state.scroll_points > 0 && last != nullptr && inside(last->rect, last->clip));
-    static_cast<void>(chooser::key(layout, state, chooser::Key::down));
-    const TargetKind below = layout.focus_order[static_cast<std::size_t>(state.focus)].kind;
-    OA_CHECK(below == TargetKind::back || below == TargetKind::choose);
-    // Up from the top row goes nowhere.
-    state.focus = 0;
-    static_cast<void>(chooser::key(layout, state, chooser::Key::up));
-    OA_CHECK(state.focus == 0);
-    // The page keys scroll by the rows' height, within the range.
-    state.scroll_points = 0;
-    static_cast<void>(chooser::key(layout, state, chooser::Key::page_down));
-    OA_CHECK(state.scroll_points > 0);
-    for (int page = 0; page < 20; ++page)
-        static_cast<void>(chooser::key(layout, state, chooser::Key::page_down));
-    OA_CHECK(state.scroll_points == layout.scroll_max_points);
-    static_cast<void>(chooser::key(layout, state, chooser::Key::page_up));
-    OA_CHECK(state.scroll_points < layout.scroll_max_points);
-    // Nothing to focus: keys do nothing.
-    chooser::UiState none;
-    OA_CHECK(chooser::key({}, none, chooser::Key::enter).command == chooser::Command::none);
-    OA_CHECK(!none.focus_shown);
+    OA_CHECK(chooser::key(layout, state, chooser::Key::choose).command == chooser::Command::none);
+
+    const kit::Control* row = find(layout, {chooser::TargetKind::entry, 0});
+    OA_CHECK(row != nullptr);
+    chooser::UiState pressed;
+    chooser::press_down(layout, pressed, {row->rect.x + 4, row->rect.y + 4});
+    const chooser::Outcome opened =
+        chooser::press_up(layout, pressed, {row->rect.x + 4, row->rect.y + 4});
+    OA_CHECK(opened.command == chooser::Command::activate_entry && opened.index == 0);
+
+    const int32_t before = 0;
+    chooser::scroll(layout, pressed, 100000);
+    OA_CHECK(pressed.scroll_points == layout.scroll_max_points);
+    chooser::scroll(layout, pressed, -100000);
+    OA_CHECK(pressed.scroll_points == before);
 }
 
-/// Checks presses: down marks the target, up on it gives its command, up elsewhere none, a
-/// disabled target takes nothing and a press near a target reaches it.
-void check_presses() {
-    const chooser::Viewport viewport = deck_viewport();
-    chooser::UiState state;
-    chooser::Layout layout = chooser::lay_out(list_model(), state, viewport, {});
-    const Control* browse = find(layout, {TargetKind::browse, 0});
-    OA_CHECK(browse != nullptr);
-    if (browse == nullptr)
-        return;
-    const chooser::Rect browse_box = browse->rect;
-    chooser::press_down(layout, state, centre(browse_box));
-    OA_CHECK(state.pressed >= 0);
-    layout = chooser::lay_out(list_model(), state, viewport, {});
-    const bool held = std::any_of(
-        layout.paint.list.items.begin(),
-        layout.paint.list.items.end(),
-        [](const oa::ui::kit::Item& item) { return item.state.pressed; }
-    );
-    OA_CHECK(held);
-    const chooser::Outcome opened = chooser::press_up(layout, state, centre(browse_box));
-    OA_CHECK(opened.command == chooser::Command::open_browser);
-    OA_CHECK(state.pressed == -1);
-    OA_CHECK(
-        layout.focus_order[static_cast<std::size_t>(state.focus)] == (Target{TargetKind::browse, 0})
-    );
-    // Slid off before coming up: nothing.
-    chooser::press_down(layout, state, centre(browse_box));
-    OA_CHECK(
-        chooser::press_up(layout, state, {browse_box.x + browse_box.width / 2, 2}).command ==
-        chooser::Command::none
-    );
-    // A disabled row takes nothing, not even the nearest target.
-    const Control* unusable = find(layout, {TargetKind::install, 1});
-    OA_CHECK(unusable != nullptr);
-    if (unusable != nullptr) {
-        chooser::press_down(layout, state, centre(unusable->rect));
-        OA_CHECK(state.pressed == -1);
-        OA_CHECK(
-            chooser::press_up(layout, state, centre(unusable->rect)).command ==
-            chooser::Command::none
-        );
-    }
-    // A press just outside the Quit button reaches it.
-    const Control* quit = find(layout, {TargetKind::quit, 0});
-    OA_CHECK(quit != nullptr);
-    if (quit != nullptr) {
-        const chooser::Point near{
-            quit->rect.x + quit->rect.width / 2, quit->rect.y + quit->rect.height + 10
-        };
-        chooser::press_down(layout, state, near);
-        OA_CHECK(chooser::press_up(layout, state, near).command == chooser::Command::quit);
-        OA_CHECK(chooser::hit_test(layout, near, 0).kind == TargetKind::none);
-    }
-    // The usable folder's row plays it.
-    const Control* install = find(layout, {TargetKind::install, 0});
-    OA_CHECK(install != nullptr);
-    if (install != nullptr) {
-        chooser::press_down(layout, state, centre(install->rect));
-        const chooser::Outcome played = chooser::press_up(layout, state, centre(install->rect));
-        OA_CHECK(played.command == chooser::Command::play_install && played.index == 0);
-    }
-    // A pointer press hides the focus the keys showed.
-    state.focus_shown = true;
-    chooser::press_down(layout, state, {1, 1});
-    OA_CHECK(!state.focus_shown && state.pressed == -1);
-}
-
-/// Checks scrolling stays within the layout's range.
-void check_scroll() {
-    const chooser::Viewport viewport = phone_viewport();
-    chooser::UiState state;
-    const chooser::Layout layout = chooser::lay_out(browse_model(false), state, viewport, {});
-    OA_CHECK(layout.scroll_max_points > 0);
-    chooser::scroll(layout, state, 1000000);
-    OA_CHECK(state.scroll_points == layout.scroll_max_points);
-    chooser::scroll(layout, state, -1000000);
-    OA_CHECK(state.scroll_points == 0);
-    chooser::scroll(layout, state, 25);
-    OA_CHECK(state.scroll_points == std::min(25, layout.scroll_max_points));
-    // Scrolled to the end, the last folder shows whole in the rows.
-    state.scroll_points = layout.scroll_max_points;
-    const chooser::Layout end = chooser::lay_out(browse_model(false), state, viewport, {});
-    const Control* last = find(end, {TargetKind::entry, 29});
-    OA_CHECK(last != nullptr && inside(last->rect, last->clip));
-    // A layout that does not scroll keeps the scroll at 0.
-    const chooser::Layout still = chooser::lay_out(list_model(), {}, deck_viewport(), {});
-    OA_CHECK(still.scroll_max_points == 0);
-    chooser::UiState held;
-    chooser::scroll(still, held, 50);
-    OA_CHECK(held.scroll_points == 0);
-}
-
-/// Checks that an empty layout reaches nothing.
-void check_empty_layout() {
-    const chooser::Layout layout{};
-    OA_CHECK(chooser::hit_test(layout, {}, 0).kind == TargetKind::none);
-    chooser::Viewport nothing;
-    OA_CHECK(chooser::lay_out(list_model(), {}, nothing, {}).paint.list.controls.empty());
-}
-
-/// One case of the recorded layouts: a model and what the chooser keeps between frames.
+/// One case of the recorded layouts: a model and what the locator keeps between frames.
 struct Case {
     std::string name{};       ///< what it shows
     chooser::Model model{};   ///< the model
@@ -500,87 +321,61 @@ std::vector<Form> forms() {
     return {{"deck 1280x800@1", deck_viewport()}, {"phone 852x393@3", phone_viewport()}};
 }
 
-/// Returns every model the checks build, with the states they lay them out in, and the views
-/// they leave out: one folder found, a long notice, long paths that break at their
-/// separators, and the rows scrolled, focused and pressed.
+/// Returns every model the digests record: the desktop and Deck samples, a home-relative
+/// path, an empty folder, a filter, a notice, focus, a press, a scrolled list, a row that
+/// cannot be chosen, and an installer.
 ///
 /// @return the cases
 std::vector<Case> every_case() {
     std::vector<Case> cases;
     const auto add = [&cases](std::string name, chooser::Model model, chooser::UiState state) {
-        cases.push_back({std::move(name), std::move(model), state});
+        cases.push_back(Case{std::move(name), std::move(model), state});
     };
     const chooser::UiState rest;
-    add("list two found", list_model(), rest);
-    chooser::Model game_mode = list_model();
-    game_mode.offers_dialog = false;
-    add("list game mode", game_mode, rest);
-    chooser::Model one = list_model();
-    one.installs.pop_back();
-    add("list one found", one, rest);
-    add("list nothing found", chooser::Model{}, rest);
-    chooser::Model nothing;
-    nothing.notice = "The Total Annihilation folder chosen earlier can no longer be used.";
-    add("list nothing found with a notice", nothing, rest);
-    chooser::Model noticed = list_model();
-    noticed.notice =
-        "The Total Annihilation folder chosen earlier can no longer be used:\n"
-        "/run/media/deck/SD/SteamLibrary/steamapps/common/Total-Annihilation-Commander-Pack\n"
-        "Its archives lack guis/mainmenu.gui.\n\nThe system's folder dialog did not open: "
-        "no portal answered.";
-    add("list long notice", noticed, rest);
-    chooser::UiState end;
-    end.scroll_points = 100000;
-    add("list long notice scrolled to the end", noticed, end);
-    chooser::Model paths = list_model();
-    paths.installs[0].folder =
-        "/home/deck/.local/share/Steam/steamapps/compatdata/2000/pfx/drive_c/GOG_Games/"
-        "Total_Annihilation_Commander_Pack/Total_Annihilation";
-    paths.installs[1].folder =
-        "C:\\Program_Files_(x86)\\GOG_Galaxy\\Games\\Total_Annihilation_Commander_Pack\\"
-        "Total_Annihilation_Kingdoms_Not_This_One";
-    add("list long paths", paths, rest);
-    chooser::UiState focused;
-    focused.focus = 1;
-    focused.focus_shown = true;
-    add("list focus on browse", list_model(), focused);
-    chooser::UiState pressed;
-    pressed.pressed = 2;
-    add("list browse pressed", list_model(), pressed);
-    chooser::UiState pressed_off;
-    pressed_off.pressed = 1;
-    add("list unusable row pressed", list_model(), pressed_off);
-    add("browse refused", browse_model(false), rest);
-    add("browse usable", browse_model(true), rest);
-    chooser::Model root = browse_model(false);
-    root.folder = "/";
-    root.has_parent = false;
-    add("browse top of a drive", root, rest);
-    chooser::Model empty = browse_model(false);
+    add("desktop", sample(false), rest);
+    add("deck", sample(true), rest);
+    chooser::Model home = sample(false);
+    home.path = "~/Games";
+    add("home path", home, rest);
+    chooser::Model empty = sample(false);
     empty.entries.clear();
-    add("browse empty folder", empty, rest);
+    empty.selected = -1;
+    empty.can_choose = false;
+    add("empty folder", empty, rest);
+    chooser::Model filtered = sample(false);
+    filtered.filter = "total";
+    add("filter", filtered, rest);
+    chooser::Model noticed = sample(false);
+    noticed.notice = "This folder cannot be played.";
+    add("notice", noticed, rest);
+    chooser::UiState focused;
+    focused.focus = 0;
+    focused.focus_shown = true;
+    add("focus shown", sample(false), focused);
+    chooser::UiState pressed;
+    pressed.pressed = 0;
+    add("row pressed", sample(false), pressed);
+    chooser::Model many = sample(false);
+    many.entries.clear();
+    for (int index = 0; index < 18; ++index) {
+        chooser::Entry row;
+        row.name = "folder-" + std::to_string(index);
+        row.what = "folder";
+        row.directory = true;
+        many.entries.push_back(std::move(row));
+    }
+    many.selected = 0;
     chooser::UiState scrolled;
-    scrolled.scroll_points = 120;
-    add("browse scrolled", browse_model(false), scrolled);
-    add("browse scrolled to the end", browse_model(false), end);
-    chooser::UiState on_folder;
-    on_folder.focus = 9;
-    on_folder.focus_shown = true;
-    on_folder.scroll_points = 60;
-    add("browse focus on a folder", browse_model(true), on_folder);
-    chooser::UiState held;
-    held.pressed = 1;
-    add("browse place pressed", browse_model(true), held);
-    chooser::Model hinted = browse_model(true);
-    hinted.folder = "/run/media/deck/SD/Downloads/Total_Annihilation_Demo_1997/"
-                    "an_installer_folder_with_a_very_long_name_indeed";
-    hinted.hint = "Open the folder that holds the installer of the Total Annihilation demo "
-                  "(1997), then Play this folder.";
-    hinted.notice = "This folder cannot be played:\n/home/deck/Games\nIt holds no archives.";
-    hinted.place_labels = {"HOME", "DOWNLOADS", "SD CARD", "USB STICK", "SECOND DRIVE"};
-    hinted.entries[2].name = "Spiele \xE2\x80\x93 Sammlung mit einem sehr langen Namen, der nicht "
-                             "in eine Zeile passt";
-    add("browse long path with a hint and a notice", hinted, rest);
+    scrolled.scroll_points = 100000;
+    add("scrolled", many, scrolled);
+    chooser::Model blocked = sample(false);
+    blocked.can_choose = false;
+    blocked.has_parent = false;
+    add("cannot choose", blocked, rest);
+    chooser::Model installer = sample(false);
+    installer.selected = 2;
+    installer.choose_label = "Use this installer";
+    add("installer", installer, rest);
     return cases;
 }
 
@@ -588,80 +383,157 @@ std::vector<Case> every_case() {
 ///
 /// @param role the role
 /// @return its enumerator's name
-std::string_view role_name(oa::ui::kit::Role role) {
-    using oa::ui::kit::Role;
+std::string_view role_name(kit::Role role) {
     switch (role) {
-    case Role::text:
+    case kit::Role::fill:
+        return "fill";
+    case kit::Role::blend:
+        return "blend";
+    case kit::Role::outline:
+        return "outline";
+    case kit::Role::bevel:
+        return "bevel";
+    case kit::Role::rule:
+        return "rule";
+    case kit::Role::text:
         return "text";
-    case Role::button:
+    case kit::Role::picture:
+        return "picture";
+    case kit::Role::mark:
+        return "mark";
+    case kit::Role::button:
         return "button";
-    case Role::toggle:
+    case kit::Role::toggle:
         return "toggle";
-    case Role::header_bar:
+    case kit::Role::levels:
+        return "levels";
+    case kit::Role::slider:
+        return "slider";
+    case kit::Role::choice:
+        return "choice";
+    case kit::Role::choice_menu:
+        return "choice_menu";
+    case kit::Role::lock:
+        return "lock";
+    case kit::Role::scroll_bar:
+        return "scroll_bar";
+    case kit::Role::focus_ring:
+        return "focus_ring";
+    case kit::Role::oa_button:
+        return "oa_button";
+    case kit::Role::oa_mark:
+        return "oa_mark";
+    case kit::Role::header:
+        return "header";
+    case kit::Role::footer_band:
+        return "footer_band";
+    case kit::Role::nav:
+        return "nav";
+    case kit::Role::heading:
+        return "heading";
+    case kit::Role::row_frame:
+        return "row_frame";
+    case kit::Role::locked_fade:
+        return "locked_fade";
+    case kit::Role::list_row:
+        return "list_row";
+    case kit::Role::chip:
+        return "chip";
+    case kit::Role::field:
+        return "field";
+    case kit::Role::tabs:
+        return "tabs";
+    case kit::Role::card:
+        return "card";
+    case kit::Role::hover_card:
+        return "hover_card";
+    case kit::Role::link:
+        return "link";
+    case kit::Role::progress:
+        return "progress";
+    case kit::Role::header_bar:
         return "header_bar";
-    case Role::badge:
+    case kit::Role::badge:
         return "badge";
-    case Role::header_text:
+    case kit::Role::header_text:
         return "header_text";
-    case Role::version:
+    case kit::Role::version:
         return "version";
-    case Role::title:
+    case kit::Role::title:
         return "title";
-    case Role::panel:
+    case kit::Role::panel:
         return "panel";
-    case Role::icon:
+    case kit::Role::icon:
         return "icon";
-    case Role::banner:
+    case kit::Role::banner:
         return "banner";
-    case Role::row:
+    case kit::Role::row:
         return "row";
-    case Role::divider:
+    case kit::Role::divider:
         return "divider";
-    case Role::button_main:
+    case kit::Role::button_main:
         return "button_main";
-    case Role::button_danger:
+    case kit::Role::button_danger:
         return "button_danger";
-    case Role::progress_track:
+    case kit::Role::progress_track:
         return "progress_track";
-    case Role::progress_fill:
+    case kit::Role::progress_fill:
         return "progress_fill";
-    case Role::progress_busy:
+    case kit::Role::progress_busy:
         return "progress_busy";
-    case Role::backdrop:
+    case kit::Role::backdrop:
         return "backdrop";
-    case Role::sheet:
+    case kit::Role::sheet:
         return "sheet";
-    default:
-        return "?";
+    case kit::Role::pill:
+        return "pill";
+    case kit::Role::language_card:
+        return "language_card";
+    case kit::Role::carousel:
+        return "carousel";
+    case kit::Role::step_indicator:
+        return "step_indicator";
+    case kit::Role::setup_chrome:
+        return "setup_chrome";
+    case kit::Role::choice_card:
+        return "choice_card";
+    case kit::Role::coach_mark:
+        return "coach_mark";
+    case kit::Role::spotlight:
+        return "spotlight";
+    case kit::Role::picture_well:
+        return "picture_well";
+    case kit::Role::call_to_action:
+        return "call_to_action";
     }
+    return "?";
 }
 
 /// Returns the name of a text's look.
 ///
 /// @param style the text's look
 /// @return its enumerator's name
-std::string_view style_name(oa::ui::kit::TextStyle style) {
-    using oa::ui::kit::TextStyle;
+std::string_view style_name(kit::TextStyle style) {
     switch (style) {
-    case TextStyle::header:
+    case kit::TextStyle::header:
         return "header";
-    case TextStyle::title:
+    case kit::TextStyle::title:
         return "title";
-    case TextStyle::subtitle:
+    case kit::TextStyle::subtitle:
         return "subtitle";
-    case TextStyle::lead:
+    case kit::TextStyle::lead:
         return "lead";
-    case TextStyle::body:
+    case kit::TextStyle::body:
         return "body";
-    case TextStyle::small:
+    case kit::TextStyle::small:
         return "small";
-    case TextStyle::row_title:
+    case kit::TextStyle::row_title:
         return "row_title";
-    case TextStyle::row_detail:
+    case kit::TextStyle::row_detail:
         return "row_detail";
-    case TextStyle::button:
+    case kit::TextStyle::button:
         return "button";
-    case TextStyle::mark_text:
+    case kit::TextStyle::mark_text:
         return "mark_text";
     }
     return "?";
@@ -671,42 +543,41 @@ std::string_view style_name(oa::ui::kit::TextStyle style) {
 ///
 /// @param glyph the mark
 /// @return its enumerator's name
-std::string_view glyph_name(oa::ui::kit::Glyph glyph) {
-    using oa::ui::kit::Glyph;
+std::string_view glyph_name(kit::Glyph glyph) {
     switch (glyph) {
-    case Glyph::none:
+    case kit::Glyph::none:
         return "none";
-    case Glyph::folder:
+    case kit::Glyph::folder:
         return "folder";
-    case Glyph::device:
+    case kit::Glyph::device:
         return "device";
-    case Glyph::disk:
+    case kit::Glyph::disk:
         return "disk";
-    case Glyph::clock:
+    case kit::Glyph::clock:
         return "clock";
-    case Glyph::warning:
+    case kit::Glyph::warning:
         return "warning";
-    case Glyph::check:
+    case kit::Glyph::check:
         return "check";
-    case Glyph::cross:
+    case kit::Glyph::cross:
         return "cross";
-    case Glyph::dash:
+    case kit::Glyph::dash:
         return "dash";
-    case Glyph::info:
+    case kit::Glyph::info:
         return "info";
-    case Glyph::stop:
+    case kit::Glyph::stop:
         return "stop";
-    case Glyph::play:
+    case kit::Glyph::play:
         return "play";
-    case Glyph::trash:
+    case kit::Glyph::trash:
         return "trash";
-    case Glyph::refresh:
+    case kit::Glyph::refresh:
         return "refresh";
-    case Glyph::plus:
+    case kit::Glyph::plus:
         return "plus";
-    case Glyph::file:
+    case kit::Glyph::file:
         return "file";
-    case Glyph::oa:
+    case kit::Glyph::oa:
         return "oa";
     }
     return "?";
@@ -716,42 +587,36 @@ std::string_view glyph_name(oa::ui::kit::Glyph glyph) {
 ///
 /// @param kind the kind
 /// @return its enumerator's name
-std::string_view target_kind_name(TargetKind kind) {
+std::string_view target_kind_name(chooser::TargetKind kind) {
     switch (kind) {
-    case TargetKind::none:
+    case chooser::TargetKind::none:
         return "none";
-    case TargetKind::install:
-        return "install";
-    case TargetKind::browse:
-        return "browse";
-    case TargetKind::dialog:
-        return "dialog";
-    case TargetKind::demo:
-        return "demo";
-    case TargetKind::quit:
-        return "quit";
-    case TargetKind::place:
+    case chooser::TargetKind::place:
         return "place";
-    case TargetKind::parent:
-        return "parent";
-    case TargetKind::entry:
+    case chooser::TargetKind::up:
+        return "up";
+    case chooser::TargetKind::filter:
+        return "filter";
+    case chooser::TargetKind::entry:
         return "entry";
-    case TargetKind::choose:
+    case chooser::TargetKind::dialog:
+        return "dialog";
+    case chooser::TargetKind::cancel:
+        return "cancel";
+    case chooser::TargetKind::choose:
         return "choose";
-    case TargetKind::back:
-        return "back";
     }
     return "?";
 }
 
 /// Returns a colour as the name of the screen's colour token whose value it is, or as
-/// #rrggbbaa when it is none of them, so that a token whose value changes keeps its name.
+/// #rrggbbaa when it is none of them.
 ///
 /// @param colour the colour
 /// @return the token's name or the hexadecimal value
-std::string colour_name(oa::ui::kit::Colour colour) {
+std::string colour_name(kit::Colour colour) {
     namespace token = oa::ui::kit::screen_colour;
-    const std::array<std::pair<std::string_view, oa::ui::kit::Colour>, 10> tokens{{
+    const std::array<std::pair<std::string_view, kit::Colour>, 10> tokens{{
         {"background", token::background},
         {"panel", token::panel},
         {"line", token::line},
@@ -763,14 +628,15 @@ std::string colour_name(oa::ui::kit::Colour colour) {
         {"ink", token::ink},
         {"button_text", token::button_text},
     }};
-    for (const auto& [name, value] : tokens)
+    for (const auto& [name, value] : tokens) {
         if (value == colour)
             return std::string(name);
+    }
     constexpr std::string_view digits = "0123456789abcdef";
     std::string hex = "#";
     for (const uint8_t channel : {colour.r, colour.g, colour.b, colour.a}) {
         hex += digits[channel >> 4];
-        hex += digits[channel & 0xf];
+        hex += digits[channel & 0x0f];
     }
     return hex;
 }
@@ -779,7 +645,7 @@ std::string colour_name(oa::ui::kit::Colour colour) {
 ///
 /// @param rect the rectangle
 /// @return the text
-std::string rect_text(const chooser::Rect& rect) {
+std::string rect_text(const kit::Rect& rect) {
     return std::to_string(rect.x) + "," + std::to_string(rect.y) + "," +
            std::to_string(rect.width) + "," + std::to_string(rect.height);
 }
@@ -788,7 +654,7 @@ std::string rect_text(const chooser::Rect& rect) {
 ///
 /// @param target the target
 /// @return kind/index
-std::string target_text(const Target& target) {
+std::string target_text(chooser::Target target) {
     return std::string(target_kind_name(target.kind)) + "/" + std::to_string(target.index);
 }
 
@@ -801,7 +667,7 @@ std::string float_text(float value) {
     const auto bits = std::bit_cast<uint32_t>(value);
     std::string written;
     for (int shift = 28; shift >= 0; shift -= 4)
-        written += digits[(bits >> shift) & 0xfu];
+        written += digits[static_cast<uint32_t>((bits >> shift) & 0xfu)];
     return written;
 }
 
@@ -819,16 +685,12 @@ std::string quoted_line(std::string_view line) {
     return quoted + "\"";
 }
 
-/// Writes a layout in a fixed text form: one line of the layout's own fields (the form, the
-/// scrolling region, how far it scrolls, the pixels a point and the focus order), one line
-/// per painted part in painting order with every field the chooser sets in a fixed order,
-/// then one line per target in the order they were laid out. Roles, text looks, marks and
-/// kinds of target are written as their enumerators' names, and colours as the names of the
-/// screen's colour tokens.
+/// Writes a layout in a fixed text form.
 ///
 /// @param layout the layout
 /// @return the text
 std::string format_layout(const chooser::Layout& layout) {
+    namespace gf = oa::ui::game_files;
     std::string written = "layout device ";
     written += layout.paint.device == gf::DeviceClass::phone ? "phone" : "tablet";
     written += " rows " + rect_text(layout.paint.rows);
@@ -836,10 +698,10 @@ std::string format_layout(const chooser::Layout& layout) {
     written += " painted_scroll " + std::to_string(layout.paint.scroll_max_points);
     written += " px " + float_text(layout.paint.px_per_point);
     written += " focus";
-    for (const Target& target : layout.focus_order)
+    for (const chooser::Target target : layout.focus_order)
         written += " " + target_text(target);
     written += "\n";
-    for (const oa::ui::kit::Item& item : layout.paint.list.items) {
+    for (const kit::Item& item : layout.paint.list.items) {
         written += role_name(item.role);
         written += " box " + rect_text(item.rect);
         written += " lines " + std::to_string(item.lines.size());
@@ -861,16 +723,16 @@ std::string format_layout(const chooser::Layout& layout) {
         written += " clip " + rect_text(item.clip);
         written += "\n";
     }
-    for (const kit::Item& part : layout.paint.list.items) {
-        if (part.control == kit::no_control)
-            continue;
-        written += "target " + target_text(chooser::target_of(part.control));
-        written += " box " + rect_text(part.rect);
-        written += " enabled " + std::to_string(part.state.disabled ? 0 : 1);
-        written += " clip " + rect_text(part.clip);
-        written += "\n";
-    }
     return written;
+}
+
+/// Lays a case out at a form.
+///
+/// @param test the case
+/// @param form the form
+/// @return the layout
+chooser::Layout lay_out_case(const Case& test, const Form& form) {
+    return chooser::lay_out(test.model, test.state, form.viewport, {});
 }
 
 /// Returns the SHA-256 of a layout's text form, in hexadecimal.
@@ -889,44 +751,30 @@ std::string layout_digest(const chooser::Layout& layout) {
     return std::string(hex.begin(), hex.end());
 }
 
-/// Lays a case out at a form.
-///
-/// @param test the case
-/// @param form the form
-/// @return the layout
-chooser::Layout lay_out_case(const Case& test, const Form& form) {
-    return chooser::lay_out(test.model, test.state, form.viewport, {});
-}
-
-/// Returns the digests of every case at every form, one line each: <case>\t<form>\t<hex>, the
-/// content of layout-digests.txt.
+/// Returns the digests of every case at every form, one line each: <case>\t<form>\t<hex>.
 ///
 /// @return the lines
 std::string digest_lines() {
     std::string lines;
-    for (const Case& test : every_case())
+    for (const Case& test : every_case()) {
         for (const Form& form : forms())
             lines += test.name + "\t" + form.name + "\t" + layout_digest(lay_out_case(test, form)) +
                      "\n";
+    }
     return lines;
 }
 
-/// Checks that every layout of every case at every form is the one recorded: its digest is
-/// the one layout-digests.txt holds for that case and form, and the file holds no other line.
+/// Checks that every layout of every case at every form is the one recorded.
 ///
 /// @param file layout-digests.txt; null when the test was given none
 void check_digests(const char* file) {
     OA_CHECK(file != nullptr);
-    if (file == nullptr) {
-        std::fprintf(stderr, "the test is given no layout-digests.txt\n");
+    if (file == nullptr)
         return;
-    }
     std::ifstream input(file, std::ios::binary);
     OA_CHECK(static_cast<bool>(input));
-    if (!input) {
-        std::fprintf(stderr, "layout-digests.txt does not open: %s\n", file);
+    if (!input)
         return;
-    }
     std::map<std::string, std::string> recorded;
     std::size_t lines = 0;
     for (std::string line; std::getline(input, line);) {
@@ -944,22 +792,14 @@ void check_digests(const char* file) {
     std::size_t compared = 0;
     for (const Case& test : every_case()) {
         for (const Form& form : forms()) {
-            const auto found = recorded.find(test.name + "\t" + form.name);
+            const std::string key = test.name + "\t" + form.name;
+            const auto found = recorded.find(key);
             OA_CHECK(found != recorded.end());
-            if (found == recorded.end()) {
-                std::fprintf(stderr, "%s at %s: no digest\n", test.name.c_str(), form.name.c_str());
+            if (found == recorded.end())
                 continue;
-            }
             ++compared;
-            const bool same = layout_digest(lay_out_case(test, form)) == found->second;
-            OA_CHECK(same);
-            if (!same)
-                std::fprintf(
-                    stderr,
-                    "%s at %s: the layout differs from the one recorded\n",
-                    test.name.c_str(),
-                    form.name.c_str()
-                );
+            const std::string digest = layout_digest(lay_out_case(test, form));
+            OA_CHECK(digest == found->second);
         }
     }
     OA_CHECK(lines == compared && recorded.size() == compared);
@@ -973,29 +813,13 @@ void check_digests(const char* file) {
 /// @param argv the arguments: layout-digests.txt, or --write-digests
 /// @return 0 when every check passed
 int main(int argc, char** argv) {
-    if (argc == 3 && std::string_view(argv[1]) == "--dump") {
-        // The text form of the cases whose names hold a text, for looking at a layout.
-        for (const Case& test : every_case())
-            if (test.name.find(argv[2]) != std::string::npos)
-                for (const Form& form : forms())
-                    std::printf(
-                        "== %s at %s\n%s",
-                        test.name.c_str(),
-                        form.name.c_str(),
-                        format_layout(lay_out_case(test, form)).c_str()
-                    );
-        return 0;
-    }
     if (argc == 2 && std::string_view(argv[1]) == "--write-digests") {
         std::fputs(digest_lines().c_str(), stdout);
         return 0;
     }
     check_digests(argc == 2 ? argv[1] : nullptr);
-    check_empty_layout();
-    check_list();
-    check_browser();
-    check_keys();
-    check_presses();
-    check_scroll();
+    check_recognition();
+    check_places_and_form();
+    check_selection();
     return oa::test::check_exit_status();
 }

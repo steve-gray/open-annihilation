@@ -1083,6 +1083,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-package-install
   oa-app-map-packs
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
+  oa-data-content-bundles
   oa-ui-frontend-multiplayer oa-ui-library oa-ui-map-browser oa-ui-first-run)
 # The table that combines the extensions' tables of oa-game
 # (extension_list.hpp); the extensions themselves are registered with
@@ -1712,6 +1713,24 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_first_run_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED first-run-clean)
+      # The locator, driven with Tab onto the fixture install and then the
+      # choose key. It leaves before a match. Each run starts from a clean
+      # folder.
+      set(oa_folder_chooser_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/folder-chooser")
+      file(MAKE_DIRECTORY "${oa_folder_chooser_dir}")
+      add_test(NAME folder-chooser-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_folder_chooser_dir}/Open Annihilation" "${oa_folder_chooser_dir}/data"
+        "${oa_folder_chooser_dir}/folder-chooser.conf")
+      set_tests_properties(folder-chooser-clean PROPERTIES FIXTURES_SETUP folder-chooser-clean)
+      add_test(NAME native-folder-chooser COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-folder-chooser
+        --preferences-file "${oa_folder_chooser_dir}/folder-chooser.conf"
+        --user-folder "${oa_folder_chooser_dir}/Open Annihilation"
+        --data-dir "${oa_folder_chooser_dir}/data")
+      set_tests_properties(native-folder-chooser PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_folder_chooser_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED folder-chooser-clean)
       # Made-up mod packages installed through the game: a missing file
       # refused, a package the Finder made installed with no question from a
       # dropped file, an update asked and cancelled then replaced, three
