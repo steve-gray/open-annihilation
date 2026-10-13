@@ -128,7 +128,12 @@ shows, the automation host lists its controls (`OaLayer::automation_controls`):
   [docs/automation.md](../../../docs/automation.md#oas-own-screens) tabulates.
   Words are the code's, never the shown text. `dialog` is `oa.` and the
   screen's name: `oa.settings`, `oa.notice` or `oa.prompt` (a notice's or
-  a prompt's own word when it gives one).
+  a prompt's own word when it gives one). The battle room's OA tip, while
+  it is open, is the screen `presence-card` (`dialog` `oa.presence-card`).
+  Each line it draws is `oa.battleroom.tip.line.<n>` from 0, a label whose
+  text is that line's words: a row's value, or `<label>: <value>` when the
+  row names one, then the block's lines. The header is not a line. The
+  lines take no press.
 - **Parts.** A control's parts that take a press of their own follow it,
   one word longer: a switch's `.off` and `.on`, a strip's levels and an
   open drop-down's items by their values, a row of buttons' buttons by

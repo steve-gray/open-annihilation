@@ -272,8 +272,8 @@ class PresenceCardScreen final : public LayerScreen {
     /// @return pass
     LayerAnswer wheel(kit::Point /*at*/, float /*notches*/) override { return LayerAnswer::pass; }
 
-    /// Returns the open card, from the place's corner: a hover card, which
-    /// is no control.
+    /// Returns the open card, from the place's corner: the hover card the
+    /// player sees, and one named control for each of its lines.
     ///
     /// @return the list; empty while no card is open
     [[nodiscard]] kit::DisplayList display_list() const override {
@@ -285,6 +285,7 @@ class PresenceCardScreen final : public LayerScreen {
         placed.x -= held.x;
         placed.y -= held.y;
         kit::add_hover_card(list, placed, shown_->look);
+        mp::presence_card_controls(list, placed, shown_->look);
         return list;
     }
 
