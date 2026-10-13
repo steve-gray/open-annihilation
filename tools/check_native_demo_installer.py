@@ -8,13 +8,13 @@ The installer the OA_DEMO_INSTALLER environment variable names stays where it
 is. The game, open-annihilation, starts headless with --game-dir on its folder
 and --data-dir on a scratch folder. The preferences file sits in that scratch
 folder, so the player's folder is "Open Annihilation" beside it. The first
-start must unpack the archive to games/totala-demo/TADemo.hpi there, with the
+start must unpack the archive to Games/totala-demo/TADemo.hpi there, with the
 .oa-content record of that base game, check it and mount it, and the verifier
 (oa-demo-installer-test --verify) must then find the file's size and SHA-256
 to be those of the release the engine recognises. A second start must check
 the archive and mount it without unpacking it again, and one after the
 archive was damaged must unpack it again. An earlier unpack left at
-demo-1997/TADemo.hpi in the data folder is copied into games/totala-demo once
+demo-1997/TADemo.hpi in the data folder is copied into Games/totala-demo once
 and left where it was. The installer's folder must be left as it was.
 
 Each start runs --skip-intro --frames 60 on the dummy SDL drivers and must
@@ -59,7 +59,7 @@ INSTALLER_VARIABLE = "OA_DEMO_INSTALLER"
 # The player's folder beside the scratch preferences file.
 PLAYER = "Open Annihilation"
 # Where the archive is unpacked, under the player's folder, and the record beside it.
-DEMO_FOLDER = Path(PLAYER) / "games" / "totala-demo"
+DEMO_FOLDER = Path(PLAYER) / "Games" / "totala-demo"
 ARCHIVE_NAME = "TADemo.hpi"
 RECORD_NAME = ".oa-content"
 # An earlier unpack, under the data folder, copied from once.

@@ -71,8 +71,8 @@ bool Runtime::package_target_in_use(
     const package_install::PackageKind& kind, const fs::path& folder
 ) const {
     if (kind.name == "oamod")
-        return options_.game_folders.size() > 1 &&
-               same_folder(kept_path(folder), kept_path(options_.game_folders.front()));
+        return !options_.layered_mod_folder.empty() &&
+               same_folder(kept_path(folder), kept_path(options_.layered_mod_folder));
     if (kind.name == "oamap")
         return false;
     // A pack is read whole when packs are read. Nothing holds its folder

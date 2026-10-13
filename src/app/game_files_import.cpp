@@ -740,7 +740,7 @@ InstalledSummary summarize_installed(const GameFilesHooks& hooks, const ImportPa
         summary.demo = !has_archives && summary.parts[static_cast<std::size_t>(Part::demo)].found;
     }
     if (!paths.data_folder.empty()) {
-        // The archive in games/totala-demo. The record beside it is not part
+        // The archive in Games/totala-demo. The record beside it is not part
         // of the archive's size.
         const fs::path demo_archive = demo_bundle_directory(paths.data_folder) /
                                       fs::path(std::string(demo_1997.archive_name));

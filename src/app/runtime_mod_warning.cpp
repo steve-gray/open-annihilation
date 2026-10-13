@@ -165,19 +165,21 @@ std::string message_text(const oa::ui::engine_settings::Notice& notice) {
 
 fs::path Runtime::played_mod_folder() const {
     fs::path folder;
-    if (options_.game_folders.size() > 1)
-        folder = options_.game_folders.front();
+    if (!options_.layered_mod_folder.empty())
+        folder = options_.layered_mod_folder;
     else if (!options_.mod_file.empty())
         folder = options_.mod_file.parent_path();
+    else if (!options_.game_folders.empty())
+        folder = options_.game_folders.back();
     else
-        folder = options_.game_folders.empty() ? options_.game_dir : options_.game_folders.front();
+        folder = options_.game_dir;
     std::error_code error;
     const fs::path absolute = fs::absolute(folder, error);
     return (error ? folder : absolute).lexically_normal();
 }
 
 bool Runtime::plays_mod() const noexcept {
-    return mod_profile() != nullptr || options_.game_folders.size() > 1;
+    return mod_profile() != nullptr || !options_.layered_mod_folder.empty();
 }
 
 ModStartGaps Runtime::mod_start_gaps() {

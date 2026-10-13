@@ -3993,15 +3993,16 @@ class Runtime final : public menu::Host,
     /// @return false when the token is not a step
     bool open_staged_first_run(std::string_view token);
 
-    /// Returns the folder of the mod played: the mod folder laid over the
-    /// game folder, else the folder of the profile --mod names, else the game
-    /// folder whose own profile plays.
+    /// Returns the folder of the mod played: the mod folder this start
+    /// layered, else the folder of the profile --mod names, else the base
+    /// game folder. An expansion bundle is not that folder.
     ///
     /// @return the folder
     [[nodiscard]] fs::path played_mod_folder() const;
 
-    /// Tells whether a mod plays: a mod profile, or a mod folder laid over
-    /// the game folder without one.
+    /// Tells whether a mod plays: a mod profile, or a mod folder this start
+    /// layered, including one without a profile. An expansion bundle does
+    /// not count.
     ///
     /// @return true when a mod plays
     [[nodiscard]] bool plays_mod() const noexcept;
