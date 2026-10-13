@@ -231,6 +231,30 @@ constexpr int32_t kHandoffWaitMs = 1000;
     return "unnamed screen";
 }
 
+// The screen change whose first frame has not been presented yet.
+struct ScreenChange {
+    std::string name;
+    uint32_t began_ms = 0;
+    bool open = false;
+};
+
+ScreenChange& screen_change() {
+    static ScreenChange change;
+    return change;
+}
+
+bool& main_menu_phase_logged() {
+    static bool logged = false;
+    return logged;
+}
+
+// The main menu's screen-change first frame, so a later change that replaced
+// the pending name does not drop it and a finished one is not written twice.
+bool& menu_screen_framed() {
+    static bool framed = false;
+    return framed;
+}
+
 /// Returns the record of a frontend panel that holds the keyboard focus.
 ///
 /// The panel is loaded as its loader loads it, undrawn, with its records
@@ -281,6 +305,43 @@ int32_t frontend_panel_focus(
 
 } // namespace
 
+void Runtime::begin_screen_change(std::string_view name) {
+    ScreenChange& change = screen_change();
+    change.name.assign(name.begin(), name.end());
+    change.began_ms = oa::platform::tick_ms();
+    change.open = true;
+    std::string phase = "screen ";
+    phase.append(name);
+    phase.append(" begin");
+    oa::platform::log_files::note_timing(phase);
+}
+
+void Runtime::finish_screen_change(std::string_view name) {
+    ScreenChange& change = screen_change();
+    if (!change.open || change.name != name)
+        return;
+    std::string phase = "screen ";
+    phase.append(name);
+    phase.append(" first frame");
+    oa::platform::log_files::note_timing_span(phase, change.began_ms);
+    change.open = false;
+    if (name == "main menu")
+        menu_screen_framed() = true;
+}
+
+void Runtime::note_shown_frame() {
+    note_launch_frame();
+    finish_screen_change(screen_label(screen_));
+    if (screen_ == Screen::main_menu && !main_menu_phase_logged()) {
+        main_menu_phase_logged() = true;
+        oa::platform::log_files::note_timing("main menu first frame");
+        if (!menu_screen_framed()) {
+            oa::platform::log_files::note_timing("screen main menu first frame");
+            menu_screen_framed() = true;
+        }
+    }
+}
+
 Runtime::Runtime(
     Options options,
     oa::AssetStore& assets,
@@ -316,19 +377,30 @@ Runtime::Runtime(
     start_session_display();
     choose_web_links();
     call_hook_or_raise<&Extension::startup>(extension_, *this);
+    const uint32_t sounds_began = oa::platform::tick_ms();
     load_all_sounds();
+    oa::platform::log_files::note_timing_span("sounds", sounds_began);
     register_screens();
     call_hook_or_raise<&Extension::ready>(extension_, *this);
+    const auto mark_phase = [](std::string_view phase_name, uint32_t started_ms) {
+        oa::platform::log_files::note_timing_span(phase_name, started_ms);
+    };
+    uint32_t phase_began = oa::platform::tick_ms();
     load_preference_file();
+    mark_phase("preferences", phase_began);
     // The player's own folder, and the one-time move of the saved games into
     // it, before the frontend's preferences read the Image Output Directory
     // that defaults to it.
+    phase_began = oa::platform::tick_ms();
     start_user_folder();
+    mark_phase("user folder", phase_began);
     // Which copied files differ, for the main menu's notice and for the
     // Library and Settings. A named --game-dir still fills it; the notice
     // stays closed then. A bundle this start's setup already copied and
     // checked is answered from that result and is not read again.
+    phase_began = oa::platform::tick_ms();
     content_check_ = check_managed_content(user_folder_, {});
+    mark_phase("content check", phase_began);
     // Stored after the one-time legacy import, which runs only while no
     // preferences file exists. An unwritable preferences file only costs the
     // next start the dialog.
@@ -346,7 +418,9 @@ Runtime::Runtime(
     // The language the game shows its text in, which loads the translation
     // table and the fonts: 3.1c's command line, else the setting, else the
     // operating system's.
+    phase_began = oa::platform::tick_ms();
     start_language();
+    mark_phase("language", phase_began);
     // SIDEDATA, and the sides' interface art and fonts it names, from the
     // language's folders first.
     load_side_table();
@@ -378,7 +452,9 @@ Runtime::Runtime(
         if (options_.check_library_map_previews)
             prepare_library_map_preview_check();
     }
+    phase_began = oa::platform::tick_ms();
     start_content();
+    mark_phase("catalogue and registries", phase_began);
     // The GUI text loops hand characters outside the 8-bit fonts to the
     // system's fonts when the profile's text rendering asks for it.
     install_game_text_hooks();
@@ -412,6 +488,8 @@ Runtime::ExtensionRelease::~ExtensionRelease() {
 }
 
 int Runtime::run() {
+    // The menu draws this window from here. A launch pump must not clear it.
+    release_launch_window();
     take_pending_content();
     log_first_run_gate(false);
     int exit_code = 0;
@@ -1346,6 +1424,7 @@ void Runtime::move_frontend_focus(oa::ui::gui_input::FocusDirection direction) {
 }
 
 void Runtime::load(Screen screen) {
+    begin_screen_change(screen_label(screen));
     if (screen == Screen::main_menu && !pending_save_path_.empty()) {
         const fs::path pending = path_from_utf8(pending_save_path_);
         pending_save_path_.clear();

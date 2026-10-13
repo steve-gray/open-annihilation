@@ -3,9 +3,10 @@
 
 // Steps 1 to 3 before the game is mounted. The window is the game's own
 // window, drawn with the bundled fonts, so a language's name in itself can
-// be read before any archive is open. The copy runs on a side thread; this
-// thread only pumps the window and reads the progress. A player who already
-// has the game, or who named --game-dir, does not see these steps.
+// be read before any archive is open. The copy runs on a side thread, and so
+// does the scan of installers already on this machine; this thread only
+// pumps the window and reads the progress. A player who already has the
+// game, or who named --game-dir, does not see these steps.
 
 #include "oa/app/setup_before_game.hpp"
 
@@ -24,6 +25,7 @@
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/platform/files.hpp"
 #include "oa/platform/game_installs.hpp"
+#include "oa/platform/log_files.hpp"
 #include "oa/platform/locale.hpp"
 #include "oa/platform/preferences.hpp"
 #include "oa/platform/system.hpp"
@@ -45,6 +47,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -295,6 +298,7 @@ std::string bundle_name(std::span<const bundles::Bundle> table, std::string_view
 /// Fills a row from a description. A place with no matched file is not listed.
 ///
 /// @param[in,out] model the game step
+/// @param[in,out] memory the places already listed, so a scan can keep its own
 /// @param path the place
 /// @param kind which reader
 /// @param mark the badge
@@ -304,6 +308,7 @@ std::string bundle_name(std::span<const bundles::Bundle> table, std::string_view
 /// @return true when the row was added
 bool add_described(
     first_run::Model& model,
+    std::vector<Remembered>& memory,
     const fs::path& path,
     SourceKind kind,
     first_run::SourceMark mark,
@@ -314,7 +319,7 @@ bool add_described(
     if (described.bundles.empty() || static_cast<int32_t>(model.sources.size()) >= kMostSources)
         return false;
     const std::string token = path_to_utf8(path);
-    for (const Remembered& held : remembered_sources()) {
+    for (const Remembered& held : memory) {
         if (held.token == token)
             return false;
     }
@@ -345,7 +350,7 @@ bool add_described(
         chip.held = false;
         row.chips.push_back(std::move(chip));
     }
-    remembered_sources().push_back(Remembered{token, kind, path});
+    memory.push_back(Remembered{token, kind, path});
     model.sources.push_back(std::move(row));
     return true;
 }
@@ -353,6 +358,7 @@ bool add_described(
 /// Lists a folder when it holds game files.
 ///
 /// @param[in,out] model the game step
+/// @param[in,out] memory the places already listed, so a scan can keep its own
 /// @param folder the folder
 /// @param user_folder the player's folder
 /// @param detail the line under the title
@@ -360,6 +366,7 @@ bool add_described(
 /// @param kind which reader; fixture uses the check's table
 void add_folder_source(
     first_run::Model& model,
+    std::vector<Remembered>& memory,
     const fs::path& folder,
     const fs::path& user_folder,
     std::string detail,
@@ -377,17 +384,28 @@ void add_folder_source(
     if (!describe_source(source, table, described, &error))
         return;
     add_described(
-        model, folder, kind, first_run::SourceMark::folder, std::move(detail), described, table
+        model,
+        memory,
+        folder,
+        kind,
+        first_run::SourceMark::folder,
+        std::move(detail),
+        described,
+        table
     );
 }
 
 /// Lists an installer whose size is one this game knows.
 ///
 /// @param[in,out] model the game step
+/// @param[in,out] memory the places already listed, so a scan can keep its own
 /// @param file the installer
 /// @param user_folder the player's folder
 void add_installer_source(
-    first_run::Model& model, const fs::path& file, const fs::path& user_folder
+    first_run::Model& model,
+    std::vector<Remembered>& memory,
+    const fs::path& file,
+    const fs::path& user_folder
 ) {
     if (file.empty() || inside_managed(file, user_folder))
         return;
@@ -421,7 +439,9 @@ void add_installer_source(
     std::string error;
     if (!describe_source(*source, table, described, &error))
         return;
-    add_described(model, file, kind, mark, path_to_utf8(file.parent_path()), described, table);
+    add_described(
+        model, memory, file, kind, mark, path_to_utf8(file.parent_path()), described, table
+    );
 }
 
 /// Lists the places this machine already has.
@@ -429,19 +449,25 @@ void add_installer_source(
 /// @param[in,out] model the game step
 /// @param user_folder the player's folder
 /// @param found_install a folder already found; empty when there is none
+/// @param held the scan's own list; null uses the list the game step keeps
 void fill_sources(
-    first_run::Model& model, const fs::path& user_folder, const fs::path& found_install
+    first_run::Model& model,
+    const fs::path& user_folder,
+    const fs::path& found_install,
+    std::vector<Remembered>* held
 ) {
+    std::vector<Remembered>& memory = held != nullptr ? *held : remembered_sources();
     model.sources.clear();
     model.source = -1;
-    remembered_sources().clear();
+    memory.clear();
     const std::span<const bundles::Bundle> table = bundles::bundles();
     if (!found_install.empty())
-        add_folder_source(model, found_install, user_folder, {}, table, SourceKind::folder);
+        add_folder_source(model, memory, found_install, user_folder, {}, table, SourceKind::folder);
     for (const installs::Candidate& candidate :
          installs::find_candidates(installs::default_search_roots())) {
         add_folder_source(
             model,
+            memory,
             candidate.folder,
             user_folder,
             std::string(installs::source_words(candidate.source, candidate.removable)),
@@ -467,11 +493,79 @@ void fill_sources(
              entry.increment(failure)) {
             if (!entry->is_regular_file(failure))
                 continue;
-            add_installer_source(model, entry->path(), user_folder);
+            add_installer_source(model, memory, entry->path(), user_folder);
         }
     }
     if (!model.sources.empty())
         model.source = 0;
+}
+
+/// The installer scan, off the thread that draws the window.
+///
+/// The rows land in `model` and `remembered` and are copied onto the setup
+/// only after `done`. The check's window replaces that list with its own
+/// install, so it does not run this scan.
+struct SourceScan {
+    ~SourceScan() { finish(); }
+
+    /// Joins the scan and records how long it took. A second call does nothing.
+    void finish() {
+        if (!started || applied)
+            return;
+        if (worker.joinable())
+            worker.join();
+        applied = true;
+        oa::platform::log_files::note_timing_span("sources", began_ms);
+    }
+
+    std::thread worker{};
+    std::atomic<bool> done{false};
+    first_run::Model model{};
+    std::vector<Remembered> remembered{};
+    std::exception_ptr failure{};
+    uint32_t began_ms = 0;
+    bool started = false;
+    bool applied = false;
+};
+
+/// Starts the scan. The caller keeps `scan` until the setup returns.
+void start_source_scan(
+    SourceScan& scan, const fs::path& user_folder, const fs::path& found_install
+) {
+    scan.began_ms = oa::platform::tick_ms();
+    scan.started = true;
+    scan.worker = std::thread([&scan, user_folder, found_install] {
+        try {
+            fill_sources(scan.model, user_folder, found_install, &scan.remembered);
+        } catch (...) {
+            scan.failure = std::current_exception();
+        }
+        scan.done.store(true);
+    });
+}
+
+/// Copies a finished scan onto the game step. False when it is still running.
+bool take_source_scan(SourceScan& scan, first_run::Model& model) {
+    if (!scan.started || scan.applied || !scan.done.load())
+        return false;
+    scan.finish();
+    if (scan.failure)
+        std::rethrow_exception(scan.failure);
+    model.sources = std::move(scan.model.sources);
+    model.source = scan.model.source;
+    remembered_sources() = std::move(scan.remembered);
+    return true;
+}
+
+/// Scans still running when the setup ends. They finish after the menu is up,
+/// and are joined when the process leaves, so Skip does not wait for them.
+struct ScanKeeper {
+    std::vector<std::unique_ptr<SourceScan>> held{};
+};
+
+ScanKeeper& scan_keeper() {
+    static ScanKeeper keeper;
+    return keeper;
 }
 
 /// The languages the step can offer before a pack is downloaded.
@@ -1210,6 +1304,8 @@ SetupBefore run_setup_before_game(
         return SetupBefore::not_run;
     if (managed_base_present(user, bundles::bundles()))
         return SetupBefore::not_run;
+    // The setup draws this window from here. A launch pump must not clear it.
+    release_launch_window();
 
     const std::string language = stored_language(options);
     apply_early_language(language);
@@ -1232,19 +1328,74 @@ SetupBefore run_setup_before_game(
             session.carousel.selected = index;
     }
     first_run::bind(session);
-    if (session.model.step == first_run::Step::game) {
-        fill_sources(session.model, user, found_install);
-        if (options.check_setup_window)
+
+    // The step on screen, and whether its first frame has been presented.
+    struct SetupStepTiming {
+        std::string_view token;
+        uint32_t began_ms = 0;
+        bool framed = false;
+    };
+
+    SetupStepTiming step_timing;
+    const auto note_setup_step = [&] {
+        const std::string_view token = first_run::step_token(session.model.step);
+        if (token == step_timing.token)
+            return;
+        step_timing.token = token;
+        step_timing.began_ms = oa::platform::tick_ms();
+        step_timing.framed = false;
+        std::string phase = "screen setup ";
+        phase.append(token);
+        phase.append(" begin");
+        oa::platform::log_files::note_timing(phase);
+    };
+    const auto note_setup_frame = [&] {
+        if (step_timing.framed || step_timing.token.empty())
+            return;
+        std::string phase = "screen setup ";
+        phase.append(step_timing.token);
+        phase.append(" first frame");
+        oa::platform::log_files::note_timing_span(phase, step_timing.began_ms);
+        step_timing.framed = true;
+    };
+    note_setup_step();
+    // The check's list is its own small install. A player's list is read
+    // while the language step is on screen, and the game step draws at once.
+    auto owned_scan = std::make_unique<SourceScan>();
+    SourceScan& sources = *owned_scan;
+
+    // A scan that is still reading when this function returns keeps running.
+    // Joining it here would hold the menu behind the installer scan.
+    struct ParkScan {
+        std::unique_ptr<SourceScan>& owned;
+
+        ~ParkScan() {
+            if (!owned)
+                return;
+            if (owned->started && !owned->applied && !owned->done.load()) {
+                scan_keeper().held.push_back(std::move(owned));
+                return;
+            }
+            owned->finish();
+        }
+    } park_scan{owned_scan};
+
+    if (options.check_setup_window) {
+        if (session.model.step == first_run::Step::game)
             setup_install_check_source(user, session.model);
+    } else {
+        start_source_scan(sources, user, found_install);
     }
 
     std::unique_ptr<text_font::FontStack> fonts;
+    const uint32_t fonts_began = oa::platform::tick_ms();
     try {
         fonts = text_font::FontStack::open(text_font::bundled_font_directory());
     } catch (const std::exception& error) {
         std::cerr << "open-annihilation: the setup's fonts could not be opened: " << error.what()
                   << '\n';
     }
+    oa::platform::log_files::note_timing_span("fonts", fonts_began);
     RenderState render_state(display.renderer);
     WindowFrame frame(display.renderer, "the setup");
     oa::ui::game_files::Viewport viewport;
@@ -1292,8 +1443,23 @@ SetupBefore run_setup_before_game(
         canvas.smooth.origin = {room.area.x, room.area.y};
         canvas.icon = app_icon;
         first_run::draw(canvas, scene, session);
+        // The game step is up while the installer scan finishes. After a
+        // moment a bar shows that the list is still being read. No new words.
+        if (sources.started && !sources.applied && session.model.step == first_run::Step::game &&
+            oa::platform::tick_ms() - step_timing.began_ms > 200) {
+            const int32_t bar_width = std::max(pixels.width / 5, 40);
+            const int32_t travel = std::max(pixels.width - bar_width, 1);
+            const uint32_t now_ms = oa::platform::tick_ms();
+            const int32_t bar_x =
+                static_cast<int32_t>((now_ms / 16U) % static_cast<uint32_t>(travel));
+            painter.fill_rect(
+                {bar_x, std::max(pixels.height - 36, 0), bar_width, 8},
+                paint::Rgba{0xc8, 0xc2, 0xb0, 255}
+            );
+        }
         static_cast<void>(frame.show(pixels, render_state, display.host));
         dirty = false;
+        note_setup_frame();
     };
 
     const auto handle = [&](const first_run::Outcome& outcome) {
@@ -1325,12 +1491,19 @@ SetupBefore run_setup_before_game(
         case first_run::Ask::advance:
             if (session.model.step == first_run::Step::language) {
                 apply_selected_language(session, options);
-                fill_sources(session.model, user, found_install);
+                session.model.step = first_run::Step::game;
+                note_setup_step();
+                // The check's install replaces the machine's list. A player's
+                // list is already being read, and is shown when it is ready.
                 if (options.check_setup_window)
                     setup_install_check_source(user, session.model);
-                session.model.step = first_run::Step::game;
+                else
+                    std::ignore = take_source_scan(sources, session.model);
                 session.focus_ready = false;
             } else if (session.model.step == first_run::Step::game) {
+                std::ignore = take_source_scan(sources, session.model);
+                if (sources.started && !sources.applied)
+                    break;
                 if (setup_begin_copy(user, session.model)) {
                     session.model.step = first_run::Step::copying;
                     session.focus_ready = false;
@@ -1352,6 +1525,9 @@ SetupBefore run_setup_before_game(
             apply_selected_language(session, options);
             break;
         case first_run::Ask::locate:
+            std::ignore = take_source_scan(sources, session.model);
+            if (sources.started && !sources.applied)
+                break;
             if (setup_locate_source(display.window, user, session.model))
                 session.focus_ready = false;
             break;
@@ -1377,6 +1553,7 @@ SetupBefore run_setup_before_game(
         case first_run::Ask::choose_off:
             break;
         }
+        note_setup_step();
         dirty = true;
     };
 
@@ -1480,6 +1657,11 @@ SetupBefore run_setup_before_game(
             dt = static_cast<uint32_t>(std::min<uint64_t>(now - last_ticks, 1000ULL));
         last_ticks = now;
         first_run::tick(session, dt);
+        if (take_source_scan(sources, session.model))
+            dirty = true;
+        if (sources.started && !sources.applied && session.model.step == first_run::Step::game &&
+            oa::platform::tick_ms() - step_timing.began_ms > 200)
+            dirty = true;
         if (dirty) {
             scene = relayout(room);
             present();
@@ -1552,6 +1734,7 @@ void setup_install_check_source(const fs::path& user_folder, first_run::Model& m
     }
     add_described(
         model,
+        remembered_sources(),
         folder,
         SourceKind::fixture,
         first_run::SourceMark::folder,
@@ -1789,10 +1972,16 @@ bool setup_locate_source(SDL_Window* window, const fs::path& user_folder, first_
         std::error_code failure;
         if (fs::is_directory(folder, failure) && !failure)
             add_folder_source(
-                model, folder, user_folder, {}, bundles::bundles(), SourceKind::folder
+                model,
+                remembered_sources(),
+                folder,
+                user_folder,
+                {},
+                bundles::bundles(),
+                SourceKind::folder
             );
         else
-            add_installer_source(model, folder, user_folder);
+            add_installer_source(model, remembered_sources(), folder, user_folder);
         if (model.sources.size() != before) {
             model.source = static_cast<int32_t>(model.sources.size()) - 1;
             added = true;
