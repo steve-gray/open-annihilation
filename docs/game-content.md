@@ -3,8 +3,8 @@
 Open Annihilation knows two base games and six expansions. A game uses one
 base game. Each expansion adds to Total Annihilation 3.1c and is left out
 of the demo. A managed copy keeps every bundle in its own folder, under
-the game's documents folder: `games/totala` and `games/totala-demo` for the
-base games, and `expansions/totala/<id>` for each expansion. The names
+the game's documents folder: `Games/totala` and `Games/totala-demo` for the
+base games, and `Expansions/totala/<id>` for each expansion. The names
 below are the names the copy uses. An install may spell the same file in
 any case, or with `\` between the parts; the copy writes these names.
 
@@ -47,6 +47,13 @@ through `tactics8.hpi`.
 change units, maps or the rules, and a comparison of two games' rules
 leaves it out.
 
+`music/0.mp3` is the same recording as `music/9.mp3`. A source that has
+one and not the other is copied as both. A soundtrack file the source
+does not have at all, which the macOS installer does for `music/13.mp3`,
+is left out and is not reported as a damaged file. The Music pill then
+reads how many tracks that source held, such as "17 of 18 tracks". A
+track that is there and does not match is still reported.
+
 **Cavedog units** (`cavedog-units`) needs Core Contingency. It holds six
 unit files, copied as `afark.ufo`, `aflea.ufo`, `ascarab.ufo`,
 `cormabm.ufo`, `cornecro.ufo` and `corplas.ufo`: FARK, Flea, Scarab,
@@ -88,8 +95,10 @@ disk image for older Macs
 `total_annihilation_commander_pack_2.0.0.10.dmg`. The 1997 demo installer
 is separate from these three, and is recognised where it is today. An
 attended start reads the Windows installer, when the installation is that
-file, and copies the game out of it. `--check-installer FILE` lists the
-bundles found in one and every file's SHA-256, and does nothing else.
+file, and copies the game out of it. The disk image is read in place: it is
+not mounted. `--check-installer FILE` lists the bundles found in a
+recognised installer and every file's SHA-256, and does nothing else. A
+bundle with no file in the installer is left out.
 
 ## For a mod author
 

@@ -76,6 +76,15 @@ at the size that source produces rather than the empty well shown while a
 picture is still missing. Its catalogue is served by the test fixture, and
 its Maps folder, data folder and preferences stay in the build tree.
 
+`native-library-content` (`--check-library-content`) turns Core Contingency
+off, closes the Library, and requires its maps out of the skirmish list.
+It then chooses the Total Annihilation demo and, on the next close,
+requires that demo mounted. `OA_DEMO_INSTALLER` names the demo's installer
+for that half. Without it the check prints that the demo was not checked
+and still passes the Core Contingency half; it does not skip with code 77.
+`--game-dir` is only the source the copy is made from. The check plays the
+player's copy, and its preferences and player folder stay in the build tree.
+
 `native-map-pack-lists` (`--check-map-pack-lists`) installs one map pack
 from the Library during the run and requires its fitting map in the
 skirmish list and the battle room's map list the next time each is shown,
@@ -289,15 +298,19 @@ it was configured with, and tests receive it at run time. It is the only
 setting the demo's tests need: each unpacks the demo's data from the
 installer itself. These tests read it:
 
-- `demo-installer-data` unpacks the installer's archive into a temporary data
-  folder, checks its size and SHA-256, and checks that a second start reuses
-  it and that the unpacked folder is a usable installation;
+- `demo-installer-data` unpacks the installer's archive into
+  `Games/totala-demo` of a temporary player's folder, checks its size and
+  SHA-256, and checks that a second start reuses it and that the unpacked
+  folder is a usable installation;
 - `native-demo-installer` starts the game headless, with `--game-dir` on the
   installer's folder and `--data-dir` on a scratch folder, and checks that the
-  archive is unpacked, checked and mounted, that every start opens the main
-  menu with no dialog over it, that a second start mounts it without
-  unpacking it again, that a damaged archive is unpacked again, and that the
-  installer's folder is left as it was;
+  archive is unpacked into that scratch folder's player folder at
+  `Games/totala-demo` with its `.oa-content` record, checked and mounted, that
+  every start opens the main menu with no dialog over it, that a second start
+  mounts it without unpacking it again, that a damaged archive is unpacked
+  again, that an earlier `demo-1997` archive in the data folder is copied
+  from once and left there, and that the installer's folder is left as it
+  was;
 - `native-demo-navigation`, `native-demo-saved-games` and
   `native-demo-multiplayer-menu` start the game the same way and run its
   `--check-navigation`, `--check-load-save` and `--check-multiplayer-menu`

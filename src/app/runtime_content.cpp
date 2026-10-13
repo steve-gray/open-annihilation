@@ -275,13 +275,14 @@ std::optional<uint64_t> Runtime::content_catalogue_generation() const {
     return snapshot->generation;
 }
 
-Runtime::CatalogueMapFit
-Runtime::catalogue_map_fits(const PackMap& map, std::string_view key) const {
+Runtime::CatalogueMapTable Runtime::catalogue_map_table(const PackMap& map) const {
+    CatalogueMapTable table;
+    table.unlisted = true;
     if (content_ == nullptr)
-        return CatalogueMapFit::unlisted;
+        return table;
     const std::shared_ptr<const content::Snapshot> snapshot = content_->service.snapshot();
     if (snapshot == nullptr)
-        return CatalogueMapFit::unlisted;
+        return table;
     const oa::data::catalogue::Package* package = nullptr;
     for (const content::Entry& entry : snapshot->entries) {
         if (entry.package == nullptr || entry.package->kind != oa::data::catalogue::Kind::oamap)
@@ -293,7 +294,8 @@ Runtime::catalogue_map_fits(const PackMap& map, std::string_view key) const {
         break;
     }
     if (package == nullptr)
-        return CatalogueMapFit::unlisted;
+        return table;
+    table.unlisted = false;
     const oa::data::catalogue::MapEntry* found = nullptr;
     for (const oa::data::catalogue::MapEntry& listed : package->maps) {
         if (listed.map == map.name) {
@@ -303,15 +305,27 @@ Runtime::catalogue_map_fits(const PackMap& map, std::string_view key) const {
         if (found == nullptr && listed.stem == map.stem)
             found = &listed;
     }
+    if (found == nullptr)
+        return table;
+    table.named = true;
+    table.rows = found->compatible;
+    return table;
+}
+
+Runtime::CatalogueMapFit
+Runtime::catalogue_map_fits(const PackMap& map, std::string_view key) const {
+    const CatalogueMapTable table = catalogue_map_table(map);
+    if (table.unlisted)
+        return CatalogueMapFit::unlisted;
     // The release names its maps. One it does not name is left out, whatever
     // the key: the catalogue has said which maps this release holds.
-    if (found == nullptr)
+    if (!table.named)
         return CatalogueMapFit::unfit;
     // An empty key, or a key this map's table never recorded, was not
     // checked when the pack was published. The files decide.
     if (key.empty())
         return CatalogueMapFit::unchecked;
-    for (const auto& [game, fitting] : found->compatible)
+    for (const auto& [game, fitting] : table.rows)
         if (game == key)
             return fitting ? CatalogueMapFit::fits : CatalogueMapFit::unfit;
     return CatalogueMapFit::unchecked;

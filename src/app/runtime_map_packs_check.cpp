@@ -4,10 +4,11 @@
 // --check-map-packs: pack maps in the skirmish list, one mounted at a time.
 // The check writes two map packs into the player's own Maps folder: one whose
 // map fits the game, and one whose feature file defines a feature the game
-// already has. It requires the first listed after every base map, the second
-// left out with one log line, the first mounted alone while it is chosen and
-// through a skirmish played on it, and unmounted for a base map and when the
-// match ends, and the second refused when it is chosen.
+// already has. It requires both listed after every base map, the clashing one
+// greyed with "doesn't fit" and named once in the log, the fitting one mounted
+// alone while it is chosen and through a skirmish played on it, and unmounted
+// for a base map and when the match ends, and the clashing one refused, with
+// the reason, when it is chosen.
 
 #include "map_pack_check_packs.hpp"
 #include "map_packs.hpp"
@@ -456,7 +457,8 @@ void Runtime::check_map_packs() {
         "the packs written are not installed"
     );
 
-    // Both maps are listed after every base map, and the first map is a base map.
+    // Both maps are listed after every base map. The clashing one is greyed.
+    // The first map is a base map.
     eligible_map_names_.clear();
     first_map_name_.clear();
     discover_first_map();
@@ -470,16 +472,20 @@ void Runtime::check_map_packs() {
             eligible_map_names_.begin()
         );
     };
+    const std::string key = played_map_key();
     const auto lines = pack_map_omission_lines();
-    const bool omitted = std::any_of(lines.begin(), lines.end(), [](const std::string& line) {
+    const bool omitted = std::any_of(lines.begin(), lines.end(), [&](const std::string& line) {
         return line.find(kClashPack.id) != std::string::npos &&
-               line.find("1 map does not fit ta-3.1c") != std::string::npos;
+               line.find("1 map cannot be played with " + key) != std::string::npos;
     });
+    require(key.find("music") == std::string::npos, "the key names music (\"" + key + "\")");
     require(
         base_maps > 0 && first_map_name_ == eligible_map_names_.front() &&
             listed_at(isle) >= base_maps && listed_at(isle) < eligible_map_names_.size() &&
-            listed_at(clash) == eligible_map_names_.size() && omitted,
-        "the fitting map is not listed after every base map, or the clashing map is listed"
+            listed_at(clash) >= base_maps && listed_at(clash) < eligible_map_names_.size() &&
+            pack_map_row_reason(isle).empty() && pack_map_row_reason(clash) == "doesn't fit" &&
+            omitted,
+        "the fitting map is not listed after every base map, or the clashing map is not greyed"
     );
     require(!assets_.pack_layer_mounted(), "a pack map is mounted before one is chosen");
     std::cout << "map pack check: " << base_maps << " base maps, then "
@@ -522,8 +528,11 @@ void Runtime::check_map_packs() {
     exercise_click(skirmish::resource_name(skirmish::Button::select_map));
     require(
         screen_ == Screen::map_selection && row_of(isle) < bound_map_names_.size() &&
-            row_of(clash) == bound_map_names_.size(),
-        "the map picker does not list the fitting map, or it lists the clashing map"
+            row_of(clash) < bound_map_names_.size() && row_of(clash) < bound_map_labels_.size() &&
+            row_of(clash) < bound_map_grey_.size() && bound_map_grey_[row_of(clash)] != 0 &&
+            bound_map_labels_[row_of(clash)].find("doesn't fit") != std::string::npos &&
+            row_of(isle) < bound_map_grey_.size() && bound_map_grey_[row_of(isle)] == 0,
+        "the map picker does not list the fitting map, or the clashing map is not greyed"
     );
 
     // Highlighting a base map reads its terrain once: the match parses it,
@@ -594,7 +603,7 @@ void Runtime::check_map_packs() {
         "the clashing pack map was not refused for its feature's name"
     );
     require(!assets_.pack_layer_mounted(), "the clashing pack map is mounted");
-    std::cout << "map pack check: left out " << clash << '\n';
+    std::cout << "map pack check: refused " << clash << '\n';
 
     load(Screen::main_menu);
     require(!assets_.pack_layer_mounted(), "the main menu shows a pack map's files");

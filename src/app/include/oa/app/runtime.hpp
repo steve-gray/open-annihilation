@@ -974,6 +974,31 @@ class Runtime final : public menu::Host,
     /// keep the player's. A setup already kept stays kept.
     void keep_player_skirmish_settings();
 
+    /// The base game, rule-changing expansions and language a presence record
+    /// may name. Bundles are named only for a managed copy whose choice is
+    /// usable. Music is left out. The language is the English name.
+    struct PresenceAnnouncement {
+        bool announce_bundles = false;       ///< the managed copy is mounted and usable
+        std::string base_game;               ///< the base game's id
+        std::vector<std::string> expansions; ///< rule-changing expansions, music left out
+        bool differs_from_known = false;     ///< a chosen bundle's file is not a known hash
+        std::string language;                ///< the shown language's English name
+    };
+
+    /// Reads what a presence record adds for this machine's content and language.
+    ///
+    /// @return the announcement
+    [[nodiscard]] PresenceAnnouncement presence_announcement() const;
+
+    /// Writes the content note beside a save or a recording. Network play
+    /// calls it for the recording it writes.
+    ///
+    /// The save or the recording itself is unchanged, so an older build still
+    /// reads it. The note names the base game and the rule-changing expansions.
+    ///
+    /// @param path the save or the recording
+    void note_content_beside(const fs::path& path) const;
+
   private:
 
     /// Runs one pass of the idle loop.
@@ -3968,15 +3993,16 @@ class Runtime final : public menu::Host,
     /// @return false when the token is not a step
     bool open_staged_first_run(std::string_view token);
 
-    /// Returns the folder of the mod played: the mod folder laid over the
-    /// game folder, else the folder of the profile --mod names, else the game
-    /// folder whose own profile plays.
+    /// Returns the folder of the mod played: the mod folder this start
+    /// layered, else the folder of the profile --mod names, else the base
+    /// game folder. An expansion bundle is not that folder.
     ///
     /// @return the folder
     [[nodiscard]] fs::path played_mod_folder() const;
 
-    /// Tells whether a mod plays: a mod profile, or a mod folder laid over
-    /// the game folder without one.
+    /// Tells whether a mod plays: a mod profile, or a mod folder this start
+    /// layered, including one without a profile. An expansion bundle does
+    /// not count.
     ///
     /// @return true when a mod plays
     [[nodiscard]] bool plays_mod() const noexcept;
@@ -4134,8 +4160,10 @@ class Runtime final : public menu::Host,
     ///
     /// Checks the map's files in its pack's folder, whatever layer is
     /// mounted. The game's names are collected once, with the run's data
-    /// layout, at the first check; a run's archives never change. The fit is
-    /// kept for the pack's SHA-256 and the map's stem.
+    /// layout, at the first check; a later archive is not seen until
+    /// drop_pack_map_fits. The fit is kept for the pack's SHA-256, the map's
+    /// stem and the compatibility key of the game being played, so one
+    /// composition is not reused for another.
     ///
     /// @param map the map
     /// @return every rule the map breaks; kept until the runtime ends
@@ -4200,11 +4228,37 @@ class Runtime final : public menu::Host,
     ///         refused, or was mounted since
     [[nodiscard]] std::optional<std::string> pack_map_refusal(std::string_view name) const;
 
-    /// Returns the compatible-table key of the mod being played.
+    /// The base game, the expansions that are on, and the mod being played.
+    struct PlayedMapTarget {
+        /// The base game's id. Empty only before a choice is known; a run uses `totala`.
+        std::string base_game{};
+        /// Expansion ids that are on, in the built-in order.
+        std::vector<std::string> expansions{};
+        /// `<id>@<release>` when the mod came from a catalogue; empty otherwise.
+        std::string mod_key{};
+        /// A mod is played and it has no catalogue key, so the files decide.
+        bool unkeyed = false;
+    };
+
+    /// Returns the base game, the expansions that are on, and the mod's key.
     ///
-    /// The base game's key is `ta-3.1c`. A mod installed from a catalogue is
-    /// `<id>@<release>` from its folder's origin record. A mod with no such
-    /// record has an empty key.
+    /// A run started with `--content` uses that choice. A named game folder
+    /// with no `--content` uses the bundles that folder holds: Total
+    /// Annihilation when it is there, otherwise the demo, and every expansion
+    /// of that base game the folder holds. Any other run uses the player's
+    /// choice. A mod from a catalogue adds `<id>@<release>`. A mod with no
+    /// such record is unkeyed.
+    ///
+    /// @return the target
+    [[nodiscard]] PlayedMapTarget played_map_target() const;
+
+    /// Returns the compatible-table key of the game being played.
+    ///
+    /// The key names the base game, then each expansion that is on, in the
+    /// built-in order, other than music, then `<id>@<release>` when a
+    /// catalogue mod is played.
+    /// A mod with no catalogue record has an empty key. The names a catalogue
+    /// published earlier, `ta-3.1c` and `<id>@<release>` alone, are still read.
     ///
     /// @return the key; empty when the mod being played has none
     [[nodiscard]] std::string played_map_key() const;
@@ -4227,17 +4281,22 @@ class Runtime final : public menu::Host,
     /// Rebuilds the pack maps in the skirmish list and the battle room's list.
     ///
     /// Keeps the base maps already listed, in their order and under their
-    /// names. A pack map is listed when it fits the mod being played. For a
-    /// pack from a registry, the catalogue's compatible table is final when
-    /// it has a row for played_map_key: true lists the map and false leaves
-    /// it out. An empty key, or a key that table lacks, is decided by the
-    /// map-fit check, as a sideloaded pack is, and a miss there is final. A
-    /// release the snapshot does not list yet is listed by that check until
-    /// the table arrives, and a miss then is not logged. A map that is left
-    /// out for good writes one log line for its pack and the mod, the first
-    /// time that pair is left out. An open skirmish map list is filled
-    /// again, and so is an open battle-room map list. The base map that was
-    /// the default stays the default while it is still listed.
+    /// names. Every installed pack map is listed. It can be played when the
+    /// pack supports the base game, every required expansion is on, and it
+    /// fits the mod. Otherwise it stays listed and greyed, and choosing it
+    /// says why. Nothing is mounted to build the list. For a pack from a
+    /// registry, the catalogue's compatible table is final when it answers
+    /// for this game: a new name wins, and `ta-3.1c` or `<id>@<release>` is
+    /// read when the table has no new name. A true answer lists the map as
+    /// playable and a false one greys it, and the files are not read either
+    /// way. An empty key, a key the table lacks, and a mod with no catalogue
+    /// record are decided by the map-fit check, as a sideloaded pack is, and
+    /// a miss there is final. A release the snapshot does not list yet is
+    /// greyed by that check until the table arrives, and a miss then is not
+    /// logged. A map that cannot be played for good writes one log line for
+    /// its pack and the game, the first time that pair is greyed. An open
+    /// skirmish map list is filled again, and so is an open battle-room map
+    /// list. The default stays a map that can be played.
     void refresh_listed_pack_maps();
 
     /// Rebuilds the pack-map lists when the catalogue snapshot has moved on.
@@ -4247,14 +4306,56 @@ class Runtime final : public menu::Host,
     /// Does not start the content service.
     void note_pack_catalogue();
 
-    /// Returns the pack maps listed for the mod being played.
+    /// Returns the pack maps listed for the game being played.
     ///
-    /// The names stay valid until the next refresh_listed_pack_maps. An empty
+    /// Every installed pack map is listed, including one that is greyed. The
+    /// names stay valid until the next refresh_listed_pack_maps. An empty
     /// list is returned before the first one, and that empty list is not the
     /// installed index.
     ///
     /// @return `<stem>@<id>` of each listed pack map, in the index's order
     [[nodiscard]] const std::vector<std::string>& listed_pack_maps();
+
+    /// Why one installed map is greyed, and whether the log names the miss.
+    struct PackMapDecision {
+        /// The short English reason; empty when the map can be played.
+        std::string row{};
+        /// What choosing the map says: a ready sentence, or a fit detail.
+        std::string refusal{};
+        /// `refusal` is a sentence the description shows as it is.
+        bool sentence = false;
+        /// The log names this miss once for the pack and the game.
+        bool final_note = false;
+    };
+
+    /// Decides whether one installed map can be played.
+    ///
+    /// A base-game or expansion miss does not read the map's files. A
+    /// catalogue answer does not either. A file check reads the pack's
+    /// folder and does not mount it.
+    ///
+    /// @param map the installed map
+    /// @return the decision
+    [[nodiscard]] PackMapDecision decide_pack_map(const PackMap& map);
+
+    /// Returns the short reason a listed pack map is greyed with.
+    ///
+    /// The words are English: "for the TA demo", "for {name}", "needs {name}"
+    /// or "doesn't fit". A map that can be played, and a name that is not
+    /// listed, has none.
+    ///
+    /// @param name the map's name, `<stem>@<id>`
+    /// @return the reason; empty when the map can be played
+    [[nodiscard]] std::string pack_map_row_reason(std::string_view name) const;
+
+    /// Returns the short reason a listed pack map is greyed with.
+    ///
+    /// The pointer addresses the list's own text and stays valid until the
+    /// next refresh_listed_pack_maps. Null when the map can be played.
+    ///
+    /// @param name the map's name, `<stem>@<id>`
+    /// @return the English reason; null when the map can be played
+    [[nodiscard]] const char* pack_map_blocked_reason(std::string_view name) const;
 
     /// Returns the log lines for pack maps left out of the lists.
     ///
@@ -4282,6 +4383,27 @@ class Runtime final : public menu::Host,
     ///
     /// @return the generation; nothing when the service has not started
     [[nodiscard]] std::optional<uint64_t> content_catalogue_generation() const;
+
+    /// The compatible rows a registry pack's catalogue holds for one map.
+    struct CatalogueMapTable {
+        /// The content service has not started, or the snapshot does not list this release.
+        bool unlisted = false;
+        /// The release lists this map.
+        bool named = false;
+        /// The map's compatible rows, in the order written. Empty unless `named`.
+        std::vector<std::pair<std::string, bool>> rows{};
+    };
+
+    /// Returns the compatible rows a registry pack's catalogue holds for a map.
+    ///
+    /// Unlisted when the content service has not started, or its snapshot
+    /// does not yet list that pack's release. A release that lists no such
+    /// map has `named` false. Does not start the content service, and does
+    /// not open the map's files.
+    ///
+    /// @param map the installed pack map
+    /// @return the table
+    [[nodiscard]] CatalogueMapTable catalogue_map_table(const PackMap& map) const;
 
     /// Returns how a registry pack's catalogue answers for a map and a key.
     ///
@@ -4782,6 +4904,13 @@ class Runtime final : public menu::Host,
     /// std::runtime_error naming the first step that failed.
     void check_library_map_previews();
 
+    /// Runs --check-library-content. The first run turns Core Contingency off
+    /// and closes the Library. The next requires its maps out of the skirmish
+    /// list, chooses the demo when its installer is named, and closes. The
+    /// last requires the demo mounted. Throws std::runtime_error naming the
+    /// first step that failed. With no installer, the demo half is not run.
+    void check_library_content();
+
     // The map browser on the OA layer (runtime_map_browser.cpp): MORE MAPS…
     // over the skirmish map list and over the host's map list in the battle
     // room opens it.
@@ -5074,6 +5203,16 @@ class Runtime final : public menu::Host,
     ///
     /// @return the choice
     [[nodiscard]] oa::data::content_bundles::ContentChoice content_choice() const;
+
+    /// Reports whether this start plays the managed copy.
+    ///
+    /// True when the game folder was composed as the player's copy. A named
+    /// --game-dir, an archive, and a scripted run that names neither a user
+    /// folder nor a preferences file are false. Presence names the base game
+    /// and expansions only when this is true.
+    ///
+    /// @return true when the managed copy is mounted
+    [[nodiscard]] bool managed_content_mounted() const noexcept;
 
     /// Turns one expansion on or off and stores the choice when it changes.
     ///
@@ -12377,6 +12516,44 @@ class Runtime final : public menu::Host,
     /// @return false when the save cannot be started
     bool load_saved_game(const fs::path& path);
 
+    /// Writes the content note in a film's folder, once for that folder.
+    ///
+    /// @param folder the film's folder
+    void note_film_content(const fs::path& folder);
+
+  public:
+
+    /// Shows the comparison when `path`'s note needs other content.
+    ///
+    /// TURN ON AND LOAD stores the choice and asks for a soft restart, then
+    /// the next start loads the save or plays the recording. CANCEL leaves
+    /// the question. A file with no note, and a note this run already matches,
+    /// show nothing.
+    ///
+    /// @param path the save, the recording or the film folder
+    /// @param title the name the question shows
+    /// @param recording true for a recording, false for a save
+    /// @return true when the question is showing
+    bool offer_content_switch(const fs::path& path, std::string_view title, bool recording);
+
+    /// The sentence the question would show, when the note needs other content.
+    ///
+    /// @param path the save or the recording
+    /// @return the sentence, or empty when nothing is asked
+    [[nodiscard]] std::string content_switch_sentence(const fs::path& path) const;
+
+    /// Takes a save or a recording TURN ON AND LOAD left for this start.
+    void take_pending_content();
+
+    /// The recording this start should play, after take_pending_content.
+    ///
+    /// @return its path, or empty
+    [[nodiscard]] const std::string& pending_demo_path() const noexcept {
+        return pending_demo_path_;
+    }
+
+  private:
+
     /// Reads the Summary fields a load needs from a save file.
     ///
     /// @param path savegame file
@@ -14322,6 +14499,12 @@ class Runtime final : public menu::Host,
     init::MapListState map_list_state_{};
     std::map<uintptr_t, int32_t> map_list_objects_;
     std::map<std::string, std::string> preference_values_;
+    /// The save TURN ON AND LOAD loads once the next start reaches the main menu.
+    std::string pending_save_path_{};
+    /// The recording TURN ON AND LOAD plays on this start.
+    std::string pending_demo_path_{};
+    /// The film folder whose content note this run already wrote.
+    std::string film_content_noted_{};
     /// The missing-language notice for this run (runtime_language_notice.cpp).
     friend class LanguageNoticeHost;
 
@@ -14774,6 +14957,8 @@ class Runtime final : public menu::Host,
     std::vector<std::string> bound_map_names_;
     /// The words MAPNAMES shows, one per `bound_map_names_` entry. The names stay the keys.
     std::vector<std::string> bound_map_labels_;
+    /// One byte per `bound_map_labels_` entry: non-zero greys that row.
+    std::vector<uint8_t> bound_map_grey_;
     std::string pending_parent_map_name_;
     // The map selection's picture; null until a map's picture is first used.
     std::unique_ptr<MapPictureState, void (*)(MapPictureState*) noexcept> map_picture_{

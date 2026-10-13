@@ -294,11 +294,17 @@ if [[ "$release_build" == 1 ]]; then
     binary="$app/Contents/MacOS/$app_executable"
     [[ "$(ls -A "$app/Contents/MacOS")" == "$app_executable" ]] || fail "Contents/MacOS holds more than $app_executable"
     resources="$(ls -A "$app/Contents/Resources" | LC_ALL=C sort | tr '\n' ' ')"
-    expected="$(printf '%s\n' ATTRIBUTIONS.md LICENSE fonts licenses registries "$(plist_value "$app" CFBundleIconFile)" \
+    expected="$(printf '%s\n' ATTRIBUTIONS.md LICENSE fonts languages licenses registries "$(plist_value "$app" CFBundleIconFile)" \
         | LC_ALL=C sort | tr '\n' ' ')"
     [[ "$resources" == "$expected" ]] || fail "unexpected files in Contents/Resources: $resources"
     cmp -s "$repo_dir/registries/coreprime.yaml" "$app/Contents/Resources/registries/coreprime.yaml" \
         || fail "Contents/Resources/registries/coreprime.yaml differs from the source"
+    # The engine's own words in its built-in languages, and nothing else in
+    # languages/: the engine ships no language pack.
+    [[ "$(ls -A "$app/Contents/Resources/languages")" == "interface.tdf" ]] \
+        || fail "Contents/Resources/languages holds more than interface.tdf"
+    cmp -s "$repo_dir/languages/interface.tdf" "$app/Contents/Resources/languages/interface.tdf" \
+        || fail "Contents/Resources/languages/interface.tdf differs from the source"
     # The fonts this version ships, read from the bootstrap's FONT_FILES.
     # The fonts folder may hold more than that, for older checkouts.
     shipped_fonts="$(

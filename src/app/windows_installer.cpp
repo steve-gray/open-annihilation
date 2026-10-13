@@ -470,7 +470,7 @@ bool WindowsInstallerSource::hash_file(
     return true;
 }
 
-int run_installer_check(const fs::path& file) {
+int run_windows_installer_check(const fs::path& file) {
     WindowsInstallerSource source(file, bundles::bundles());
     std::string problem;
     if (!source.open(&problem)) {

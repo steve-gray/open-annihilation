@@ -21,6 +21,7 @@
 #include "oa/ui/frontend_multiplayer/presence_card.hpp"
 #include "oa/ui/frontend_renderer.hpp"
 #include "oa/ui/kit/controls.hpp"
+#include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/theme.hpp"
 
@@ -271,6 +272,79 @@ struct SampleRoom {
         room.receive(kGuestId, encoded(sample_record()));
     }
 };
+
+/// A record that names bundles, with the sample's engine line and one sim hash.
+///
+/// @param hash the sim hash
+/// @param expansions the expansion ids
+/// @param base the base game
+/// @return the record
+ng::PresenceRecord bundled_record(
+    const ng::PresenceDigest& hash, std::vector<std::string> expansions, const char* base = "totala"
+) {
+    ng::PresenceRecord record;
+    record.engine = ng::PresenceEngine{"0.8.0", "Windows", "x64"};
+    record.sim_hash = hash;
+    record.bundles = ng::PresenceBundles{base, std::move(expansions), false};
+    record.language = "English";
+    return record;
+}
+
+// Bundles add Base game, Expansions, No Mod and Language, and name one
+// missing expansion. The Rules line stays the sim-hash comparison. A record
+// without bundles keeps Mod at line 2 and Rules at line 3.
+void the_card_names_the_content() {
+    const auto hash = filled_hash(0x44);
+    Room room(true, "Steve");
+    const int32_t kirby = room.seat(kGuestId, "Kirby", true);
+    auto host = bundled_record(
+        hash,
+        {"campaign", "core-contingency", "battle-tactics", "cavedog-units", "cavedog-tilesets"}
+    );
+    host.engine = ng::PresenceEngine{"0.8.0", "macOS", "arm64"};
+    room.own(encoded(host));
+    room.receive(
+        kGuestId,
+        encoded(bundled_record(
+            hash, {"campaign", "core-contingency", "cavedog-units", "cavedog-tilesets", "music"}
+        ))
+    );
+    const auto card = mp::presence_card(*room.lobby, kirby, {});
+    OA_CHECK(card.has_value());
+    if (!card)
+        return;
+    OA_CHECK(line_is(*card, 2, "Base game", "Total Annihilation 3.1c"));
+    OA_CHECK(line_is(
+        *card, 3, "Expansions", "Campaign, Core Contingency, Cavedog units, Cavedog tilesets"
+    ));
+    OA_CHECK(line_is(*card, 4, "Mod", "No Mod"));
+    OA_CHECK(line_is(*card, 5, "Language", "English"));
+    OA_CHECK(line_is(*card, 6, "Rules", "Same as the host's"));
+    OA_CHECK(mp::lobby_rules_differ_from_host(*room.lobby, kirby));
+    OA_CHECK(!mp::lobby_sim_hash_differs_from_host(*room.lobby, kirby));
+    OA_CHECK(
+        line_is(*card, 7, "", "Different from the host: no Battle Tactics.", mp::CardTone::amber)
+    );
+    OA_CHECK(line_is(
+        *card,
+        8,
+        "",
+        "The game cannot start until Kirby turns it on, or the host turns it off.",
+        mp::CardTone::amber
+    ));
+
+    const auto own = mp::presence_card(*room.lobby, 0, {});
+    OA_CHECK(own.has_value());
+    if (own) {
+        OA_CHECK(line_is(
+            *own,
+            3,
+            "Expansions",
+            "Campaign, Core Contingency, Battle Tactics, Cavedog units, Cavedog tilesets"
+        ));
+        OA_CHECK(own->lines.size() == 7);
+    }
+}
 
 // The design's sample: every line of Kirby's card, the amber Rules line
 // naming the host's revision, and the hacks.
@@ -782,6 +856,86 @@ void the_keys_open_and_close_the_card() {
     OA_CHECK(trigger.open_slot() == mp::presence_card_no_slot);
 }
 
+/// The words automation reads for one drawn line.
+///
+/// @param label the row's label; empty for a value alone
+/// @param value the value, as drawn
+/// @return the line's text
+std::string line_words(std::string_view label, std::string_view value) {
+    if (label.empty())
+        return std::string(value);
+    return std::string(label) + ": " + std::string(value);
+}
+
+// The open tip lists each drawn line as a named control, in order, with
+// that line's words. The endpoint adds oa. in front of the name.
+void the_open_tip_lists_its_lines() {
+    Room room(true, "Steve");
+    const int32_t kirby = room.seat(kGuestId, "Kirby", true);
+    const auto hash = filled_hash(0x44);
+    auto host =
+        bundled_record(hash, {"campaign", "core-contingency", "battle-tactics", "cavedog-units"});
+    room.own(encoded(host));
+    room.receive(
+        kGuestId, encoded(bundled_record(hash, {"campaign", "core-contingency", "cavedog-units"}))
+    );
+    const auto card = mp::presence_card(*room.lobby, kirby, {});
+    OA_CHECK(card.has_value());
+    if (!card)
+        return;
+    const kit::HoverCardLook look =
+        mp::presence_card_look(*card, kit::SizeClass::compact, 640, fonts());
+    const kit::Rect placed{12, 40, look.width, 200};
+    kit::DisplayList list;
+    kit::add_hover_card(list, placed, look);
+    mp::presence_card_controls(list, placed, look);
+    OA_CHECK(kit::name_problem(list).empty());
+    const std::vector<kit::AutomationEntry> entries = kit::automation_parts(list, {});
+    const std::size_t lines = look.rows.size() + look.block.size();
+    OA_CHECK(entries.size() == lines);
+    OA_CHECK(entries.size() == card->lines.size());
+    for (std::size_t index = 0; index < entries.size() && index < look.rows.size(); ++index) {
+        const kit::AutomationEntry& entry = entries[index];
+        OA_CHECK(entry.name == "battleroom.tip.line." + std::to_string(index));
+        OA_CHECK(entry.text == line_words(look.rows[index].label, look.rows[index].value));
+        OA_CHECK(entry.kind == kit::ControlKind::area);
+        OA_CHECK(!entry.enabled && !entry.focusable && entry.shown);
+        OA_CHECK(
+            entry.rect.y == placed.y + kit::compact_metrics.hover_card_padding +
+                                kit::compact_metrics.small_line +
+                                static_cast<int32_t>(index) * kit::compact_metrics.small_line
+        );
+    }
+    bool names_the_gap = false;
+    bool names_the_hold = false;
+    for (const kit::AutomationEntry& entry : entries) {
+        if (entry.text == "Different from the host: no Battle Tactics.")
+            names_the_gap = true;
+        if (entry.text.find("cannot start until") != std::string::npos)
+            names_the_hold = true;
+    }
+    OA_CHECK(names_the_gap && names_the_hold);
+
+    SampleRoom sample;
+    const auto sampled = mp::presence_card(*sample.room.lobby, sample.kirby, {});
+    OA_CHECK(sampled.has_value());
+    if (!sampled)
+        return;
+    const kit::HoverCardLook sample_look =
+        mp::presence_card_look(*sampled, kit::SizeClass::regular, 960, fonts());
+    kit::DisplayList sample_list;
+    mp::presence_card_controls(sample_list, {0, 0, sample_look.width, 400}, sample_look);
+    const std::vector<kit::AutomationEntry> sample_entries = kit::automation_parts(sample_list, {});
+    OA_CHECK(sample_entries.size() == sample_look.rows.size() + sample_look.block.size());
+    if (sample_entries.size() == sample_look.rows.size() + sample_look.block.size()) {
+        for (std::size_t index = 0; index < sample_look.block.size(); ++index) {
+            const std::size_t at = sample_look.rows.size() + index;
+            OA_CHECK(sample_entries[at].name == "battleroom.tip.line." + std::to_string(at));
+            OA_CHECK(sample_entries[at].text == sample_look.block[index]);
+        }
+    }
+}
+
 // A tap on a badge toggles its card and is taken; a tap elsewhere closes it
 // and goes on.
 void taps_toggle_the_card() {
@@ -801,6 +955,7 @@ void taps_toggle_the_card() {
 } // namespace
 
 int main() {
+    the_card_names_the_content();
     the_sample_card_says_what_the_record_says();
     the_rules_line_compares_with_the_host();
     a_development_build_says_so();
@@ -817,5 +972,6 @@ int main() {
     moving_between_badges_waits_again();
     the_keys_open_and_close_the_card();
     taps_toggle_the_card();
+    the_open_tip_lists_its_lines();
     return oa::test::check_exit_status();
 }

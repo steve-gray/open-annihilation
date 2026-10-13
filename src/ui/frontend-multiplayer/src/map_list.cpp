@@ -4,6 +4,7 @@
 // Shown text for a map list. The name a row selects stays with the caller.
 #include "oa/ui/frontend_multiplayer/map_list.hpp"
 
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/data/map_pack/map_name.hpp"
 
 #include <string>
@@ -42,6 +43,34 @@ std::string pack_mark(const MapListFact& row) {
     return std::string(split->id);
 }
 
+/// The greyed reason in the language being shown.
+///
+/// @param english the English reason, with its name already filled
+/// @return the words the row shows; empty when there is no reason
+std::string shown_reason(std::string_view english) {
+    if (english.empty())
+        return {};
+    if (english == "for the TA demo" || english == "doesn't fit")
+        return std::string(oa::data::languages::interface_text(english));
+    constexpr std::string_view needs = "needs ";
+    constexpr std::string_view for_name = "for ";
+    if (english.starts_with(needs)) {
+        std::string text(oa::data::languages::interface_text("needs {name}"));
+        const std::string field = "{name}";
+        if (const std::size_t at = text.find(field); at != std::string::npos)
+            text.replace(at, field.size(), english.substr(needs.size()));
+        return text;
+    }
+    if (english.starts_with(for_name)) {
+        std::string text(oa::data::languages::interface_text("for {name}"));
+        const std::string field = "{name}";
+        if (const std::size_t at = text.find(field); at != std::string::npos)
+            text.replace(at, field.size(), english.substr(for_name.size()));
+        return text;
+    }
+    return std::string(english);
+}
+
 } // namespace
 
 std::vector<std::string> map_list_texts(std::span<const MapListFact> rows) {
@@ -53,26 +82,30 @@ std::vector<std::string> map_list_texts(std::span<const MapListFact> rows) {
     std::vector<std::string> texts;
     texts.reserve(rows.size());
     for (std::size_t index = 0; index < rows.size(); ++index) {
+        std::string text;
         if (!rows[index].pack) {
-            texts.push_back(plain[index]);
-            continue;
-        }
-        bool shared = false;
-        for (std::size_t other = 0; other < plain.size(); ++other) {
-            if (other != index && plain[other] == plain[index]) {
-                shared = true;
-                break;
+            text = plain[index];
+        } else {
+            bool shared = false;
+            for (std::size_t other = 0; other < plain.size(); ++other) {
+                if (other != index && plain[other] == plain[index]) {
+                    shared = true;
+                    break;
+                }
+            }
+            if (!shared) {
+                text = plain[index];
+            } else {
+                const std::string mark = pack_mark(rows[index]);
+                text = mark.empty() ? plain[index] : plain[index] + " (" + mark + ")";
             }
         }
-        if (!shared) {
-            texts.push_back(plain[index]);
-            continue;
+        if (!rows[index].blocked_reason.empty()) {
+            const std::string reason = shown_reason(rows[index].blocked_reason);
+            if (!reason.empty())
+                text.append("  ").append(reason);
         }
-        const std::string mark = pack_mark(rows[index]);
-        if (mark.empty())
-            texts.push_back(plain[index]);
-        else
-            texts.push_back(plain[index] + " (" + mark + ")");
+        texts.push_back(std::move(text));
     }
     return texts;
 }
@@ -91,6 +124,30 @@ int32_t map_list_row(
         if (keys[index] == query)
             return static_cast<int32_t>(index);
     return -1;
+}
+
+MapRefusalParts map_refusal_parts(std::string_view reason) {
+    constexpr std::string_view demo = "This map is for the TA demo.";
+    if (reason == demo)
+        return {MapRefusalKind::ready_demo, {}};
+    constexpr std::string_view for_head = "This map is for ";
+    if (reason.starts_with(for_head) && reason.ends_with('.') &&
+        reason.size() > for_head.size() + 1)
+        return {
+            MapRefusalKind::ready_for,
+            reason.substr(for_head.size(), reason.size() - for_head.size() - 1)
+        };
+    constexpr std::string_view needs_head = "Needs ";
+    constexpr std::string_view needs_mid = ", which is off.";
+    if (reason.starts_with(needs_head)) {
+        const std::size_t mid = reason.find(needs_mid);
+        if (mid != std::string_view::npos && mid >= needs_head.size())
+            return {
+                MapRefusalKind::ready_needs,
+                reason.substr(needs_head.size(), mid - needs_head.size())
+            };
+    }
+    return {};
 }
 
 } // namespace oa::ui::frontend_multiplayer

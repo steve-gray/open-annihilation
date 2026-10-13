@@ -125,6 +125,8 @@ struct MapInfo {
     std::string file_title; ///< the map file's title, when the source held one
     std::string pack_name;  ///< the pack's name; empty for a base map
     bool pack = false;
+    /// The short English reason the row is greyed with; empty when it can be played.
+    std::string blocked_reason;
 };
 
 struct UnitStore {
@@ -491,6 +493,7 @@ void load_maps() {
         const char* title{};
         const char* file_title{};
         const char* pack_name{};
+        const char* blocked_reason{};
         bool pack = false;
     };
 
@@ -512,6 +515,7 @@ void load_maps() {
             info.title = map.title != nullptr ? map.title : "";
             info.file_title = map.file_title != nullptr ? map.file_title : "";
             info.pack_name = map.pack_name != nullptr ? map.pack_name : "";
+            info.blocked_reason = map.blocked_reason != nullptr ? map.blocked_reason : "";
             info.pack = true;
         }
         state.maps.push_back(std::move(info));
@@ -575,6 +579,7 @@ void load_maps() {
                      pack.title,
                      pack.file_title,
                      pack.pack_name,
+                     pack.blocked_reason,
                      true}
                 );
         }
@@ -582,8 +587,17 @@ void load_maps() {
     std::sort(state.maps.begin(), state.maps.end(), [](const MapInfo& a, const MapInfo& b) {
         return a.name < b.name;
     });
-    if (!state.maps.empty() && state.map < 0)
+    // A sorted list can open on a grey pack map. Start on the first map that
+    // can be played; a list of only grey maps stays on the first row.
+    if (!state.maps.empty() && state.map < 0) {
         state.map = 0;
+        for (std::size_t index = 0; index < state.maps.size(); ++index) {
+            if (state.maps[index].blocked_reason.empty()) {
+                state.map = static_cast<int32_t>(index);
+                break;
+            }
+        }
+    }
 }
 
 const MapInfo* current_map() {
@@ -665,6 +679,7 @@ void list_new_pack_map(const char* name) {
         info.title = pack.title != nullptr ? pack.title : "";
         info.file_title = pack.file_title != nullptr ? pack.file_title : "";
         info.pack_name = pack.pack_name != nullptr ? pack.pack_name : "";
+        info.blocked_reason = pack.blocked_reason != nullptr ? pack.blocked_reason : "";
         info.pack = true;
         state.maps.push_back(std::move(info));
         std::sort(state.maps.begin(), state.maps.end(), [](const MapInfo& a, const MapInfo& b) {
@@ -2091,13 +2106,17 @@ void compose_layout(
             (control.type == ControlType::hot_surface || control.type == ControlType::image))
             if (auto picture = picture_presentation(res, control, gadget))
                 buttons.push_back(std::move(*picture));
-        if (control.type == ControlType::list_box && !control.items.empty())
-            lists.push_back(
-                {gadget.common.name,
-                 std::span<const std::string>(control.items),
-                 static_cast<std::size_t>(std::max<int16_t>(0, control.list_first)),
-                 static_cast<std::size_t>(std::max<int16_t>(0, control.list_selection))}
-            );
+        if (control.type == ControlType::list_box && !control.items.empty()) {
+            renderer::ListPresentation presented{
+                gadget.common.name,
+                std::span<const std::string>(control.items),
+                static_cast<std::size_t>(std::max<int16_t>(0, control.list_first)),
+                static_cast<std::size_t>(std::max<int16_t>(0, control.list_selection))
+            };
+            if (control.item_grey.size() == control.items.size())
+                presented.grey = control.item_grey;
+            lists.push_back(presented);
+        }
         layout.gadgets.push_back(std::move(gadget));
     }
 }
@@ -4234,6 +4253,7 @@ std::vector<std::string> multiplayer_map_texts(std::span<const std::string> name
             fact.file_title = found->file_title;
             fact.pack_name = found->pack_name;
             fact.pack = found->pack;
+            fact.blocked_reason = found->blocked_reason;
         }
         facts.push_back(fact);
     }
@@ -4249,6 +4269,16 @@ void multiplayer_fill_map_names(Panel& panel, const std::vector<std::string>& na
         texts.assign(names.begin(), names.end());
     panel_fill_list(panel, "MAPNAMES", std::move(texts));
     panel_set_item_keys(panel, "MAPNAMES", names);
+    std::vector<uint8_t> grey(names.size(), 0);
+    const auto& maps = ui().maps;
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        const auto found = std::find_if(maps.begin(), maps.end(), [&](const MapInfo& info) {
+            return info.name == names[index];
+        });
+        if (found != maps.end() && !found->blocked_reason.empty())
+            grey[index] = 1;
+    }
+    panel_set_item_grey(panel, "MAPNAMES", std::move(grey));
 }
 
 const char* multiplayer_map_at(int32_t index) {

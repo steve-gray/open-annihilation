@@ -17,6 +17,7 @@ target_include_directories(oa-tool-commands PRIVATE
   ${PROJECT_SOURCE_DIR}/src/ui/engine-settings/include
   ${PROJECT_SOURCE_DIR}/src/ui/first-run/include
   ${PROJECT_SOURCE_DIR}/src/ui/folder-chooser/include
+  ${PROJECT_SOURCE_DIR}/src/ui/frontend-dialogs/include
   ${PROJECT_SOURCE_DIR}/src/ui/frontend-multiplayer/include
   ${PROJECT_SOURCE_DIR}/src/ui/game-files/include
   ${PROJECT_SOURCE_DIR}/src/ui/library/include

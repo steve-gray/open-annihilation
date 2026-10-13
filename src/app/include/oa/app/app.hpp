@@ -264,6 +264,10 @@ struct Options {
     // find_game_directory fills game_dir. That folder is played as it
     // stands: the content check still runs, and its notice stays closed.
     bool game_dir_named = false;
+    /// True when this start plays the managed copy: the game folder's source
+    /// is managed after the last compose. A named --game-dir stays false.
+    /// Presence names the base game and expansions only then.
+    bool managed_content = false;
     // Opens the folder dialog even when a usable folder is remembered.
     bool choose_game_dir = false;
     // The folder the dialog chose, which the runtime stores in the
@@ -293,8 +297,16 @@ struct Options {
     /// with the next mount.
     std::string content{};
     // The folders loose files come from, highest precedence first: the mod
-    // folder, then game_dir. main() fills it; empty means game_dir alone.
+    // folder when one is layered, then each expansion bundle, then the base
+    // game. main() fills it; empty means game_dir alone. How many there are
+    // does not say that a mod is playing: that is layered_mod_folder.
     std::vector<fs::path> game_folders;
+    /// The mod folder layered over the game for this start; empty when no
+    /// mod plays. main() sets it from the resolved game directory, including
+    /// a mod folder a named --game-dir layers. An expansion bundle is never
+    /// this folder. The Library, Settings, presence and the played mod read
+    /// this.
+    fs::path layered_mod_folder;
     // The mod profile the game plays, resolved from --mod or the folders'
     // own oamod.yaml before any archive is mounted: its limits size the
     // game's tables and its rules reach every match. Null for base 3.1c.
@@ -523,8 +535,9 @@ struct Options {
     /// --check-content-copy PATH: copies a small fixture into PATH, standing in
     /// for Documents, and checks that copy. The run does nothing else.
     fs::path check_content_copy{};
-    /// --check-installer FILE: reads a Windows installer, lists the bundles it
-    /// holds and every file's SHA-256. The run does nothing else.
+    /// --check-installer FILE: reads a recognised Windows installer, macOS
+    /// installer or disk image for older Macs, lists the bundles it holds and
+    /// every file's SHA-256. The run does nothing else and copies nothing.
     fs::path check_installer{};
     /// --no-game-files-screen: with no usable game folder, the notice with its look-again
     /// button instead of the Game files screen, where the platform offers both.
@@ -657,6 +670,12 @@ struct Options {
     // one from a terrain minimap and one from a catalogue, then shows the
     // two installed maps on the Active tab. Each picture has its own size.
     bool check_library_map_previews = false;
+    // Turns Core Contingency off and, when OA_DEMO_INSTALLER names the demo's
+    // installer, chooses the demo. Each change is mounted when the Library
+    // closes, over a soft restart, and Core Contingency's maps leave the
+    // skirmish list. The run names --game-dir only so the copy can be made;
+    // the check itself plays the player's copy.
+    bool check_library_content = false;
     // The soft restarts the process has made before this run: 0 for the
     // first; each switch of the mod from the settings adds one.
     uint32_t restarts = 0;

@@ -82,9 +82,13 @@ inline constexpr int32_t presence_card_edge_gap = 8;
 /// - Platform, under Engine: "<platform> · <architecture>". A field the
 ///   record leaves empty is left out, and the line goes when both are empty;
 /// - Mod: "<name> <version> · rev <packaging revision>", or "Total
-///   Annihilation 3.1c" for a record without a mod;
+///   Annihilation 3.1c" for a record without a mod. A record that names its
+///   bundles says "No Mod" instead when it names no mod, and before Mod it
+///   adds Base game and Expansions (music left out; "None" when there is no
+///   other expansion). Language follows Mod when the record names one;
 /// - Rules: "The host's" on the host's card; otherwise "Differ from the
-///   host's" in amber (lobby_rules_differ_from_host), with " (rev <n>)" when
+///   host's" in amber when the sim hashes differ
+///   (lobby_sim_hash_differs_from_host), with " (rev <n>)" when
 ///   the host's record names the same mod at packaging revision n, another;
 ///   "Same as the host's" when the two sim hashes are known and equal (a
 ///   3.1c host plays the plain baseline's); "Unknown" otherwise;
@@ -96,6 +100,9 @@ inline constexpr int32_t presence_card_edge_gap = 8;
 ///   the key> <version>", then by `pack_state` " ✓ installed" in lime,
 ///   " · another release here" in amber, " · not installed", or nothing
 ///   when the state is not known.
+/// When both records name bundles and they differ, unlabelled amber lines
+/// name the difference and say the game cannot start. The Rules line stays
+/// the sim-hash comparison above.
 /// The first presence_card_listed_hacks game hacks' ids follow, and
 /// "· <n> more" for the rest. Every label and fixed word goes through the
 /// lobby's translation (lobby_translated).
@@ -158,6 +165,21 @@ presence_card_place(kit::Rect badge, kit::Point size, kit::Rect safe_area, int32
 /// @param card the card's rectangle (presence_card_place)
 /// @param badge the badge
 void presence_card_point(kit::HoverCardLook& look, kit::Rect card, kit::Rect badge) noexcept;
+
+/// Names the open tip's lines for automation, in the order the hover card
+/// draws them: each row, then each block line.
+///
+/// A line is a control of kind area that takes no press and no focus, so
+/// the endpoint lists it as a label. Its name is battleroom.tip.line.<n>,
+/// from 0; the endpoint adds oa. Its text is the words drawn on that line,
+/// the row's value, or "<label>: <value>" when the row has a label, already
+/// cut as the card cuts them. The header is not a line. The rectangles are
+/// the rows the card draws, in the same points as `card`.
+///
+/// @param[in,out] list the display list the card is drawn into
+/// @param card the card's rectangle, in the list's points
+/// @param look the hover card drawn there
+void presence_card_controls(kit::DisplayList& list, kit::Rect card, const kit::HoverCardLook& look);
 
 /// The slot that names no badge.
 inline constexpr int32_t presence_card_no_slot = -1;

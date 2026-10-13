@@ -155,6 +155,8 @@ struct ScreenResult {
     bool registry_on{};
     /// The expansion ADD FROM… or the expansion-off question names.
     std::string expansion{};
+    /// The base game USE THIS GAME asked the host to copy.
+    std::string base_game{};
     bool redraw{}; ///< what the screen shows changed: lay it out and draw it again
 };
 

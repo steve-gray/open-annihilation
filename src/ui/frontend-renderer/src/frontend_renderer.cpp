@@ -207,10 +207,11 @@ struct ResolvedSprite {
         return {named, 0};
     }
     const auto* fields = std::get_if<ui::gui_layout::ButtonFields>(&gadget.fields);
-    // The first panel draw skips BUTTONS0/stagebuttn for a button with the
-    // checkbox or text_list attribute.
-    constexpr uint32_t skip_default_button_gaf =
-        ui::gui_layout::attribute::checkbox | ui::gui_layout::attribute::text_list;
+    // A checkbox is filled as a bevel, with no BUTTONS0 frame. A hold button
+    // (text_list) that has no sequence of its own, such as NEWGAME's Arm and
+    // Core, still takes BUTTONS0: its normal frame while it is up, the next
+    // frame while it is down.
+    constexpr uint32_t skip_default_button_gaf = ui::gui_layout::attribute::checkbox;
     if ((static_cast<uint32_t>(gadget.common.attributes) & skip_default_button_gaf) != 0)
         return {};
     std::string fallback_name = "BUTTONS0";
@@ -910,7 +911,8 @@ void draw_list_box(
     const ListPresentation& list,
     const formats::fnt::Font& selected_font,
     const PaletteBytes& active_palette,
-    std::span<const uint8_t> light_table
+    std::span<const uint8_t> light_table,
+    GrayedShade* shade
 ) {
     const auto* fields = std::get_if<ui::gui_layout::ListBoxFields>(&gadget.fields);
     if (fields == nullptr)
@@ -937,6 +939,10 @@ void draw_list_box(
         draw_clipped_text(
             surface, selected_font, text, x, y, row_clip, active_palette, nullptr, list.game_text
         );
+        // A greyed row is shaded after its text and before the selection
+        // light, so choosing it still highlights the row.
+        if (shade != nullptr && index < list.grey.size() && list.grey[index] != 0)
+            shade_rectangle(surface, row_clip, *shade);
         // A text list lights the whole selected row at light level 0x1E after
         // drawing it.
         if (list.selected && *list.selected == index)
@@ -1231,8 +1237,28 @@ void render_screen_into(
         }
         if (gadget.common.type == ui::gui_layout::GadgetType::list_box) {
             if (const auto* list = list_for(gadget.common.name, lists)) {
+                const bool grey_row =
+                    std::any_of(list->grey.begin(), list->grey.end(), [](uint8_t mark) {
+                        return mark != 0;
+                    });
+                if (grey_row && shade_palette != nullptr && !grayed_shade)
+                    grayed_shade.emplace(
+                        *shade_palette,
+                        remembered_gray_table(
+                            resources.game_palette.has_value() ? *resources.game_palette
+                                                               : *shade_palette
+                        ),
+                        resources.shade_table,
+                        grayed_shade_row
+                    );
                 draw_list_box(
-                    result, gadget, *list, resources.font, active_palette, resources.light_table
+                    result,
+                    gadget,
+                    *list,
+                    resources.font,
+                    active_palette,
+                    resources.light_table,
+                    grey_row && grayed_shade ? &*grayed_shade : nullptr
                 );
             }
             continue;

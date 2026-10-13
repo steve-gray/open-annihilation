@@ -23,6 +23,7 @@
 #include "oa/app/content/service.hpp"
 #include "oa/app/content/settings.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/netgame/presence.hpp"
 #include "oa/app/view_rules.hpp"
 #include "oa/data/registry/descriptor.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -637,13 +638,17 @@ void Runtime::list_offered_mods() {
         if (fs::is_directory(folder, missing))
             offered.push_back(folder);
     }
-    // The mod folder played is the one layered over the game folder.
-    state.playing_mod_folder =
-        options_.game_folders.size() > 1
-            ? path_to_utf8(fs::absolute(options_.game_folders.front()).lexically_normal())
-            : std::string{};
-    if (options_.game_folders.size() > 1)
-        offered.push_back(options_.game_folders.front());
+    // The mod folder played is the one this start layered. An expansion
+    // bundle is another game folder and is not offered as that mod.
+    state.playing_mod_folder.clear();
+    if (!options_.layered_mod_folder.empty()) {
+        std::error_code absolute_error;
+        const fs::path absolute = fs::absolute(options_.layered_mod_folder, absolute_error);
+        state.playing_mod_folder = path_to_utf8(
+            (absolute_error ? options_.layered_mod_folder : absolute).lexically_normal()
+        );
+        offered.push_back(options_.layered_mod_folder);
+    }
     // A folder of the player's own Mods folder offers ROLL BACK while its
     // .backup keeps an earlier version of its mod that the game can play,
     // checked as a pick is.
@@ -907,8 +912,8 @@ void Runtime::load_profile_layers() {
     // apart from the game's without a mod.
     if (options_.mod_profile)
         state.profile_id = options_.mod_profile->id;
-    else if (options_.game_folders.size() > 1)
-        state.profile_id = folder_overrides_id(options_.game_folders.front());
+    else if (!options_.layered_mod_folder.empty())
+        state.profile_id = folder_overrides_id(options_.layered_mod_folder);
     else
         state.profile_id = std::string(profiles::base_game_id);
     state.profile_hacks = profiles::base_hack_states();
@@ -1800,6 +1805,44 @@ oa::data::content_bundles::ContentChoice Runtime::content_choice() const {
     const std::vector<std::string> copied = copied_content_bundles(options_.game_dir);
     const std::vector<std::string_view> copied_ids = id_views(copied);
     return content_choice_from_preferences(preference_values_, copied_ids, options_.content);
+}
+
+bool Runtime::managed_content_mounted() const noexcept {
+    return options_.managed_content;
+}
+
+Runtime::PresenceAnnouncement Runtime::presence_announcement() const {
+    PresenceAnnouncement played;
+    played.language = std::string(shown_language().english_name);
+    if (!managed_content_mounted())
+        return played;
+    const oa::data::content_bundles::ContentChoice choice = content_choice();
+    if (!choice.error.empty() || choice.base_game.empty())
+        return played;
+    played.announce_bundles = true;
+    played.base_game = choice.base_game;
+    for (const std::string& expansion_id : choice.expansions) {
+        if (expansion_id != oa::netgame::presence_uncompared_expansion)
+            played.expansions.push_back(expansion_id);
+    }
+    const ContentCheck& known = content_check();
+    for (const ContentBundleCheck& bundle : known.bundles) {
+        if (bundle.files_differ == 0 || bundle.id == oa::netgame::presence_uncompared_expansion)
+            continue;
+        if (bundle.id == played.base_game) {
+            played.differs_from_known = true;
+            break;
+        }
+        for (const std::string& expansion_id : played.expansions) {
+            if (expansion_id == bundle.id) {
+                played.differs_from_known = true;
+                break;
+            }
+        }
+        if (played.differs_from_known)
+            break;
+    }
+    return played;
 }
 
 oa::data::content_bundles::ContentChangeResult Runtime::turn_content_expansion(

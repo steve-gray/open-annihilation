@@ -269,6 +269,7 @@ Runtime::ExtensionRelease::~ExtensionRelease() {
 }
 
 int Runtime::run() {
+    take_pending_content();
     log_first_run_gate(false);
     int exit_code = 0;
     const auto extension_run = [&](RunPhase phase) {
@@ -459,6 +460,11 @@ int Runtime::run() {
         }
         if (options_.check_library_map_previews) {
             check_library_map_previews();
+            flush_preferences();
+            return 0;
+        }
+        if (options_.check_library_content) {
+            check_library_content();
             flush_preferences();
             return 0;
         }
@@ -1161,6 +1167,12 @@ void Runtime::move_frontend_focus(oa::ui::gui_input::FocusDirection direction) {
 }
 
 void Runtime::load(Screen screen) {
+    if (screen == Screen::main_menu && !pending_save_path_.empty()) {
+        const fs::path pending = path_from_utf8(pending_save_path_);
+        pending_save_path_.clear();
+        if (load_saved_game(pending))
+            return;
+    }
     // A pack map's files are mounted for the skirmish setup that chose the
     // map and the match it starts; the main menu shows none.
     if (screen == Screen::main_menu)
@@ -1319,6 +1331,8 @@ void Runtime::rebuild_surface() {
                                                     ? bound_map_labels_
                                                     : bound_map_names_;
         lists.push_back({"MAPNAMES", shown, map_first_visible(), selected});
+        if (bound_map_grey_.size() == shown.size())
+            lists.back().grey = bound_map_grey_;
     }
     // A list its scroll bar scrolls shows the rows the bar brings into view.
     if (const auto first = frontend_list_first("Campaign"))

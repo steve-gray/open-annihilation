@@ -156,10 +156,14 @@ std::string_view action_word(Action action) {
         return "use-now";
     case Action::change_base_game:
         return "change";
+    case Action::copy_base_game:
+        return "copy";
     case Action::add_expansion:
         return "add-from";
     case Action::ask_expansion_off:
         return "turn-off";
+    case Action::turn_on:
+        return "turn-on";
     }
     return "action";
 }
@@ -267,15 +271,20 @@ struct Building {
     kit::SizeClass size_class{};   ///< the class
     int32_t scale_percent{100};    ///< the frame's scale, in percent; the base badge is sized to it
     kit::DisplayList list{}; ///< the items, in drawing order; its controls are moved to the groups
-    std::vector<kit::Control> menu{};    ///< an open drop-down's items, tried first
-    std::vector<kit::Control> top{};     ///< the tabs, the search and the filters
-    std::vector<kit::Control> rows{};    ///< the list's rows that show
-    std::vector<kit::Control> panes{};   ///< the list pane, tried after its rows
-    std::vector<kit::Control> detail{};  ///< the details' controls and labels
-    std::vector<kit::Control> footer{};  ///< the footer's buttons and label
+    std::vector<kit::Control> menu{};   ///< an open drop-down's items, tried first
+    std::vector<kit::Control> top{};    ///< the tabs, the search and the filters
+    std::vector<kit::Control> rows{};   ///< the list's rows that show
+    std::vector<kit::Control> panes{};  ///< the list pane, tried after its rows
+    std::vector<kit::Control> detail{}; ///< the details' controls and labels
+    std::vector<kit::Control> footer{}; ///< the footer's buttons and label
+    /// The base game chooser's controls, tried before the Library's, so a
+    /// press on the dialog never reaches what it covers.
+    std::vector<kit::Control> overlay{};
     std::vector<kit::ControlId> order{}; ///< Tab's order, built in the order it is declared
-    std::vector<std::string> names{};    ///< the names given so far
-    std::optional<OpenMenu> open{};      ///< the open drop-down
+    /// Tab's order while the chooser is open: its rows and buttons only.
+    std::vector<kit::ControlId> chooser_order{};
+    std::vector<std::string> names{}; ///< the names given so far
+    std::optional<OpenMenu> open{};   ///< the open drop-down
 };
 
 /// Returns a name no control of the layout has yet, the name itself or with
@@ -771,7 +780,13 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     look.maker = shown_maker(entry_maker(entry));
     const std::string version = entry_version(library, entry);
     const std::string size = entry_size(library, entry);
+    const ContentLines lines = content_lines(library, entry);
+    const bool named = !lines.row.empty();
     if (form == RowForm::compact) {
+        if (named) {
+            look.lines.push_back(lines.row);
+            return look;
+        }
         std::string line = version;
         if (is_built_in_language(entry.id)) {
             const std::string_view english = entry_summary(entry);
@@ -794,7 +809,9 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
         return look;
     }
     look.by = byline(entry, library.text);
-    if (entry.listing != nullptr && !entry.listing->summary.empty())
+    if (named)
+        look.lines.push_back(lines.row);
+    else if (entry.listing != nullptr && !entry.listing->summary.empty())
         look.lines.push_back(entry.listing->summary);
     else if (is_base_game(entry.id) || is_built_in_language(entry.id)) {
         const std::string_view about = entry_summary(entry);
@@ -3824,7 +3841,7 @@ IdentityTile base_tile(Building& building, const ActiveContent& content) {
     }
     tile.button = true;
     tile.button_caption = std::string(shown(building.library->text, words::active_change));
-    tile.button_enabled = true;
+    tile.button_enabled = content.change_enabled;
     tile.button_id = controls::active_change;
     tile.button_name = named("active.change");
     return tile;
@@ -5221,6 +5238,293 @@ void add_unload_note(Building& building, const Window& window) {
     kit::add_hover_card(building.list, card, look);
 }
 
+/// Appends the base game chooser over the Library: a shade, the dialog, one
+/// row per base game, and CANCEL and USE THIS GAME. The rows and the buttons
+/// are tried before the shade, and the shade before the Library.
+///
+/// @param[in,out] building the layout
+/// @param window the window
+void add_base_chooser(Building& building, const Window& window) {
+    const Library& library = *building.library;
+    const BaseChooser& chooser = library.chooser;
+    if (!chooser.open)
+        return;
+    const kit::Metrics& metrics = *building.metrics;
+    const int32_t margin = window.padding;
+    const kit::Rect shade{0, 0, window.width, window.height};
+    kit::Item& dim = add_item(building.list, kit::Role::blend, shade, {});
+    dim.colour = kit::colour::backdrop;
+    dim.opacity = 180;
+
+    const int32_t dialog_width = std::max(window.width - 2 * margin, int32_t{1});
+    const int32_t inner_width = std::max(dialog_width - 2 * margin, int32_t{1});
+    const std::vector<std::string> lead = wrapped(
+        building, kit::FontRole::small, shown(library.text, words::base_lead), inner_width, 0
+    );
+    const std::vector<std::string> note =
+        chooser.note.empty()
+            ? std::vector<std::string>{}
+            : wrapped(building, kit::FontRole::small, chooser.note, inner_width, 0);
+    const std::vector<std::string> problem =
+        chooser.problem.empty()
+            ? std::vector<std::string>{}
+            : wrapped(building, kit::FontRole::small, chooser.problem, inner_width, 0);
+    const int32_t title_band = metrics.button_height;
+    const int32_t lead_height = static_cast<int32_t>(lead.size()) * metrics.small_line;
+    const int32_t note_height =
+        note.empty() ? 0 : static_cast<int32_t>(note.size()) * metrics.small_line + margin;
+    const int32_t problem_height =
+        problem.empty() ? 0
+                        : static_cast<int32_t>(problem.size()) * metrics.small_line + window.gap;
+    const int32_t row_gap = window.gap;
+    int32_t rows_height = 0;
+    std::vector<int32_t> row_heights;
+    row_heights.reserve(chooser.rows.size());
+    for (const BaseGameRow& row : chooser.rows) {
+        int32_t height = metrics.regular_line + metrics.small_line + window.gap;
+        if (!row.detail.empty())
+            height += metrics.small_line;
+        if (!row.expansions.empty())
+            height += kit::pill_height() + window.gap;
+        height = std::max(height, int32_t{52});
+        row_heights.push_back(height);
+        rows_height += height;
+    }
+    if (chooser.rows.size() > 1)
+        rows_height += static_cast<int32_t>(chooser.rows.size() - 1) * row_gap;
+    const int32_t footer_band = metrics.button_height + margin;
+    int32_t dialog_height = title_band + margin + lead_height + row_gap + rows_height +
+                            note_height + problem_height + footer_band + margin;
+    const int32_t most = std::max(window.height - 2 * margin, int32_t{1});
+    if (dialog_height > most)
+        dialog_height = most;
+    const int32_t dialog_x = margin;
+    const int32_t dialog_y = std::max((window.height - dialog_height) / 2, int32_t{0});
+    const kit::Rect dialog{dialog_x, dialog_y, dialog_width, dialog_height};
+    add_item(building.list, kit::Role::fill, dialog, {}).colour = kit::colour::panel;
+    add_item(building.list, kit::Role::outline, dialog, {}).colour = kit::colour::control_border;
+    add_text(
+        building,
+        kit::FontRole::regular,
+        std::string(shown(library.text, words::base_title)),
+        {dialog_x + margin, dialog_y, inner_width, title_band},
+        kit::Align::left,
+        kit::colour::text,
+        {}
+    );
+    int32_t cursor = dialog_y + title_band;
+    add_item(building.list, kit::Role::rule, {dialog_x, cursor, dialog_width, 1}, {}).colour =
+        kit::colour::control_border;
+    cursor += margin / 2;
+    for (const std::string& line : lead) {
+        add_text(
+            building,
+            kit::FontRole::small,
+            line,
+            {dialog_x + margin, cursor, inner_width, metrics.small_line},
+            kit::Align::left,
+            kit::colour::hint,
+            {}
+        );
+        cursor += metrics.small_line;
+    }
+    cursor += row_gap;
+    const int32_t badge = 36;
+    for (std::size_t index = 0; index < chooser.rows.size() && index < row_heights.size();
+         ++index) {
+        const BaseGameRow& row = chooser.rows[index];
+        const int32_t height = row_heights[index];
+        const kit::Rect rect{dialog_x + margin, cursor, inner_width, height};
+        if (index < controls::most_base_rows) {
+            const kit::ControlId id = controls::first_base_row + static_cast<kit::ControlId>(index);
+            kit::ButtonLook look;
+            look.style = kit::ButtonStyle::quiet;
+            look.hovered = hovered(building, id);
+            look.held = held(building, id);
+            const std::size_t before = building.list.controls.size();
+            kit::add_button(
+                building.list, rect, look, id, unique_name(building, named("base." + row.id))
+            );
+            move_controls(building.list, before, building.overlay);
+            kit::Control& control = building.overlay.back();
+            control.focusable = true;
+            control.enabled = true;
+            building.chooser_order.push_back(control.id);
+        }
+        if (row.marked)
+            add_item(building.list, kit::Role::outline, rect, {}).colour = kit::colour::accent;
+        else
+            add_item(building.list, kit::Role::outline, rect, {}).colour =
+                kit::colour::control_border;
+        const kit::Rect radio{rect.x + 8, rect.y + 10, 12, 12};
+        add_item(building.list, kit::Role::outline, radio, {}).colour =
+            row.marked ? kit::colour::accent : kit::colour::switch_idle;
+        if (row.marked) {
+            const kit::Rect dot{radio.x + 3, radio.y + 3, 6, 6};
+            add_item(building.list, kit::Role::fill, dot, {}).colour = kit::colour::accent;
+        }
+        const kit::Rect badge_rect{radio.x + radio.width + 8, rect.y + 8, badge, badge};
+        add_item(building.list, kit::Role::fill, badge_rect, {}).colour = kit::colour::off_selected;
+        add_text(
+            building,
+            kit::FontRole::small,
+            row.letters,
+            badge_rect,
+            kit::Align::centre,
+            kit::colour::text,
+            {}
+        );
+        const int32_t text_x = badge_rect.x + badge + 8;
+        const int32_t text_w = std::max(rect.x + rect.width - text_x - 8, int32_t{1});
+        add_text(
+            building,
+            kit::FontRole::regular,
+            row.name,
+            {text_x, rect.y + 6, text_w, metrics.regular_line},
+            kit::Align::left,
+            kit::colour::text,
+            {}
+        );
+        if (!row.version.empty()) {
+            const int32_t version_w =
+                std::min(width_of(building, kit::FontRole::small, row.version) + 8, text_w / 3);
+            add_text(
+                building,
+                kit::FontRole::small,
+                row.version,
+                {text_x + width_of(building, kit::FontRole::regular, row.name) + 8,
+                 rect.y + 8,
+                 std::max(version_w, int32_t{1}),
+                 metrics.small_line},
+                kit::Align::left,
+                kit::colour::hint,
+                {}
+            );
+        }
+        kit::PillLook state_pill;
+        state_pill.text = row.state_text;
+        state_pill.state = row.state == BaseGameState::not_added ? kit::PillState::update
+                                                                 : kit::PillState::neutral;
+        const int32_t state_w = std::min(kit::pill_width(*building.fonts, state_pill), text_w);
+        kit::add_pill(
+            building.list,
+            {rect.x + rect.width - state_w - 8, rect.y + 6, state_w, kit::pill_height()},
+            state_pill,
+            kit::no_control,
+            {}
+        );
+        int32_t line_y = rect.y + 6 + metrics.regular_line;
+        if (!row.detail.empty()) {
+            add_text(
+                building,
+                kit::FontRole::small,
+                row.detail,
+                {text_x, line_y, text_w, metrics.small_line},
+                kit::Align::left,
+                kit::colour::hint,
+                {}
+            );
+            line_y += metrics.small_line;
+        }
+        int32_t pill_x = text_x;
+        for (const std::string& expansion : row.expansions) {
+            kit::PillLook expansion_pill;
+            expansion_pill.text = expansion;
+            expansion_pill.state = kit::PillState::active;
+            const int32_t width =
+                std::min(kit::pill_width(*building.fonts, expansion_pill), text_w);
+            if (pill_x + width > text_x + text_w)
+                break;
+            kit::add_pill(
+                building.list,
+                {pill_x, line_y, width, kit::pill_height()},
+                expansion_pill,
+                kit::no_control,
+                {}
+            );
+            pill_x += width + metrics.button_gap;
+        }
+        cursor += height + row_gap;
+    }
+    if (!note.empty()) {
+        for (const std::string& line : note) {
+            add_text(
+                building,
+                kit::FontRole::small,
+                line,
+                {dialog_x + margin, cursor, inner_width, metrics.small_line},
+                kit::Align::left,
+                kit::colour::button_text,
+                {}
+            );
+            cursor += metrics.small_line;
+        }
+        cursor += window.gap;
+    }
+    for (const std::string& line : problem) {
+        add_text(
+            building,
+            kit::FontRole::small,
+            line,
+            {dialog_x + margin, cursor, inner_width, metrics.small_line},
+            kit::Align::left,
+            kit::colour::lock,
+            {}
+        );
+        cursor += metrics.small_line;
+    }
+    const int32_t button_y = dialog_y + dialog_height - margin / 2 - metrics.button_height;
+    kit::ButtonLook use_look;
+    use_look.caption = std::string(shown(library.text, words::base_use));
+    use_look.style = kit::ButtonStyle::accent;
+    use_look.hovered = hovered(building, controls::base_use);
+    use_look.held = held(building, controls::base_use);
+    const int32_t use_width = std::max(
+        width_of(building, kit::FontRole::regular, use_look.caption) + 2 * margin, int32_t{120}
+    );
+    kit::ButtonLook cancel_look;
+    cancel_look.caption = std::string(shown(library.text, words::action_cancel));
+    cancel_look.style = kit::ButtonStyle::plain;
+    cancel_look.hovered = hovered(building, controls::base_cancel);
+    cancel_look.held = held(building, controls::base_cancel);
+    const int32_t cancel_width = std::max(
+        width_of(building, kit::FontRole::regular, cancel_look.caption) + 2 * margin, int32_t{80}
+    );
+    const int32_t use_x = dialog_x + dialog_width - margin - use_width;
+    const int32_t cancel_x = use_x - window.gap - cancel_width;
+    const auto take_button = [&](const kit::Rect& rect,
+                                 const kit::ButtonLook& look,
+                                 kit::ControlId id,
+                                 std::string name) {
+        const std::size_t before = building.list.controls.size();
+        kit::add_button(building.list, rect, look, id, unique_name(building, named(name)));
+        move_controls(building.list, before, building.overlay);
+        kit::Control& control = building.overlay.back();
+        control.focusable = true;
+        control.enabled = true;
+        building.chooser_order.push_back(control.id);
+    };
+    take_button(
+        {cancel_x, button_y, cancel_width, metrics.button_height},
+        cancel_look,
+        controls::base_cancel,
+        "base.cancel"
+    );
+    take_button(
+        {use_x, button_y, use_width, metrics.button_height},
+        use_look,
+        controls::base_use,
+        "base.use"
+    );
+    const std::size_t before = building.list.controls.size();
+    kit::ButtonLook shade_look;
+    shade_look.style = kit::ButtonStyle::quiet;
+    kit::add_button(building.list, shade, shade_look, controls::base_blocker, named("base.block"));
+    move_controls(building.list, before, building.overlay);
+    building.overlay.back().enabled = true;
+    building.overlay.back().focusable = false;
+}
+
 /// Finishes a layout: the window's edge, the focus ring, the open menu over
 /// everything, the key tooltip, and the controls in the order a press tries them.
 ///
@@ -5234,11 +5538,14 @@ kit::DisplayList finish(Building& building, const Window& window) {
     add_open_menu(building, window.footer_rule);
     add_unload_note(building, window);
     add_key_tooltip(building, window);
+    add_base_chooser(building, window);
     for (kit::Control& control : building.top)
         if (control.id == controls::close_x)
             tab_stop(building, control);
     kit::DisplayList list = std::move(building.list);
     list.controls.clear();
+    for (kit::Control& control : building.overlay)
+        list.controls.push_back(std::move(control));
     for (auto* group :
          {&building.menu,
           &building.top,
@@ -5248,7 +5555,10 @@ kit::DisplayList finish(Building& building, const Window& window) {
           &building.footer})
         for (kit::Control& control : *group)
             list.controls.push_back(std::move(control));
-    list.tab_order = std::move(building.order);
+    if (building.library->chooser.open)
+        list.tab_order = std::move(building.chooser_order);
+    else
+        list.tab_order = std::move(building.order);
     return list;
 }
 

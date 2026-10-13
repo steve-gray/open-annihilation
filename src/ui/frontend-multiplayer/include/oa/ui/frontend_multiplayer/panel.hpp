@@ -91,6 +91,8 @@ struct Control {
     /// name a choice uses. Empty for every other list, and for a list whose
     /// rows were replaced without names.
     std::vector<std::string> item_keys;
+    /// One byte per `items` entry: non-zero greys that row. Empty greys none.
+    std::vector<uint8_t> item_grey;
     /// The picture a hot surface without art shows, as palette indices in
     /// rows of picture_width; empty when it has none, and the surface then
     /// shows a blank. MAPPIC holds the selected map's minimap fitted to its size.
@@ -284,6 +286,17 @@ void panel_fill_list(Panel& panel, std::string_view name, std::vector<std::strin
 /// @param name List name or link.
 /// @param keys One name per row.
 void panel_set_item_keys(Panel& panel, std::string_view name, std::vector<std::string> keys);
+
+/// Marks the greyed rows of a list, one byte per row.
+///
+/// A non-zero byte greys that row. A count other than the list's row count
+/// clears the marks. A missing list is ignored. Replacing the rows clears
+/// the marks.
+///
+/// @param[in,out] panel Panel holding the list.
+/// @param name List name or link.
+/// @param grey One byte per row.
+void panel_set_item_grey(Panel& panel, std::string_view name, std::vector<uint8_t> grey);
 
 /// Selects a row of a list and brings it into view, as 3.1c does when a screen picks a row.
 ///

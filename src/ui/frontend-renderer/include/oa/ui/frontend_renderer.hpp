@@ -74,6 +74,10 @@ struct ListPresentation {
     // The items are game text, such as chat lines, which the Language
     // settings may draw in the modern fonts.
     bool game_text = false;
+    // One byte per item: a non-zero byte greys that row. Empty greys none.
+    // A greyed row is shaded before the selection light, so a chosen grey
+    // row stays highlighted.
+    std::span<const uint8_t> grey{};
 };
 
 struct Surface {

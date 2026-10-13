@@ -9,7 +9,7 @@ values. The table holds names, sizes and hashes only.
 
 The demo's installer is still recognised where it is today
 (`demo_1997` in `oa/app/demo_installer.hpp`), by its size and SHA-256. The
-archive it carries is copied into `games/totala-demo` with that bundle's
+archive it carries is copied into `Games/totala-demo` with that bundle's
 record. This table names the unpacked archive, `TADemo.hpi`, with the same
 size and SHA-256 that recognition checks. It does not repeat the installer's
 size, hash or resource.
@@ -39,6 +39,10 @@ size, hash or resource.
   rules. `parse_content_argument` reads `GAME[:EXPANSION,...]`.
 - `installers`, `find_installer` and `known_installer_hash` are the three
   Commander Pack installers, recognised by size and SHA-256.
+- `oa/data/content_bundles/record.hpp` reads and writes a bundle folder's
+  `.oa-content` record. `parse_content_record` and `format_content_record`
+  take bytes and return bytes. `read_bundle_folder_record` reads the record
+  in one bundle folder. A field the reader does not know is ignored.
 - `table_fault` is empty when every dependency names a real bundle and
   following the needs reaches no cycle.
 
@@ -66,6 +70,9 @@ bundle on and off from a set, matches a file by name and case and size,
 checks a known hash and a different one, and checks that the table's own
 dependencies hold. The demo archive's size and hash are the ones
 `demo_1997` checks.
+
+`data-content-record` writes a record and reads it back, refuses a record
+it does not understand, and keeps a record that carries a field it skips.
 
 `data-content-choice` turns an expansion on and off, chooses a base game,
 clears a mod whose required expansion went off, reads a player with no

@@ -6,8 +6,8 @@ its own storage. When it starts without a game folder it can play, it opens
 the **Game files** screen, which brings the files in for you. On macOS,
 Windows and Linux the screen never opens. The first start you are there
 for, when you have not named a folder with `--game-dir`, copies the known
-game files from the installation already in use into `games` and
-`expansions` inside your Open Annihilation folder. That installation is
+game files from the installation already in use into `Games` and
+`Expansions` inside your Open Annihilation folder. That installation is
 only read. A later start copies only what is missing. `--game-dir` does
 not copy: the named folder is used as it is. A run that nobody is watching
 does not copy either: it uses a copy already in your folder, or it stops
@@ -111,15 +111,15 @@ replacements take effect from the next start of Open Annihilation, and
 
 - The game folder, `Total Annihilation`, in the folder the platform names
   (its documents folder), which the device's file manager reaches.
-- The managed copy of a base game, `games/<game>` in your Open Annihilation
+- The managed copy of a base game, `Games/<game>` in your Open Annihilation
   folder (in Documents), and of an expansion,
-  `expansions/<game>/<expansion>`. Each of those folders holds a
+  `Expansions/<game>/<expansion>`. Each of those folders holds a
   `.oa-content` record: where the files came from, and each file's size,
   modification time and SHA-256.
 - The copy being made, in `import/Total Annihilation` of the game's data
   folder (`--data-dir`, else the per-user data folder), with the import's
   state in `import/state`.
-- The demo, in `games/totala-demo` of the player's Open Annihilation folder.
+- The demo, in `Games/totala-demo` of the player's Open Annihilation folder.
   An earlier unpack in `demo-1997` of the data folder is copied from once
   and left there.
 
@@ -146,17 +146,18 @@ screen is offered only where a platform installs the hooks. The desktop
 installs none, so the screen never opens there.
 
 An attended start that was not given `--game-dir` copies the known files of
-the installation already in use into `games/<game>` and
-`expansions/<game>/<expansion>` under the player's Open Annihilation folder.
+the installation already in use into `Games/<game>` and
+`Expansions/<game>/<expansion>` under the player's Open Annihilation folder.
 The installation is only read. A file already recorded, with the same size
 and modification time, is left in place, and a copy that stopped continues
 from the bytes already written. `--game-dir` does not copy. A run that
 nobody is watching does not copy: it uses a managed base game already
 there, or it stops with a message. `--check-content-copy PATH` checks that
 copy against a small fixture, using PATH as the Documents folder, and does
-nothing else. `--check-installer FILE` reads a Windows installer, lists the
-bundles it holds and every file's SHA-256, and does nothing else. Mounting
-the composed folder is separate: the game still
+nothing else. `--check-installer FILE` reads a recognised Windows installer,
+macOS installer or disk image for older Macs, lists the bundles it holds and
+every file's SHA-256, and copies nothing. Mounting the composed folder is
+separate: the game still
 plays from the installation folder.
 
 ### The check

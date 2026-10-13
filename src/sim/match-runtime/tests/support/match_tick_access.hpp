@@ -92,6 +92,43 @@ class MatchTickAccess {
     /// @return Whether its building bit is set.
     [[nodiscard]] static bool order_building(const sim::simulation_state::Order& order) noexcept;
 
+    /// An order's place on a target's observer list.
+    struct ObserverPlace {
+        const void* node{}; ///< the order, or null when the match does not own it
+    };
+
+    /// Points an order at a unit, or at no unit, on the observer lists.
+    ///
+    /// The order leaves the list it was on. A missing unit, or one with no
+    /// type, leaves it on no list.
+    ///
+    /// @param match Match that owns the order.
+    /// @param[in,out] order Order to retarget.
+    /// @param target Unit it now watches, or null.
+    static void link_target(
+        Match& match, sim::simulation_state::Order& order, sim::simulation_state::Unit* target
+    );
+
+    /// Returns the order's place on the observer lists.
+    ///
+    /// @param match Match that owns the order.
+    /// @param order The order.
+    /// @return Its place, or a null place when the match does not own it.
+    [[nodiscard]] static ObserverPlace
+    observer_place(Match& match, const sim::simulation_state::Order& order);
+
+    /// Tells whether a unit's observer list holds an order's place.
+    ///
+    /// The search stops when the place matches, and does not follow the list
+    /// past it.
+    ///
+    /// @param match Match that owns the lists.
+    /// @param unit Unit whose list is searched.
+    /// @param place Place taken while the order was still owned.
+    /// @return True when that place is on the unit's list.
+    [[nodiscard]] static bool
+    list_holds(Match& match, sim::simulation_state::Unit& unit, ObserverPlace place);
+
   private:
 
     std::unique_ptr<TickHost> host_;

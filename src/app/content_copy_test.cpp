@@ -239,9 +239,11 @@ void test_decisions() {
     }
     const fs::path user = "player";
     const fs::path base = oa::app::bundle_folder(user, table[0]);
-    OA_CHECK(base == user / "games" / "totala");
+    OA_CHECK(base == user / std::string(oa::app::managed_games_folder) / "totala");
     const fs::path expansion = oa::app::bundle_folder(user, table[1]);
-    OA_CHECK(expansion == user / "expansions" / "totala" / "campaign");
+    OA_CHECK(
+        expansion == user / std::string(oa::app::managed_expansions_folder) / "totala" / "campaign"
+    );
 }
 
 void test_resume(const fs::path& scratch) {
@@ -276,7 +278,8 @@ void test_resume(const fs::path& scratch) {
     const oa::app::CopyResult first = oa::app::copy_content(source, request);
     OA_CHECK(first.status == oa::app::CopyStatus::stopped);
     OA_CHECK(first.files_copied == 1);
-    const fs::path partial = user / "games" / "totala" / "Data" / "2.zrb.part";
+    const fs::path partial =
+        user / std::string(oa::app::managed_games_folder) / "totala" / "Data" / "2.zrb.part";
     std::error_code failure;
     OA_CHECK(fs::is_regular_file(partial, failure));
     const auto partial_raw = fs::file_size(partial, failure);
@@ -306,11 +309,16 @@ void test_resume(const fs::path& scratch) {
     OA_CHECK(!fs::exists(partial, failure));
     check_unchanged(stamps);
     OA_CHECK(oa::app::managed_base_present(user, oa::app::copy_check_bundles()));
-    fs::remove(user / "games" / "totala" / std::string(oa::app::content_record_name), failure);
+    fs::remove(
+        user / std::string(oa::app::managed_games_folder) / "totala" /
+            std::string(oa::app::content_record_name),
+        failure
+    );
     OA_CHECK(!oa::app::managed_base_present(user, oa::app::copy_check_bundles()));
     OA_CHECK(
         fs::exists(
-            user / "expansions" / "totala" / "campaign" / std::string(oa::app::content_record_name),
+            user / std::string(oa::app::managed_expansions_folder) / "totala" / "campaign" /
+                std::string(oa::app::content_record_name),
             failure
         )
     );
@@ -335,7 +343,10 @@ void test_wineskin(const fs::path& scratch) {
     OA_CHECK(result.files_copied == 3);
     check_unchanged(stamps);
     check_copied_tree(user);
-    OA_CHECK(read_bytes(user / "games" / "totala" / "rev31.gp3") != "DECOY-FIXTURE!");
+    OA_CHECK(
+        read_bytes(user / std::string(oa::app::managed_games_folder) / "totala" / "rev31.gp3") !=
+        "DECOY-FIXTURE!"
+    );
 }
 
 oa::app::FreeSpace no_free_space(void*, const fs::path&) {
@@ -360,7 +371,7 @@ void test_space(const fs::path& scratch) {
     const oa::app::CopyResult denied = oa::app::copy_content(source, request);
     OA_CHECK(denied.status == oa::app::CopyStatus::no_space);
     std::error_code failure;
-    OA_CHECK(!fs::exists(blocked / "games", failure));
+    OA_CHECK(!fs::exists(blocked / std::string(oa::app::managed_games_folder), failure));
     check_unchanged(stamps);
 
     const fs::path user = scratch / "user";
@@ -414,7 +425,7 @@ void test_corrupt_copy(const fs::path& scratch) {
     const fs::path user = scratch / "user";
     write_cased_install(install);
     const std::vector<SourceStamp> stamps = stamp_files(install);
-    const fs::path totala = user / "games" / "totala";
+    const fs::path totala = user / std::string(oa::app::managed_games_folder) / "totala";
     place_file(totala / ".oa-content", "not a record\n");
     place_file(totala / "rev31.gp3", "WRONG-BYTES!!\n");
     place_file(totala / "Data" / "2.zrb.part", std::string(100, 'x'));
@@ -456,7 +467,7 @@ void test_ensure(const fs::path& scratch) {
     );
     check_unchanged(stamps);
     std::error_code failure;
-    OA_CHECK(!fs::exists(user / "games", failure));
+    OA_CHECK(!fs::exists(user / std::string(oa::app::managed_games_folder), failure));
 
     request.unattended = false;
     std::ostringstream news;
@@ -483,7 +494,7 @@ void test_ensure(const fs::path& scratch) {
     named.user_folder_known = true;
     named.bundles = oa::app::copy_check_bundles();
     oa::app::ensure_managed_copy(named);
-    OA_CHECK(!fs::exists(named.user_folder / "games", failure));
+    OA_CHECK(!fs::exists(named.user_folder / std::string(oa::app::managed_games_folder), failure));
 
     oa::app::ManagedCopyRequest unknown_folder;
     unknown_folder.installation = scratch / "unused";
@@ -491,7 +502,9 @@ void test_ensure(const fs::path& scratch) {
     unknown_folder.user_folder = scratch / "unknown";
     unknown_folder.bundles = oa::app::copy_check_bundles();
     oa::app::ensure_managed_copy(unknown_folder);
-    OA_CHECK(!fs::exists(unknown_folder.user_folder / "games", failure));
+    OA_CHECK(!fs::exists(
+        unknown_folder.user_folder / std::string(oa::app::managed_games_folder), failure
+    ));
 }
 
 void test_inside_source(const fs::path& scratch) {
@@ -508,7 +521,9 @@ void test_inside_source(const fs::path& scratch) {
     request.user_folder_known = true;
     request.bundles = oa::app::copy_check_bundles();
     oa::app::ensure_managed_copy(request);
-    OA_CHECK(!fs::exists(user / "games" / "totala" / ".oa-content", failure));
+    OA_CHECK(!fs::exists(
+        user / std::string(oa::app::managed_games_folder) / "totala" / ".oa-content", failure
+    ));
     check_unchanged(stamps);
 }
 
@@ -594,7 +609,7 @@ void test_content_difference(const fs::path& scratch) {
     copy_fixture(install, user);
     const auto files = oa::app::copy_check_files();
     const auto table = oa::app::copy_check_bundles();
-    const fs::path rev = user / "games" / "totala" / "rev31.gp3";
+    const fs::path rev = user / std::string(oa::app::managed_games_folder) / "totala" / "rev31.gp3";
 
     // A new time with the same bytes is hashed once and is not a difference.
     bump_time(rev, 2);
@@ -636,7 +651,9 @@ void test_content_difference(const fs::path& scratch) {
     // hashed while its size and time still match.
     std::string error;
     oa::app::ContentRecord record = oa::app::read_content_record(
-        user / "games" / "totala" / std::string(oa::app::content_record_name), &error
+        user / std::string(oa::app::managed_games_folder) / "totala" /
+            std::string(oa::app::content_record_name),
+        &error
     );
     OA_CHECK(record.valid);
     bool rewritten = false;
@@ -649,7 +666,10 @@ void test_content_difference(const fs::path& scratch) {
     OA_CHECK(rewritten);
     OA_CHECK(
         oa::app::write_content_record(
-            user / "games" / "totala" / std::string(oa::app::content_record_name), record, &error
+            user / std::string(oa::app::managed_games_folder) / "totala" /
+                std::string(oa::app::content_record_name),
+            record,
+            &error
         )
     );
     const oa::app::ContentCheck unknown = oa::app::check_managed_content(user, table);
@@ -712,6 +732,109 @@ void test_content_difference(const fs::path& scratch) {
     OA_CHECK(oa::app::content_match_line(2) == "2 files differ");
 }
 
+// One soundtrack file is missing and matches another file's bytes. A second
+// is missing and matches nothing. The first is stored under its own name.
+// The second is recorded as not in the source and does not warn. A damaged
+// track still does.
+void test_sibling_and_absent(const fs::path& scratch) {
+    const std::string shared = "track-shared";
+    const std::string only = "track-only";
+    static oa::base::sha256::Digest stored_shared;
+    static oa::base::sha256::Digest stored_only;
+    stored_shared = digest_of(shared);
+    stored_only = digest_of(only);
+    static const std::string_view name0[]{"music/0.mp3"};
+    static const std::string_view name9[]{"music/9.mp3"};
+    static const std::string_view name13[]{"music/13.mp3"};
+    const uint64_t shared_size = static_cast<uint64_t>(shared.size());
+    const uint64_t only_size = static_cast<uint64_t>(only.size());
+    const oa::data::content_bundles::ContentFile files[] = {
+        {"music/0.mp3",
+         name0,
+         shared_size,
+         std::span<const oa::base::sha256::Digest>(&stored_shared, 1)},
+        {"music/9.mp3",
+         name9,
+         shared_size,
+         std::span<const oa::base::sha256::Digest>(&stored_shared, 1)},
+        {"music/13.mp3",
+         name13,
+         only_size,
+         std::span<const oa::base::sha256::Digest>(&stored_only, 1)},
+    };
+    const oa::data::content_bundles::Bundle table[] = {
+        {"music",
+         "Music",
+         oa::data::content_bundles::Kind::expansion,
+         {},
+         {},
+         std::span<const oa::data::content_bundles::ContentFile>(files)},
+    };
+    const fs::path install = scratch / "source";
+    const fs::path user = scratch / "user";
+    std::error_code failure;
+    fs::create_directories(install / "music", failure);
+    OA_CHECK(!failure);
+    fs::create_directories(user, failure);
+    place_file(install / "music" / "9.mp3", shared);
+    oa::app::FolderContentSource source(install, table);
+    oa::app::CopyRequest request;
+    request.user_folder = user;
+    request.bundles = table;
+    request.share_blocks = false;
+    const oa::app::CopyResult copied = oa::app::copy_content(source, request);
+    OA_CHECK(copied.status == oa::app::CopyStatus::finished);
+    const fs::path music_dir =
+        user / std::string(oa::app::managed_expansions_folder) / "music" / "music";
+    OA_CHECK(read_bytes(music_dir / "0.mp3") == shared);
+    OA_CHECK(read_bytes(music_dir / "9.mp3") == shared);
+    OA_CHECK(!fs::exists(music_dir / "13.mp3", failure));
+    std::string error;
+    const oa::app::ContentRecord record = oa::app::read_content_record(
+        user / std::string(oa::app::managed_expansions_folder) / "music" /
+            std::string(oa::app::content_record_name),
+        &error
+    );
+    OA_CHECK(record.valid);
+    bool saw_filled = false;
+    bool saw_absent = false;
+    for (const oa::app::ContentRecordFile& item : record.files) {
+        if (item.copy_name == "music/0.mp3") {
+            saw_filled = true;
+            OA_CHECK(!item.not_in_source);
+            OA_CHECK(item.digest == stored_shared);
+        }
+        if (item.copy_name == "music/13.mp3") {
+            saw_absent = true;
+            OA_CHECK(item.not_in_source);
+        }
+    }
+    OA_CHECK(saw_filled);
+    OA_CHECK(saw_absent);
+    const oa::app::ContentCheck check = oa::app::check_managed_content(user, table);
+    OA_CHECK(!oa::app::content_notice_due(check));
+    const oa::app::ContentBundleCheck* music = bundle_named(check, "music");
+    OA_CHECK(music != nullptr);
+    if (music != nullptr) {
+        OA_CHECK(music->files_differ == 0);
+        OA_CHECK(music->files_not_in_source == 1);
+        OA_CHECK(oa::app::content_bundle_line(*music) == "2 of 3 tracks");
+    }
+    OA_CHECK(oa::app::content_tracks_line(17, 18) == "17 of 18 tracks");
+
+    place_file(music_dir / "9.mp3", "TRACK-SHARED");
+    bump_time(music_dir / "9.mp3", 30);
+    const oa::app::ContentCheck damaged = oa::app::check_managed_content(user, table);
+    OA_CHECK(oa::app::content_notice_due(damaged));
+    const oa::app::ContentBundleCheck* broken = bundle_named(damaged, "music");
+    OA_CHECK(broken != nullptr);
+    if (broken != nullptr) {
+        OA_CHECK(broken->files_differ == 1);
+        OA_CHECK(names_file(*broken, "music/9.mp3"));
+        OA_CHECK(!names_file(*broken, "music/13.mp3"));
+    }
+}
+
 } // namespace
 
 int main() {
@@ -727,6 +850,7 @@ int main() {
     test_clone(scratch / "clone");
     test_check(scratch / "check");
     test_content_difference(scratch / "G03-difference");
+    test_sibling_and_absent(scratch / "G26-music");
     each_regular_file(scratch, unlock_one);
     std::error_code ignored;
     fs::remove_all(scratch, ignored);

@@ -127,10 +127,16 @@ object:
 | `preview` | no | A picture reference ending `.png`. |
 | `compatible` | no | An object of names to booleans, in the order written. Each name is 1 to 256 bytes. |
 
-`size` is the text `16x16`, not an object. A name in `compatible` is a free
-name such as `ta-3.1c`, the base the map was published against, not a
-package key. `true` means that target fits. The manifest inside the package
-is described by the [OAMAP standard](../maps/oamap-standard.md).
+`size` is the text `16x16`, not an object. A name in `compatible` is not a
+package key. The names published first name the base game, then each
+required expansion in the built-in order, then a mod: `totala`,
+`totala+core-contingency`, `totala+<mod>@<revision>`. Music is not one of
+those expansions. `true` means that target fits. The same rows are also
+published under the older names,
+`ta-3.1c` and `<mod>@<revision>`, so an older engine still finds its own.
+OA reads a new name when the table has one, and an older name only when it
+does not. The manifest inside the package is described by the
+[OAMAP standard](../maps/oamap-standard.md).
 
 ## Language packs
 

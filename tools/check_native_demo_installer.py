@@ -6,13 +6,16 @@
 
 The installer the OA_DEMO_INSTALLER environment variable names stays where it
 is. The game, open-annihilation, starts headless with --game-dir on its folder
-and --data-dir on a scratch folder. The first start must unpack the archive to
-demo-1997/TADemo.hpi in the scratch folder, check it and mount it, and the
-verifier (oa-demo-installer-test --verify) must then find the file's size and
-SHA-256 to be those of the release the engine recognises. A second start must
-check the archive and mount it without unpacking it again, and one after the
-archive was damaged must unpack it again. The installer's folder must be left
-as it was.
+and --data-dir on a scratch folder. The preferences file sits in that scratch
+folder, so the player's folder is "Open Annihilation" beside it. The first
+start must unpack the archive to Games/totala-demo/TADemo.hpi there, with the
+.oa-content record of that base game, check it and mount it, and the verifier
+(oa-demo-installer-test --verify) must then find the file's size and SHA-256
+to be those of the release the engine recognises. A second start must check
+the archive and mount it without unpacking it again, and one after the
+archive was damaged must unpack it again. An earlier unpack left at
+demo-1997/TADemo.hpi in the data folder is copied into Games/totala-demo once
+and left where it was. The installer's folder must be left as it was.
 
 Each start runs --skip-intro --frames 60 on the dummy SDL drivers and must
 reach the main menu: it ends with status 0 and its "native check:" lines,
@@ -42,6 +45,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -52,8 +56,14 @@ RUNNER = shlex.split(os.environ.get("OA_TEST_RUNNER", ""))
 # ctest's SKIP_RETURN_CODE.
 SKIP = 77
 INSTALLER_VARIABLE = "OA_DEMO_INSTALLER"
-# Where the archive is unpacked, under the data folder.
-ARCHIVE = Path("demo-1997") / "TADemo.hpi"
+# The player's folder beside the scratch preferences file.
+PLAYER = "Open Annihilation"
+# Where the archive is unpacked, under the player's folder, and the record beside it.
+DEMO_FOLDER = Path(PLAYER) / "Games" / "totala-demo"
+ARCHIVE_NAME = "TADemo.hpi"
+RECORD_NAME = ".oa-content"
+# An earlier unpack, under the data folder, copied from once.
+LEGACY = Path("demo-1997") / ARCHIVE_NAME
 # The game's line once the archive is mounted, and how it says where the
 # archive came from.
 MOUNTED = "open-annihilation: mounted the Total Annihilation demo (1997) from "
@@ -128,18 +138,33 @@ def verify(verifier, archive):
     expect(result.returncode == 0, f"{archive} is not the demo's archive", result.stdout + result.stderr)
 
 
+def demo_record(archive):
+    """The base game's record beside `archive`."""
+    return archive.parent / RECORD_NAME
+
+
+def expect_demo_folder(archive):
+    """The archive and its record, and nothing else, are in the demo's folder."""
+    record = demo_record(archive)
+    expect(archive.is_file(), f"no archive at {archive}")
+    expect(record.is_file(), f"no content record at {record}")
+    text = record.read_text(encoding="utf-8", errors="replace")
+    expect("bundle totala-demo" in text and ARCHIVE_NAME in text,
+           "the content record does not name the demo's archive")
+    expect(sorted(path.name for path in archive.parent.iterdir()) == [RECORD_NAME, ARCHIVE_NAME],
+           "the demo's folder holds more than its archive and record")
+
+
 def check(native, verifier, installer, workdir):
     """Runs every start; raises DemoFailure."""
     folder = installer.parent
     data = workdir / "data"
     before = listing(folder)
-    archive = data / ARCHIVE
+    archive = workdir / DEMO_FOLDER / ARCHIVE_NAME
 
     output = start(native, folder, data, workdir)
     expect(UNPACKED_NOW in output, "the first start did not unpack the archive", output)
-    expect(archive.is_file(), f"no archive at {archive}")
-    expect(sorted(path.name for path in archive.parent.iterdir()) == [ARCHIVE.name],
-           "the data folder holds more than the archive")
+    expect_demo_folder(archive)
     verify(verifier, archive)
 
     output = start(native, folder, data, workdir)
@@ -152,7 +177,26 @@ def check(native, verifier, installer, workdir):
         damaged.write(bytes([byte[0] ^ 1]))
     output = start(native, folder, data, workdir)
     expect(UNPACKED_NOW in output, "a damaged archive was not unpacked again", output)
+    expect_demo_folder(archive)
     verify(verifier, archive)
+
+    # An earlier unpack is copied once into the player's folder and left in place.
+    legacy = data / LEGACY
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(archive, legacy)
+    legacy_stamp = legacy.stat().st_mtime_ns
+    shutil.rmtree(archive.parent)
+    output = start(native, folder, data, workdir)
+    expect(CHECKED in output,
+           "an earlier demo-1997 archive was not copied into the player's folder", output)
+    expect_demo_folder(archive)
+    verify(verifier, archive)
+    expect(legacy.is_file() and legacy.stat().st_mtime_ns == legacy_stamp,
+           "the earlier demo-1997 archive was not left as it was")
+    output = start(native, folder, data, workdir)
+    expect(CHECKED in output, "a copied demo-1997 archive was not reused", output)
+    expect(legacy.is_file() and legacy.stat().st_mtime_ns == legacy_stamp,
+           "an earlier demo-1997 archive was copied again")
 
     expect(listing(folder) == before, "the installer's folder changed")
 

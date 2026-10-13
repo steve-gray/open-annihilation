@@ -6,6 +6,7 @@
 #include "oa/app/demo_installer.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/data/content_bundles.hpp"
+#include "oa/data/content_bundles/record.hpp"
 #include "oa/formats/pe.hpp"
 #include "oa/platform/file_clone.hpp"
 #include <algorithm>
@@ -363,35 +364,13 @@ void write_bundle_record(const DemoSetup& setup, const DemoRelease& release) {
     const auto stamp = fs::last_write_time(setup.archive, error);
     file.modified = error ? 0 : seconds_since_1970(stamp);
     record.files.push_back(std::move(file));
-    std::string text = "oa-content 1\nbundle ";
-    text += record.bundle_id;
-    text += "\nsource ";
-    for (const char byte : record.source) {
-        if (byte == '\\')
-            text += "\\\\";
-        else if (byte == '\n')
-            text += "\\n";
-        else if (byte == '\r')
-            text += "\\r";
-        else
-            text.push_back(byte);
-    }
-    text += '\n';
-    for (const ContentRecordFile& item : record.files) {
-        text += "file ";
-        text += item.copy_name;
-        text += "\nsize ";
-        text += std::to_string(item.size);
-        text += "\nmodified ";
-        text += std::to_string(item.modified);
-        text += "\nsha256 ";
-        const auto hex = sha256::to_hex(item.digest);
-        text.append(hex.data(), hex.size());
-        text += '\n';
-    }
+    const std::optional<std::string> text =
+        oa::data::content_bundles::format_content_record(record);
+    if (!text)
+        return;
     const fs::path record_path = setup.folder / fs::path(std::string(content_record_name));
     std::ofstream output(record_path, std::ios::binary | std::ios::trunc);
-    output << text;
+    output << *text;
 }
 
 /// The archive resource of a recognised installer.
@@ -510,7 +489,8 @@ set_up_demo(const fs::path& folder, const fs::path& player_folder, const DemoRel
     const auto unpacked_folder = demo_bundle_directory(player_folder, release);
     const auto archive = unpacked_folder / fs::path(std::string(release.archive_name));
     std::error_code games_error;
-    const auto games_status = fs::symlink_status(player_folder / "games", games_error);
+    const auto games_status =
+        fs::symlink_status(player_folder / std::string(managed_games_folder), games_error);
     const bool games_linked =
         !player_folder.empty() && fs::exists(games_status) && !fs::is_directory(games_status);
     const bool linked =
@@ -700,7 +680,8 @@ bool adopt_legacy_demo(
     const fs::path folder = demo_bundle_directory(player_folder, release);
     const fs::path archive = folder / fs::path(std::string(release.archive_name));
     std::error_code games_error;
-    const auto games_status = fs::symlink_status(player_folder / "games", games_error);
+    const auto games_status =
+        fs::symlink_status(player_folder / std::string(managed_games_folder), games_error);
     const bool games_linked = fs::exists(games_status) && !fs::is_directory(games_status);
     if (games_linked || leads_elsewhere(folder, archive))
         return false;

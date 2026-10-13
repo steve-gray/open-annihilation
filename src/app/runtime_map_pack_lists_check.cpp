@@ -557,7 +557,12 @@ void Runtime::check_map_pack_lists() {
                eligible_map_names_.end();
     };
     require(skirmish_has(fitting), "the skirmish list does not show the spaced map");
-    require(!skirmish_has(other), "the skirmish list shows the map that does not fit");
+    require(skirmish_has(other), "the skirmish list hides the map that does not fit");
+    require(pack_map_row_reason(fitting).empty(), "the spaced map is greyed for the base game");
+    require(
+        pack_map_row_reason(other) == "for ridge",
+        "the other map is not greyed for ridge (" + pack_map_row_reason(other) + ")"
+    );
 
     std::vector<std::string> room_after;
     const int32_t room_after_count = mp::multiplayer_map_count();
@@ -576,8 +581,15 @@ void Runtime::check_map_pack_lists() {
         "the battle room does not list the spaced map"
     );
     require(
-        std::find(room_after.begin(), room_after.end(), other) == room_after.end(),
-        "the battle room lists the map that does not fit"
+        std::find(room_after.begin(), room_after.end(), other) != room_after.end(),
+        "the battle room hides the map that does not fit"
+    );
+    const std::vector<std::string> other_row =
+        mp::multiplayer_map_texts(std::vector<std::string>{other});
+    require(
+        other_row.size() == 1 && other_row.front().find("for ridge") != std::string::npos,
+        "the battle room's greyed row is \"" +
+            (other_row.empty() ? std::string() : other_row.front()) + "\""
     );
     const char* title_text = mp::multiplayer_pack_map_title(fitting.c_str());
     const std::string room_title = title_text != nullptr ? title_text : std::string();
@@ -609,12 +621,17 @@ void Runtime::check_map_pack_lists() {
     bool omitted = false;
     for (const std::string& line : lines) {
         if (line.find(kPackId) != std::string::npos &&
-            line.find("1 map does not fit ta-3.1c") != std::string::npos) {
+            line.find("1 map cannot be played with " + played_map_key()) != std::string::npos) {
             omitted = true;
             std::cout << "map pack lists check: " << line << '\n';
         }
     }
-    require(omitted, "the map that does not fit was not left out with one log line");
+    require(omitted, "the map that cannot be played was not named with one log line");
+    require(
+        played_map_key().starts_with("totala") && played_map_key().find('@') == std::string::npos &&
+            played_map_key().find("music") == std::string::npos,
+        "the base game's key is \"" + played_map_key() + "\""
+    );
     std::cout << "map pack lists check: after install, skirmish " << eligible_map_names_.size()
               << " maps, battle room " << room_after.size() << " maps\n";
 
@@ -627,9 +644,11 @@ void Runtime::check_map_pack_lists() {
     fs::create_directories(local_mod, made);
     require(!made, "could not make the local mod's folder");
     const std::vector<fs::path> saved_folders = options_.game_folders;
+    const fs::path saved_layered = options_.layered_mod_folder;
     if (options_.game_folders.empty())
         options_.game_folders.push_back(options_.game_dir);
     options_.game_folders.insert(options_.game_folders.begin(), local_mod);
+    options_.layered_mod_folder = local_mod;
     require(plays_mod(), "the local folder is not played as a mod");
     require(played_map_key().empty(), "the local mod has a catalogue key");
     drop_pack_map_fits();
@@ -637,6 +656,10 @@ void Runtime::check_map_pack_lists() {
     require(
         skirmish_has(fitting) && skirmish_has(other),
         "a map whose files fit a mod the catalogue has no row for was left out"
+    );
+    require(
+        pack_map_row_reason(fitting).empty() && pack_map_row_reason(other).empty(),
+        "a map whose files fit the local mod is greyed"
     );
     require(
         room_lists(fitting) && room_lists(other),
@@ -654,15 +677,18 @@ void Runtime::check_map_pack_lists() {
     drop_pack_map_fits();
     refresh_listed_pack_maps();
     require(skirmish_has(fitting), "the spaced map no longer fits the local mod");
-    require(!skirmish_has(other), "the local mod lists the map whose feature it already defines");
-    require(room_lists(fitting), "the battle room dropped the spaced map for the local mod");
+    require(skirmish_has(other), "the local mod hides the map whose feature it already defines");
     require(
-        !room_lists(other), "the battle room lists the map whose feature the local mod defines"
+        pack_map_row_reason(other).find("doesn't fit") != std::string::npos,
+        "the local mod does not grey the map whose feature it defines (" +
+            pack_map_row_reason(other) + ")"
     );
+    require(room_lists(fitting), "the battle room dropped the spaced map for the local mod");
+    require(room_lists(other), "the battle room hides the map whose feature the local mod defines");
     bool local_omitted = false;
     for (const std::string& line : pack_map_omission_lines()) {
         if (line.find(std::string(kPackId)) != std::string::npos &&
-            line.find("1 map does not fit the mod being played") != std::string::npos) {
+            line.find("1 map cannot be played with the mod being played") != std::string::npos) {
             local_omitted = true;
             std::cout << "map pack lists check: " << line << '\n';
         }
@@ -672,14 +698,21 @@ void Runtime::check_map_pack_lists() {
     );
 
     options_.game_folders = saved_folders;
+    options_.layered_mod_folder = saved_layered;
     drop_pack_map_fits();
     refresh_listed_pack_maps();
     require(!plays_mod(), "the base game is still played as a mod");
-    require(played_map_key() == "ta-3.1c", "the base game's key is not ta-3.1c");
-    require(skirmish_has(fitting) && !skirmish_has(other), "the base game's lists changed");
     require(
-        room_lists(fitting) && !room_lists(other),
-        "the battle room's list changed for the base game"
+        played_map_key().starts_with("totala") && played_map_key().find('@') == std::string::npos &&
+            played_map_key().find("music") == std::string::npos,
+        "the base game's key is \"" + played_map_key() + "\""
+    );
+    require(
+        skirmish_has(fitting) && skirmish_has(other) && pack_map_row_reason(other) == "for ridge",
+        "the base game's lists changed"
+    );
+    require(
+        room_lists(fitting) && room_lists(other), "the battle room's list changed for the base game"
     );
 
     exercise_click(menu::resource_name(menu::Button::single_player));
@@ -688,8 +721,8 @@ void Runtime::check_map_pack_lists() {
     exercise_click(skirmish::resource_name(skirmish::Button::select_map));
     require(
         screen_ == Screen::map_selection && row_of(fitting) < bound_map_names_.size() &&
-            row_of(other) == bound_map_names_.size(),
-        "the skirmish map list does not show the spaced name, or it shows the other map"
+            row_of(other) < bound_map_names_.size(),
+        "the skirmish map list does not show both pack maps"
     );
     preview_map_index(row_of(fitting));
     require(
@@ -708,6 +741,12 @@ void Runtime::check_map_pack_lists() {
         bound_map_labels_[row_of(fitting)] == kFittingTitle &&
             bound_map_names_[row_of(fitting)] == fitting,
         "the skirmish row shows \"" + bound_map_labels_[row_of(fitting)] + "\""
+    );
+    require(
+        bound_map_labels_[row_of(other)].find("for ridge") != std::string::npos &&
+            row_of(other) < bound_map_grey_.size() && bound_map_grey_[row_of(other)] != 0 &&
+            row_of(fitting) < bound_map_grey_.size() && bound_map_grey_[row_of(fitting)] == 0,
+        "the greyed skirmish row shows \"" + bound_map_labels_[row_of(other)] + "\""
     );
     // The stock skirmish map screen has no name under the list. The title is
     // what that screen writes when its layout has one, and what the battle

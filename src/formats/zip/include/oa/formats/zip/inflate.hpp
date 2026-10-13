@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The raw deflate decoder both readers use: the in-memory reader in one pass
-// over a whole entry, the streamed reader a piece at a time through fixed
-// buffers.
+// The raw deflate decoder the zip readers use, and that other formats use
+// for a deflate stream of their own: one pass over a whole buffer, or a
+// piece at a time through fixed buffers. The stream has no zlib or gzip
+// wrapper; the caller deals with that wrapper.
 #pragma once
 
 #include <cstddef>
@@ -12,7 +13,7 @@
 
 #include <zlib.h>
 
-namespace oa::formats::zip::detail {
+namespace oa::formats::zip {
 
 /// Inflates one raw deflate stream (no zlib header or trailer), in as many
 /// passes as its caller likes.
@@ -57,4 +58,4 @@ class Inflater {
     bool started_{};
 };
 
-} // namespace oa::formats::zip::detail
+} // namespace oa::formats::zip
