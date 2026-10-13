@@ -213,13 +213,19 @@ class FolderContentSource final : public ContentSource {
         std::filesystem::path folder, std::span<const oa::data::content_bundles::Bundle> bundles
     );
 
+    /// The folder the player named, as the copy's record keeps it.
     [[nodiscard]] std::string origin() const override;
+    /// Finds the game folder in the named folder, or in a Wineskin drive_c.
     [[nodiscard]] bool open(std::string* error) override;
+    /// Lists the game folder's files that match the table by name and size.
     [[nodiscard]] bool list(std::vector<ContentSourceFile>& files, std::string* error) override;
+    /// Writes one listed file from the game folder to `request.destination`.
     [[nodiscard]] bool
     stream_file(const StreamRequest& request, StreamResult& result, std::string* error) override;
+    /// Resolves a listed name to its file in the game folder.
     [[nodiscard]] bool
     locate(std::string_view name, std::filesystem::path& resolved, std::string* error) override;
+    /// The game folder the files are read from.
     [[nodiscard]] std::filesystem::path disk_root() const override;
 
   private:

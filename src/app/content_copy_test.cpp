@@ -29,7 +29,7 @@ namespace fs = std::filesystem;
 
 struct SourceStamp {
     fs::path path;
-    std::uintmax_t size{};
+    uintmax_t size{};
     fs::file_time_type modified{};
     std::string bytes;
 };
