@@ -9,17 +9,22 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/data/languages/interface_text.hpp"
+#include "oa_layer.hpp"
 #include "render_host.hpp"
 #include "render_run.hpp"
+#include "user_folder_state.hpp"
 #include "web_link_state.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/frontend_state/app_modes.hpp"
+#include "oa/ui/kit/components_more.hpp"
 
 #include <SDL3/SDL.h>
 
+#include <memory>
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace oa::app {
@@ -194,6 +199,77 @@ void Runtime::open_web_link(std::string_view address) {
     const std::string text(address);
     if (!hooks.open(hooks.context, text.c_str()))
         status_ = "cannot open " + text + ": " + SDL_GetError();
+}
+
+const ContentCheck& Runtime::content_check() const noexcept {
+    return content_check_;
+}
+
+void Runtime::tell_content_difference() {
+    // Most starts match, and most frames have nothing to tell.
+    if (content_notice_closed_ || options_.game_dir_named || !content_notice_due(content_check_))
+        return;
+    constexpr std::string_view notice_word = "content-notice";
+    if (oa_layer_ != nullptr &&
+        (oa_layer_->find(notice_word) != nullptr || oa_layer_->waiting(notice_word) != nullptr))
+        return;
+    if (!main_menu_settled(screen_, state_, frame_owned_by_package())) {
+        content_notice_frames_ = 0;
+        return;
+    }
+    if (++content_notice_frames_ < kNoticeMenuFrames || dialogs::dialog_count() != 0 ||
+        engine_settings_dialog() != nullptr || engine_settings_fonts() == nullptr)
+        return;
+    // A run nobody watches leaves it for one someone does, unless a check
+    // asked for the main menu's notices.
+    if (UserFolderState::unwatched(options_.unattended) && !user_folder_state().check_shows_notice)
+        return;
+    const ContentNoticeCopy copy = content_difference_notice(content_check_);
+    oa::ui::kit::Notice told;
+    told.title = copy.title;
+    told.paragraphs.reserve(copy.lines.size());
+    for (const std::string& line : copy.lines)
+        told.paragraphs.push_back({line, false});
+    told.open_caption = copy.details;
+    told.ok_caption = copy.ok;
+    told.word = std::string(notice_word);
+    NoticeScreen::Host host;
+    // OK and Escape close it for this start only. The next start shows it
+    // again while the files differ. Nothing is written to skip it.
+    host.ok = [this] {
+        content_notice_closed_ = true;
+        play_ui_sound("Options", 0);
+    };
+    // DETAILS lists the files. Settings' Game Content page replaces this
+    // list; the notice stays open underneath it.
+    host.open = [this] {
+        const ContentNoticeCopy files = content_file_notice(content_check_);
+        oa::ui::kit::Question asked;
+        asked.title = files.title;
+        asked.paragraphs.reserve(files.lines.size());
+        for (const std::string& line : files.lines)
+            asked.paragraphs.push_back({line, false});
+        asked.buttons.push_back({files.ok, true, "ok"});
+        asked.cancel_button = 0;
+        asked.primary_button = 0;
+        asked.word = "content-files";
+        QuestionScreen::Host answers;
+        answers.answer = [](int32_t) { return true; };
+        auto& layer = oa_layer();
+        layer.push(
+            std::make_unique<QuestionScreen>(
+                layer, Screen::main_menu, std::move(asked), std::move(answers)
+            )
+        );
+        return std::string();
+    };
+    // Leaving the main menu closes it without counting as OK, so it returns
+    // with the menu.
+    host.tick = [this] { return screen_ != Screen::main_menu; };
+    auto& layer = oa_layer();
+    layer.show_when_free(
+        std::make_unique<NoticeScreen>(layer, Screen::main_menu, std::move(told), std::move(host))
+    );
 }
 
 void Runtime::choose_web_links() {

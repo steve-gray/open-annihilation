@@ -809,7 +809,7 @@ int run_once(
     LookupLog* lookup_log,
     ModSwitchMemory& switch_memory
 ) {
-    const bool game_dir_named = !options.game_dir.empty();
+    options.game_dir_named = !options.game_dir.empty();
     // Captured before game_dir is filled with the folder this start plays:
     // the second compose, after a copy made on this start, still runs.
     const bool mount_copy = mount_managed_copy(options);
@@ -877,7 +877,7 @@ int run_once(
             "game directory does not exist: " + path_to_utf8(options.game_dir) +
             " (name it with --game-dir PATH)"
         );
-    publish_managed_copy(options, options.game_dir, game_dir_named);
+    publish_managed_copy(options, options.game_dir, options.game_dir_named);
     // A copy made on this start is what the start plays. --game-dir is left
     // on the folder it named.
     if (mount_copy) {

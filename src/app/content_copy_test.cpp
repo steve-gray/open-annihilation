@@ -12,6 +12,7 @@
 #include "oa/test/scratch_directory.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -541,6 +542,176 @@ void test_check(const fs::path& scratch) {
     OA_CHECK(status == 0);
 }
 
+const oa::app::ContentBundleCheck*
+bundle_named(const oa::app::ContentCheck& check, std::string_view id) {
+    for (const oa::app::ContentBundleCheck& bundle : check.bundles) {
+        if (bundle.id == id)
+            return &bundle;
+    }
+    return nullptr;
+}
+
+bool names_file(const oa::app::ContentBundleCheck& bundle, std::string_view copy_name) {
+    for (const oa::app::ContentFileDifference& file : bundle.differing) {
+        if (file.copy_name == copy_name)
+            return true;
+    }
+    return false;
+}
+
+bool line_has(const oa::app::ContentNoticeCopy& copy, std::string_view text) {
+    for (const std::string& line : copy.lines) {
+        if (line.find(text) != std::string::npos)
+            return true;
+    }
+    return false;
+}
+
+/// Moves a file's modification time forward by whole minutes, so each step
+/// of a test gives the file a time no earlier step recorded, however quickly
+/// the steps run.
+///
+/// @param path the file
+/// @param minutes how far forward
+void bump_time(const fs::path& path, int minutes) {
+    std::error_code failure;
+    const auto stamp = fs::last_write_time(path, failure);
+    OA_CHECK(!failure);
+    fs::last_write_time(path, stamp + std::chrono::minutes(minutes), failure);
+    OA_CHECK(!failure);
+}
+
+void copy_fixture(const fs::path& install, const fs::path& user) {
+    write_cased_install(install);
+    oa::app::FolderContentSource source(install, oa::app::copy_check_bundles());
+    const oa::app::CopyResult result = oa::app::copy_content(source, byte_request(user));
+    OA_CHECK(result.status == oa::app::CopyStatus::finished);
+}
+
+void test_content_difference(const fs::path& scratch) {
+    const fs::path install = scratch / "install";
+    const fs::path user = scratch / "user";
+    copy_fixture(install, user);
+    const auto files = oa::app::copy_check_files();
+    const auto table = oa::app::copy_check_bundles();
+    const fs::path rev = user / "games" / "totala" / "rev31.gp3";
+
+    // A new time with the same bytes is hashed once and is not a difference.
+    bump_time(rev, 2);
+    const oa::app::ContentCheck touched = oa::app::check_managed_content(user, table);
+    OA_CHECK(touched.files_hashed == 1);
+    OA_CHECK(!oa::app::content_notice_due(touched));
+    const oa::app::ContentBundleCheck* totala = bundle_named(touched, "totala");
+    OA_CHECK(totala != nullptr);
+    OA_CHECK(totala->files_differ == 0);
+    OA_CHECK(bundle_named(touched, "campaign") != nullptr);
+    const oa::app::ContentCheck settled = oa::app::check_managed_content(user, table);
+    OA_CHECK(settled.files_hashed == 0);
+    OA_CHECK(!oa::app::content_notice_due(settled));
+
+    // A changed byte is a difference, and the file is named. The next check
+    // does not hash it again while its size and time still match.
+    std::string changed(files[0].bytes);
+    changed[0] = 'X';
+    place_file(rev, changed);
+    bump_time(rev, 10);
+    const oa::app::ContentCheck bad = oa::app::check_managed_content(user, table);
+    OA_CHECK(bad.files_hashed == 1);
+    OA_CHECK(oa::app::content_notice_due(bad));
+    totala = bundle_named(bad, "totala");
+    OA_CHECK(totala != nullptr);
+    OA_CHECK(totala->files_differ == 1);
+    OA_CHECK(names_file(*totala, "rev31.gp3"));
+    const oa::app::ContentCheck bad_again = oa::app::check_managed_content(user, table);
+    OA_CHECK(bad_again.files_hashed == 0);
+    OA_CHECK(oa::app::content_notice_due(bad_again));
+
+    // The original bytes, with a new time, match again.
+    place_file(rev, files[0].bytes);
+    bump_time(rev, 20);
+    const oa::app::ContentCheck restored = oa::app::check_managed_content(user, table);
+    OA_CHECK(!oa::app::content_notice_due(restored));
+
+    // A recorded hash the table does not know is named, and the file is not
+    // hashed while its size and time still match.
+    std::string error;
+    oa::app::ContentRecord record = oa::app::read_content_record(
+        user / "games" / "totala" / std::string(oa::app::content_record_name), &error
+    );
+    OA_CHECK(record.valid);
+    bool rewritten = false;
+    for (oa::app::ContentRecordFile& item : record.files) {
+        if (item.copy_name != "rev31.gp3")
+            continue;
+        item.digest = oa::base::sha256::Digest{};
+        rewritten = true;
+    }
+    OA_CHECK(rewritten);
+    OA_CHECK(
+        oa::app::write_content_record(
+            user / "games" / "totala" / std::string(oa::app::content_record_name), record, &error
+        )
+    );
+    const oa::app::ContentCheck unknown = oa::app::check_managed_content(user, table);
+    OA_CHECK(unknown.files_hashed == 0);
+    OA_CHECK(oa::app::content_notice_due(unknown));
+    totala = bundle_named(unknown, "totala");
+    OA_CHECK(totala != nullptr);
+    OA_CHECK(names_file(*totala, "rev31.gp3"));
+
+    // The notice shows at every start until the files match. Closing it, a
+    // named --game-dir, and a run nobody watches are this start only.
+    OA_CHECK(oa::app::show_content_notice(false, false, false, unknown));
+    OA_CHECK(!oa::app::show_content_notice(false, false, true, unknown));
+    OA_CHECK(oa::app::show_content_notice(false, false, false, unknown));
+    OA_CHECK(!oa::app::show_content_notice(true, false, false, unknown));
+    OA_CHECK(!oa::app::show_content_notice(false, true, false, unknown));
+    OA_CHECK(!oa::app::show_content_notice(false, false, false, restored));
+
+    oa::app::ContentCheck shown;
+    oa::app::ContentBundleCheck music;
+    music.english_name = "Music";
+    music.file_count = 18;
+    music.files_differ = 1;
+    oa::app::ContentFileDifference music_file;
+    music_file.copy_name = "music/7.mp3";
+    music.differing.push_back(std::move(music_file));
+    shown.bundles.push_back(std::move(music));
+    oa::app::ContentBundleCheck core;
+    core.english_name = "Core Contingency";
+    core.file_count = 3;
+    core.files_differ = 2;
+    oa::app::ContentFileDifference core_archive;
+    core_archive.copy_name = "a.gp3";
+    core.differing.push_back(std::move(core_archive));
+    oa::app::ContentFileDifference core_pack;
+    core_pack.copy_name = "b.hpi";
+    core.differing.push_back(std::move(core_pack));
+    shown.bundles.push_back(std::move(core));
+    const oa::app::ContentNoticeCopy notice = oa::app::content_difference_notice(shown);
+    OA_CHECK(notice.title == "Game content");
+    OA_CHECK(notice.details == "DETAILS…");
+    OA_CHECK(notice.ok == "OK");
+    OA_CHECK(
+        line_has(notice, "The following content for your game does not match our expected sizes:")
+    );
+    OA_CHECK(line_has(notice, "Music / 1 of 18 files differs"));
+    OA_CHECK(line_has(notice, "Core Contingency / 2 of 3 files differ"));
+    OA_CHECK(line_has(
+        notice,
+        "The game still plays with these files, but network games with other players may not "
+        "start, and recordings may not replay the same. Copy the content again from another "
+        "source to fix it."
+    ));
+    const oa::app::ContentNoticeCopy listed = oa::app::content_file_notice(shown);
+    OA_CHECK(line_has(listed, "Files that differ:"));
+    OA_CHECK(line_has(listed, "Music: music/7.mp3"));
+    OA_CHECK(line_has(listed, "Core Contingency: b.hpi"));
+    OA_CHECK(oa::app::content_match_line(0) == "All files match");
+    OA_CHECK(oa::app::content_match_line(1) == "1 file differs");
+    OA_CHECK(oa::app::content_match_line(2) == "2 files differ");
+}
+
 } // namespace
 
 int main() {
@@ -555,6 +726,7 @@ int main() {
     test_inside_source(scratch / "inside");
     test_clone(scratch / "clone");
     test_check(scratch / "check");
+    test_content_difference(scratch / "G03-difference");
     each_regular_file(scratch, unlock_one);
     std::error_code ignored;
     fs::remove_all(scratch, ignored);
