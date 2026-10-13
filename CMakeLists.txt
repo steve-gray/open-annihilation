@@ -1108,7 +1108,7 @@ endif()
 set_property(SOURCE src/app/runtime_director.cpp src/app/runtime_engine_settings.cpp
   src/app/main.cpp src/app/game_files_screen.cpp src/app/runtime_game_files.cpp APPEND
   PROPERTY COMPILE_DEFINITIONS "OA_ENGINE_VERSION=\"${PROJECT_VERSION}\"")
-set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory oa-app-mod-profile
+set(oa_game_libraries oa-formats-hpi oa-formats-json oa-app-game-options oa-app-game-directory oa-app-mod-profile
   oa-app-user-folder
   oa-app-view-rules
   oa-app-window-icon
@@ -3263,7 +3263,7 @@ endif()
 
 # Network play: the multiplayer screens, the network session and match, the
 # .tad recording format and its playback, and oa-game's extension
-# oa-app-netgame, which takes the 3.1c network switches -e -h -n -p -t the
+# oa-app-netgame, which takes the 3.1c network switches -c -e -h -n -p -t the
 # game otherwise refuses. Its state for each runtime
 # (src/app/netgame/network_play.hpp) is its extension's own, and Runtime's
 # friend. Registered before any other extension, so that the others come
@@ -3287,8 +3287,14 @@ endif()
 list(APPEND oa_game_libraries oa-app-content)
 add_subdirectory(src/session/demo)
 add_subdirectory(src/app/netgame)
+# The command line reads a launch file. The options library does not link
+# back, so this is not a cycle. The link stays in this file: the netgame
+# directory does not link a target it does not own.
+if(TARGET oa-app-game-options AND TARGET oa-app-netgame-options)
+  target_link_libraries(oa-app-game-options PRIVATE oa-app-netgame-options)
+endif()
 if(TARGET oa-app-netgame)
-  oa_add_extension(oa-app-netgame INIT oa_extension_init_netgame SWITCHES ehnpt)
+  oa_add_extension(oa-app-netgame INIT oa_extension_init_netgame SWITCHES cehnpt)
 endif()
 # The automation endpoint: the automation protocol's codec, and the
 # endpoint a program on this machine drives the game through, oa-game's

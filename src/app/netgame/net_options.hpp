@@ -10,6 +10,7 @@
 #include "oa/app/extension.hpp"
 #include "oa/app/command_line.hpp"
 #include "oa/netgame/frontend/multiplayer_states.hpp"
+#include "oa/app/netgame/launch_file.hpp"
 #include "oa/app/netgame/launch_switches.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/ui/screen_registry.hpp"
@@ -72,6 +73,30 @@ struct NetOptions {
     // as soon as the game starts, as the player would through them. The
     // preferences keep what they hold.
     oa::ui::frontend_multiplayer::DirectGame direct_game{};
+    // --launch FILE, or "-" for standard input. Read once the other options
+    // are known, so an option beside the file overrides one field.
+    std::string launch_yaml{};
+    // --list-content with --json: print the installed maps, mods and
+    // expansions and leave before a window opens.
+    bool list_content = false;
+    bool json_requested = false;
+    // A launch file was read. The battle room applies it, and standard
+    // output names the map and the rules.
+    bool launch_from_file = false;
+    std::string launch_source{};
+    // Which of the direct-game options the command line itself named, so a
+    // launch file does not replace them.
+    bool cli_player_name = false;
+    bool cli_game_name = false;
+    bool cli_password = false;
+    bool cli_dplay_port = false;
+    bool cli_dplay_guid = false;
+    netgame::LaunchContentChoice launch_content{};
+    netgame::LaunchStatusChoice launch_status{};
+    // The launch's content is what this run plays, rather than --content.
+    bool launch_content_applied = false;
+    // The launch names a mod the run has not resolved to a folder yet.
+    bool launch_mod_pending = false;
 };
 
 // A recording the engine handed network play to replay
@@ -131,6 +156,17 @@ struct NetgameContext {
 ///                      and match_game are set.
 /// @param[in,out] context Context the hooks read and write; becomes `table.context`.
 void fill_option_hooks(Extension& table, NetgameContext& context);
+
+struct Options;
+
+/// Copies a launch file's content onto the run when the command line did not name --content.
+///
+/// The mod's folder is resolved later, once the game folder is known. A unit
+/// test that parses a local context leaves the process's context alone, so
+/// this reads the process's context: the game's own extension uses that one.
+///
+/// @param[in,out] options the parsed command line
+void adopt_launch_run(Options& options);
 
 /// Binds the multiplayer frontend states' answers about joining and leaving a session to the dispatcher (query_register).
 ///

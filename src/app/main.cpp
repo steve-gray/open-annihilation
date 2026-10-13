@@ -24,6 +24,16 @@
 #include "oa/app/package_install/handoff.hpp"
 #include "oa/app/package_install/inbox.hpp"
 #include "oa/app/mod_profile_loader.hpp"
+#include "oa/app/mod_summary.hpp"
+#include "oa/app/netgame/launch_file.hpp"
+#include "map_packs.hpp"
+#include "net_options.hpp"
+#include "oa/base/text.hpp"
+#include "oa/data/campaign/campaign_assets.hpp"
+#include "oa/data/campaign/map_catalog.hpp"
+#include "oa/data/content_bundles.hpp"
+#include "oa/formats/json.hpp"
+#include "oa/formats/ota.hpp"
 #include "oa/app/platform_hooks.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/app/video_capture.hpp"
@@ -50,7 +60,9 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <cstring>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <new>
 #include <optional>
@@ -788,6 +800,493 @@ void publish_managed_copy(
     return compose_managed_content(request, values);
 }
 
+/// Compares two names without regard to ASCII case.
+///
+/// @param left one name
+/// @param right the other
+/// @return true when every letter matches
+bool same_ascii(std::string_view left, std::string_view right) noexcept {
+    if (left.size() != right.size())
+        return false;
+    for (std::size_t at = 0; at < left.size(); ++at) {
+        const auto fold = [](unsigned char character) noexcept {
+            return character >= 'A' && character <= 'Z'
+                       ? static_cast<unsigned char>(character - 'A' + 'a')
+                       : character;
+        };
+        if (fold(static_cast<unsigned char>(left[at])) !=
+            fold(static_cast<unsigned char>(right[at])))
+            return false;
+    }
+    return true;
+}
+
+/// Returns the largest whole number written in a player-count list.
+///
+/// @param text the OTA numplayers text, such as "2, 4"
+/// @return the largest number, or 0 when there is none
+int32_t largest_count(std::string_view text) noexcept {
+    int32_t best = 0;
+    int32_t current = 0;
+    bool digits = false;
+    for (const char character : text) {
+        if (character >= '0' && character <= '9') {
+            digits = true;
+            const int32_t digit = character - '0';
+            if (current > (std::numeric_limits<int32_t>::max() - digit) / 10)
+                current = std::numeric_limits<int32_t>::max();
+            else
+                current = current * 10 + digit;
+        } else if (digits) {
+            if (current > best)
+                best = current;
+            current = 0;
+            digits = false;
+        }
+    }
+    if (digits && current > best)
+        best = current;
+    return best;
+}
+
+/// Returns how many players a parsed map is for.
+///
+/// The permitted counts win. Without them, the largest Network schema's
+/// start positions do.
+///
+/// @param metadata the map's OTA
+/// @return the count, or 0 when the file names none
+int32_t map_players(const oa::formats::ota::MapMetadata& metadata) noexcept {
+    const int32_t listed = largest_count(metadata.permitted_player_counts);
+    if (listed > 0)
+        return listed;
+    int32_t best = 0;
+    for (const oa::formats::ota::Schema& schema : metadata.schemas) {
+        bool network = false;
+        for (const std::string_view type : oa::formats::ota::multiplayer_schema_types)
+            if (same_ascii(schema.type, type))
+                network = true;
+        if (!network)
+            continue;
+        const auto count = static_cast<int32_t>(schema.start_positions.size());
+        if (count > best)
+            best = count;
+    }
+    return best;
+}
+
+/// One map a launch or the content list can name.
+struct CatalogueMap {
+    std::string key{};
+    std::string shown{};
+    std::string stem{};
+    int32_t players = 0;
+    std::string size{};
+};
+
+/// One mod or expansion the content list names.
+struct CatalogueNamed {
+    std::string id{};
+    std::string name{};
+};
+
+/// Returns the player's own folder, or nothing when it cannot be chosen.
+///
+/// @param options the run
+/// @return the folder
+std::optional<fs::path> launch_user_folder(const Options& options) {
+    try {
+        const fs::path preferences = preference_file(options.preferences_file);
+        std::error_code failure;
+        oa::platform::preferences::Values values;
+        if (fs::exists(preferences, failure) && !failure)
+            values = oa::platform::preferences::load(preferences);
+        std::string note;
+        return own_user_folder(
+            options.user_folder, options.preferences_file, preferences, values, note
+        );
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+/// Turns "has not copied <id>" into a launch refusal that names the field.
+///
+/// @param message the message the managed copy reported
+/// @return the refusal line
+std::string missing_copy_line(std::string_view message) {
+    const auto& net = netgame_context().options;
+    constexpr std::string_view marker = "Open Annihilation has not copied ";
+    const auto at = message.find(marker);
+    std::string id;
+    if (at != std::string_view::npos) {
+        auto rest = message.substr(at + marker.size());
+        if (!rest.empty() && rest.back() == '.')
+            rest.remove_suffix(1);
+        id = std::string(rest);
+    }
+    const std::string prefix = net.launch_source + ": ";
+    if (!id.empty() && id == net.launch_content.base_game)
+        return prefix + "content.base-game: \"" + id + "\" is not an installed base game";
+    if (!id.empty())
+        return prefix + "content.expansions: \"" + id + "\" is not an installed expansion";
+    return prefix + "content.base-game: " + std::string(message);
+}
+
+/// Mounts the managed copy, and names a missing bundle as a launch refusal.
+///
+/// @param options the run
+/// @return the composed folders, or nullopt when no copy is recorded
+std::optional<GameDirectory> compose_for_run(const Options& options) {
+    try {
+        return compose_from_options(options);
+    } catch (const netgame::LaunchRefusal&) {
+        throw;
+    } catch (const std::runtime_error& error) {
+        if (netgame_context().options.launch_content_applied)
+            throw netgame::LaunchRefusal(missing_copy_line(error.what()));
+        throw;
+    }
+}
+
+/// Resolves content.mod to a folder or a profile file before the game mounts.
+///
+/// A path that is already there is used as it is. An id is matched to a mod
+/// in the player's Mods folder, and, when --game-dir was named, to one in
+/// that game folder. A missing mod is refused before a window opens.
+///
+/// @param[in,out] options the run; mod_file or mod_dir is set when one matches
+void resolve_launch_mod(Options& options) {
+    auto& net = netgame_context().options;
+    if (!net.launch_mod_pending)
+        return;
+    const std::string named = net.launch_content.mod;
+    const fs::path as_path = path_from_utf8(named);
+    std::error_code failure;
+    if (fs::exists(as_path, failure) && !failure) {
+        if (fs::is_regular_file(as_path, failure) && !failure)
+            options.mod_file = as_path;
+        else if (fs::is_directory(as_path, failure) && !failure)
+            options.mod_dir = as_path;
+        else
+            throw netgame::LaunchRefusal(
+                net.launch_source + ": content.mod: \"" + named + "\" is not an installed mod"
+            );
+        net.launch_mod_pending = false;
+        return;
+    }
+    std::vector<fs::path> folders;
+    if (const std::optional<fs::path> user = launch_user_folder(options)) {
+        try {
+            const std::vector<fs::path> mods =
+                list_mods_in(*user / std::string(user_mods_folder_name));
+            folders.insert(folders.end(), mods.begin(), mods.end());
+        } catch (const std::exception&) {
+        }
+    }
+    if (options.game_dir_named) {
+        try {
+            const std::vector<fs::path> mods = list_mod_folders(options.game_dir);
+            folders.insert(folders.end(), mods.begin(), mods.end());
+        } catch (const std::exception&) {
+        }
+    }
+    std::optional<fs::path> by_id;
+    std::optional<fs::path> by_filename;
+    for (const fs::path& folder : folders) {
+        const ModSummary summary = read_mod_summary(folder);
+        const std::string filename = path_to_utf8(folder.filename());
+        if (!summary.id.empty() && summary.id == named && !by_id)
+            by_id = folder;
+        if (filename == named && !by_filename)
+            by_filename = folder;
+    }
+    const std::optional<fs::path> found = by_id ? by_id : by_filename;
+    if (!found)
+        throw netgame::LaunchRefusal(
+            net.launch_source + ": content.mod: \"" + named + "\" is not an installed mod"
+        );
+    options.mod_dir = *found;
+    net.launch_mod_pending = false;
+}
+
+/// Refuses a --game-dir launch whose named bundles are not in that folder.
+///
+/// A start without --game-dir is checked when the managed copy is mounted.
+///
+/// @param options the run, with game_dir filled
+void require_installed_copies(const Options& options) {
+    const auto& net = netgame_context().options;
+    if (!net.launch_content_applied || !options.game_dir_named)
+        return;
+    const std::vector<std::string> copied = copied_content_bundles(options.game_dir);
+    const auto missing = [&copied](const std::string& id) {
+        return std::find(copied.begin(), copied.end(), id) == copied.end();
+    };
+    const std::string prefix = net.launch_source + ": ";
+    if (!net.launch_content.base_game.empty() && missing(net.launch_content.base_game))
+        throw netgame::LaunchRefusal(
+            prefix + "content.base-game: \"" + net.launch_content.base_game +
+            "\" is not an installed base game"
+        );
+    for (const std::string& id : net.launch_content.expansions)
+        if (missing(id))
+            throw netgame::LaunchRefusal(
+                prefix + "content.expansions: \"" + id + "\" is not an installed expansion"
+            );
+}
+
+/// Reads the installed maps, mods and expansions.
+///
+/// @param options the run
+/// @param directory the game folder
+/// @param[out] maps the maps, sorted by key
+/// @param[out] mods the mods, sorted by id
+/// @param[out] expansions the installed expansions, sorted by id
+void read_installed_content(
+    const Options& options,
+    const GameDirectory& directory,
+    std::vector<CatalogueMap>& maps,
+    std::vector<CatalogueNamed>& mods,
+    std::vector<CatalogueNamed>& expansions
+) {
+    std::vector<fs::path> archives = options.archives;
+    if (archives.empty())
+        archives = directory.archives;
+    if (!archives.empty()) {
+        oa::AssetStore assets(options.game_folders);
+        for (const fs::path& candidate : archives) {
+            const fs::path archive =
+                candidate.is_absolute() ? candidate : options.game_dir / candidate;
+            assets.mount(archive);
+        }
+
+        struct ListedNames {
+            oa::data::campaign::MapList list{};
+            char* names = nullptr;
+
+            ~ListedNames() {
+                std::free(names);
+                oa::data::campaign::map_clear_list_cache(list, nullptr);
+            }
+        } listed;
+
+        auto files = oa::data::campaign::campaign_asset_files(assets);
+        files.translate = nullptr;
+        const int32_t count = oa::data::campaign::map_build_multiplayer_list(
+            listed.list, files, {}, &listed.names, false, false
+        );
+        const char* name = listed.names;
+        for (int32_t index = 0; name != nullptr && index < count;
+             ++index, name += std::strlen(name) + 1) {
+            CatalogueMap row;
+            row.key = name;
+            row.stem = name;
+            row.shown = name;
+            try {
+                const auto bytes = assets.read(std::string("maps/") + row.key + ".ota").bytes;
+                const auto parsed = oa::formats::ota::parse(
+                    std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size())
+                );
+                if (parsed.ok() && parsed.metadata) {
+                    if (!parsed.metadata->mission_name.empty())
+                        row.shown = parsed.metadata->mission_name;
+                    row.size = parsed.metadata->map_size;
+                    row.players = map_players(*parsed.metadata);
+                }
+            } catch (const std::exception&) {
+            }
+            maps.push_back(std::move(row));
+        }
+    }
+    if (const std::optional<fs::path> user = launch_user_folder(options)) {
+        try {
+            MapPacks packs(*user / "Maps");
+            for (const PackMap& map : packs.maps()) {
+                CatalogueMap row;
+                row.key = map.name;
+                row.stem = map.stem;
+                row.shown = map.title.empty() ? map.name : map.title;
+                row.players = map.players;
+                row.size = map.size;
+                maps.push_back(std::move(row));
+            }
+        } catch (const std::exception&) {
+        }
+        try {
+            const std::vector<fs::path> folders =
+                list_mods_in(*user / std::string(user_mods_folder_name));
+            for (const fs::path& folder : folders) {
+                const ModSummary summary = read_mod_summary(folder);
+                CatalogueNamed row;
+                row.id = summary.id.empty() ? path_to_utf8(folder.filename()) : summary.id;
+                row.name = summary.title.empty() ? row.id : summary.title;
+                mods.push_back(std::move(row));
+            }
+        } catch (const std::exception&) {
+        }
+    }
+    try {
+        const std::vector<fs::path> folders = list_mod_folders(options.game_dir);
+        for (const fs::path& folder : folders) {
+            const ModSummary summary = read_mod_summary(folder);
+            CatalogueNamed row;
+            row.id = summary.id.empty() ? path_to_utf8(folder.filename()) : summary.id;
+            row.name = summary.title.empty() ? row.id : summary.title;
+            const bool seen =
+                std::any_of(mods.begin(), mods.end(), [&row](const CatalogueNamed& have) {
+                    return have.id == row.id;
+                });
+            if (!seen)
+                mods.push_back(std::move(row));
+        }
+    } catch (const std::exception&) {
+    }
+    if (!options.game_dir.empty()) {
+        for (const std::string& id : copied_content_bundles(options.game_dir)) {
+            const oa::data::content_bundles::Bundle* bundle =
+                oa::data::content_bundles::find_bundle(id);
+            if (bundle == nullptr || bundle->kind != oa::data::content_bundles::Kind::expansion)
+                continue;
+            CatalogueNamed row;
+            row.id = id;
+            row.name = bundle->english_name.empty() ? id : std::string(bundle->english_name);
+            expansions.push_back(std::move(row));
+        }
+    }
+    std::sort(maps.begin(), maps.end(), [](const CatalogueMap& left, const CatalogueMap& right) {
+        return left.key < right.key;
+    });
+    std::sort(
+        mods.begin(), mods.end(), [](const CatalogueNamed& left, const CatalogueNamed& right) {
+            return left.id < right.id;
+        }
+    );
+    std::sort(
+        expansions.begin(),
+        expansions.end(),
+        [](const CatalogueNamed& left, const CatalogueNamed& right) { return left.id < right.id; }
+    );
+}
+
+/// Finds the one map a launch names, by key and then by the name players see.
+///
+/// @param asked the file's map
+/// @param maps the installed maps
+/// @param[out] why why none was chosen, when the return is null
+/// @return the map, or null
+const CatalogueMap* resolve_catalogue_map(
+    std::string_view asked, const std::vector<CatalogueMap>& maps, std::string& why
+) {
+    std::vector<const CatalogueMap*> exact;
+    for (const CatalogueMap& map : maps)
+        if (map.key == asked)
+            exact.push_back(&map);
+    if (exact.size() == 1)
+        return exact[0];
+    if (exact.size() > 1) {
+        why = "matches more than one map";
+        return nullptr;
+    }
+    const bool keyed = asked.find('@') != std::string_view::npos;
+    std::vector<const CatalogueMap*> keys;
+    for (const CatalogueMap& map : maps)
+        if (same_ascii(map.key, asked))
+            keys.push_back(&map);
+    if (keys.size() == 1)
+        return keys[0];
+    if (keys.size() > 1 || keyed) {
+        why = keys.empty() ? "is not an installed map" : "matches more than one map";
+        return nullptr;
+    }
+    std::vector<const CatalogueMap*> shown;
+    for (const CatalogueMap& map : maps)
+        if (same_ascii(map.shown, asked) || same_ascii(map.stem, asked))
+            shown.push_back(&map);
+    if (shown.size() == 1)
+        return shown[0];
+    why = shown.empty() ? "is not an installed map" : "matches more than one map";
+    return nullptr;
+}
+
+/// Prints the installed content, or checks a host's launch map, before a window.
+///
+/// @param options the run
+/// @param directory the game folder
+/// @return 0 when the content list was printed; nullopt to keep starting
+std::optional<int>
+publish_launch_catalogue(const Options& options, const GameDirectory& directory) {
+    auto& net = netgame_context().options;
+    auto& block = netgame_context().launch.block;
+    const bool named_map = net.launch_from_file && block.hosting != 0 && block.mission[0] != '\0';
+    if (!net.list_content && !named_map)
+        return std::nullopt;
+    if (!net.list_content)
+        require_installed_copies(options);
+    std::vector<CatalogueMap> maps;
+    std::vector<CatalogueNamed> mods;
+    std::vector<CatalogueNamed> expansions;
+    read_installed_content(options, directory, maps, mods, expansions);
+    if (net.list_content) {
+        oa::formats::json::JsonWriter writer;
+        writer.begin_object();
+        writer.key("maps");
+        writer.begin_array();
+        for (const CatalogueMap& map : maps) {
+            writer.begin_object();
+            writer.key("shown-name");
+            writer.string(map.shown);
+            writer.key("key");
+            writer.string(map.key);
+            writer.key("players");
+            writer.integer(map.players);
+            writer.key("size");
+            writer.string(map.size);
+            writer.end_object();
+        }
+        writer.end_array();
+        writer.key("mods");
+        writer.begin_array();
+        for (const CatalogueNamed& mod : mods) {
+            writer.begin_object();
+            writer.key("id");
+            writer.string(mod.id);
+            writer.key("name");
+            writer.string(mod.name);
+            writer.end_object();
+        }
+        writer.end_array();
+        writer.key("expansions");
+        writer.begin_array();
+        for (const CatalogueNamed& expansion : expansions) {
+            writer.begin_object();
+            writer.key("id");
+            writer.string(expansion.id);
+            writer.key("name");
+            writer.string(expansion.name);
+            writer.end_object();
+        }
+        writer.end_array();
+        writer.end_object();
+        std::cout << writer.text() << std::endl;
+        return 0;
+    }
+    std::string asked;
+    for (const char character : block.mission) {
+        if (character == '\0')
+            break;
+        asked.push_back(character);
+    }
+    std::string why;
+    const CatalogueMap* chosen = resolve_catalogue_map(asked, maps, why);
+    if (chosen == nullptr)
+        throw netgame::LaunchRefusal(net.launch_source + ": map: \"" + asked + "\" " + why);
+    if (chosen->key.size() >= sizeof block.mission)
+        throw netgame::LaunchRefusal(net.launch_source + ": map: is longer than 63 characters");
+    oa::base::text::copy_terminated(block.mission, chosen->key);
+    return std::nullopt;
+}
+
 /// Runs the game once: finds the game folders and their profile, with the
 /// Game files screen where the platform brings game files in and none is
 /// usable, opens the window the first time, plays the intro movies the
@@ -812,6 +1311,7 @@ int run_once(
     ModSwitchMemory& switch_memory
 ) {
     options.game_dir_named = !options.game_dir.empty();
+    resolve_launch_mod(options);
     // Captured before game_dir is filled with the folder this start plays:
     // the second compose, after a copy made on this start, still runs.
     const bool mount_copy = mount_managed_copy(options);
@@ -840,7 +1340,7 @@ int run_once(
     // mounts. --game-dir keeps the scan of the named folder.
     std::optional<GameDirectory> game_directory;
     if (mount_copy)
-        game_directory = compose_from_options(options);
+        game_directory = compose_for_run(options);
     GameFilesNeeded needed;
     if (!game_directory)
         game_directory = find_game_directory(
@@ -883,7 +1383,7 @@ int run_once(
     // A copy made on this start is what the start plays. --game-dir is left
     // on the folder it named.
     if (mount_copy) {
-        if (std::optional<GameDirectory> copied = compose_from_options(options))
+        if (std::optional<GameDirectory> copied = compose_for_run(options))
             game_directory = std::move(copied);
         options.game_dir = game_directory->installation;
     }
@@ -929,6 +1429,8 @@ int run_once(
     }
     // Every later read of game data uses the profile's layout.
     oa::data::defs::use_data_layout(data_layout_of(options.mod_profile.get()));
+    if (const std::optional<int> listed = publish_launch_catalogue(options, *game_directory))
+        return *listed;
     if (!options.headless_check && !display.initialized)
         display.initialize(options);
     // The Game files check's management route runs its pass over the
@@ -1392,6 +1894,9 @@ int main(int argc, char** argv) {
             }
             package_install::finish_pending_change(change);
         }
+    } catch (const netgame::LaunchRefusal& error) {
+        report_fatal(error.what());
+        return 2;
     } catch (const fs::filesystem_error& error) {
         // A path longer than the system opens is reported with its length,
         // the limit and what to do.

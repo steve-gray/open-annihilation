@@ -1023,7 +1023,10 @@ void bind_boundaries() {
     lobby.launch_link = state.launch_link;
     lobby.rules = state.rules;
     lobby.lobby_buttons = state.lobby_buttons;
-    lobby.option_4 = state.launch_link.block != nullptr && state.launch_link.block->tournament != 0;
+    // A tournament lock is the host's. A joiner takes a seat, not the host's rules.
+    const auto* linked_block = state.launch_link.block;
+    lobby.option_4 =
+        linked_block != nullptr && linked_block->hosting != 0 && linked_block->tournament != 0;
     if (state.units.loaded) {
         lobby.units = state.units.units.data();
         lobby.unit_count = static_cast<int32_t>(state.units.units.size());

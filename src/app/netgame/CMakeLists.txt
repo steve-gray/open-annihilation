@@ -19,13 +19,13 @@ target_link_libraries(oa-app-netgame-launch PUBLIC oa-app-command-line oa-ui-fro
 
 # The long options and 3.1c network switches, which the option test parses
 # without a running app.
-add_library(oa-app-netgame-options STATIC net_options.cpp)
+add_library(oa-app-netgame-options STATIC net_options.cpp launch_file.cpp)
 add_library(oa::app::netgame_options ALIAS oa-app-netgame-options)
 target_include_directories(oa-app-netgame-options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(oa-app-netgame-options PUBLIC oa::app::headers oa-app-netgame-launch oa-netgame-frontend
   oa-app-command-line oa-ui-frontend-renderer oa-ui-frontend-state oa-sim-scenario oa-ui-screen-registry
   oa-core-types
-  PRIVATE oa-netgame oa-options)
+  PRIVATE oa-netgame oa-options oa-formats-oamod oa-base-text)
 
 # The network rules a mod profile gives network play, which their test
 # reads without a running app.
@@ -112,6 +112,10 @@ if(BUILD_TESTING)
   add_executable(oa-netgame-options-test tests/options_test.cpp)
   target_link_libraries(oa-netgame-options-test PRIVATE oa-app-netgame-options oa-app-game-options oa-netgame oa-options)
   add_test(NAME netgame-game-options COMMAND oa-netgame-options-test)
+  add_executable(oa-netgame-launch-file-test tests/launch_file_test.cpp)
+  target_link_libraries(oa-netgame-launch-file-test PRIVATE oa-app-netgame-options oa-app-game-options
+    oa-netgame oa-options)
+  add_test(NAME netgame-launch-file COMMAND oa-netgame-launch-file-test)
   add_executable(oa-netgame-close-handlers-test tests/close_handlers_test.cpp)
   target_link_libraries(oa-netgame-close-handlers-test PRIVATE oa-app-netgame-launch-binding oa-ui-frontend-state)
   add_test(NAME netgame-close-handlers COMMAND oa-netgame-close-handlers-test)
@@ -238,5 +242,13 @@ if(BUILD_TESTING AND TARGET oa-game AND IS_DIRECTORY "${OA_GAME_DIR}")
       --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
       --scratch-root "${oa_netgame_checks}")
     set_tests_properties(native-net-options PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
+    # A launch file, TA Forever's or this game's, opens the battle room on
+    # the file's map and rules. A file the game cannot use ends before a
+    # window, and --list-content --json prints the installed content.
+    add_test(NAME native-launch-file COMMAND ${Python3_EXECUTABLE}
+      "${PROJECT_SOURCE_DIR}/tools/check_native_launch_file.py"
+      --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
+      --scratch-root "${oa_netgame_checks}")
+    set_tests_properties(native-launch-file PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
   endif()
 endif()

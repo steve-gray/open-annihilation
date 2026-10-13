@@ -446,24 +446,34 @@ void set_option_bit(uint16_t& options, uint16_t bit, bool on) noexcept {
 
 /// Applies an active launch's options to the local player as the battle room opens.
 ///
-/// A unit limit becomes the game's and the player's; the lock sets or
-/// clears option word bit 0; a commander rule 1 to 3 becomes the game's
-/// rule and the player's commander option; a faction the player's side; a
-/// team 1 to 5 the player's team, which is sent with the alliances
-/// refreshed; line of sight, cheats, fixed positions, mapping and watching
-/// their option bits. Energy and metal become the sliders' first values. A
-/// field that is 0 leaves its setting alone.
+/// The host takes the unit limit, the lock, the commander rule, the resources,
+/// line of sight, cheats, start positions, mapping and watching. A joiner
+/// takes only the side and the team; the host's rules stay the host's. A
+/// faction becomes the player's side; a team 1 to 5 the player's team, which
+/// is sent with the alliances refreshed. Energy and metal become the sliders'
+/// first values. A field that is 0 leaves its setting alone.
 ///
 /// @param[in,out] lobby Lobby state; its launch must be active.
 /// @param[in,out] me the local player
 /// @param[in,out] info the local player's lobby block
 /// @param[in,out] energy the energy slider's first value
 /// @param[in,out] metal the metal slider's first value
+/// @param host true when this machine hosts the game
 void apply_launch_options(
-    Lobby& lobby, Player& me, PlayerSetupInfo& info, int32_t& energy, int32_t& metal
+    Lobby& lobby, Player& me, PlayerSetupInfo& info, int32_t& energy, int32_t& metal, bool host
 ) noexcept {
     namespace nl = oa::ui::frontend_multiplayer::launch;
     const nl::LaunchBlock& block = *lobby.launch_link.block;
+    if (!host) {
+        if (block.faction != nl::faction::none)
+            info.side = block.faction != nl::faction::arm ? 1 : 0;
+        if (block.team >= kLaunchTeamFirst && block.team <= kLaunchTeamLast) {
+            lobby_player_team(me) = static_cast<uint8_t>(block.team - kLaunchTeamFirst);
+            lobby_send_team(lobby, me);
+            lobby_update_ally_matrix(lobby);
+        }
+        return;
+    }
     auto& game = *lobby.game;
     if (block.max_units != 0) {
         info.max_units = static_cast<uint16_t>(block.max_units);
@@ -2144,7 +2154,7 @@ void lobby_enter_battleroom(Lobby& lobby, Panel& panel) noexcept {
     int32_t metal = kDefaultResource;
     const bool launch_applied = lobby_launch_block_active(lobby);
     if (launch_applied) {
-        apply_launch_options(lobby, me, info, energy, metal);
+        apply_launch_options(lobby, me, info, energy, metal, host);
     } else if (host) {
         const auto saved = lobby_started_options(game);
         auto options = static_cast<uint16_t>(info.options & 0xa0ff);
@@ -2204,13 +2214,23 @@ void lobby_enter_battleroom(Lobby& lobby, Panel& panel) noexcept {
     if (lobby_launch_active(lobby))
         panel_set_grayed(panel, "COMMANDER", true);
     lobby_bind_slider(lobby, panel, "ENERGY", kResourceSliderMaximum, energy, lobby_on_energy);
-    // The host plays the map the launch names.
-    if (host && launch_applied && lobby.launch_link.block->mission[0] != '\0' &&
-        lobby.maps.select != nullptr)
-        (void)lobby.maps.select(lobby.maps.context, lobby.launch_link.block->mission);
-    if (!map_selected(lobby))
-        message(lobby, "Could not find the multiplayer map!!");
-    std::snprintf(info.map_name, sizeof(info.map_name), "%s", map_name(lobby));
+    // The host plays the map the launch names. A name that is not installed
+    // clears the map, so a map already selected is not kept in its place.
+    bool named_map_missing = false;
+    if (host && launch_applied && lobby.launch_link.block->mission[0] != '\0') {
+        const bool chosen = lobby.maps.select != nullptr &&
+                            lobby.maps.select(lobby.maps.context, lobby.launch_link.block->mission);
+        if (!chosen) {
+            named_map_missing = true;
+            info.map_name[0] = '\0';
+            message(lobby, "Could not find the multiplayer map!!");
+        }
+    }
+    if (!named_map_missing) {
+        if (!map_selected(lobby))
+            message(lobby, "Could not find the multiplayer map!!");
+        std::snprintf(info.map_name, sizeof(info.map_name), "%s", map_name(lobby));
+    }
     info.map_hash =
         lobby.maps.content_hash != nullptr ? lobby.maps.content_hash(lobby.maps.context) : 0;
     presence_refresh(lobby);

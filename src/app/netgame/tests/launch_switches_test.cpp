@@ -73,7 +73,8 @@ void timeouts_and_percentages() {
 void intro_and_connection() {
     const auto join = parsed("-n1:10.0.0.5");
     require(
-        join.launch.block.connection_type == 1 && join.engine.skip_intro == 1,
+        join.launch.block.connection_type == 1 && join.engine.skip_intro == 1 &&
+            join.launch.connection_from_switch,
         "typed connection skips intro"
     );
     require(std::strcmp(join.launch.block.address, "10.0.0.5") == 0, "address after the colon");
@@ -84,7 +85,8 @@ void intro_and_connection() {
     );
     const auto bad = parsed("-n5");
     require(
-        bad.launch.block.connection_type == 0 && bad.engine.skip_intro == 1,
+        bad.launch.block.connection_type == 0 && bad.engine.skip_intro == 1 &&
+            !bad.launch.connection_from_switch,
         "type outside 1..4 is ignored"
     );
     const auto dash = parsed("-n -x");
@@ -92,11 +94,21 @@ void intro_and_connection() {
         dash.launch.block.connection_type == 0 && dash.engine.skip_intro == 1,
         "dash argument still skips"
     );
-    // "-c" and "-y" are not network play's switches ("-y" asks for the
-    // setup, enable_netsetup); unhandled, they stop the parse as reserved
-    // letters.
-    const auto module = parsed("-c module.cfg", cl::Status::unavailable_switch);
-    require(module.engine.skip_intro == 0, "-c is not taken");
+    // "-c" names TA Forever's launch file and skips the intro. "-y" asks for
+    // the setup (enable_netsetup) and is not network play's switch.
+    const auto module = parsed("-c module.cfg");
+    require(
+        module.launch.ini_seen && module.launch.ini_path == "module.cfg" &&
+            module.engine.skip_intro == 1,
+        "-c takes a file and skips the intro"
+    );
+    const auto attached_file = parsed("-cmodule.cfg");
+    require(attached_file.launch.ini_path == "module.cfg", "an attached -c file");
+    const auto empty = parsed("-c -");
+    require(
+        empty.launch.ini_seen && empty.launch.ini_path.empty() && empty.engine.skip_intro == 1,
+        "-c with a dash stores no file"
+    );
     const auto setup = parsed("-y", cl::Status::unavailable_switch);
     require(setup.engine.skip_intro == 0 && setup.launch.netsetup == 0, "-y is not taken");
 }
@@ -105,7 +117,8 @@ void hosting() {
     const auto attached = parsed("-hMy Game");
     require(
         attached.launch.block.hosting == 1 &&
-            std::strcmp(attached.launch.block.session_name, "My") == 0,
+            std::strcmp(attached.launch.block.session_name, "My") == 0 &&
+            attached.launch.session_from_switch,
         "attached name ends at the blank"
     );
     require(

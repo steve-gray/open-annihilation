@@ -179,15 +179,53 @@ std::string battle_room_players(mp::Lobby& lobby) {
     return names;
 }
 
+/// Writes the battle room's map and rules when a launch file opened it.
+///
+/// The password is not written. Each line is flushed.
+///
+/// @param lobby the battle room
+void report_launch_battle_room(mp::Lobby& lobby) {
+    if (lobby.game == nullptr)
+        return;
+    const auto& info = mp::local_info(lobby);
+    const std::string map(info.map_name, ::strnlen(info.map_name, sizeof info.map_name));
+    std::cout << "multiplayer: battle room map: " << map << std::endl;
+    const auto commander = (info.options & mp::option::commander_mask) >> 11;
+    const char* commander_name = "continues";
+    if (commander == 1)
+        commander_name = "ends";
+    else if (commander == 2)
+        commander_name = "deathmatch";
+    const char* sight = "permanent";
+    if ((info.options & mp::option::los_limited) != 0 && (info.options & mp::option::los_true) != 0)
+        sight = "true";
+    else if ((info.options & mp::option::los_limited) != 0)
+        sight = "circular";
+    const char* mapping_name = (info.options & mp::option::unmapped) != 0 ? "unmapped" : "mapped";
+    const char* starts = (info.options & mp::option::fixed_locations) != 0 ? "fixed" : "random";
+    const char* cheats = (info.options & mp::option::cheats_allowed) != 0 ? "on" : "off";
+    const char* watchers = (info.options & mp::option::watching_allowed) != 0 ? "on" : "off";
+    const int32_t players = mp::lobby_session_players(*lobby.game);
+    std::cout << "multiplayer: battle room rules: commander " << commander_name << ", metal "
+              << static_cast<int>(info.metal_hundreds) * 100 << ", energy "
+              << static_cast<int>(info.energy_hundreds) * 100;
+    if (net_launch_switches().block.max_units != 0)
+        std::cout << ", units " << net_launch_switches().block.max_units;
+    std::cout << ", los " << sight << ", mapping " << mapping_name << ", starts " << starts
+              << ", cheats " << cheats << ", watchers " << watchers << ", player limit " << players
+              << std::endl;
+}
+
 /// Runs the part of a frame that follows the game --host or --join asked for.
 ///
 /// Until a multiplayer screen first shows, each frame asks for a frontend
 /// pass, so multiplayer opens without input, for kDirectGameOpeningFrames
 /// frames at most. Standard output reports, each
 /// line once and flushed at once: the battle room opening, with the game's
-/// name and the local player's; the players the battle room lists, whenever
+/// name and the local player's; when a launch file opened the room, the map
+/// and the rules; the players the battle room lists, whenever
 /// they change while it shows; and a join or a game the screens refused,
-/// with the notice they showed.
+/// with the notice they showed. The password is not written.
 void direct_game_frame() {
     const auto& game = net_options().direct_game;
     if (game.kind == mp::DirectGame::Kind::none)
@@ -203,10 +241,12 @@ void direct_game_frame() {
     const auto& progress = mp::multiplayer_direct_game_progress();
     if (progress.reached != report.reported) {
         report.reported = progress.reached;
-        if (progress.reached == mp::DirectGameStep::battle_room)
+        if (progress.reached == mp::DirectGameStep::battle_room) {
             std::cout << "multiplayer: in the battle room of \"" << progress.game_name << "\" as "
                       << progress.player_name << std::endl;
-        else if (
+            if (net_options().launch_from_file)
+                report_launch_battle_room(mp::multiplayer_lobby());
+        } else if (
             progress.reached == mp::DirectGameStep::failed &&
             game.kind == mp::DirectGame::Kind::join
         )
@@ -297,9 +337,9 @@ LaunchBinding netgame_launch_binding() {
 /// setup's provider list, and the answers to the frontend's questions about
 /// joining and leaving a session. A launch lands in the launch block
 /// the switches write, which the multiplayer screens, the frontend states and
-/// the frontend's entry read. With --check-host-not-found the "-n1" launch
-/// counts as active from here until the game list begins to wait for the
-/// host.
+/// the frontend's entry read. A launch file, and --check-host-not-found, count
+/// as active from here. The host-not-found launch stays active until the game
+/// list begins to wait for the host.
 ///
 /// @param context Extension context (unused).
 /// @param[in,out] registry Screen registry of the app.
@@ -312,7 +352,7 @@ void register_screens(void* /*context*/, ScreenRegistry* registry) {
     (void)overlay_register(registry, &services);
     auto& netgame = netgame_context();
     bind_launch(netgame_launch_binding());
-    if (net_options().check_host_not_found)
+    if (net_options().check_host_not_found || net_options().launch_from_file)
         set_launch_active(true);
     mp::multiplayer_bind_launch_link(launch_link());
     mp::multiplayer_bind_direct_game(net_options().direct_game);
