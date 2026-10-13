@@ -13,6 +13,7 @@
 #include "oa/ui/engine_settings/interface_words.hpp"
 #include "oa/ui/first_run/interface_words.hpp"
 #include "oa/ui/folder_chooser/interface_words.hpp"
+#include "oa/ui/frontend_dialogs/interface_words.hpp"
 #include "oa/ui/frontend_multiplayer/interface_words.hpp"
 #include "oa/ui/game_files/interface_words.hpp"
 #include "oa/ui/library/interface_words.hpp"
@@ -40,6 +41,7 @@ std::vector<std::string_view> join_interface_words() {
     append(words, oa::ui::engine_settings::interface_words);
     append(words, oa::ui::first_run::interface_words);
     append(words, oa::ui::map_browser::interface_words);
+    append(words, oa::ui::frontend_dialogs::interface_words);
     append(words, oa::ui::frontend_multiplayer::interface_words);
     append(words, oa::app::package_install::interface_words);
     append(words, oa::ui::game_files::interface_words);
