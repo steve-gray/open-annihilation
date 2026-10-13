@@ -1227,8 +1227,9 @@ void Runtime::present_front_end() {
     // A match's surface_ is composed at the display gamma already.
     const auto present_start = std::chrono::steady_clock::now();
     const bool gamma = !gamma_identity_ && screen_ != Screen::match;
-    // A window larger than the picture draws the main menu's OA buttons from
-    // the icon, so the bevelled squares are put back to the menu first.
+    // A window larger than the picture draws the main menu's OA buttons again
+    // from an icon at least that large, so those squares are put back to the
+    // menu under them first.
     std::vector<uint8_t> menu_buttons;
     const bool sharp_menu_buttons = replace_menu_button_pixels(menu_buttons);
     const uint8_t* source_rgb = sharp_menu_buttons ? menu_buttons.data() : surface_.rgb.data();

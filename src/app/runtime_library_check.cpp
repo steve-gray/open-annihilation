@@ -779,10 +779,15 @@ void Runtime::check_library() {
         // no update matches and a frame with updates differs only there.
         kit::OaButtonMark mark = EngineSettingsMenuHost::library_mark(*this);
         mark.dot = false;
-        kit::draw_oa_button(
-            {&plain, {square.x, square.y, 1}, fonts, icon},
+        oa::ui::frontend_renderer::RgbaPicture picture;
+        if (const WindowIcon* square_icon =
+                engine_settings_menu_host().icon_for(true, square.width))
+            picture = {square_icon->width, square_icon->height, square_icon->pixels};
+        kit::draw_menu_icon_button(
+            {&plain, {square.x, square.y, 1}, fonts, picture},
             square.width,
             kit::OaButtonState::idle,
+            false,
             mark
         );
         return std::array<renderer::Surface, 2>{shown, plain};

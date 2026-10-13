@@ -1264,6 +1264,35 @@ void menu_icon_button_is_the_icon() {
         ring.r == kit::colour::accent.r && ring.g == kit::colour::accent.g &&
         ring.b == kit::colour::accent.b && ring.a == 255
     );
+
+    // The 640 picture has no painter. The same icon is filtered into the
+    // 48-pixel square and a clear corner stays the picture behind it.
+    const auto draw_crisp = [&icon](kit::OaButtonState state, bool focused) {
+        renderer::Surface surface = black(48, 48);
+        kit::Canvas canvas;
+        canvas.surface = &surface;
+        canvas.placement = {0, 0, 1};
+        canvas.icon = {static_cast<uint32_t>(icon_side), static_cast<uint32_t>(icon_side), icon};
+        kit::draw_menu_icon_button(canvas, 48, state, focused, {});
+        return surface;
+    };
+    const renderer::Surface crisp = draw_crisp(kit::OaButtonState::idle, false);
+    expect(crisp, 0, 0, 0, 0, 0);
+    expect(crisp, 24, 24, 20, 180, 40);
+    const renderer::Surface crisp_hover = draw_crisp(kit::OaButtonState::hovered, false);
+    expect(crisp_hover, 0, 0, 0, 0, 0);
+    expect(crisp_hover, 24, 1, kit::colour::accent.r, kit::colour::accent.g, kit::colour::accent.b);
+    const renderer::Surface crisp_focus = draw_crisp(kit::OaButtonState::idle, true);
+    expect(crisp_focus, 24, 1, kit::colour::accent.r, kit::colour::accent.g, kit::colour::accent.b);
+    const renderer::Surface crisp_held = draw_crisp(kit::OaButtonState::pressed, false);
+    expect(
+        crisp_held,
+        24,
+        1,
+        kit::colour::accent_held.r,
+        kit::colour::accent_held.g,
+        kit::colour::accent_held.b
+    );
 }
 
 } // namespace

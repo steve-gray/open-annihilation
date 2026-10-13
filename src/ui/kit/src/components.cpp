@@ -1862,62 +1862,118 @@ void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state, boo
     draw_oa_button(canvas, side, state, mark);
 }
 
-void draw_menu_icon_button(
-    const Canvas& canvas, int32_t side, OaButtonState state, bool focused, const OaButtonMark& mark
-) {
-    oa::ui::paint::Painter* painter = canvas.smooth.painter;
-    if (painter == nullptr || side <= 0)
-        return;
-    if (canvas.smooth.clip && canvas.smooth.clip->empty())
-        return;
-    if (canvas.smooth.clip)
-        painter->set_clip(*canvas.smooth.clip);
-    else
-        painter->reset_clip();
+namespace {
 
-    const int32_t percent = canvas.smooth.scale_percent > 0 ? canvas.smooth.scale_percent : 100;
-    const Rect placed =
-        to_canvas({canvas.smooth.origin.x, canvas.smooth.origin.y, side, side}, percent);
+/// Draws the icon, shifted when pressed, and the rounded ring. The mark and
+/// the badge are drawn by the caller, so a crisp picture can keep its own
+/// fonts for the count.
+///
+/// @param painter where the icon and the ring are drawn
+/// @param percent canvas pixels a point, in percent
+/// @param origin the button's origin on that canvas
+/// @param side the square's side, in points
+/// @param state how it looks
+/// @param focused a ring is drawn at rest
+/// @param icon the button's icon; empty draws no icon
+void paint_menu_icon_face(
+    oa::ui::paint::Painter& painter,
+    int32_t percent,
+    Point origin,
+    int32_t side,
+    OaButtonState state,
+    bool focused,
+    const renderer::RgbaPicture& icon
+) {
+    if (percent <= 0)
+        percent = 100;
+    const Rect placed = to_canvas({origin.x, origin.y, side, side}, percent);
     if (placed.width <= 0 || placed.height <= 0)
         return;
-
     const int32_t nudge =
         state == OaButtonState::pressed
             ? std::max(
                   int32_t{1}, to_canvas({0, 0, compact_metrics.button_icon_press, 0}, percent).width
               )
             : 0;
-    if (renderer::picture_drawable(canvas.icon)) {
+    if (renderer::picture_drawable(icon)) {
         const int32_t drawn_width = std::max(int32_t{1}, placed.width - nudge);
         const int32_t drawn_height = std::max(int32_t{1}, placed.height - nudge);
-        painter->draw_rgba(
-            canvas.icon.pixels,
-            static_cast<int>(canvas.icon.width),
-            static_cast<int>(canvas.icon.height),
+        painter.draw_rgba(
+            icon.pixels,
+            static_cast<int>(icon.width),
+            static_cast<int>(icon.height),
             {static_cast<int>(placed.x + nudge),
              static_cast<int>(placed.y + nudge),
              static_cast<int>(drawn_width),
              static_cast<int>(drawn_height)}
         );
-    } else {
-        draw_oa_mark(canvas, side);
     }
+    if (state == OaButtonState::idle && !focused)
+        return;
+    const Colour ink = state == OaButtonState::pressed ? colour::accent_held : colour::accent;
+    const int32_t span = std::min(placed.width, placed.height);
+    const float radius =
+        static_cast<float>(span) * static_cast<float>(menu_icon_corner_256) / 256.0F;
+    const int32_t thick = std::max(int32_t{2}, to_canvas({0, 0, 2, 0}, percent).width);
+    painter.outline_rounded_rect(
+        {static_cast<float>(placed.x),
+         static_cast<float>(placed.y),
+         static_cast<float>(placed.width),
+         static_cast<float>(placed.height)},
+        radius,
+        static_cast<float>(thick),
+        {ink.r, ink.g, ink.b, ink.a}
+    );
+}
 
-    if (state != OaButtonState::idle || focused) {
-        const Colour ink = state == OaButtonState::pressed ? colour::accent_held : colour::accent;
-        const int32_t span = std::min(placed.width, placed.height);
-        const float radius =
-            static_cast<float>(span) * static_cast<float>(menu_icon_corner_256) / 256.0F;
-        const int32_t thick = std::max(int32_t{2}, to_canvas({0, 0, 2, 0}, percent).width);
-        painter->outline_rounded_rect(
-            {static_cast<float>(placed.x),
-             static_cast<float>(placed.y),
-             static_cast<float>(placed.width),
-             static_cast<float>(placed.height)},
-            radius,
-            static_cast<float>(thick),
-            {ink.r, ink.g, ink.b, ink.a}
+} // namespace
+
+void draw_menu_icon_button(
+    const Canvas& canvas, int32_t side, OaButtonState state, bool focused, const OaButtonMark& mark
+) {
+    if (side <= 0)
+        return;
+    oa::ui::paint::Painter* painter = canvas.smooth.painter;
+    if (painter != nullptr) {
+        if (canvas.smooth.clip && canvas.smooth.clip->empty())
+            return;
+        if (canvas.smooth.clip)
+            painter->set_clip(*canvas.smooth.clip);
+        else
+            painter->reset_clip();
+        const int32_t percent = canvas.smooth.scale_percent > 0 ? canvas.smooth.scale_percent : 100;
+        if (!renderer::picture_drawable(canvas.icon))
+            draw_oa_mark(canvas, side);
+        paint_menu_icon_face(
+            *painter, percent, canvas.smooth.origin, side, state, focused, canvas.icon
         );
+    } else if (canvas.surface != nullptr && canvas.placement.scale >= 1) {
+        // The 640 picture has no painter. The icon is filtered into the
+        // square and blended over the menu, so a clear corner stays the menu.
+        if (!renderer::picture_drawable(canvas.icon))
+            draw_oa_mark(canvas, side);
+        const int32_t pixel_scale = canvas.placement.scale;
+        const int32_t pixels_wide = side * pixel_scale;
+        oa::ui::paint::Canvas layer = oa::ui::paint::make_canvas(pixels_wide, pixels_wide);
+        oa::ui::paint::Painter layer_painter(layer);
+        paint_menu_icon_face(
+            layer_painter, pixel_scale * 100, {0, 0}, side, state, focused, canvas.icon
+        );
+        const renderer::RgbaPicture painted{
+            static_cast<uint32_t>(pixels_wide), static_cast<uint32_t>(pixels_wide), layer.rgba
+        };
+        renderer::Placement placed{canvas.placement.x, canvas.placement.y, 1};
+        if (canvas.placement.clip.width > 0 && canvas.placement.clip.height > 0) {
+            placed.clip = {
+                canvas.placement.clip.x * pixel_scale,
+                canvas.placement.clip.y * pixel_scale,
+                canvas.placement.clip.width * pixel_scale,
+                canvas.placement.clip.height * pixel_scale
+            };
+        }
+        renderer::draw_picture(*canvas.surface, placed, {0, 0, pixels_wide, pixels_wide}, painted);
+    } else {
+        return;
     }
     draw_oa_button_corner(canvas, side, mark);
     if (mark.dot)

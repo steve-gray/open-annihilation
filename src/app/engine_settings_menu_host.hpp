@@ -206,7 +206,7 @@ struct Runtime::EngineSettingsMenuHost {
     );
 
     /// Builds one window-pixel button and, when the frame still holds the
-    /// bevelled square, puts the menu back there.
+    /// picture's button, puts the menu back under it.
     ///
     /// @param runtime the runtime
     /// @param[in,out] frame the frame's red, green and blue

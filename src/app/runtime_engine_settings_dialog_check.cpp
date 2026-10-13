@@ -53,6 +53,7 @@
 #include <iterator>
 #include <memory>
 #include <map>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -519,20 +520,25 @@ std::size_t differing_outside(
 
 /// Counts the picture's pixels a letterboxed window frame does not show:
 /// each picture pixel is compared with the window pixel at its centre,
-/// leaving out the pixels round the pointer, where the cursor draws.
+/// leaving out the pixels round the pointer, where the cursor draws, and
+/// any other picture rectangles the caller names. A window larger than the
+/// picture draws the menu's buttons from a larger icon, so those squares
+/// are left out only then.
 ///
 /// @param presented the window's frame as presented
 /// @param picture the picture, at the display gamma
 /// @param area where the picture lands in the window
 /// @param window_width the window's width, in pixels
 /// @param pointer the pointer, in the picture's pixels
+/// @param also_left_out picture rectangles not compared
 /// @return the pixels that differ; every pixel when the frame misses the area
 std::size_t letterbox_differences(
     const artless::Surface& presented,
     const artless::Surface& picture,
     const SDL_FRect& area,
     int window_width,
-    layout::Point pointer
+    layout::Point pointer,
+    std::span<const artless::SourceRect> also_left_out = {}
 ) {
     // The read-back holds the whole window, or the letterboxed area alone.
     const bool whole_window = static_cast<int>(presented.width) == window_width;
@@ -545,6 +551,15 @@ std::size_t letterbox_differences(
     for (uint32_t y = 0; y < picture.height; ++y)
         for (uint32_t x = 0; x < picture.width; ++x) {
             if (inside(cursor, static_cast<int32_t>(x), static_cast<int32_t>(y)))
+                continue;
+            bool left_out = false;
+            for (const artless::SourceRect& skipped : also_left_out) {
+                if (inside(skipped, static_cast<int32_t>(x), static_cast<int32_t>(y))) {
+                    left_out = true;
+                    break;
+                }
+            }
+            if (left_out)
                 continue;
             const auto window_x = static_cast<std::size_t>(
                 left + (static_cast<float>(x) + 0.5F) * area.w / static_cast<float>(picture.width)
@@ -2030,8 +2045,25 @@ void Runtime::check_engine_settings_window_sizes() {
             "corner" +
                 on
         );
-        const auto differing =
-            letterbox_differences(presented, picture, area, window_width, kRestingPointer);
+        // Above the picture's size the window draws each button from a larger
+        // icon, so that square of the picture is not what the window shows.
+        // At the picture's size the window shows the picture, buttons included.
+        const auto windows = oa_layer().menu_button_windows();
+        std::array<artless::SourceRect, 2> sharp_squares{};
+        std::size_t sharp_count = 0;
+        if (windows.library.width != button.width || windows.library.height != button.height)
+            sharp_squares[sharp_count++] = button;
+        if (windows.settings.width != settings_button.width ||
+            windows.settings.height != settings_button.height)
+            sharp_squares[sharp_count++] = settings_button;
+        const auto differing = letterbox_differences(
+            presented,
+            picture,
+            area,
+            window_width,
+            kRestingPointer,
+            std::span<const artless::SourceRect>(sharp_squares.data(), sharp_count)
+        );
         require(
             differing == 0,
             "the window does not show the main menu with its OA button" + on + ": " +

@@ -478,27 +478,29 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
     );
     // The dot stays in the top right while updates can be installed. The
     // bottom right is the mod count, or the spinner while it is not final.
-    // The picture keeps this bevelled button. A larger window draws the icon
-    // itself over it (replace_scaled_buttons).
-    kit::draw_oa_button(
-        {context->surface,
-         {rect.x, rect.y, 1},
-         runtime.engine_settings_fonts(),
-         mods_icon(runtime)},
-        rect.width,
-        library_state,
-        library_badge
-    );
+    // The icon itself, from the shipped square, at this picture's size: no
+    // panel and no bevel, clear corners left as the menu. A larger window
+    // draws that icon again from a source at least that large
+    // (replace_scaled_buttons). A window the size of this picture shows this
+    // draw, so nothing is painted over it.
+    const auto draw_icon = [&](const artless::SourceRect& at,
+                               bool mods,
+                               kit::OaButtonState state,
+                               const kit::OaButtonMark& mark) {
+        artless::RgbaPicture picture;
+        if (const WindowIcon* icon = host.icon_for(mods, at.width))
+            picture = {icon->width, icon->height, icon->pixels};
+        kit::draw_menu_icon_button(
+            {context->surface, {at.x, at.y, 1}, runtime.engine_settings_fonts(), picture},
+            at.width,
+            state,
+            false,
+            mark
+        );
+    };
+    draw_icon(rect, true, library_state, library_badge);
     // The Settings button wears neither the dot nor the mod count.
-    kit::draw_oa_button(
-        {context->surface,
-         {beside.x, beside.y, 1},
-         runtime.engine_settings_fonts(),
-         settings_icon(runtime)},
-        beside.width,
-        settings_state,
-        false
-    );
+    draw_icon(beside, false, settings_state, {});
     host.keep_button_drawn(*context->surface, library_state, library_badge, settings_state);
 }
 
@@ -559,6 +561,9 @@ bool Runtime::EngineSettingsMenuHost::prepare_sharp_button(
     uint32_t passes
 ) {
     sharp.show = false;
+    // The picture already holds the icon at this size. A window whose
+    // rectangle is that same square shows the picture, and the presented
+    // frame matches it after gamma. A larger rectangle draws the icon again.
     if (window_width <= 0 || window_height <= 0 ||
         (window_width == kept.at.width && window_height == kept.at.height))
         return false;

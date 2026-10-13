@@ -9,7 +9,8 @@
 // OA button and the Settings dialog's header draw. The mods icon, the
 // plates over drive bays, is what the main menu's Library button and the
 // Library's header draw. Each is cut to its visible part where it is drawn
-// into the 640 by 480 picture. The settings and mods icons also have a 512
+// into a bevelled button. The main menu draws the full square, clear
+// corners included. The settings and mods icons also have a 512
 // by 512 picture, which the main menu's buttons draw from when the window
 // shows them larger than 256 pixels.
 #pragma once
