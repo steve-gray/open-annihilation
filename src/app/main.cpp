@@ -750,7 +750,7 @@ int run_once(
     LookupLog* lookup_log,
     ModSwitchMemory& switch_memory
 ) {
-    const bool game_dir_named = !options.game_dir.empty();
+    options.game_dir_named = !options.game_dir.empty();
     // A soft restart reads the settings the switch saved: the mod the Game
     // files screen would play and the backups setting.
     if (options.restarts > 0 && game_files.installed &&
@@ -807,7 +807,7 @@ int run_once(
             "game directory does not exist: " + path_to_utf8(options.game_dir) +
             " (name it with --game-dir PATH)"
         );
-    publish_managed_copy(options, options.game_dir, game_dir_named);
+    publish_managed_copy(options, options.game_dir, options.game_dir_named);
     options.game_folders = game_directory->folders;
     if (options.game_folders.empty())
         options.game_folders = {options.game_dir};

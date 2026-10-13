@@ -46,6 +46,22 @@
 	it=1 file;
 	}
 
+[1 file differs]
+	{
+	de=1 Datei weicht ab;
+	fr=1 fichier diffère;
+	es=1 archivo difiere;
+	it=1 file è diverso;
+	}
+
+[1 of {total} files differs]
+	{
+	de=1 von {total} Dateien weicht ab;
+	fr=1 fichier sur {total} diffère;
+	es=1 de {total} archivos difiere;
+	it=1 di {total} file è diverso;
+	}
+
 [1 file was added]
 	{
 	de=1 Datei wurde hinzugefügt;
@@ -684,6 +700,14 @@
 	fr=S'applique dès la prochaine partie.;
 	es=Se aplica desde la próxima partida.;
 	it=Si applica dalla prossima partita.;
+	}
+
+[All files match]
+	{
+	de=Alle Dateien stimmen überein;
+	fr=Tous les fichiers correspondent;
+	es=Todos los archivos coinciden;
+	it=Tutti i file corrispondono;
 	}
 
 [Applies from the next start.]
@@ -2030,6 +2054,14 @@
 	it=DETTAGLI;
 	}
 
+[DETAILS…]
+	{
+	de=DETAILS…;
+	fr=DÉTAILS…;
+	es=DETALLES…;
+	it=DETTAGLI…;
+	}
+
 [DEVELOPER]
 	{
 	de=ENTWICKLER;
@@ -2654,6 +2686,14 @@
 	it=Tipi di file;
 	}
 
+[Files that differ:]
+	{
+	de=Dateien, die abweichen:;
+	fr=Fichiers qui diffèrent :;
+	es=Archivos que difieren:;
+	it=File che differiscono:;
+	}
+
 [Files added to its folder, or changed, since it was installed are replaced or removed.]
 	{
 	de=Dateien, die seit der Installation in seinen Ordner kamen oder geändert wurden, werden ersetzt oder entfernt.;
@@ -3052,6 +3092,14 @@
 	fr=Archives du jeu;
 	es=Archivos comprimidos del juego;
 	it=Archivi di gioco;
+	}
+
+[Game content]
+	{
+	de=Spielinhalt;
+	fr=Contenu du jeu;
+	es=Contenido del juego;
+	it=Contenuto di gioco;
 	}
 
 [Game files]
@@ -8078,12 +8126,28 @@
 	it=Il gioco va senza di esso.;
 	}
 
+[The following content for your game does not match our expected sizes:]
+	{
+	de=Der folgende Inhalt deines Spiels entspricht nicht unseren erwarteten Größen:;
+	fr=Le contenu suivant de ton jeu ne correspond pas aux tailles que nous attendons :;
+	es=El siguiente contenido de tu juego no coincide con los tamaños que esperamos:;
+	it=I seguenti contenuti del tuo gioco non corrispondono alle dimensioni che ci aspettiamo:;
+	}
+
 [The game reloads its data for the mod and returns to the main menu.]
 	{
 	de=Das Spiel lädt seine Daten für den Mod neu und kehrt zum Hauptmenü zurück.;
 	fr=Le jeu recharge ses données pour le mod et revient au menu principal.;
 	es=El juego recarga sus datos para el mod y vuelve al menú principal.;
 	it=Il gioco ricarica i dati per il mod e torna al menu principale.;
+	}
+
+[The game still plays with these files, but network games with other players may not start, and recordings may not replay the same. Copy the content again from another source to fix it.]
+	{
+	de=Das Spiel läuft mit diesen Dateien weiter, aber Netzwerkspiele mit anderen Spielern starten vielleicht nicht, und Aufzeichnungen spielen vielleicht nicht gleich ab. Kopiere den Inhalt erneut aus einer anderen Quelle, um das zu beheben.;
+	fr=Le jeu se lance quand même avec ces fichiers, mais les parties en réseau avec d'autres joueurs peuvent ne pas démarrer, et les enregistrements peuvent ne pas se rejouer pareil. Copie à nouveau le contenu depuis une autre source pour corriger ça.;
+	es=El juego sigue funcionando con estos archivos, pero las partidas en red con otros jugadores pueden no empezar, y las grabaciones pueden no repetirse igual. Vuelve a copiar el contenido desde otro origen para corregirlo.;
+	it=Il gioco funziona comunque con questi file, ma le partite in rete con altri giocatori possono non iniziare, e le registrazioni possono non ripetersi allo stesso modo. Copia di nuovo i contenuti da un'altra fonte per sistemarli.;
 	}
 
 [The game's own fonts have fixed sizes.]
@@ -10876,6 +10940,22 @@
 	fr={counts} · {missing};
 	es={counts} · {missing};
 	it={counts} · {missing};
+	}
+
+[{count} files differ]
+	{
+	de={count} Dateien weichen ab;
+	fr={count} fichiers diffèrent;
+	es={count} archivos difieren;
+	it={count} file sono diversi;
+	}
+
+[{count} of {total} files differ]
+	{
+	de={count} von {total} Dateien weichen ab;
+	fr={count} fichiers sur {total} diffèrent;
+	es={count} de {total} archivos difieren;
+	it={count} di {total} file sono diversi;
 	}
 
 [{count} days ago]
