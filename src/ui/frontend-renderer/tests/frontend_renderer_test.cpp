@@ -204,6 +204,54 @@ void test_default_art_in_panel_archive() {
     CHECK(red_at(shown(renderer::ButtonCondition::pressed), 2, 3) == 41);
 }
 
+// NEWGAME's Arm and Core are hold buttons (text_list) with no sequence of
+// their own. They take BUTTONS0's size group: the normal frame while up,
+// the next frame while down. A checkbox still has no default frame.
+void test_hold_button_takes_default_art() {
+    namespace renderer = oa::ui::frontend_renderer;
+    renderer::ScreenResources resources;
+    resources.background.width = 16;
+    resources.background.height = 8;
+    resources.background.rgb.assign(16U * 8U * 3U, 99);
+    for (std::size_t index = 0; index < 256; ++index)
+        resources.gui_palette[index * 4] = static_cast<uint8_t>(index);
+    auto arm = button("Arm", 1, 1, 10, 4);
+    arm.common.attributes = static_cast<int32_t>(
+        oa::ui::gui_layout::attribute::centered | oa::ui::gui_layout::attribute::text_list
+    );
+    resources.layout.gadgets.push_back(arm);
+    auto box = button("Check", 1, 1, 10, 4);
+    box.common.attributes = static_cast<int32_t>(oa::ui::gui_layout::attribute::checkbox);
+    oa::formats::gaf::Sequence buttons;
+    buttons.name = "BUTTONS0";
+    const auto add_group = [&](int width, int height, uint8_t normal, uint8_t pressed) {
+        for (int frame_index = 0; frame_index < 4; ++frame_index) {
+            oa::formats::gaf::Frame frame;
+            frame.width = width;
+            frame.height = height;
+            const uint8_t value = frame_index == 1 ? pressed : normal;
+            frame.pixels.assign(static_cast<std::size_t>(width * height), value);
+            frame.coverage.assign(frame.pixels.size(), 1);
+            buttons.frames.push_back(std::move(frame));
+        }
+    };
+    add_group(2, 2, 10, 11);
+    add_group(10, 4, 30, 31);
+    resources.shared_sprites.sequences.push_back(buttons);
+    const auto shown = [&](renderer::ButtonCondition condition) {
+        const renderer::ButtonPresentation state{
+            "Arm", condition, std::nullopt, std::nullopt, std::nullopt
+        };
+        return renderer::render_screen(resources, {&state, 1});
+    };
+    CHECK(red_at(shown(renderer::ButtonCondition::normal), 1, 1) == 30);
+    CHECK(red_at(shown(renderer::ButtonCondition::pressed), 1, 1) == 31);
+    resources.layout.gadgets.back() = box;
+    const auto drawn = renderer::render_screen(resources, {});
+    // The checkbox draws its own bevel, never BUTTONS0's frame.
+    CHECK(red_at(drawn, 6, 3) != 30 && red_at(drawn, 6, 3) != 31);
+}
+
 // A centred caption underlines its quick key's glyph on the row below the
 // text, in GUI palette entry 2, or 0 while pressed, and not while grayed;
 // the focused record gets the focus marker's six rings, lit through the
@@ -1031,6 +1079,7 @@ int main() {
     test_grayed_art_frame();
     test_art_keeps_frame_size();
     test_default_art_in_panel_archive();
+    test_hold_button_takes_default_art();
     test_grayed_art_cost();
     test_quick_key_and_focus();
     test_caption_placement();

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 # SPDX-License-Identifier: GPL-3.0-only
 
-# The map browser: its model (the cards from the three sources, the filters,
+# The map browser: its model (the cards from the four sources, the filters,
 # the order and the primary button; model.hpp), and its screen made of the UI
 # kit's components (the layout at the three size classes, the drawing and
 # the input; screen.hpp). It draws nothing of its own, reads no file and
@@ -20,7 +20,9 @@ if(BUILD_TESTING)
   # the pictures asked for, focus by geometry, Tab's order and the input).
   add_executable(oa-ui-map-browser-test tests/model_test.cpp tests/layout_test.cpp)
   target_link_libraries(oa-ui-map-browser-test PRIVATE oa-ui-map-browser oa-ui-kit
+    oa-formats-png oa-formats-hpi oa-platform-text-font oa-present oa-test-game-data
     oa-test-support oa-options)
+  oa_copy_text_fonts(oa-ui-map-browser-test "$<TARGET_FILE_DIR:oa-ui-map-browser-test>")
   add_test(NAME ui-map-browser COMMAND oa-ui-map-browser-test)
   set_tests_properties(ui-map-browser PROPERTIES TIMEOUT 30)
 endif()

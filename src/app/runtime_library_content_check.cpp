@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// --check-library-content: Core Contingency is turned off, the Library
-// closes, and its maps leave the skirmish list; the demo is chosen when
-// OA_DEMO_INSTALLER names its installer, the Library closes, and the demo
-// is mounted. Nothing is mounted again while the Library stays open.
+// --check-library-content: with the managed copy and the campaign on, the
+// Library's mod tile says No Mod. Core Contingency is then turned off, the
+// Library closes, and its maps leave the skirmish list; the demo is chosen
+// when OA_DEMO_INSTALLER names its installer, the Library closes, and the
+// demo is mounted. Nothing is mounted again while the Library stays open.
 
 #include "library_host.hpp"
 #include "oa_layer.hpp"
@@ -211,6 +212,21 @@ void Runtime::check_library_content() {
         open_library(library::Tab::active);
         frames(3);
         require(oa_layer().find(library_screen_name) != nullptr, "the Library did not open");
+        {
+            const std::optional<AutomationControl> mod = named("oa.library.active.mod");
+            const std::optional<AutomationControl> campaign =
+                named("oa.library.active.expansion.campaign");
+            require(options_.managed_content, "the managed copy is not mounted");
+            require(options_.layered_mod_folder.empty(), "a mod folder is layered");
+            require(campaign.has_value() && campaign->checked, "the campaign is not on");
+            const std::string shown = mod ? mod->text : std::string("missing");
+            require(
+                mod.has_value() && mod->text == "No Mod" &&
+                    !named("oa.library.active.unload").has_value(),
+                "the Library shows a mod while the campaign is on and no mod is played (" + shown +
+                    ")"
+            );
+        }
         click_named("oa.library.active.expansion.core-contingency");
         frames(2);
         require(

@@ -841,6 +841,14 @@ void lay_online(
         "only when asking that registry for a download. Turning it off forgets it, and downloads "
         "from that registry stop. Built-in languages and files you open keep working."
     );
+    const std::string on_title = show("Turn on online features");
+    const std::string on_hint = show(
+        "Check for content updates stays at Automatically, and Core Prime's install ID stays on."
+    );
+    const std::string off_title = show("Not now");
+    const std::string off_hint = show(
+        "Check for content updates is set to Never, and Core Prime's install ID is turned off."
+    );
     const int32_t card_height = kit::choice_card_height();
     constexpr int32_t kGap = 16;
     constexpr int32_t kChrome = 2 + 2 * kit::picture_well_inset;
@@ -855,8 +863,15 @@ void lay_online(
             fonts, std::max(column - 16, int32_t{1}), panel_body, kit::FontRole::small
         );
         const int32_t panel_h = 8 + kit::compact_metrics.regular_line + 4 + body_h + 8;
+        // The card's own height holds one hint line. A wrapped hint grows it.
+        const auto hint_extra = [&](std::string_view hint) {
+            const int32_t hint_room = std::max(column - 30, int32_t{1});
+            const int32_t tall = paragraph_height(fonts, hint_room, hint, kit::FontRole::small);
+            return std::max(tall - kit::compact_metrics.small_line, int32_t{0});
+        };
         return kit::compact_metrics.small_line + 4 + heading_h + 6 + packs_h + 2 + lists_h + 2 +
-               id_h + 8 + panel_h + 8 + card_height * 2 + 8;
+               id_h + 8 + panel_h + 8 + card_height * 2 + hint_extra(on_hint) +
+               hint_extra(off_hint) + 8;
     };
     const auto place_well = [&](const kit::Rect& well_rect, const SampleFit& fitted) {
         kit::PictureWellLook well;
@@ -980,16 +995,18 @@ void lay_online(
     );
     row += panel_height + 8;
 
-    const std::string on_title = show("Turn on online features");
-    const std::string on_hint = show(
-        "Check for content updates stays at Automatically, and Core Prime's install ID stays on."
-    );
-    const std::string off_title = show("Not now");
-    const std::string off_hint = show(
-        "Check for content updates is set to Never, and Core Prime's install ID is turned off."
-    );
-    const kit::Rect on_rect{text_left, row, text_width, card_height};
-    const kit::Rect off_rect{text_left, row + card_height + 8, text_width, card_height};
+    const int32_t hint_room = std::max(text_width - 30, int32_t{1});
+    const auto extra_for = [&](std::string_view hint) {
+        return std::max(
+            paragraph_height(fonts, hint_room, hint, kit::FontRole::small) -
+                kit::compact_metrics.small_line,
+            int32_t{0}
+        );
+    };
+    const int32_t on_height = card_height + extra_for(on_hint);
+    const int32_t off_height = card_height + extra_for(off_hint);
+    const kit::Rect on_rect{text_left, row, text_width, on_height};
+    const kit::Rect off_rect{text_left, row + on_height + 8, text_width, off_height};
     kit::ChoiceCardLook on_look;
     on_look.title = on_title;
     on_look.hint = on_hint;

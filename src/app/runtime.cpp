@@ -563,6 +563,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_text_fit) {
+            check_text_fit();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_kill_board) {
             check_kill_board();
             flush_preferences();

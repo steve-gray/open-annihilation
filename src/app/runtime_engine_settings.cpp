@@ -709,13 +709,17 @@ void Runtime::list_offered_mods() {
         if (fs::is_directory(folder, missing))
             offered.push_back(folder);
     }
-    // The mod folder played is the one layered over the game folder.
-    state.playing_mod_folder =
-        options_.game_folders.size() > 1
-            ? path_to_utf8(fs::absolute(options_.game_folders.front()).lexically_normal())
-            : std::string{};
-    if (options_.game_folders.size() > 1)
-        offered.push_back(options_.game_folders.front());
+    // The mod folder played is the one this start layered. An expansion
+    // bundle is another game folder and is not offered as that mod.
+    state.playing_mod_folder.clear();
+    if (!options_.layered_mod_folder.empty()) {
+        std::error_code absolute_error;
+        const fs::path absolute = fs::absolute(options_.layered_mod_folder, absolute_error);
+        state.playing_mod_folder = path_to_utf8(
+            (absolute_error ? options_.layered_mod_folder : absolute).lexically_normal()
+        );
+        offered.push_back(options_.layered_mod_folder);
+    }
     // A folder of the player's own Mods folder offers ROLL BACK while its
     // .backup keeps an earlier version of its mod that the game can play,
     // checked as a pick is.
@@ -979,8 +983,8 @@ void Runtime::load_profile_layers() {
     // apart from the game's without a mod.
     if (options_.mod_profile)
         state.profile_id = options_.mod_profile->id;
-    else if (options_.game_folders.size() > 1)
-        state.profile_id = folder_overrides_id(options_.game_folders.front());
+    else if (!options_.layered_mod_folder.empty())
+        state.profile_id = folder_overrides_id(options_.layered_mod_folder);
     else
         state.profile_id = std::string(profiles::base_game_id);
     state.profile_hacks = profiles::base_hack_states();

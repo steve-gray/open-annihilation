@@ -279,65 +279,6 @@ int32_t endonym_capitals(text_font::FontStack& fonts, int32_t pixel_size) {
     return std::max(pixel_size * 7 / 10, int32_t{1});
 }
 
-/// Returns the largest pixel size at or under a wanted size whose line fits.
-///
-/// @param fonts the modern fonts
-/// @param text the text
-/// @param wanted the size to start from, in pixels per em
-/// @param room the width the line may take, in pixels
-/// @return the size, at least 1
-int32_t
-endonym_size(text_font::FontStack& fonts, std::string_view text, int32_t wanted, int32_t room) {
-    int32_t size = std::clamp(wanted, int32_t{1}, text_font::max_pixel_size);
-    if (room <= 0)
-        return 1;
-    while (size > 1) {
-        const EndonymLine line = draw_endonym(fonts, text, size);
-        if (line.drawn && line.coverage.advance <= room)
-            return size;
-        --size;
-    }
-    return 1;
-}
-
-/// Shortens a line with an ellipsis once shrinking to one pixel still misses.
-///
-/// @param fonts the modern fonts
-/// @param text the text
-/// @param pixel_size the size it is drawn at
-/// @param room the width, in pixels
-/// @return the text when it fits; a shortened line, or empty, when it does not
-std::string endonym_ellipsis(
-    text_font::FontStack& fonts, std::string_view text, int32_t pixel_size, int32_t room
-) {
-    constexpr std::string_view mark = "\xE2\x80\xA6";
-    const auto fits = [&](std::string_view words) {
-        const EndonymLine line = draw_endonym(fonts, words, pixel_size);
-        return line.drawn && line.coverage.advance <= room;
-    };
-    if (fits(text))
-        return std::string(text);
-    std::string kept;
-    std::string best;
-    for (std::size_t at = 0; at < text.size();) {
-        const std::size_t bytes = character_bytes(text.substr(at));
-        if (bytes == 0)
-            break;
-        kept.append(text.substr(at, bytes));
-        std::string candidate = kept;
-        while (!candidate.empty() && candidate.back() == ' ')
-            candidate.pop_back();
-        candidate += mark;
-        if (!fits(candidate))
-            break;
-        best = std::move(candidate);
-        at += bytes;
-    }
-    if (!best.empty())
-        return best;
-    return fits(mark) ? std::string(mark) : std::string{};
-}
-
 /// Returns a rectangle of a smooth canvas as the painter's pixels.
 ///
 /// @param canvas the canvas, smooth
@@ -352,7 +293,8 @@ oa::ui::paint::Box smooth_pixels(const Canvas& canvas, const Rect& box) noexcept
     return {drawn.x, drawn.y, drawn.width, drawn.height};
 }
 
-/// Draws a centred line in the modern fonts, shrunk until it fits.
+/// Draws a centred line in the modern fonts at the size asked for. A line
+/// wider than the box is recorded and still drawn at that size.
 ///
 /// @param canvas the canvas, smooth, with fonts
 /// @param text the text
@@ -382,17 +324,42 @@ void draw_modern_line(
         int32_t{1},
         text_font::max_pixel_size
     );
-    const int32_t size = endonym_size(*fonts, text, wanted, pixels.width);
-    std::string shown(text);
-    EndonymLine line = draw_endonym(*fonts, shown, size);
-    if (!line.drawn || line.coverage.advance > pixels.width) {
-        shown = endonym_ellipsis(*fonts, text, size, pixels.width);
-        line = draw_endonym(*fonts, shown, size);
-    }
-    if (!line.drawn || shown.empty())
+    const int32_t size = std::clamp(wanted, int32_t{1}, text_font::max_pixel_size);
+    EndonymLine line = draw_endonym(*fonts, text, size);
+    if (!line.drawn)
         return;
     const int32_t capitals_tall = endonym_capitals(*fonts, size);
     const int32_t pen = pixels.x + (pixels.width - line.coverage.advance) / 2;
+    // A line the large size cannot fit wraps at the font's own size. The
+    // point box is the one the caller laid out.
+    if (line.coverage.advance > pixels.width) {
+        const Measure measure = [&](std::string_view words) {
+            const int32_t measured = measure_text(canvas, FontRole::regular, words);
+            return measured > 0 ? measured : estimated_width(words);
+        };
+        std::vector<std::string> lines = wrap(text, std::max(box.width, int32_t{1}), measure);
+        if (lines.empty())
+            lines.emplace_back(text);
+        const int32_t step = compact_metrics.regular_line;
+        const int32_t block = step * static_cast<int32_t>(lines.size());
+        int32_t y = box.y + std::max((box.height - block) / 2, int32_t{0});
+        for (const std::string& wrapped : lines) {
+            box_text(
+                canvas,
+                FontRole::regular,
+                wrapped,
+                {box.x, y, box.width, step},
+                Align::centre,
+                ink,
+                0
+            );
+            y += step;
+        }
+        return;
+    }
+    note_text_fit(
+        text, line.coverage.advance, pixels.x, pixels.y, pixels.width, pixels.height, pen
+    );
     const int32_t baseline = pixels.y + (pixels.height - capitals_tall) / 2 + capitals_tall;
     oa::ui::paint::TextLine painted;
     painted.coverage = std::move(line.coverage);
@@ -402,9 +369,8 @@ void draw_modern_line(
     );
 }
 
-/// Draws a centred line in a game font, grown to the box and shrunk when
-/// that would be wider than the box. An ellipsis is not used: the whole
-/// line is kept.
+/// Draws a centred line in a game font, grown to the box's height. A line
+/// wider than the box is recorded and still drawn at that height.
 ///
 /// @param canvas the canvas, crisp
 /// @param role which font
@@ -422,14 +388,10 @@ void draw_bitmap_line(
     if (full <= 0)
         return;
     constexpr int32_t kMostSource = 4096;
-    std::string shown(text);
+    const std::string shown(text);
     int32_t src_w = full;
-    if (src_w > kMostSource) {
-        shown = fit(text, kMostSource, [&](std::string_view words) {
-            return text_width(*canvas.fonts, role, words);
-        });
-        src_w = std::max(text_width(*canvas.fonts, role, shown), int32_t{1});
-    }
+    if (src_w > kMostSource)
+        return;
     const int32_t src_h = rows + 2;
     renderer::Surface source;
     source.width = static_cast<uint32_t>(src_w);
@@ -487,16 +449,65 @@ void draw_bitmap_line(
             pixels[to + 3] = 255;
         }
     }
-    // The box is the design size. Grow the line to that height, and shrink
-    // it only when the grown line would be wider than the box.
-    int32_t dest_h = box.height;
-    int32_t dest_w = std::max(crop_w * box.height / crop_h, int32_t{1});
+    // The box is the design size. The line grows to that height while the
+    // grown line fits the box. When it does not, the words stay at the font's
+    // own size and wrap inside the box.
+    int32_t dest_h = std::max(box.height, int32_t{1});
+    int32_t dest_w = std::max(crop_w * dest_h / std::max(crop_h, int32_t{1}), int32_t{1});
     if (dest_w > box.width) {
-        dest_w = box.width;
-        dest_h = std::max(crop_h * box.width / crop_w, int32_t{1});
+        const Measure measure = [&](std::string_view words) {
+            return text_width(*canvas.fonts, role, words);
+        };
+        std::vector<std::string> lines = wrap(shown, std::max(box.width, int32_t{1}), measure);
+        if (lines.empty())
+            lines.emplace_back(shown);
+        const int32_t step =
+            role == FontRole::regular ? compact_metrics.regular_line : compact_metrics.small_line;
+        const int32_t block = step * static_cast<int32_t>(lines.size());
+        int32_t y = box.y + std::max((box.height - block) / 2, int32_t{0});
+        for (const std::string& line : lines) {
+            box_text(canvas, role, line, {box.x, y, box.width, step}, Align::centre, ink, 0);
+            y += step;
+        }
+        return;
     }
-    dest_w = std::clamp(dest_w, int32_t{1}, box.width);
-    dest_h = std::clamp(dest_h, int32_t{1}, box.height);
+    const int32_t scale = std::max(canvas.placement.scale, int32_t{1});
+    const int32_t origin_x = canvas.placement.scale > 0 ? canvas.placement.x / scale : 0;
+    const int32_t origin_y = canvas.placement.scale > 0 ? canvas.placement.y / scale : 0;
+    const int32_t ink_x = box.x + (box.width - dest_w) / 2;
+    const Rect& clip = canvas.placement.clip;
+    if (canvas.placement.scale == 0)
+        note_text_fit(
+            shown,
+            dest_w,
+            box.x + origin_x,
+            box.y + origin_y,
+            box.width,
+            dest_h,
+            ink_x + origin_x,
+            0,
+            0,
+            -1,
+            0
+        );
+    else if (clip.width > 0 && clip.height > 0)
+        note_text_fit(
+            shown,
+            dest_w,
+            box.x + origin_x,
+            box.y + origin_y,
+            box.width,
+            dest_h,
+            ink_x + origin_x,
+            clip.x + origin_x,
+            clip.y + origin_y,
+            clip.width,
+            clip.height
+        );
+    else
+        note_text_fit(
+            shown, dest_w, box.x + origin_x, box.y + origin_y, box.width, dest_h, ink_x + origin_x
+        );
     const Rect dest{
         box.x + (box.width - dest_w) / 2,
         box.y + (box.height - dest_h) / 2,
@@ -510,7 +521,7 @@ void draw_bitmap_line(
 }
 
 /// Draws a centred line: large in the modern fonts when they are open, and
-/// in a game font otherwise. It shrinks until the whole line fits.
+/// in a game font otherwise. A line wider than the box keeps its size.
 ///
 /// @param canvas where it is drawn
 /// @param role the game font, when the modern fonts are not open
@@ -1498,16 +1509,30 @@ void draw_choice_card(const Canvas& canvas, const Rect& rect, const ChoiceCardLo
         {text_x, title_y, text_w, compact_metrics.regular_line},
         title
     );
-    line_in(
-        canvas,
-        FontRole::small,
-        look.hint,
-        {text_x,
-         title_y + compact_metrics.regular_line + compact_metrics.hint_gap,
-         text_w,
-         compact_metrics.small_line},
-        hint
-    );
+    // The hint wraps in the card. A card laid at choice_card_height holds one
+    // line; a taller card holds the rest.
+    const Measure measure = [&](std::string_view words) {
+        const int32_t measured = measure_text(canvas, FontRole::small, words);
+        if (measured > 0 || canvas.fonts != nullptr)
+            return measured;
+        return estimated_width(words);
+    };
+    std::vector<std::string> hint_lines;
+    if (text_w > 0 && !look.hint.empty())
+        hint_lines = wrap(look.hint, text_w, measure);
+    if (hint_lines.empty() && !look.hint.empty())
+        hint_lines.emplace_back(look.hint);
+    int32_t hint_y = title_y + compact_metrics.regular_line + compact_metrics.hint_gap;
+    for (const std::string& line : hint_lines) {
+        line_in(
+            canvas,
+            FontRole::small,
+            line,
+            {text_x, hint_y, text_w, compact_metrics.small_line},
+            hint
+        );
+        hint_y += compact_metrics.small_line;
+    }
 }
 
 void add_choice_card(

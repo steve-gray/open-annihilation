@@ -72,8 +72,8 @@ void set_language(SettingsModel& model, int32_t index);
 /// Returns one line of Language's hint.
 ///
 /// While an available pack is chosen and not yet installed, the line says
-/// the download will switch to it, or why it failed. Otherwise the lines are
-/// the page's own two, in English.
+/// the download will switch to it, or why it failed. Otherwise it is the
+/// page's own sentence, in English.
 ///
 /// @param model the model
 /// @param line the line, from 0
@@ -83,7 +83,7 @@ void set_language(SettingsModel& model, int32_t index);
 /// Returns how many lines Language's hint takes now.
 ///
 /// @param model the model
-/// @return one while an available pack is chosen and not yet installed, else two
+/// @return one: the sentence, or the download while a pack is not yet installed
 [[nodiscard]] std::size_t language_hint_lines(const SettingsModel& model);
 
 /// Language's row: System default, the installed languages and the packs
@@ -100,7 +100,7 @@ void set_language(SettingsModel& model, int32_t index);
             nullptr,
             &language_id,
         },
-        {"The game's own text and unit names, where its", "data has them in the language."}
+        {"The game's own text and unit names, where its data has them in the language."}
     );
     spec.control_width = choice_width;
     spec.hint_text = &language_hint;

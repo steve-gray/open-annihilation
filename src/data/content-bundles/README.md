@@ -9,7 +9,7 @@ values. The table holds names, sizes and hashes only.
 
 The demo's installer is still recognised where it is today
 (`demo_1997` in `oa/app/demo_installer.hpp`), by its size and SHA-256. The
-archive it carries is copied into `games/totala-demo` with that bundle's
+archive it carries is copied into `Games/totala-demo` with that bundle's
 record. This table names the unpacked archive, `TADemo.hpi`, with the same
 size and SHA-256 that recognition checks. It does not repeat the installer's
 size, hash or resource.
@@ -43,6 +43,10 @@ size, hash or resource.
   `.oa-content` record. `parse_content_record` and `format_content_record`
   take bytes and return bytes. `read_bundle_folder_record` reads the record
   in one bundle folder. A field the reader does not know is ignored.
+- `oa/data/content_bundles/expansion_package.hpp` reads `oaexp.yaml` and
+  checks that the files offered with it are the expansion's files, by
+  name, size and SHA-256. `expansion_fixture.hpp` is the small table the
+  tests install against. The game does not.
 - `table_fault` is empty when every dependency names a real bundle and
   following the needs reaches no cycle.
 

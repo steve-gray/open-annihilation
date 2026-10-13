@@ -489,7 +489,8 @@ set_up_demo(const fs::path& folder, const fs::path& player_folder, const DemoRel
     const auto unpacked_folder = demo_bundle_directory(player_folder, release);
     const auto archive = unpacked_folder / fs::path(std::string(release.archive_name));
     std::error_code games_error;
-    const auto games_status = fs::symlink_status(player_folder / "games", games_error);
+    const auto games_status =
+        fs::symlink_status(player_folder / std::string(managed_games_folder), games_error);
     const bool games_linked =
         !player_folder.empty() && fs::exists(games_status) && !fs::is_directory(games_status);
     const bool linked =
@@ -679,7 +680,8 @@ bool adopt_legacy_demo(
     const fs::path folder = demo_bundle_directory(player_folder, release);
     const fs::path archive = folder / fs::path(std::string(release.archive_name));
     std::error_code games_error;
-    const auto games_status = fs::symlink_status(player_folder / "games", games_error);
+    const auto games_status =
+        fs::symlink_status(player_folder / std::string(managed_games_folder), games_error);
     const bool games_linked = fs::exists(games_status) && !fs::is_directory(games_status);
     if (games_linked || leads_elsewhere(folder, archive))
         return false;

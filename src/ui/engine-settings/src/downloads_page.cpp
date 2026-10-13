@@ -11,6 +11,7 @@
 
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
+#include "oa/ui/kit/text.hpp"
 #include "oa/ui/library/text.hpp"
 
 #include <algorithm>
@@ -22,6 +23,18 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+
+namespace oa::ui::engine_settings::geometry {
+
+void fit_control(oa::ui::kit::RowView& shown, int32_t content_width, const TextWidth& measure);
+void fit_measured(
+    oa::ui::kit::RowView& shown,
+    int32_t content_width,
+    const TextWidth& small,
+    const TextWidth* regular
+);
+
+} // namespace oa::ui::engine_settings::geometry
 
 namespace oa::ui::engine_settings::downloads {
 
@@ -174,56 +187,26 @@ const InstallIdRow* offered(const Dialog& dialog, std::size_t registry) noexcept
     return &dialog.downloads.install_ids[registry];
 }
 
-/// Breaks a hint into the lines the page shows.
-///
-/// @param dialog the dialog
-/// @param text the hint, already as shown
-/// @return at most four lines
-std::vector<std::string> wrapped(const Dialog& dialog, std::string text) {
-    const std::size_t columns =
-        std::max(geometry::sizes_of(dialog).hint_line_characters, std::size_t{1});
-    return geometry::break_lines(text, columns, geometry::most_notice_lines);
-}
-
-/// Returns one line of a wrapped hint.
-///
-/// @param dialog the dialog
-/// @param text the hint
-/// @param line the line, from 0
-/// @return the line; empty past the last
-std::string wrapped_line(const Dialog& dialog, std::string text, std::size_t line) {
-    const std::vector<std::string> lines = wrapped(dialog, std::move(text));
-    return line < lines.size() ? lines[line] : std::string();
-}
-
-/// Returns how many lines the check's hint takes.
+/// The check's hint, looked up whole, plus the https note on a system that
+/// reads it as http. The page wraps the looked-up lines together.
 ///
 /// @param model the row
-/// @return the lines
-/// The check's hint, plus the https note on a system that reads it as http.
-///
-/// @param dialog the dialog
-/// @return the hint
-std::string check_hint_text(const Dialog& dialog) {
-    std::string text(kCheckHint);
-    if (dialog.downloads.https_over_http) {
-        text.push_back(' ');
-        text.append(kHttpsOverHttp);
-    }
-    return text;
-}
-
+/// @return one line, or two when the note shows
 std::size_t check_hint_lines(const RowModel& model) {
-    return wrapped(*model.dialog, check_hint_text(*model.dialog)).size();
+    return model.dialog->downloads.https_over_http ? std::size_t{2} : std::size_t{1};
 }
 
-/// Returns one line of the check's hint.
+/// Returns one line of the check's hint, the whole text.
 ///
 /// @param model the row
 /// @param line the line, from 0
 /// @return the line
 std::string check_hint_line(const RowModel& model, std::size_t line) {
-    return wrapped_line(*model.dialog, check_hint_text(*model.dialog), line);
+    if (line == 0)
+        return std::string(kCheckHint);
+    if (line == 1 && model.dialog->downloads.https_over_http)
+        return std::string(kHttpsOverHttp);
+    return {};
 }
 
 /// Returns an install ID's label: "Install ID", or "Install ID · {name}"
@@ -252,21 +235,23 @@ std::string install_hint(const RowModel& model) {
     return geometry::filled(kInstallHint, {{"name", name}});
 }
 
-/// Returns how many lines an install ID's hint takes.
+/// Returns how many lines an install ID's hint takes before it is wrapped.
 ///
 /// @param model the row
-/// @return the lines
-std::size_t install_hint_lines(const RowModel& model) {
-    return wrapped(*model.dialog, install_hint(model)).size();
+/// @return one: the whole hint
+std::size_t install_hint_lines(const RowModel&) {
+    return 1;
 }
 
-/// Returns one line of an install ID's hint.
+/// Returns the install ID's hint, the registry's name filled in.
 ///
 /// @param model the row
 /// @param line the line, from 0
-/// @return the line
+/// @return the hint; empty past the first line
 std::string install_hint_line(const RowModel& model, std::size_t line) {
-    return wrapped_line(*model.dialog, install_hint(model), line);
+    if (line != 0)
+        return {};
+    return install_hint(model);
 }
 
 /// Returns whether an install-ID switch is on.
@@ -496,15 +481,53 @@ kit::RowResult note_reset(Dialog& dialog, const RowModel& model, const kit::RowR
     return result;
 }
 
+/// Joins a row's looked-up hint lines and wraps them to the section.
+///
+/// @param[in,out] shown the row
+/// @param room the hint's width
+/// @param measure a text's width in the small font
+void wrap_shown_hints(kit::RowView& shown, int32_t room, const geometry::TextWidth& measure) {
+    std::string paragraph;
+    for (const std::string& line : shown.hints) {
+        if (line.empty())
+            continue;
+        if (!paragraph.empty())
+            paragraph.push_back(' ');
+        paragraph += line;
+    }
+    if (paragraph.empty()) {
+        shown.hints.clear();
+        shown.notices.clear();
+        return;
+    }
+    std::vector<std::string> lines = kit::wrap(paragraph, std::max(room, int32_t{1}), measure);
+    if (lines.empty())
+        lines.push_back(std::move(paragraph));
+    if (lines.size() > geometry::most_row_lines)
+        lines.resize(geometry::most_row_lines);
+    const bool notice = !shown.notices.empty() && shown.notices.front();
+    shown.hints = std::move(lines);
+    shown.notices.assign(shown.hints.size(), notice);
+}
+
 } // namespace
 
 geometry::Rows place(
     const Dialog& dialog,
     const Locks& locks,
     const geometry::TextWidth& width,
-    kit::PlacedRows* placed
+    kit::PlacedRows* placed,
+    const geometry::Sizes* sizes,
+    const geometry::TextWidth* regular
 ) {
-    static_cast<void>(width);
+    const geometry::Sizes& sized = sizes != nullptr ? *sizes : geometry::sizes_of(dialog);
+    const geometry::TextWidth measure =
+        static_cast<bool>(width) ? width : geometry::TextWidth{&geometry::estimated_width};
+    const bool estimated = measure("n") == kit::estimated_character_width &&
+                           measure("W") == kit::estimated_character_width;
+    const int32_t room = estimated ? static_cast<int32_t>(sized.hint_line_characters) *
+                                         kit::estimated_character_width
+                                   : sized.content_width;
     const std::size_t count = row_count(dialog);
     std::vector<kit::RowView> row_views;
     std::vector<bool> game_locked;
@@ -514,6 +537,9 @@ geometry::Rows place(
         const RowModel model{const_cast<Dialog*>(&dialog), &locks, index};
         const kit::RowSpec<RowModel> spec = spec_for(model);
         kit::RowView shown = kit::view_of(spec, model, &geometry::shown_text);
+        wrap_shown_hints(shown, room, measure);
+        geometry::fit_control(shown, sized.content_width, measure);
+        geometry::fit_measured(shown, sized.content_width, measure, regular);
         const Role role = role_of(dialog, index);
         if (role == Role::toggle || role == Role::id_value) {
             const InstallIdRow* row = offered(dialog, registry_of(index));
@@ -526,7 +552,6 @@ geometry::Rows place(
         row_views.push_back(std::move(shown));
     }
 
-    const geometry::Sizes& sized = geometry::sizes_of(dialog);
     kit::RowPlacement placement;
     placement.left = sized.content_left;
     placement.right = sized.content_right;

@@ -379,25 +379,33 @@ OA_GAME_DATA_TEST(end_mission_main_menu_with_a_return_label) {
     OA_CHECK(!fixture->frontend.cursors.empty() && fixture->frontend.cursors.back() == 0x14);
 }
 
-OA_GAME_DATA_TEST(end_mission_state_opens_the_panel) {
+// Coming back from Save Game (and Load Game or Adjust Difficulty, which open
+// the same way) keeps the finished tally: the bars are shown at their final
+// values and the count-up does not start again.
+OA_GAME_DATA_TEST(end_mission_return_keeps_the_finished_tally) {
     auto fixture = std::make_unique<Fixture>();
     if (!fixture->load())
         return;
     auto& context = fixture->context;
     fixture->world->game.victory = 1;
     oa::base::text::copy_terminated(fixture->world->game.scores[0].name, "Commander");
+    fixture->world->game.scores[0].values[campaign::score_kills] = 4;
     fixture->world->game.score_maxima[campaign::score_kills] = 10;
-    fixture->world->game.endgame_column = 7;
+    fixture->world->game.endgame_column = 3;
     auto layout = std::make_unique<campaign::ScoreLayout>();
     end_mission_open(fixture->panel, context, *layout);
-    OA_CHECK(layout->row_count == 1 && fixture->world->game.endgame_column == 0);
-    OA_CHECK(!layout->rows[0].bars[campaign::score_kills].active);
+    OA_CHECK(layout->row_count == 1);
+    const campaign::ScoreBar& kills = layout->rows[0].bars[campaign::score_kills];
+    OA_CHECK(kills.active && !kills.running && kills.current == 4 && kills.value == 4);
+    OA_CHECK(
+        fixture->world->game.endgame_column == static_cast<int32_t>(campaign::score_column_count)
+    );
     for (const char* name : kPanelControls)
         OA_CHECK(panel_control(fixture->panel, name)->active == 1);
     OA_CHECK(fixture->frontend.modes.back() == 7);
     OA_CHECK(
         fixture->frontend.end_game_steps.size() == 1 &&
-        fixture->frontend.end_game_steps[0] == OA_ENDGAME_STAT_BARS
+        fixture->frontend.end_game_steps[0] == OA_ENDGAME_PANEL
     );
 }
 

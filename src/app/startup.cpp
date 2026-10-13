@@ -18,16 +18,24 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace oa::app {
 namespace {
@@ -302,6 +310,7 @@ void check_game_files_options(Options& options) {
         {options.check_language_registry, "--check-language-registry"},
         {options.check_language_notice, "--check-language-notice"},
         {options.check_first_run, "--check-first-run"},
+        {options.check_text_fit, "--check-text-fit"},
         {options.check_folder_chooser, "--check-folder-chooser"},
         {options.check_patrol_reclaim, "--check-patrol-reclaim"},
         {options.check_reclaim_cursor, "--check-reclaim-cursor"},
@@ -516,6 +525,7 @@ void check_director_options(Options& options) {
         {options.check_language_registry, "--check-language-registry"},
         {options.check_language_notice, "--check-language-notice"},
         {options.check_first_run, "--check-first-run"},
+        {options.check_text_fit, "--check-text-fit"},
         {options.check_folder_chooser, "--check-folder-chooser"},
         {options.check_patrol_reclaim, "--check-patrol-reclaim"},
         {options.check_reclaim_cursor, "--check-reclaim-cursor"},
@@ -593,6 +603,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_language_registry, "--check-language-registry"},
             {options.check_language_notice, "--check-language-notice"},
             {options.check_first_run, "--check-first-run"},
+            {options.check_text_fit, "--check-text-fit"},
             {options.check_folder_chooser, "--check-folder-chooser"},
             {options.check_patrol_reclaim, "--check-patrol-reclaim"},
             {options.check_reclaim_cursor, "--check-reclaim-cursor"},
@@ -796,6 +807,7 @@ constexpr FlagOption kFlagOptions[] = {
     {"--check-language-registry", &Options::check_language_registry},
     {"--check-language-notice", &Options::check_language_notice},
     {"--check-first-run", &Options::check_first_run},
+    {"--check-text-fit", &Options::check_text_fit},
     {"--check-folder-chooser", &Options::check_folder_chooser},
     {"--check-patrol-reclaim", &Options::check_patrol_reclaim},
     {"--check-reclaim-cursor", &Options::check_reclaim_cursor},
@@ -1205,6 +1217,67 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
 
 } // namespace
 
+namespace {
+
+/// Writes `text` to the console this program was started from, when Windows
+/// gave the program no console of its own and nothing is capturing the output.
+void write_parent_console(std::string_view text) {
+#if defined(_WIN32)
+    // The console of the process that started this one. Windows names it -1.
+    constexpr DWORD kParentConsole = 0xFFFFFFFFu;
+    const HANDLE current = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (current != nullptr && current != INVALID_HANDLE_VALUE) {
+        const DWORD kind = GetFileType(current);
+        if (kind == FILE_TYPE_PIPE || kind == FILE_TYPE_DISK)
+            return;
+    }
+    const HMODULE kernel = GetModuleHandleW(L"kernel32.dll");
+    if (kernel == nullptr)
+        return;
+    using AttachConsoleFunction = BOOL(WINAPI*)(DWORD);
+    // A direct cast of GetProcAddress is a cast between function types, which
+    // this build rejects. Copy the pointer instead.
+    const auto looked_up = GetProcAddress(kernel, "AttachConsole");
+    AttachConsoleFunction attach = nullptr;
+    static_assert(sizeof(attach) == sizeof(looked_up));
+    std::memcpy(&attach, &looked_up, sizeof(attach));
+    if (attach == nullptr || attach(kParentConsole) == FALSE)
+        return;
+    const HANDLE console = CreateFileW(
+        L"CONOUT$",
+        GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr
+    );
+    if (console == INVALID_HANDLE_VALUE)
+        return;
+    DWORD written = 0;
+    std::ignore =
+        WriteFile(console, text.data(), static_cast<DWORD>(text.size()), &written, nullptr);
+    std::ignore = CloseHandle(console);
+#else
+    (void)text;
+#endif
+}
+
+} // namespace
+
+void write_startup_line(std::string_view text) {
+    std::string bytes(text);
+    if (bytes.empty() || bytes.back() != '\n')
+        bytes.push_back('\n');
+    // A test replaces the output buffer and reads it back. The console is
+    // written only for the program's own buffer, so that capture stays one copy.
+    static std::streambuf* const own_buffer = std::cout.rdbuf();
+    if (std::cout.rdbuf() == own_buffer)
+        write_parent_console(bytes);
+    std::cout << bytes;
+    std::exit(0);
+}
+
 [[nodiscard]] Options parse_options(int argc, char** argv, const Extension& extension) {
     Options result;
     std::string joined_line;
@@ -1249,91 +1322,92 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
         } else if (argument == "--help" || argument == "-h") {
             // A bare -h stays the help flag, so the game's "-h NAME" (name as
             // the next argument) must be written -hNAME here.
-            std::cout
-                << "usage: open-annihilation [--game-dir PATH | --choose-game-dir] "
-                   "[--archive PATH]... "
-                   "[--mod FILE] [--mod-dir PATH | --base-game] "
-                   "[--content GAME[:EXPANSION,...]] [--print-profile] "
-                   "[--accept-unimplemented-hacks] "
-                   "[--skip-intro] [--first-run] [--frames N] [--headless-check] "
-                   "[--snapshot PATH.ppm] [--preferences-file PATH] [--data-dir PATH] "
-                   "[--user-folder PATH] [--log-dir PATH] "
-                   "[--mute] "
-                   "[--check-navigation [screens|orders|outcomes|zoom|zoom-1366x768|"
-                   "zoom-1920x1080|zoom-2560x1440|campaign]] "
-                   "[--check-match-dialogs] [--check-match-layers] "
-                   "[--check-render-tiers [--force-capable]] "
-                   "[--check-match-orders] [--check-factory-orders] [--check-unit-speech] "
-                   "[--check-download-builds] [--check-stockpile-builds] "
-                   "[--check-unit-page-memory] [--check-side-column] [--check-match-bars] "
-                   "[--check-unit-pages whole|scaled:TYPE,...] "
-                   "[--check-kill-board] [--check-paused-save] [--check-simulation-hash] "
-                   "[--check-unit-language TAG] "
-                   "[--check-language-switch] "
-                   "[--check-language-registry] "
-                   "[--check-language-notice] [--check-first-run] [--check-folder-chooser] "
-                   "[--check-patrol-reclaim] [--check-reclaim-cursor] [--check-build-preview] "
-                   "[--check-megamap-clicks] [--check-radar-orders] "
-                   "[--check-pointer-interfaces] [--check-pad-controls] [--check-touch-controls] "
-                   "[--check-game-files] [--check-content-copy PATH] "
-                   "[--check-installer FILE] "
-                   "[--check-multiplayer-menu] "
-                   "[--check-load-save] [--check-frontend-controls] "
-                   "[--check-scroll-bars] [--check-engine-settings [--force-capable]] "
-                   "[--check-registered-kit] [--check-kit-gallery] "
-                   "[--check-user-folder] [--check-mod-switch] [--check-map-packs] "
-                   "[--check-map-pack-lists] "
-                   "[--check-map-browser] "
-                   "[--check-mod-warning] "
-                   "[--check-mod-install] [--check-language-install] [--check-challenge] "
-                   "[--check-registries] "
-                   "[--check-library] [--check-library-install] "
-                   "[--check-library-map-previews] [--check-library-content] "
-                   "[--check-renderer-ladder [--render-fault POINT[@FRAME]]] "
-                   "[--check-briefing-narration] [--check-director-view] "
-                   "[--check-director-render] [--check-interpolation] "
-                   "[--check-unit-playout] [--check-running-while-inactive] "
-                   "[--trace-input] "
-                << extension_text(extension, ExtensionText::usage_checks, "")
-                << "[--debug-order-lines] "
-                   "[--max-fps N] "
-                   "[--hardware-acceleration[=off|basic|full] | --no-hardware-acceleration] "
-                   "[--native-density] [--display-modes MODES] "
-                   "[--benchmark FRAMES] [--match-ticks N "
-                   "[--frame-rate FPS [--frame-log FILE] [--scroll-camera] [--march] "
-                   "[--follow] [--frame-clock MS]]] "
-                   "[--campaign NAME --mission N [--past-outcome] [--restart-at TICK]] "
-                   "[--resolution WxH] [--touch-controls] "
-                   "[--game-files-route folder|demo|copy-yourself|manage] "
-                   "[--game-files-expect main-menu|stopped-kept|resumed|not-a-game|short-space|"
-                   "next-start] "
-                   "[--game-files-source PATH] [--game-files-free-bytes N] "
-                   "[--game-files-copy-rate BYTES] [--game-files-stop-after BYTES] "
-                   "[--no-game-files-screen] "
-                   "[--zoom FACTOR] [--combat UNITS [--busy-combat]] [--stage FILE] "
-                   "[--reclaim-check] "
-                   "[--camera X,Z] "
-                << extension_text(extension, ExtensionText::usage_runs, "")
-                << "[--save-after TICK] "
-                   "[--save-file PATH.sav] [--load PATH.sav] [--give-orders] [--seed N] "
-                   "[--trace-digest FILE] [--trace-units FILE] [--trace-lookups FILE] "
-                   "[--draw-threads N] "
-                   "[--capture-video PATH.mp4] [--showcase arm-first-mission|skirmish-battle] "
-                   "[--open FILE]... [--install-mod FILE]... "
-                   "[--generate-script RECORDING [--output PATH.oascript|PATH.oamovie] "
-                   "[--resolution WxH]] "
-                   "[--render-script PATH.oascript|PATH.oamovie [--output DIR] "
-                   "[--chunks A-B] [--stills F,F...]] "
-                   "[game switches such as "
-                << extension_text(extension, ExtensionText::usage_switches, "")
-                << "-d -s] "
-                   "[LANGUAGE]\n"
-                   "--generate-script plans a director script from a recording an "
-                   "extension of this build replays;\n"
-                   "--render-script renders a director script, or a bundle of one and "
-                   "its recording, to video (docs/director.md).\n"
-                << extension_text(extension, ExtensionText::usage_note, "");
-            std::exit(0);
+            std::ostringstream usage;
+            usage << "usage: open-annihilation [--version] [--game-dir PATH | --choose-game-dir] "
+                     "[--archive PATH]... "
+                     "[--mod FILE] [--mod-dir PATH | --base-game] "
+                     "[--content GAME[:EXPANSION,...]] [--print-profile] "
+                     "[--accept-unimplemented-hacks] "
+                     "[--skip-intro] [--first-run] [--frames N] [--headless-check] "
+                     "[--snapshot PATH.ppm] [--preferences-file PATH] [--data-dir PATH] "
+                     "[--user-folder PATH] [--log-dir PATH] "
+                     "[--mute] "
+                     "[--check-navigation [screens|orders|outcomes|zoom|zoom-1366x768|"
+                     "zoom-1920x1080|zoom-2560x1440|campaign]] "
+                     "[--check-match-dialogs] [--check-match-layers] "
+                     "[--check-render-tiers [--force-capable]] "
+                     "[--check-match-orders] [--check-factory-orders] [--check-unit-speech] "
+                     "[--check-download-builds] [--check-stockpile-builds] "
+                     "[--check-unit-page-memory] [--check-side-column] [--check-match-bars] "
+                     "[--check-unit-pages whole|scaled:TYPE,...] "
+                     "[--check-kill-board] [--check-paused-save] [--check-simulation-hash] "
+                     "[--check-unit-language TAG] "
+                     "[--check-language-switch] "
+                     "[--check-language-registry] "
+                     "[--check-language-notice] [--check-first-run] [--check-text-fit] "
+                     "[--check-folder-chooser] "
+                     "[--check-patrol-reclaim] [--check-reclaim-cursor] [--check-build-preview] "
+                     "[--check-megamap-clicks] [--check-radar-orders] "
+                     "[--check-pointer-interfaces] [--check-pad-controls] [--check-touch-controls] "
+                     "[--check-game-files] [--check-content-copy PATH] "
+                     "[--check-installer FILE] "
+                     "[--check-multiplayer-menu] "
+                     "[--check-load-save] [--check-frontend-controls] "
+                     "[--check-scroll-bars] [--check-engine-settings [--force-capable]] "
+                     "[--check-registered-kit] [--check-kit-gallery] "
+                     "[--check-user-folder] [--check-mod-switch] [--check-map-packs] "
+                     "[--check-map-pack-lists] "
+                     "[--check-map-browser] "
+                     "[--check-mod-warning] "
+                     "[--check-mod-install] [--check-language-install] [--check-challenge] "
+                     "[--check-registries] "
+                     "[--check-library] [--check-library-install] "
+                     "[--check-library-map-previews] [--check-library-content] "
+                     "[--check-renderer-ladder [--render-fault POINT[@FRAME]]] "
+                     "[--check-briefing-narration] [--check-director-view] "
+                     "[--check-director-render] [--check-interpolation] "
+                     "[--check-unit-playout] [--check-running-while-inactive] "
+                     "[--trace-input] "
+                  << extension_text(extension, ExtensionText::usage_checks, "")
+                  << "[--debug-order-lines] "
+                     "[--max-fps N] "
+                     "[--hardware-acceleration[=off|basic|full] | --no-hardware-acceleration] "
+                     "[--native-density] [--display-modes MODES] "
+                     "[--benchmark FRAMES] [--match-ticks N "
+                     "[--frame-rate FPS [--frame-log FILE] [--scroll-camera] [--march] "
+                     "[--follow] [--frame-clock MS]]] "
+                     "[--campaign NAME --mission N [--past-outcome] [--restart-at TICK]] "
+                     "[--resolution WxH] [--touch-controls] "
+                     "[--game-files-route folder|demo|copy-yourself|manage] "
+                     "[--game-files-expect main-menu|stopped-kept|resumed|not-a-game|short-space|"
+                     "next-start] "
+                     "[--game-files-source PATH] [--game-files-free-bytes N] "
+                     "[--game-files-copy-rate BYTES] [--game-files-stop-after BYTES] "
+                     "[--no-game-files-screen] "
+                     "[--zoom FACTOR] [--combat UNITS [--busy-combat]] [--stage FILE] "
+                     "[--reclaim-check] "
+                     "[--camera X,Z] "
+                  << extension_text(extension, ExtensionText::usage_runs, "")
+                  << "[--save-after TICK] "
+                     "[--save-file PATH.sav] [--load PATH.sav] [--give-orders] [--seed N] "
+                     "[--trace-digest FILE] [--trace-units FILE] [--trace-lookups FILE] "
+                     "[--draw-threads N] "
+                     "[--capture-video PATH.mp4] [--showcase arm-first-mission|skirmish-battle] "
+                     "[--open FILE]... [--install-mod FILE]... "
+                     "[--generate-script RECORDING [--output PATH.oascript|PATH.oamovie] "
+                     "[--resolution WxH]] "
+                     "[--render-script PATH.oascript|PATH.oamovie [--output DIR] "
+                     "[--chunks A-B] [--stills F,F...]] "
+                     "[game switches such as "
+                  << extension_text(extension, ExtensionText::usage_switches, "")
+                  << "-d -s] "
+                     "[LANGUAGE]\n"
+                     "--generate-script plans a director script from a recording an "
+                     "extension of this build replays;\n"
+                     "--render-script renders a director script, or a bundle of one and "
+                     "its recording, to video (docs/director.md).\n"
+                  << extension_text(extension, ExtensionText::usage_note, "");
+            write_startup_line(usage.str());
         } else if (argument.starts_with("--")) {
             const OptionValues values{&cursor, next_value};
             uint32_t effects = 0;
@@ -1462,14 +1536,14 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
         result.check_side_column || result.check_match_bars || !result.check_unit_pages.empty() ||
         result.check_kill_board || !result.check_unit_language.empty() ||
         result.check_language_switch || result.check_language_registry ||
-        result.check_language_notice || result.check_first_run || result.check_folder_chooser ||
-        result.check_patrol_reclaim || result.check_reclaim_cursor || result.check_build_preview ||
-        result.check_pointer_interfaces || result.check_megamap_clicks ||
-        result.check_radar_orders || result.check_touch_controls || result.check_pad_controls ||
-        result.check_running_while_inactive || result.check_director_view ||
-        result.check_director_render || result.check_interpolation || result.check_unit_playout ||
-        result.check_paused_save || result.check_simulation_hash || result.check_map_packs ||
-        result.check_map_browser || result.check_map_pack_lists;
+        result.check_language_notice || result.check_first_run || result.check_text_fit ||
+        result.check_folder_chooser || result.check_patrol_reclaim || result.check_reclaim_cursor ||
+        result.check_build_preview || result.check_pointer_interfaces ||
+        result.check_megamap_clicks || result.check_radar_orders || result.check_touch_controls ||
+        result.check_pad_controls || result.check_running_while_inactive ||
+        result.check_director_view || result.check_director_render || result.check_interpolation ||
+        result.check_unit_playout || result.check_paused_save || result.check_simulation_hash ||
+        result.check_map_packs || result.check_map_browser || result.check_map_pack_lists;
     // A capture and a showcase need the application's own loop and window,
     // which checks and benchmarks do not run.
     const bool check_run = result.fixed_clock || result.check_navigation ||

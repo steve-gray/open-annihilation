@@ -7,7 +7,7 @@
 // fetched, and at 640x480, 1280x720, 1920x1080 and 2560x1440 opens SELMAP and
 // presses MORE MAPS…. It requires the size class and scale the window gives
 // and the grid's columns there; MORE MAPS… over none of SELMAP's gadgets;
-// every card and control inside the browser's window; Installed packs showing
+// every card and control inside the browser's window; Downloads showing
 // the two check maps alone; the search "isle" leaving one; the clashing
 // map's card greyed with "New names" in the footer's reason and the primary
 // button disabled; and Select on the fitting map closing the browser with
@@ -461,37 +461,33 @@ void Runtime::check_map_browser() {
                 "the grid has " + std::to_string(first_row.size()) + " columns, not " +
                     std::to_string(window.columns) + on
             );
-            for (const std::string_view listed :
-                 {mb::name_filter_all,
-                  mb::name_filter_base,
-                  mb::name_filter_installed,
-                  mb::name_filter_online,
-                  mb::name_players_2,
-                  mb::name_players_3,
-                  mb::name_players_4,
-                  mb::name_players_many,
-                  mb::name_size_small,
-                  mb::name_size_medium,
-                  mb::name_size_large,
-                  mb::name_search,
-                  mb::name_cancel,
-                  mb::name_select})
+            constexpr std::string_view listed_names[] = {
+                mb::name_filter_all, mb::name_filter_game,
+                mb::name_filter_mod, mb::name_filter_downloads,
+                mb::name_players,    "maps-players.any",
+                "maps-players.2",    "maps-players.3",
+                "maps-players.4",    "maps-players.5-10",
+                mb::name_sizes,      "maps-size.any",
+                "maps-size.s",       "maps-size.m",
+                "maps-size.l",       mb::name_search,
+                mb::name_cancel,     mb::name_select,
+                mb::name_close,
+            };
+            for (const std::string_view listed : listed_names)
                 require(
                     named("oa." + std::string(listed)).has_value(),
                     "oa." + std::string(listed) + " is not listed" + on
                 );
         }
 
-        // Installed packs: the two check maps, and nothing else. Online: none.
-        click_named("oa.maps-filter-online");
-        require(shown_cards().empty(), "a map is offered online with every registry off" + on);
-        click_named("oa.maps-filter-installed");
+        // Downloads: the two check maps, and nothing offered online.
+        click_named("oa.maps-filter-downloads");
         {
             std::vector<std::string> names = shown_cards();
             std::sort(names.begin(), names.end());
             require(
                 names == std::vector<std::string>{clash, isle},
-                "Installed packs does not show the two check maps alone" + on
+                "Downloads does not show the two check maps alone" + on
             );
         }
 
@@ -537,8 +533,8 @@ void Runtime::check_map_browser() {
         // Acid Foursome is for 2 and 4 players. Its card reads 4, chip 4
         // lists it and chip 3 does not.
         constexpr std::string_view foursome = "Foursome";
-        click_named("oa.maps-filter-base");
-        click_named("oa.maps-players-4");
+        click_named("oa.maps-filter-game");
+        click_named("oa.maps-players.4");
         click_named("oa.maps-search");
         {
             const LayerAnswer typed = shown->text(foursome);
@@ -581,11 +577,11 @@ void Runtime::check_map_browser() {
             );
             std::cout << "map browser check: Acid Foursome: " << details << '\n';
         }
-        click_named("oa.maps-players-4");
-        click_named("oa.maps-players-3");
+        click_named("oa.maps-players.any");
+        click_named("oa.maps-players.3");
         frames(1);
-        require(shown_cards().empty(), "chip 3 lists Acid Foursome" + on);
-        click_named("oa.maps-players-3");
+        require(shown_cards().empty(), "3 players lists Acid Foursome" + on);
+        click_named("oa.maps-players.any");
         click_named("oa.maps-filter-all");
         click_named("oa.maps-search");
         for (std::size_t typed = foursome.size(); typed > 0; --typed) {
@@ -595,7 +591,7 @@ void Runtime::check_map_browser() {
         frames(1);
 
         // The search narrows the installed maps to one.
-        click_named("oa.maps-filter-installed");
+        click_named("oa.maps-filter-downloads");
         click_named("oa.maps-search");
         {
             const LayerAnswer answer = shown->text(kSearch);

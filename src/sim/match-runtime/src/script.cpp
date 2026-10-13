@@ -174,6 +174,10 @@ bool ScriptInstance::tick(uint32_t elapsed) {
     return true;
 }
 
+int32_t ScriptInstance::piece_turn_speed(uint32_t piece, uint32_t axis) const noexcept {
+    return vm_.turn_speed(piece, axis);
+}
+
 namespace {
 // Adapts the match's UnitValueHost to the canonical GET/SET services.
 struct ValueBridge {

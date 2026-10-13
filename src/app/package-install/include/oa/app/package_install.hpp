@@ -16,8 +16,11 @@
 // drops are deleted a little at a time (Discarder). One table of kinds says
 // what differs: the oamod kind, whose manifest is oamod.yaml and whose root
 // folder is Mods, the oamap kind, whose manifest is oamap.yaml and whose
-// root folder is Maps, and the oalang kind, whose manifest is language.yaml
-// and whose root folder is Languages. No function here throws: errors are values.
+// root folder is Maps, the oalang kind, whose manifest is language.yaml
+// and whose root folder is Languages, and the expansion kind, whose
+// manifest is oaexp.yaml. An expansion is copied by install_oaexp into
+// Expansions/<game>/<id> with the .oa-content record; its plan refuses the
+// generic unpack. No function here throws: errors are values.
 #pragma once
 
 #include "oa/app/package_install/origin.hpp"
@@ -391,7 +394,7 @@ struct PackageKind {
 
 /// Returns every kind the game installs, in table order.
 ///
-/// @return the kinds; oamod, then oamap, then oalang
+/// @return the kinds; oamod, then oamap, then oalang, then expansion
 [[nodiscard]] std::span<const PackageKind> package_kinds() noexcept;
 
 /// Returns the kind whose extension a file's name ends with, matched without case.

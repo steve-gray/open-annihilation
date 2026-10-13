@@ -370,7 +370,7 @@ void prepare_native_host(
     if (!native.data_folder.empty()) {
         const fs::path player =
             native.user_folder.empty() ? native.data_folder : native.user_folder;
-        // An earlier unpack in demo-1997 is copied once into games/totala-demo.
+        // An earlier unpack in demo-1997 is copied once into Games/totala-demo.
         std::ignore = adopt_legacy_demo(native.data_folder, player);
     }
 }

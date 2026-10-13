@@ -1297,29 +1297,6 @@ std::string_view reach_line(AccelerationReach reach) noexcept {
 /// The lowest level that draws units finer and needs the warning hint.
 constexpr AntiAliasing kDemandingLevel = AntiAliasing::x8;
 
-/// Enhanced anti-aliasing's hint while frames are drawn in Full, by the
-/// samples a pixel the graphics card draws the battlefield with: there the
-/// processor's anti-aliasing never runs, and the row's level is the
-/// samples across, as the renderer's texture limit and the memory allow
-/// at the window's size; where they allow fewer, the second line says so.
-constexpr Hint kFullAntiAliasingOff{
-    "In Full the graphics card draws the view 1:1;", "a level draws it finer for smoother edges."
-};
-constexpr std::string_view kFullAntiAliasingScaled = "and scales them down for smoother edges.";
-constexpr std::string_view kFullAntiAliasingCapped = "the most this window allows, scaled down.";
-constexpr Hint kFullAntiAliasingTwice{
-    "In Full the card draws 2x2 samples a pixel", kFullAntiAliasingScaled
-};
-constexpr Hint kFullAntiAliasingFourTimes{
-    "In Full the card draws 4x4 samples a pixel", kFullAntiAliasingScaled
-};
-constexpr Hint kFullAntiAliasingEightTimes{
-    "In Full the card draws 8x8 samples a pixel", kFullAntiAliasingScaled
-};
-constexpr Hint kFullAntiAliasingSixteenTimes{
-    "In Full the card draws 16x16 samples a pixel", kFullAntiAliasingScaled
-};
-
 /// Returns a line of a hint of two lines.
 ///
 /// @param lines the hint
@@ -1339,44 +1316,74 @@ AccelerationStatus acceleration_of(const SettingsModel& model) {
 
 /// Returns a line of Maximum zoom out's hint, by the choice.
 std::string max_zoom_out_hint(const SettingsModel& model, std::size_t line) {
-    // What the choice stops at, then what says how units look there.
-    constexpr std::string_view dots = "Graphics' Zoomed out units says how units look.";
+    // What the choice stops at, and how units look there.
     switch (model.settings->max_zoom_out) {
     case ZoomOutLimit::automatic:
         return line_of(
-            {"As far as the view always went: 1/6 of normal",
-             "size with Full hardware acceleration, else 1/2."},
+            {"As far as the view always went: 1/6 of normal size with Full hardware acceleration, "
+             "else 1/2."},
             line
         );
     case ZoomOutLimit::whole_map:
-        return line_of({"Out until the whole map fits the view.", dots}, line);
+        return line_of(
+            {"Out until the whole map fits the view. Graphics' Zoomed out units says how units "
+             "look."},
+            line
+        );
     case ZoomOutLimit::one_thirty_second:
-        return line_of({"Out to 1/32 of normal size, or the whole map.", dots}, line);
+        return line_of(
+            {"Out to 1/32 of normal size, or the whole map. Graphics' Zoomed out units says how "
+             "units look."},
+            line
+        );
     case ZoomOutLimit::one_sixteenth:
-        return line_of({"Out to 1/16 of normal size, or the whole map.", dots}, line);
+        return line_of(
+            {"Out to 1/16 of normal size, or the whole map. Graphics' Zoomed out units says how "
+             "units look."},
+            line
+        );
     case ZoomOutLimit::one_eighth:
-        return line_of({"Out to 1/8 of normal size, or the whole map.", dots}, line);
+        return line_of(
+            {"Out to 1/8 of normal size, or the whole map. Graphics' Zoomed out units says how "
+             "units look."},
+            line
+        );
     case ZoomOutLimit::one_quarter:
-        return line_of({"Out to 1/4 of normal size, or the whole map.", dots}, line);
+        return line_of(
+            {"Out to 1/4 of normal size, or the whole map. Graphics' Zoomed out units says how "
+             "units look."},
+            line
+        );
     case ZoomOutLimit::one_half:
-        return line_of({"Out to 1/2 of normal size, or the whole map.", dots}, line);
+        return line_of(
+            {"Out to 1/2 of normal size, or the whole map. Graphics' Zoomed out units says how "
+             "units look."},
+            line
+        );
     }
     return {};
 }
 
 /// Returns a line of Maximum zoom in's hint, by the choice.
 std::string max_zoom_in_hint(const SettingsModel& model, std::size_t line) {
-    // What the choice stops at, then every way of zooming it holds.
-    constexpr std::string_view every = "The wheel, a pinch and a controller stop there.";
+    // What the choice stops at, and every way of zooming it holds.
     switch (model.settings->max_zoom_in) {
     case ZoomInLimit::none:
-        return line_of({"Never closer than normal size.", every}, line);
+        return line_of(
+            {"Never closer than normal size. The wheel, a pinch and a controller stop there."}, line
+        );
     case ZoomInLimit::twice:
-        return line_of({"In to 2x normal size at most.", every}, line);
+        return line_of(
+            {"In to 2x normal size at most. The wheel, a pinch and a controller stop there."}, line
+        );
     case ZoomInLimit::three_times:
-        return line_of({"In to 3x normal size at most.", every}, line);
+        return line_of(
+            {"In to 3x normal size at most. The wheel, a pinch and a controller stop there."}, line
+        );
     case ZoomInLimit::four_times:
-        return line_of({"In to 4x normal size at most.", every}, line);
+        return line_of(
+            {"In to 4x normal size at most. The wheel, a pinch and a controller stop there."}, line
+        );
     }
     return {};
 }
@@ -1388,19 +1395,19 @@ std::string view_past_map_edge_hint(const SettingsModel& model, std::size_t line
     switch (model.settings->view_past_map_edge) {
     case ViewPastMapEdge::off:
         return line_of(
-            {"The view stays on the map, as the game kept it.",
-             "With more than the map in view, it is centred."},
+            {"The view stays on the map, as the game kept it. With more than the map in view, it "
+             "is centred."},
             line
         );
     case ViewPastMapEdge::one_quarter:
         return line_of(
-            {"Up to a quarter of the battlefield past the", "map's edges, however the view moves."},
+            {"Up to a quarter of the battlefield past the map's edges, however the view moves."},
             line
         );
     case ViewPastMapEdge::one_half:
         return line_of(
-            {"Up to half the battlefield past the map's edges;",
-             "a zoom keeps the ground under the pointer."},
+            {"Up to half the battlefield past the map's edges; a zoom keeps the ground under the "
+             "pointer."},
             line
         );
     }
@@ -1429,31 +1436,45 @@ std::size_t max_frame_rate_lines(const SettingsModel& model) {
     return model.dialog != nullptr && model.dialog->steam_deck_panel_hz != 0 ? 2 : 1;
 }
 
-/// Returns a line of Enhanced anti-aliasing's hint, by the level and Full's samples.
+/// Returns Enhanced anti-aliasing's hint, the whole sentence for the level
+/// and for what Full draws.
 std::string anti_aliasing_hint(const SettingsModel& model, std::size_t line) {
+    if (line != 0)
+        return {};
     const EngineSettings& settings = *model.settings;
     const uint8_t drawn = acceleration_of(model).full_supersample;
-    Hint lines{};
     if (drawn != 0) {
-        lines = drawn >= 16  ? kFullAntiAliasingSixteenTimes
-                : drawn >= 8 ? kFullAntiAliasingEightTimes
-                : drawn >= 4 ? kFullAntiAliasingFourTimes
-                : drawn >= 2 ? kFullAntiAliasingTwice
-                             : kFullAntiAliasingOff;
         // Fewer samples than the row asks: the texture limit or the memory
         // allows no more at this window's size.
-        if (drawn >= 2 && drawn < static_cast<uint8_t>(settings.anti_aliasing))
-            lines[1] = kFullAntiAliasingCapped;
-    } else if (settings.anti_aliasing == AntiAliasing::x16) {
-        lines = {"Units drawn at 16x and scaled down.", "Needs a fast CPU."};
-    } else if (
-        static_cast<uint8_t>(settings.anti_aliasing) >= static_cast<uint8_t>(kDemandingLevel)
-    ) {
-        lines = {"Units drawn at 8x and scaled down.", "Needs a fast CPU."};
-    } else {
-        lines = {"Units drawn at higher resolution and scaled down", "for smoother edges."};
+        const bool capped = drawn >= 2 && drawn < static_cast<uint8_t>(settings.anti_aliasing);
+        if (drawn >= 16)
+            return capped ? "In Full the card draws 16x16 samples a pixel the most this window "
+                            "allows, scaled down."
+                          : "In Full the card draws 16x16 samples a pixel and scales them down for "
+                            "smoother edges.";
+        if (drawn >= 8)
+            return capped ? "In Full the card draws 8x8 samples a pixel the most this window "
+                            "allows, scaled down."
+                          : "In Full the card draws 8x8 samples a pixel and scales them down for "
+                            "smoother edges.";
+        if (drawn >= 4)
+            return capped ? "In Full the card draws 4x4 samples a pixel the most this window "
+                            "allows, scaled down."
+                          : "In Full the card draws 4x4 samples a pixel and scales them down for "
+                            "smoother edges.";
+        if (drawn >= 2)
+            return capped ? "In Full the card draws 2x2 samples a pixel the most this window "
+                            "allows, scaled down."
+                          : "In Full the card draws 2x2 samples a pixel and scales them down for "
+                            "smoother edges.";
+        return "In Full the graphics card draws the view 1:1; a level draws it finer for smoother "
+               "edges.";
     }
-    return line_of(lines, line);
+    if (settings.anti_aliasing == AntiAliasing::x16)
+        return "Units drawn at 16x and scaled down. Needs a fast CPU.";
+    if (static_cast<uint8_t>(settings.anti_aliasing) >= static_cast<uint8_t>(kDemandingLevel))
+        return "Units drawn at 8x and scaled down. Needs a fast CPU.";
+    return "Units drawn at higher resolution and scaled down for smoother edges.";
 }
 
 /// Returns a line of Hardware acceleration's status.
@@ -1467,15 +1488,14 @@ std::string menu_scaling_hint(const SettingsModel& model, std::size_t line) {
     // What the way chosen does to the menus.
     switch (model.settings->menu_scaling) {
     case MenuScaling::sharp:
-        return line_of({"The menus fill the window, every pixel", "as wide as the next."}, line);
+        return line_of({"The menus fill the window, every pixel as wide as the next."}, line);
     case MenuScaling::whole_steps:
         return line_of(
-            {"The largest whole-number scale that fits:", "smaller menus, every pixel square."},
-            line
+            {"The largest whole-number scale that fits: smaller menus, every pixel square."}, line
         );
     case MenuScaling::unfiltered:
         return line_of(
-            {"The menus fill the window, unfiltered,", "as the game always drew them."}, line
+            {"The menus fill the window, unfiltered, as the game always drew them."}, line
         );
     }
     return {};
@@ -1486,17 +1506,14 @@ std::string explosion_flash_hint(const SettingsModel& model, std::size_t line) {
     // What the level chosen draws; a mod's profile may draw less.
     switch (model.settings->explosion_flash) {
     case ExplosionFlash::off:
-        return line_of(
-            {"Explosions do not light up the ground,", "whatever a mod asks for."}, line
-        );
+        return line_of({"Explosions do not light up the ground, whatever a mod asks for."}, line);
     case ExplosionFlash::reduced:
         return line_of(
-            {"Explosions light up the ground at half", "strength, or less where a mod asks."}, line
+            {"Explosions light up the ground at half strength, or less where a mod asks."}, line
         );
     case ExplosionFlash::full:
         return line_of(
-            {"Explosions light up the ground as the game", "drew it, or less where a mod asks."},
-            line
+            {"Explosions light up the ground as the game drew it, or less where a mod asks."}, line
         );
     }
     return {};
@@ -1509,14 +1526,12 @@ std::string zoomed_out_units_hint(const SettingsModel& model, std::size_t line) 
     case ZoomedOutUnits::rendered:
     case ZoomedOutUnits::icons:
         return line_of(
-            {"Units are drawn as models at every zoom.",
-             "Far out on a large map, needs a fast CPU."},
+            {"Units are drawn as models at every zoom. Far out on a large map, needs a fast CPU."},
             line
         );
     case ZoomedOutUnits::dots:
         return line_of(
-            {"Past After zoom, each unit is a dot of its",
-             "owner's colour, framed while selected."},
+            {"Past After zoom, each unit is a dot of its owner's colour, framed while selected."},
             line
         );
     }
@@ -1525,23 +1540,43 @@ std::string zoomed_out_units_hint(const SettingsModel& model, std::size_t line) 
 
 /// Returns a line of After zoom's hint, by the choice.
 std::string zoomed_out_after_hint(const SettingsModel& model, std::size_t line) {
-    // Where the dots begin, then what is drawn nearer.
-    constexpr std::string_view nearer = "Closer in, units are drawn as models.";
+    // Where the dots begin, and what is drawn nearer.
     switch (model.settings->zoomed_out_after) {
     case ZoomedOutAfter::one_half:
-        return line_of({"Dots farther out than 1/2 of normal size.", nearer}, line);
+        return line_of(
+            {"Dots farther out than 1/2 of normal size. Closer in, units are drawn as models."},
+            line
+        );
     case ZoomedOutAfter::one_third:
-        return line_of({"Dots farther out than 1/3 of normal size.", nearer}, line);
+        return line_of(
+            {"Dots farther out than 1/3 of normal size. Closer in, units are drawn as models."},
+            line
+        );
     case ZoomedOutAfter::one_quarter:
-        return line_of({"Dots farther out than 1/4 of normal size.", nearer}, line);
+        return line_of(
+            {"Dots farther out than 1/4 of normal size. Closer in, units are drawn as models."},
+            line
+        );
     case ZoomedOutAfter::one_sixth:
-        return line_of({"Dots farther out than 1/6 of normal size.", nearer}, line);
+        return line_of(
+            {"Dots farther out than 1/6 of normal size. Closer in, units are drawn as models."},
+            line
+        );
     case ZoomedOutAfter::one_eighth:
-        return line_of({"Dots farther out than 1/8 of normal size.", nearer}, line);
+        return line_of(
+            {"Dots farther out than 1/8 of normal size. Closer in, units are drawn as models."},
+            line
+        );
     case ZoomedOutAfter::one_twelfth:
-        return line_of({"Dots farther out than 1/12 of normal size.", nearer}, line);
+        return line_of(
+            {"Dots farther out than 1/12 of normal size. Closer in, units are drawn as models."},
+            line
+        );
     case ZoomedOutAfter::one_sixteenth:
-        return line_of({"Dots farther out than 1/16 of normal size.", nearer}, line);
+        return line_of(
+            {"Dots farther out than 1/16 of normal size. Closer in, units are drawn as models."},
+            line
+        );
     }
     return {};
 }
@@ -1552,14 +1587,12 @@ std::string window_frame_hint(const SettingsModel& model, std::size_t line) {
     switch (model.settings->window_frame) {
     case WindowFrame::hidden_in_play:
         return line_of(
-            {"A window hides its title bar and borders",
-             "while a game is played; menus show them."},
+            {"A window hides its title bar and borders while a game is played; menus show them."},
             line
         );
     case WindowFrame::always_shown:
         return line_of(
-            {"A window shows its title bar and borders", "on every screen, a game's included."},
-            line
+            {"A window shows its title bar and borders on every screen, a game's included."}, line
         );
     }
     return {};
@@ -1570,23 +1603,21 @@ std::string hud_scaling_hint(const SettingsModel& model, std::size_t line) {
     // The size the game's side column and bars are drawn at.
     if (model.settings->hud_scaling)
         return line_of(
-            {"The side panel and bars grow with the window,",
-             "up to twice the original game's size."},
+            {"The side panel and bars grow with the window, up to twice the original game's size."},
             line
         );
     return line_of(
-        {"The side panel and bars keep the original", "game's size on every window."}, line
+        {"The side panel and bars keep the original game's size on every window."}, line
     );
 }
 
 /// Returns a line of Text size's hint, by the modern fonts' switch.
 std::string text_size_hint(const SettingsModel& model, std::size_t line) {
-    return line_of(
-        {"The size of game text in the modern fonts.",
-         model.settings->modern_fonts ? "Larger sizes are easier to read."
-                                      : "The game's own fonts have fixed sizes."},
-        line
-    );
+    if (line != 0)
+        return {};
+    if (model.settings->modern_fonts)
+        return "The size of game text in the modern fonts. Larger sizes are easier to read.";
+    return "The size of game text in the modern fonts. The game's own fonts have fixed sizes.";
 }
 
 /// Returns a line of One-finger drag's hint, by the way chosen.
@@ -1594,11 +1625,11 @@ std::string touch_drag_hint(const SettingsModel& model, std::size_t line) {
     // What a drag does now, and what still gives the other.
     switch (model.settings->touch_drag) {
     case TouchDrag::automatic:
-        return line_of({"Automatic: a selection box on a tablet,", "scrolling on a phone."}, line);
+        return line_of({"Automatic: a selection box on a tablet, scrolling on a phone."}, line);
     case TouchDrag::box:
-        return line_of({"A drag draws a selection box;", "two fingers scroll the map."}, line);
+        return line_of({"A drag draws a selection box; two fingers scroll the map."}, line);
     case TouchDrag::scroll:
-        return line_of({"A drag scrolls the map;", "hold, then drag, for a selection box."}, line);
+        return line_of({"A drag scrolls the map; hold, then drag, for a selection box."}, line);
     }
     return {};
 }
@@ -1607,18 +1638,18 @@ std::string touch_drag_hint(const SettingsModel& model, std::size_t line) {
 std::string touch_latches_hint(const SettingsModel& model, std::size_t line) {
     if (model.settings->touch_latches == TouchLatches::one_action)
         return line_of(
-            {"A tapped QUEUE, ADD or x5 turns off", "after the next order or selection."}, line
+            {"A tapped QUEUE, ADD or x5 turns off after the next order or selection."}, line
         );
-    return line_of({"A tapped QUEUE, ADD or x5 stays on", "until it is tapped again."}, line);
+    return line_of({"A tapped QUEUE, ADD or x5 stays on until it is tapped again."}, line);
 }
 
 /// Returns a line of Scheme's hint, by the scheme.
 std::string pad_scheme_hint(const SettingsModel& model, std::size_t line) {
     if (model.settings->pad_scheme == pad_controls::Scheme::sticks)
-        return line_of({"The right stick moves the pointer and the left", "stick the map."}, line);
+        return line_of({"The right stick moves the pointer and the left stick the map."}, line);
     return line_of(
-        {"The right trackpad points and the left one moves",
-         "the map; a pad without trackpads plays Sticks."},
+        {"The right trackpad points and the left one moves the map; a pad without trackpads plays "
+         "Sticks."},
         line
     );
 }
@@ -1635,12 +1666,12 @@ std::string pad_right_stick_hint(const SettingsModel& model, std::size_t line) {
     switch (model.settings->pad_right_stick) {
     case pad_controls::RightStick::zoom_and_pages:
         return line_of(
-            {"Up and down zoom about the pointer; a flick left",
-             "or right turns the build page while building."},
+            {"Up and down zoom about the pointer; a flick left or right turns the build page while "
+             "building."},
             line
         );
     case pad_controls::RightStick::pointer:
-        return line_of({"The right stick moves the pointer, as in the", "Sticks scheme."}, line);
+        return line_of({"The right stick moves the pointer, as in the Sticks scheme."}, line);
     case pad_controls::RightStick::nothing:
         return line_of({"The right stick does nothing.", {}}, line);
     }
@@ -1683,7 +1714,7 @@ std::string game_files_summary_hint(const SettingsModel& model, std::size_t line
 
 /// Include in device backups' hint: {device} is the device's own name.
 constexpr Hint kBackupsHint{
-    "After restoring this {device} from a backup,", "add the game files again."
+    "After restoring this {device} from a backup, add the game files again."
 };
 
 /// Returns a line of Include in device backups' hint, naming the device.
@@ -1862,37 +1893,31 @@ constexpr Spec kit_gallery_row() noexcept {
     return changing(spec, &kit_gallery_hint, &kit_gallery_hint_count);
 }
 
-/// File Type Registration's heading: what a switch does, on two lines that
-/// fit a Compact hint.
-constexpr std::string_view file_type_heading_lead = "Open these files with the game";
-constexpr std::string_view file_type_heading_rest = "from your file manager.";
+/// File Type Registration's heading, one sentence the row wraps.
+constexpr std::string_view file_type_heading_text =
+    "Open these files with the game from your file manager.";
 /// The text row's first line, on every system that shows it.
 constexpr std::string_view file_types_taken_text =
     "The system takes these file types from the app.";
-/// The text row's Finder lines. iOS has no Finder, so it shows neither.
-constexpr std::string_view file_types_finder_lead = "Finder's Get Info › Open with";
-constexpr std::string_view file_types_finder_rest = "chooses another opener.";
+/// The Finder sentence. iOS has no Finder, so it shows none.
+constexpr std::string_view file_types_finder_text =
+    "Finder's Get Info › Open with chooses another opener.";
 
-/// The lines under File Type Registration. While macOS kept this copy as an
-/// opener, that sentence replaces the usual hint; otherwise the usual two.
+/// The line under File Type Registration. While macOS kept this copy as an
+/// opener, that sentence replaces the usual hint.
 std::vector<std::string> file_type_heading_lines(const SettingsModel& model) {
     if (model.dialog != nullptr && !model.dialog->file_type_kept_hint.empty())
-        return break_lines(
-            model.dialog->file_type_kept_hint, line_characters(model), most_notice_lines
-        );
-    return {
-        std::string(file_type_heading_lead),
-        std::string(file_type_heading_rest),
-    };
+        return {model.dialog->file_type_kept_hint};
+    return {std::string(file_type_heading_text)};
 }
 
-/// Returns a line under File Type Registration.
+/// Returns the line under File Type Registration.
 std::string file_type_heading_hint(const SettingsModel& model, std::size_t line) {
     const std::vector<std::string> lines = file_type_heading_lines(model);
     return line < lines.size() ? lines[line] : std::string{};
 }
 
-/// Returns how many lines File Type Registration's hint takes.
+/// Returns how many lines File Type Registration's hint takes before it wraps.
 std::size_t file_type_heading_hint_count(const SettingsModel& model) {
     return file_type_heading_lines(model).size();
 }
@@ -1904,42 +1929,28 @@ constexpr Spec file_type_heading_row() noexcept {
     return changing(spec, &file_type_heading_hint, &file_type_heading_hint_count);
 }
 
-/// The Finder sentence, as two catalog lines joined where a hint line holds it.
-std::string file_types_finder_sentence() {
-    return std::string(shown_text(file_types_finder_lead)) + " " +
-           std::string(shown_text(file_types_finder_rest));
-}
-
-/// Tells whether the Finder sentence fits one hint line at the dialog's class.
-bool file_types_finder_fits(const SettingsModel& model) {
-    return kit::character_count(file_types_finder_sentence()) <= line_characters(model);
-}
-
-/// Returns a line of the File types text row. The system's sentence is
-/// always the first. On a Mac the Finder sentence follows, on one line
-/// where it fits and on its two catalog lines at Compact. iOS has no Finder.
+/// Returns a line of the File types text row. The system's sentence is the
+/// first. On a Mac the Finder sentence follows, and the row wraps it. iOS
+/// has no Finder.
 std::string file_types_note_hint(const SettingsModel& model, std::size_t line) {
     if (line == 0)
-        return std::string(shown_text(file_types_taken_text));
+        return std::string(file_types_taken_text);
+    static_cast<void>(model);
 #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
     return {};
 #else
-    if (file_types_finder_fits(model))
-        return line == 1 ? file_types_finder_sentence() : std::string{};
     if (line == 1)
-        return std::string(shown_text(file_types_finder_lead));
-    if (line == 2)
-        return std::string(shown_text(file_types_finder_rest));
+        return std::string(file_types_finder_text);
     return {};
 #endif
 }
 
-/// Returns how many lines the File types text row takes.
-std::size_t file_types_note_hint_count(const SettingsModel& model) {
+/// Returns how many lines the File types text row takes before they wrap.
+std::size_t file_types_note_hint_count(const SettingsModel&) {
 #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
     return 1;
 #else
-    return file_types_finder_fits(model) ? 2 : 3;
+    return 2;
 #endif
 }
 
@@ -2010,12 +2021,12 @@ using PanelBackground = ThreeWay<&panel_background, kPanelBackgroundCaptions>;
 using MexSnap = SnapRadius<&ModOptions::mex_snap_radius, &ModOptions::mex_snap_most>;
 using WreckSnap = SnapRadius<&ModOptions::wreck_snap_radius, &ModOptions::wreck_snap_most>;
 
-/// What a patrolling builder's row says; it shows its first line.
-constexpr Hint kPatrolHint{"What patrolling builders do.", "Applies from the next game."};
-/// What a guarding builder's row says; it shows its first line.
-constexpr Hint kGuardHint{"What guarding builders do.", "Applies from the next game."};
+/// What a patrolling builder's row says.
+constexpr Hint kPatrolHint{"What patrolling builders do. Applies from the next game."};
+/// What a guarding builder's row says.
+constexpr Hint kGuardHint{"What guarding builders do. Applies from the next game."};
 
-/// Makes a patrolling or guarding builder's row, which shows one hint line.
+/// Makes a patrolling or guarding builder's row. Its hint is one sentence.
 constexpr Spec
 builders_row(std::string_view id, std::string_view label, Stepper stepper, Hint hint) noexcept {
     Spec spec = kit::slider(id, label, stepper, hint);
@@ -2061,20 +2072,20 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = changing(wide(kit::choice("max-zoom-out", "Maximum zoom out",
                                        DropDown<ZoomOutLimit, 7, zoom_out_limits, &E::max_zoom_out, kZoomOutCaptions, &table_word<zoom_out_words, ZoomOutLimit>>::stepper()),
                            choice_width),
-                      &max_zoom_out_hint, &lines<2>)},
+                      &max_zoom_out_hint, &lines<1>)},
     {.setting = S::max_zoom_in,
      .spec = changing(wide(kit::choice("max-zoom-in", "Maximum zoom in",
                                        DropDown<ZoomInLimit, 4, zoom_in_limits, &E::max_zoom_in, kZoomInCaptions, &table_word<zoom_in_words, ZoomInLimit>>::stepper()),
                            choice_width),
-                      &max_zoom_in_hint, &lines<2>)},
+                      &max_zoom_in_hint, &lines<1>)},
     {.setting = S::view_past_map_edge,
      .spec = changing(kit::levels("view-past-map-edge", "View past the map's edge",
                                   LevelStrip<ViewPastMapEdge, 3, view_past_map_edge_choices, &E::view_past_map_edge, kViewPastMapEdgeCaptions, &table_word<view_past_map_edge_words, ViewPastMapEdge>>::stepper(),
                                   view_past_map_edge_level_width),
-                      &view_past_map_edge_hint, &lines<2>)},
+                      &view_past_map_edge_hint, &lines<1>)},
     {.setting = S::escape_opens_menu,
      .spec = engine_switch<&E::escape_opens_menu>("escape-opens-menu", "Escape opens the game menu",
-                                                  {"The first press clears the selection,", "the second opens the menu."})},
+                                                  {"The first press clears the selection, the second opens the menu."})},
     {.setting = S::switch_alt,
      .spec = engine_switch<&E::switch_alt>("switch-alt", "Select groups without Alt",
                                            {"A number key selects its group on its own.", {}})},
@@ -2082,7 +2093,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = slider("unit-limit", "Unit limit",
                     {&unit_limit_stops, &unit_limit_stop, &set_unit_limit_stop,
                      &stop_caption<&unit_limit_stop, &set_unit_limit_stop, &unit_limit_text>, nullptr},
-                    {"Units each player can have.", "Applies from the next game."}),
+                    {"Units each player can have. Applies from the next game."}),
      .lock = &Locks::unit_limit,
      .copy = &copy_field<&E::unit_limit>},
     {.setting = S::max_frame_rate,
@@ -2094,11 +2105,11 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = changing(kit::levels("anti-aliasing", "Enhanced anti-aliasing",
                                   LevelStrip<AntiAliasing, 5, anti_aliasing_levels, &E::anti_aliasing, kAntiAliasingCaptions, &anti_aliasing_word>::stepper(),
                                   level_width),
-                      &anti_aliasing_hint, &lines<2>)},
+                      &anti_aliasing_hint, &lines<1>)},
     {.setting = S::screen_size,
      .spec = slider("screen-size", "Screen size",
                     {&screen_size_stops, &screen_size_stop, &set_screen_size_stop, &screen_size_caption, nullptr},
-                    {"Full screen at this size, or a window of it.", "Applies when you press OK."}),
+                    {"Full screen at this size, or a window of it. Applies when you press OK."}),
      .copy = &copy_field<&E::screen_size>},
     {.setting = S::developer_mode,
      .spec = engine_switch<&E::developer_mode>("developer-mode", "Enable Developer Mode",
@@ -2119,7 +2130,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .copy = &copy_field<&E::language>},
     {.setting = S::modern_fonts,
      .spec = kit::toggle("modern-fonts", "Use modern fonts for game text", &engine_flag<&E::modern_fonts>, &set_modern_fonts,
-                         {"Modern fonts for in-game text,", "including internationalization."}),
+                         {"Modern fonts for in-game text, including internationalization."}),
      .lock = &Locks::modern_fonts},
     {.setting = S::text_outline,
      .spec = engine_switch<&E::text_outline>("text-outline", "Font outline",
@@ -2132,18 +2143,18 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                                                 {"A shaded box behind each line of game text.", {}})},
     {.setting = S::unicode_chat,
      .spec = engine_switch<&E::unicode_chat>("unicode-chat", "Enable Unicode Multiplayer Chat",
-                                             {"Chat in any language with players who have it;", "others see ? for letters they lack."}),
+                                             {"Chat in any language with players who have it; others see ? for letters they lack."}),
      .lock = &Locks::unicode_chat},
     {.setting = S::text_size,
      .spec = changing(linear<TextSize, &text_size_text>("text-size", "Text size", {}),
-                      &text_size_hint, &lines<2>),
+                      &text_size_hint, &lines<1>),
      .lock = &Locks::text_size,
      .copy = &copy_field<&E::text_size>},
     {.setting = S::touch_drag,
      .spec = changing(kit::levels("touch-drag", "One-finger drag",
                                   LevelStrip<TouchDrag, 3, touch_drag_choices, &E::touch_drag, kTouchDragCaptions, &text_word<&touch_drag_text, TouchDrag>>::stepper(),
                                   touch_drag_level_width),
-                      &touch_drag_hint, &lines<2>)},
+                      &touch_drag_hint, &lines<1>)},
     {.setting = S::touch_hold_delay,
      .spec = linear<HoldDelay, &hold_delay_text>("touch-hold-delay", "Hold delay",
                                                  {"How long a finger or button is held for a hold.", {}}),
@@ -2152,23 +2163,23 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = changing(kit::levels("touch-latches", "QUEUE and ADD",
                                   LevelStrip<TouchLatches, 2, touch_latches_choices, &E::touch_latches, kTouchLatchesCaptions, &text_word<&touch_latches_text, TouchLatches>>::stepper(),
                                   touch_latches_level_width),
-                      &touch_latches_hint, &lines<2>)},
+                      &touch_latches_hint, &lines<1>)},
     {.setting = S::touch_haptics,
      .spec = engine_switch<&E::touch_haptics>("touch-haptics", "Haptics",
                                               {"A short vibration as a touch control acts.", {}})},
     {.setting = S::touch_left_handed,
      .spec = engine_switch<&E::touch_left_handed>("touch-left-handed", "Left-handed layout",
-                                                  {"The minimap and the thumb controls on the", "right, the orders on the left."})},
+                                                  {"The minimap and the thumb controls on the right, the orders on the left."})},
     {.setting = S::touch_control_size,
      .spec = kit::levels("touch-control-size", "Control size",
                          LevelStrip<ControlSize, 3, control_size_choices, &E::touch_control_size, kControlSizeCaptions, &table_word<control_size_words, ControlSize>>::stepper(),
                          control_size_level_width,
-                         {"The size of the touch controls; the game's own", "screens keep theirs."})},
+                         {"The size of the touch controls; the game's own screens keep theirs."})},
     {.setting = S::pad_scheme,
      .spec = changing(kit::levels("pad-scheme", "Scheme",
                                   LevelStrip<pad_controls::Scheme, 2, kSchemeChoices, &E::pad_scheme, kSchemeCaptions, &table_word<scheme_words, pad_controls::Scheme>>::stepper(),
                                   scheme_level_width),
-                      &pad_scheme_hint, &lines<2>)},
+                      &pad_scheme_hint, &lines<1>)},
     {.setting = S::pad_right_trackpad,
      .spec = changing(kit::levels("pad-right-trackpad", "Right trackpad",
                                   LevelStrip<pad_controls::RightTrackpad, 2, kRightTrackpadChoices, &E::pad_right_trackpad, kRightTrackpadCaptions, &table_word<right_trackpad_words, pad_controls::RightTrackpad>>::stepper(),
@@ -2190,7 +2201,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = changing(kit::levels("pad-right-stick", "Right stick",
                                   LevelStrip<pad_controls::RightStick, 3, kRightStickChoices, &E::pad_right_stick, kRightStickCaptions, &table_word<right_stick_words, pad_controls::RightStick>>::stepper(),
                                   right_stick_level_width),
-                      &pad_right_stick_hint, &lines<2>)},
+                      &pad_right_stick_hint, &lines<1>)},
     {.setting = S::pad_magnetism,
      .spec = engine_switch<&E::pad_magnetism>("pad-magnetism", "Magnetism (stick pointer)",
                                               {"The stick pointer settles on a lone unit near it.", {}})},
@@ -2215,7 +2226,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                   choice_width)},
     {.setting = S::pad_left_handed,
      .spec = engine_switch<&E::pad_left_handed>("pad-left-handed", "Left-handed",
-                                                {"Mirrors the roles: the left pad points, the right", "pad moves the map, triggers and grips swap."})},
+                                                {"Mirrors the roles: the left pad points, the right pad moves the map, triggers and grips swap."})},
     {.setting = S::pad_steam_input_notice,
      .spec = steam_input_notice_row()},
     {.setting = S::snap_override_key,
@@ -2275,7 +2286,7 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = game_files_summary_row()},
     {.setting = S::game_files_backed_up,
      .spec = changing(engine_switch<&E::game_files_backed_up>("game-files-backed-up", "Include in device backups", kBackupsHint),
-                      &backups_hint, &lines<2>)},
+                      &backups_hint, &lines<1>)},
     {.setting = S::game_files_location,
      .spec = game_files_location_row()},
     {.setting = S::user_folder,
@@ -2285,39 +2296,39 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = changing(kit::levels("menu-scaling", "Menu scaling",
                                   LevelStrip<MenuScaling, 3, menu_scaling_choices, &E::menu_scaling, kMenuScalingCaptions, &text_word<&menu_scaling_text, MenuScaling>>::stepper(),
                                   menu_scaling_level_width),
-                      &menu_scaling_hint, &lines<2>)},
+                      &menu_scaling_hint, &lines<1>)},
     {.setting = S::native_density,
      .spec = engine_switch<&E::native_density>("native-density", "Native pixel density",
-                                               {"The display's own pixel density (Retina on a Mac).", "Applies from the next start."}),
+                                               {"The display's own pixel density (Retina on a Mac). Applies from the next start."}),
      .lock = &Locks::native_density},
     {.setting = S::explosion_flash,
      .spec = changing(kit::levels("explosion-flash", "Explosion flash",
                                   LevelStrip<ExplosionFlash, 3, explosion_flash_choices, &E::explosion_flash, kExplosionFlashCaptions, &table_word<explosion_flash_words, ExplosionFlash>>::stepper(),
                                   explosion_flash_level_width),
-                      &explosion_flash_hint, &lines<2>)},
+                      &explosion_flash_hint, &lines<1>)},
     {.setting = S::zoomed_out_units,
      .spec = changing(kit::levels("zoomed-out-units", "Zoomed out units",
                                   LevelStrip<ZoomedOutUnits, 3, zoomed_out_units_choices, &E::zoomed_out_units, kZoomedOutUnitsCaptions, &zoomed_out_units_word, offered_zoomed_out_units>::stepper(),
                                   zoomed_out_units_level_width),
-                      &zoomed_out_units_hint, &lines<2>),
+                      &zoomed_out_units_hint, &lines<1>),
      .copy = &copy_field<&E::zoomed_out_units>},
     {.setting = S::zoomed_out_after,
      .spec = changing(wide(kit::choice("zoomed-out-after", "After zoom",
                                        DropDown<ZoomedOutAfter, 7, zoomed_out_afters, &E::zoomed_out_after, kZoomedOutAfterCaptions, &table_word<zoomed_out_after_words, ZoomedOutAfter>>::stepper()),
                            choice_width),
-                      &zoomed_out_after_hint, &lines<2>),
+                      &zoomed_out_after_hint, &lines<1>),
      .lock = &Locks::zoomed_out_after},
     {.setting = S::window_frame,
      .spec = changing(kit::levels("window-frame", "Window frame",
                                   LevelStrip<WindowFrame, 2, window_frame_choices, &E::window_frame, kWindowFrameCaptions, &table_word<window_frame_words, WindowFrame>>::stepper(),
                                   window_frame_level_width),
-                      &window_frame_hint, &lines<2>)},
+                      &window_frame_hint, &lines<1>)},
     {.setting = S::hud_scaling,
      .spec = changing(engine_switch<&E::hud_scaling>("hud-scaling", "HUD scaling", {}),
-                      &hud_scaling_hint, &lines<2>)},
+                      &hud_scaling_hint, &lines<1>)},
     {.setting = S::interface_size,
      .spec = wide(kit::choice("interface-size", "Interface size", kInterfaceSizeStepper,
-                              {"How large Open Annihilation's own screens", "are drawn. Auto suits the window's height."}),
+                              {"How large Open Annihilation's own screens are drawn. Auto suits the window's height."}),
                   choice_width)},
     {.setting = S::more_in_library,
      .spec = more_in_library_row()},

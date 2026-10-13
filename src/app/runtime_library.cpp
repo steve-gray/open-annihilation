@@ -130,6 +130,10 @@ library::Kind kind_of(data::catalogue::Kind kind) noexcept {
         return library::Kind::map_pack;
     case data::catalogue::Kind::oalang:
         return library::Kind::language;
+    case data::catalogue::Kind::expansion:
+        // The caller lists an expansion on downloadable_expansions and does
+        // not build a Library row for it.
+        return library::Kind::mod;
     }
     return library::Kind::mod;
 }
@@ -1267,6 +1271,19 @@ library::Inputs Runtime::library_inputs() {
             if (entry.package == nullptr)
                 continue;
             const data::catalogue::Package& package = *entry.package;
+            if (package.kind == data::catalogue::Kind::expansion) {
+                library::DownloadableExpansion offered;
+                offered.id = package.id;
+                offered.registry = entry.registry;
+                offered.name = package.name;
+                offered.version = package.version;
+                offered.file = package.file;
+                offered.sha256 = package.sha256;
+                offered.size = package.size;
+                offered.extends = package.extends;
+                inputs.downloadable_expansions.push_back(std::move(offered));
+                continue;
+            }
             library::Listing listing;
             listing.registry = entry.registry;
             listing.kind = kind_of(package.kind);
@@ -1558,9 +1575,10 @@ library::Inputs Runtime::library_inputs() {
     inputs.in_match = screen_ == Screen::match || match_ != nullptr;
     inputs.mod_from_command_line = !options_.mod_dir.empty() || options_.base_game;
 
-    // The Active tab. The mod played, as list_offered_mods finds it: the
-    // folder layered over the game folder, with its title, version and
-    // badge as read at start.
+    // The Active tab. The mod played is the folder this start layered
+    // (layered_mod_folder), with its title, version and badge as read at
+    // start. An expansion bundle is not that folder, so the tile says No
+    // Mod while only expansions are mounted.
     const EngineSettingsState& mods = engine_settings_state();
     if (!mods.playing_mod_folder.empty()) {
         for (std::size_t index = 0;
@@ -2181,8 +2199,19 @@ struct Runtime::LibraryScreen final : LayerScreen {
             );
             return;
         }
+        // The copy is in the player's folder. A rebuild reads that, and drops
+        // a chooser whose choice is not stored yet, so the chooser is opened
+        // again on the game just copied. The files stay as they are until the
+        // Library closes.
         host.rebuild(runtime_);
-        library::refresh_base_chooser(host.model);
+        if (!host.model.chooser.open) {
+            const library::BaseOpen opened = library::open_base_chooser(host.model);
+            if (opened.opened) {
+                host.state.interaction.focused = opened.focus;
+                host.state.interaction.focus_shown = opened.focus != kit::no_control;
+            }
+        }
+        library::mark_base_game(host.model, id);
         const library::BaseUse used = library::use_marked_base_game(host.model);
         if (used.kind == library::BaseUseKind::needs_source)
             library::note_base_copy_problem(host.model, library::words::base_copy_failed);
