@@ -814,6 +814,12 @@ author: {name: "Core Prime"}
 packaging: {revision: 1, date: "2026-11-01", packager: "oa-tool 0.8"}
 maps:
   - stem: "isle"
+    name: "Isle"
+    players: 2
+    size: 8x8
+    files:
+      - maps/isle.ota
+      - maps/isle.tnt
 )";
     Manifest manifest;
     if (read_ok(named, ManifestUse::source, manifest)) {
