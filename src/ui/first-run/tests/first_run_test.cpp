@@ -673,6 +673,82 @@ void check_leave_word() {
     }
 }
 
+/// The game step's column is Settings' panel, and its rows leave room between them.
+void check_game_column() {
+    using oa::ui::first_run::GameSource;
+    using oa::ui::first_run::SourceChip;
+    using oa::ui::first_run::SourceMark;
+    const int32_t sizes[][2] = {{640, 480}, {1280, 720}, {1920, 1080}};
+    for (const auto& size : sizes) {
+        oa::ui::kit::Frame frame;
+        frame.area = {0, 0, size[0], size[1]};
+        frame.size_class = oa::ui::kit::size_class_of(size[0], size[1]);
+        frame.scale_percent = 100;
+        Session session;
+        session.model.leave = Leave::quit;
+        session.model.walk = Walk::setup;
+        session.model.step = Step::game;
+        GameSource fuller;
+        fuller.title = "setup-full.exe";
+        fuller.detail = "~/Downloads";
+        fuller.mark = SourceMark::gog;
+        fuller.footnote = "1.0 GB";
+        fuller.chips = {
+            SourceChip{"Total Annihilation 3.1c", true},
+            SourceChip{"Campaign", true},
+            SourceChip{"Core Contingency", true},
+            SourceChip{"Battle Tactics", true},
+            SourceChip{"Music", true},
+        };
+        GameSource thinner;
+        thinner.title = "setup-thin.exe";
+        thinner.detail = "~/Downloads";
+        thinner.mark = SourceMark::gog;
+        thinner.footnote = "1.0 GB";
+        thinner.chips = {
+            SourceChip{"Total Annihilation 3.1c", true},
+            SourceChip{"Music", true},
+        };
+        session.model.sources.push_back(std::move(fuller));
+        session.model.sources.push_back(std::move(thinner));
+        session.model.source = 0;
+        const auto scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+        const oa::ui::kit::Control* first =
+            oa::ui::kit::control_of(scene.list, oa::ui::first_run::source_id);
+        const oa::ui::kit::Control* second =
+            oa::ui::kit::control_of(scene.list, oa::ui::first_run::source_id + 1);
+        const int32_t edge =
+            oa::ui::kit::compact_metrics.edge + oa::ui::kit::compact_metrics.padding;
+        const int32_t band = std::max(size[0] - 2 * edge, int32_t{0});
+        const oa::ui::kit::Metrics& metrics = oa::ui::kit::metrics_of(frame.size_class);
+        const int32_t column = std::min(band, metrics.dialog_width);
+        if (first == nullptr || second == nullptr) {
+            OA_CHECK(first != nullptr && second != nullptr);
+            continue;
+        }
+        OA_CHECK(first->rect.width == column);
+        OA_CHECK(second->rect.width == column);
+        OA_CHECK(first->rect.x == edge + std::max((band - column) / 2, int32_t{0}));
+        OA_CHECK(second->rect.y == first->rect.y + first->rect.height + metrics.padding);
+        OA_CHECK(first->rect.height > oa::ui::kit::choice_card_height());
+        OA_CHECK(!meets(first->rect, second->rect));
+        for (const oa::ui::kit::Item& item : scene.list.items) {
+            if (item.role != oa::ui::kit::Role::pill)
+                continue;
+            OA_CHECK(item.text.find("no ") == std::string::npos);
+            const bool in_first =
+                item.rect.x >= first->rect.x && item.rect.y >= first->rect.y &&
+                item.rect.x + item.rect.width <= first->rect.x + first->rect.width &&
+                item.rect.y + item.rect.height <= first->rect.y + first->rect.height;
+            const bool in_second =
+                item.rect.x >= second->rect.x && item.rect.y >= second->rect.y &&
+                item.rect.x + item.rect.width <= second->rect.x + second->rect.width &&
+                item.rect.y + item.rect.height <= second->rect.y + second->rect.height;
+            OA_CHECK(in_first || in_second);
+        }
+    }
+}
+
 } // namespace
 
 int main() {
@@ -686,5 +762,6 @@ int main() {
     check_lookup();
     check_leave_word();
     check_centred_language();
+    check_game_column();
     return oa::test::check_exit_status();
 }

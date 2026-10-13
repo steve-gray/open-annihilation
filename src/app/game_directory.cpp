@@ -671,7 +671,7 @@ std::optional<GameDirectory> resolve_game_directory(
     // Where the Game files screen is offered, a start with no usable folder
     // opens it in place of any notice; the folder chosen earlier is still
     // tried first, and an unattended run that checks the screen does not stop.
-    if (request.import_offered && needed != nullptr && !request.choose) {
+    if (request.import_offered && needed != nullptr && !request.choose && !request.defer_dialog) {
         if (request.stored && !request.stored->empty()) {
             const auto stored = path_from_utf8(*request.stored);
             auto install = inspect_folder(host, stored);
@@ -744,6 +744,11 @@ std::optional<GameDirectory> resolve_game_directory(
     }
     if (!request.choose && usable_found.size() == 1 && !stored_refused)
         return only_found;
+    // The five-step setup asks where the game is. While it will run, nothing
+    // here opens the system's folder dialog, the in-engine locator or the
+    // Game files screen.
+    if (request.defer_dialog)
+        return std::nullopt;
     // Game Mode, and a build with no dialog, open the locator and never the
     // system's dialog. Everywhere else the dialog asks first; when it cannot
     // open, the loop below hands the same folders to the locator.

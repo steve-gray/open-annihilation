@@ -52,6 +52,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -331,65 +332,136 @@ bool add_described(
         chip.held = true;
         row.chips.push_back(std::move(chip));
     }
-    std::vector<std::string> missing_ids;
-    for (const MissingContentFile& missing : described.missing) {
-        if (std::find(described.bundles.begin(), described.bundles.end(), missing.bundle_id) !=
-            described.bundles.end())
-            continue;
-        if (std::find(missing_ids.begin(), missing_ids.end(), missing.bundle_id) !=
-            missing_ids.end())
-            continue;
-        missing_ids.push_back(missing.bundle_id);
-        first_run::SourceChip chip;
-        chip.name = bundle_name(table, missing.bundle_id);
-        chip.held = false;
-        row.chips.push_back(std::move(chip));
-    }
     remembered_sources().push_back(Remembered{token, kind, path});
     model.sources.push_back(std::move(row));
     return true;
 }
 
-/// Lists a folder when it holds game files.
+/// One place gathered before the list is ranked.
+struct HeldSource {
+    first_run::GameSource row{};   ///< the row
+    Remembered remembered{};       ///< how the copy opens it
+    installs::SetupSource facts{}; ///< what the rank reads
+};
+
+/// The path the row is known by, so the same place is not listed twice.
 ///
-/// @param[in,out] model the game step
-/// @param folder the folder
-/// @param user_folder the player's folder
-/// @param detail the line under the title
-/// @param table the table to match
-/// @param kind which reader; fixture uses the check's table
-void add_folder_source(
-    first_run::Model& model,
-    const fs::path& folder,
-    const fs::path& user_folder,
-    std::string detail,
-    std::span<const bundles::Bundle> table,
-    SourceKind kind
-) {
-    if (folder.empty() || inside_managed(folder, user_folder))
-        return;
+/// @param path the place
+/// @return its canonical path, or the path itself when that cannot be found
+std::string source_token(const fs::path& path) {
     std::error_code failure;
-    if (!fs::is_directory(folder, failure) || failure)
-        return;
-    FolderContentSource source(folder, table);
-    SourceDescription described;
-    std::string error;
-    if (!describe_source(source, table, described, &error))
-        return;
-    add_described(
-        model, folder, kind, first_run::SourceMark::folder, std::move(detail), described, table
-    );
+    const fs::path canonical = fs::weakly_canonical(path, failure);
+    return path_to_utf8(failure ? path.lexically_normal() : canonical);
 }
 
-/// Lists an installer whose size is one this game knows.
+/// A path shortened under the home folder, for the line under a row's title.
 ///
-/// @param[in,out] model the game step
+/// @param home the home folder
+/// @param path the place
+/// @return the path to show
+std::string shortened_path(const fs::path& home, const fs::path& path) {
+    if (path.empty())
+        return {};
+    return installs::path_under_home(home, path);
+}
+
+/// The rank's facts for what a place holds.
+///
+/// @param token the row's token
+/// @param place which kind of place
+/// @param described what it holds
+/// @param table the table the description was made from
+/// @return the facts
+installs::SetupSource rank_facts(
+    std::string token,
+    installs::SetupPlace place,
+    const SourceDescription& described,
+    std::span<const bundles::Bundle> table
+) {
+    installs::SetupSource facts;
+    facts.token = std::move(token);
+    facts.place = place;
+    facts.bundle_count = static_cast<int>(described.bundles.size());
+    bool base_game = false;
+    bool demo = false;
+    int expansions = 0;
+    for (const std::string& id : described.bundles) {
+        const bundles::Bundle* bundle = nullptr;
+        for (const bundles::Bundle& known : table) {
+            if (known.id == id) {
+                bundle = &known;
+                break;
+            }
+        }
+        if (bundle != nullptr && bundle->kind == bundles::Kind::expansion)
+            ++expansions;
+        if (id == "totala")
+            base_game = true;
+        else if (id == "totala-demo")
+            demo = true;
+    }
+    facts.base_rank = base_game ? 2 : (demo ? 1 : 0);
+    facts.expansion_count = expansions;
+    return facts;
+}
+
+/// Tells whether a file's size is one of the installers this game knows.
+///
+/// @param file the file; unused
+/// @param size its size
+/// @param context unused
+/// @return true when the size is a known installer
+bool known_installer_file(const fs::path& file, uint64_t size, void* context) {
+    std::ignore = file;
+    std::ignore = context;
+    return bundles::find_installer(size) != nullptr;
+}
+
+/// Tells whether a token is already in a gathered list.
+///
+/// @param found the list
+/// @param token the token
+/// @return true when it is there
+bool already_gathered(const std::vector<HeldSource>& found, const std::string& token) {
+    for (const HeldSource& held : found) {
+        if (held.row.token == token)
+            return true;
+    }
+    return false;
+}
+
+/// Keeps a later "where it was found" line when the row was gathered without one.
+///
+/// @param[in,out] found the gathered places
+/// @param token the row
+/// @param status the line; empty does nothing
+void note_status(
+    std::vector<HeldSource>& found, const std::string& token, const std::string& status
+) {
+    if (status.empty())
+        return;
+    for (HeldSource& held : found) {
+        if (held.row.token == token && held.row.status.empty())
+            held.row.status = status;
+    }
+}
+
+/// Builds a row for an installer file. A file that is not a known installer is left out.
+///
+/// @param[in,out] found the gathered places
 /// @param file the installer
 /// @param user_folder the player's folder
-void add_installer_source(
-    first_run::Model& model, const fs::path& file, const fs::path& user_folder
+/// @param home the home folder, for the shortened path
+void gather_installer(
+    std::vector<HeldSource>& found,
+    const fs::path& file,
+    const fs::path& user_folder,
+    const fs::path& home
 ) {
     if (file.empty() || inside_managed(file, user_folder))
+        return;
+    const std::string token = source_token(file);
+    if (already_gathered(found, token))
         return;
     std::error_code failure;
     if (!fs::is_regular_file(file, failure) || failure)
@@ -419,12 +491,193 @@ void add_installer_source(
         source = std::make_unique<WindowsInstallerSource>(file, table);
     SourceDescription described;
     std::string error;
-    if (!describe_source(*source, table, described, &error))
+    if (!describe_source(*source, table, described, &error) || described.bundles.empty())
         return;
-    add_described(model, file, kind, mark, path_to_utf8(file.parent_path()), described, table);
+    HeldSource held;
+    held.row.token = token;
+    held.row.title =
+        file.filename().empty() ? std::string("Total Annihilation") : path_to_utf8(file.filename());
+    held.row.detail = shortened_path(home, file.parent_path());
+    held.row.mark = mark;
+    held.row.footnote = bytes_text(described.bytes_to_copy);
+    for (const std::string& id : described.bundles) {
+        first_run::SourceChip chip;
+        chip.name = bundle_name(table, id);
+        chip.held = true;
+        held.row.chips.push_back(std::move(chip));
+    }
+    held.remembered = Remembered{token, kind, file};
+    held.facts = rank_facts(token, installs::SetupPlace::installer, described, table);
+    found.push_back(std::move(held));
 }
 
-/// Lists the places this machine already has.
+/// Builds a row for a folder when it is a game installation.
+///
+/// @param[in,out] found the gathered places
+/// @param folder the folder
+/// @param user_folder the player's folder
+/// @param status where it was found, such as a Steam library; empty when that is not known
+/// @param home the home folder, for the shortened path
+void gather_folder(
+    std::vector<HeldSource>& found,
+    const fs::path& folder,
+    const fs::path& user_folder,
+    std::string status,
+    const fs::path& home
+) {
+    if (folder.empty() || inside_managed(folder, user_folder))
+        return;
+    const std::string token = source_token(folder);
+    if (already_gathered(found, token)) {
+        note_status(found, token, status);
+        return;
+    }
+    std::error_code failure;
+    if (!fs::is_directory(folder, failure) || failure)
+        return;
+    const std::span<const bundles::Bundle> table = bundles::bundles();
+    FolderContentSource source(folder, table);
+    SourceDescription described;
+    std::string error;
+    if (!describe_source(source, table, described, &error) || described.bundles.empty())
+        return;
+    HeldSource held;
+    held.row.token = token;
+    held.row.title = folder.filename().empty() ? std::string("Total Annihilation")
+                                               : path_to_utf8(folder.filename());
+    held.row.detail = shortened_path(home, folder);
+    held.row.mark = first_run::SourceMark::folder;
+    held.row.status = std::move(status);
+    held.row.footnote = bytes_text(described.bytes_to_copy);
+    for (const std::string& id : described.bundles) {
+        first_run::SourceChip chip;
+        chip.name = bundle_name(table, id);
+        chip.held = true;
+        held.row.chips.push_back(std::move(chip));
+    }
+    held.remembered = Remembered{token, SourceKind::folder, folder};
+    held.facts = rank_facts(token, installs::SetupPlace::installation, described, table);
+    found.push_back(std::move(held));
+}
+
+/// Gathers the rows a path contributes. A folder that is not an installation contributes the
+/// installer files inside it, and is not itself a row.
+///
+/// @param[in,out] found the gathered places
+/// @param path the folder or the file
+/// @param user_folder the player's folder
+/// @param status where a folder was found; empty when that is not known
+/// @param home the home folder, for the shortened path
+void gather_path(
+    std::vector<HeldSource>& found,
+    const fs::path& path,
+    const fs::path& user_folder,
+    std::string status,
+    const fs::path& home
+) {
+    if (path.empty() || inside_managed(path, user_folder))
+        return;
+    std::error_code failure;
+    if (!fs::is_directory(path, failure) || failure) {
+        gather_installer(found, path, user_folder, home);
+        return;
+    }
+    const installs::SetupFolderOffer offer =
+        installs::offer_from_folder(path, known_installer_file, nullptr);
+    for (const fs::path& installer : offer.installers)
+        gather_installer(found, installer, user_folder, home);
+    if (offer.folder_offered)
+        gather_folder(found, path, user_folder, std::move(status), home);
+}
+
+/// Appends gathered places, fullest first, up to the step's limit.
+///
+/// @param[in,out] model the game step
+/// @param found the places
+/// @param select_best true to select the fullest of the places appended
+/// @return true when a place was appended
+bool append_ranked(first_run::Model& model, std::vector<HeldSource> found, bool select_best) {
+    std::vector<installs::SetupSource> facts;
+    facts.reserve(found.size());
+    for (const HeldSource& held : found)
+        facts.push_back(held.facts);
+    const std::vector<installs::SetupSource> ranked =
+        installs::rank_setup_sources(std::move(facts));
+    bool appended = false;
+    int32_t first_added = -1;
+    for (const installs::SetupSource& ranked_row : ranked) {
+        if (static_cast<int32_t>(model.sources.size()) >= kMostSources)
+            break;
+        const HeldSource* match = nullptr;
+        for (const HeldSource& held : found) {
+            if (held.facts.token == ranked_row.token) {
+                match = &held;
+                break;
+            }
+        }
+        if (match == nullptr)
+            continue;
+        bool seen = false;
+        for (const Remembered& remembered : remembered_sources()) {
+            if (remembered.token == match->remembered.token)
+                seen = true;
+        }
+        if (seen)
+            continue;
+        if (first_added < 0)
+            first_added = static_cast<int32_t>(model.sources.size());
+        remembered_sources().push_back(match->remembered);
+        model.sources.push_back(match->row);
+        appended = true;
+    }
+    if (select_best && first_added >= 0)
+        model.source = first_added;
+    return appended;
+}
+
+/// Lists a folder the player just chose. An installation is one row. A folder of loose files,
+/// or one that holds installers, lists those installers instead, and the fullest new row is
+/// selected.
+///
+/// @param[in,out] model the game step
+/// @param folder the folder
+/// @param user_folder the player's folder
+/// @param detail unused; the row says the shortened path
+/// @param table unused; the built-in table is read
+/// @param kind unused; a chosen folder is read as a folder
+void add_folder_source(
+    first_run::Model& model,
+    const fs::path& folder,
+    const fs::path& user_folder,
+    std::string detail,
+    std::span<const bundles::Bundle> table,
+    SourceKind kind
+) {
+    std::ignore = detail;
+    std::ignore = table;
+    std::ignore = kind;
+    std::vector<HeldSource> found;
+    gather_path(found, folder, user_folder, {}, installs::home_folder());
+    std::ignore = append_ranked(model, std::move(found), true);
+}
+
+/// Lists an installer the player just chose, and selects it.
+///
+/// @param[in,out] model the game step
+/// @param file the installer
+/// @param user_folder the player's folder
+void add_installer_source(
+    first_run::Model& model, const fs::path& file, const fs::path& user_folder
+) {
+    std::vector<HeldSource> found;
+    gather_installer(found, file, user_folder, installs::home_folder());
+    std::ignore = append_ranked(model, std::move(found), true);
+}
+
+/// Lists the places this machine already has, fullest first, and selects that one.
+///
+/// A folder that is not a game installation is not a row. Installer files found directly
+/// inside it are. At most kMostSources rows are kept, after the rank, so the fullest stay.
 ///
 /// @param[in,out] model the game step
 /// @param user_folder the player's folder
@@ -435,22 +688,21 @@ void fill_sources(
     model.sources.clear();
     model.source = -1;
     remembered_sources().clear();
-    const std::span<const bundles::Bundle> table = bundles::bundles();
+    const fs::path home = installs::home_folder();
+    std::vector<HeldSource> found;
     if (!found_install.empty())
-        add_folder_source(model, found_install, user_folder, {}, table, SourceKind::folder);
+        gather_path(found, found_install, user_folder, {}, home);
     for (const installs::Candidate& candidate :
          installs::find_candidates(installs::default_search_roots())) {
-        add_folder_source(
-            model,
+        gather_path(
+            found,
             candidate.folder,
             user_folder,
             std::string(installs::source_words(candidate.source, candidate.removable)),
-            table,
-            SourceKind::folder
+            home
         );
     }
     std::vector<fs::path> downloads;
-    const fs::path home = installs::home_folder();
     if (!home.empty())
         downloads.push_back(home / "Downloads");
     try {
@@ -459,17 +711,9 @@ void fill_sources(
             downloads.push_back(documents.parent_path() / "Downloads");
     } catch (const std::exception&) {
     }
-    for (const fs::path& folder : downloads) {
-        std::error_code failure;
-        if (!fs::is_directory(folder, failure) || failure)
-            continue;
-        for (fs::directory_iterator entry(folder, failure), end; !failure && entry != end;
-             entry.increment(failure)) {
-            if (!entry->is_regular_file(failure))
-                continue;
-            add_installer_source(model, entry->path(), user_folder);
-        }
-    }
+    for (const fs::path& folder : downloads)
+        gather_path(found, folder, user_folder, {}, home);
+    std::ignore = append_ranked(model, std::move(found), false);
     if (!model.sources.empty())
         model.source = 0;
 }

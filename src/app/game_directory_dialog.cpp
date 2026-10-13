@@ -381,12 +381,14 @@ void prepare_native_host(
 
 } // namespace
 
-std::optional<GameDirectory> find_game_directory(const Options& options, GameFilesNeeded* needed) {
+std::optional<GameDirectory>
+find_game_directory(const Options& options, GameFilesNeeded* needed, bool defer_dialog) {
     GameDirectoryRequest request;
     request.argument = options.game_dir;
     request.choose = options.choose_game_dir;
     request.archives_named = !options.archives.empty();
     request.unattended = unattended_run(options);
+    request.defer_dialog = defer_dialog;
     NativeHost native;
     prepare_native_host(options, request.unattended, true, native);
     if (request.argument.empty())

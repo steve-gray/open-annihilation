@@ -12,6 +12,17 @@ or Program Files, the volumes, a Steam Deck's microSD cards, and a Steam
 Proton prefix, Heroic, Lutris and Bottles when those folders exist.
 `path_under_home` writes a folder under the home folder as `~/…`.
 
+The setup's game step uses the same module to decide which places are rows.
+`drop_folder_name` names Downloads, Desktop and Documents. `offer_as_installation`
+is false for those, for the home folder, for a folder with no game archive,
+and for a folder that also holds an installer file. `offer_from_folder` lists
+the installer files directly inside a folder and says whether the folder
+itself is a row. `rank_setup_sources` drops a loose folder, then orders the
+rest by how many built-in bundles they hold, then whether they hold the base
+game ahead of only the demo, then how many expansions. An installer and an
+installation rank together, ahead of a loose folder. The first place is the
+one the step selects.
+
 `oa/platform/game_installs.hpp` (namespace `oa::platform::game_installs`):
 
 - `search_roots_under(home)` gives the usual places under a home folder:

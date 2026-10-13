@@ -1037,7 +1037,28 @@ std::string_view source_badge(SourceMark mark) noexcept {
     return "FOLDER";
 }
 
+/// A chip's width: the pill's own measure, or the estimate when the fonts are not there.
+///
+/// @param fonts the fonts; null estimates
+/// @param text the chip's words
+/// @param room the widest a chip may be
+/// @return the width, in points
+int32_t chip_width(const kit::Fonts* fonts, std::string_view text, int32_t room) {
+    int32_t measured = 0;
+    if (fonts != nullptr) {
+        kit::PillLook look;
+        look.text = std::string(text);
+        measured = kit::pill_width(*fonts, look);
+    }
+    if (measured <= 0)
+        measured = std::max(static_cast<int32_t>(text.size()) * 7 + 16, int32_t{48});
+    return std::min(measured, std::max(room, int32_t{48}));
+}
+
 /// Lays the game step out: the sources that were found, and Locate another.
+///
+/// The column is as wide as Settings' panel. Each row holds its path and the bundles it has,
+/// and the rows are separated by the panel's padding.
 ///
 /// @param[in,out] scene the scene
 /// @param session the session
@@ -1051,11 +1072,14 @@ void lay_game(
     std::vector<kit::ControlId> order;
     add_chrome(scene, order, session, width, height, true, true, nullptr);
     const Band band = content_band(width, height);
-    const bool narrow = frame.size_class == kit::SizeClass::compact || band.width < 520;
-    int32_t column = band.width;
-    if (!narrow)
-        column = std::min(band.width, int32_t{640});
+    const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
+    const int32_t column = std::min(band.width, metrics.dialog_width);
     const int32_t left = band.left + std::max((band.width - column) / 2, int32_t{0});
+    // The choice card's text starts after the radio, and stops short of the card's right edge.
+    constexpr int32_t kTextInset = 24;
+    constexpr int32_t kTextEnd = 6;
+    const int32_t text_w = std::max(column - kTextInset - kTextEnd, int32_t{1});
+    const int32_t text_left = left + kTextInset;
 
     int32_t row = band.top;
     constexpr int32_t kTitle = 36;
@@ -1069,12 +1093,14 @@ void lay_game(
         row,
         column,
         show("OA copies the game once. The installation is left as it is."),
-        kit::FontRole::small,
+        kit::FontRole::regular,
         kit::colour::hint
     );
-    row += 10;
+    row += metrics.padding;
 
-    const int32_t card_height = kit::choice_card_height();
+    constexpr int32_t kCardPad = 6;
+    constexpr int32_t kChipGap = 6;
+    const int32_t chip_h = kit::pill_height();
     const auto count = static_cast<int32_t>(session.model.sources.size());
     for (int32_t index = 0; index < count; ++index) {
         const GameSource& source = session.model.sources[static_cast<std::size_t>(index)];
@@ -1087,56 +1113,90 @@ void lay_game(
             hint += " · ";
             hint += source.status;
         }
+
+        struct ChipSpot {
+            std::string text{};
+            int32_t x{};
+            int32_t y{};
+            int32_t width{};
+        };
+
+        std::vector<ChipSpot> spots;
+        int32_t cursor = 0;
+        int32_t chip_row = 0;
+        for (const SourceChip& chip : source.chips) {
+            if (!chip.held || chip.name.empty())
+                continue;
+            const int32_t pill_w = chip_width(fonts, chip.name, text_w);
+            if (cursor > 0 && cursor + pill_w > text_w) {
+                cursor = 0;
+                ++chip_row;
+            }
+            ChipSpot spot;
+            spot.text = chip.name;
+            spot.x = cursor;
+            spot.y = chip_row * (chip_h + kChipGap);
+            spot.width = pill_w;
+            cursor += pill_w + kChipGap;
+            spots.push_back(std::move(spot));
+        }
+        const int32_t chip_rows = spots.empty() ? 0 : chip_row + 1;
+        const int32_t chip_block =
+            chip_rows == 0 ? 0 : chip_rows * chip_h + (chip_rows - 1) * kChipGap;
+        const int32_t hint_h = std::max(
+            paragraph_height(fonts, text_w, hint, kit::FontRole::small), metrics.small_line
+        );
+        const int32_t note_h =
+            source.footnote.empty()
+                ? 0
+                : paragraph_height(fonts, text_w, source.footnote, kit::FontRole::small);
+        int32_t card_h = kCardPad + metrics.regular_line + metrics.hint_gap + hint_h;
+        if (chip_block > 0)
+            card_h += metrics.hint_gap + chip_block;
+        if (note_h > 0)
+            card_h += metrics.hint_gap + note_h;
+        card_h += kCardPad;
+        card_h = std::max(card_h, kit::choice_card_height());
+
         kit::ChoiceCardLook card;
         card.title = source.title;
         card.hint = std::move(hint);
         card.chosen = session.model.source == index;
-        const kit::Rect rect{left, row, column, card_height};
+        const kit::Rect rect{left, row, column, card_h};
         const kit::ControlId id = source_id + index;
         kit::add_choice_card(
             scene.list, rect, card, id, control_name(Step::game, "source." + std::to_string(index))
         );
         order.insert(order.begin(), id);
-        row += card_height + 4;
-        int32_t chip_x = left + 8;
-        for (const SourceChip& chip : source.chips) {
-            if (chip.name.empty())
-                continue;
+        const int32_t chips_y =
+            rect.y + kCardPad + metrics.regular_line + metrics.hint_gap + hint_h + metrics.hint_gap;
+        for (const ChipSpot& spot : spots) {
             kit::PillLook pill;
-            pill.text = chip.held ? chip.name : show("no {name}");
-            if (!chip.held) {
-                const std::string token = "{name}";
-                const auto at = pill.text.find(token);
-                if (at != std::string::npos)
-                    pill.text.replace(at, token.size(), chip.name);
-            }
-            pill.state = chip.held ? kit::PillState::active : kit::PillState::inactive;
-            const int32_t pill_w = std::min(
-                std::max(static_cast<int32_t>(pill.text.size()) * 7 + 16, int32_t{48}),
-                std::max(column - 16, int32_t{48})
-            );
-            if (chip_x + pill_w > left + column)
-                break;
+            pill.text = spot.text;
+            pill.state = kit::PillState::active;
             kit::add_pill(
-                scene.list, {chip_x, row, pill_w, kit::pill_height()}, pill, kit::no_control, {}
+                scene.list,
+                {text_left + spot.x, chips_y + spot.y, spot.width, chip_h},
+                pill,
+                kit::no_control,
+                {}
             );
-            chip_x += pill_w + 6;
         }
-        if (!source.chips.empty())
-            row += kit::pill_height() + 2;
         if (!source.footnote.empty()) {
-            row = add_paragraph(
+            const int32_t note_y =
+                chip_block > 0 ? chips_y + chip_block + metrics.hint_gap : chips_y;
+            add_paragraph(
                 scene.list,
                 fonts,
-                left + 8,
-                row,
-                std::max(column - 16, int32_t{1}),
+                text_left,
+                note_y,
+                text_w,
                 source.footnote,
                 kit::FontRole::small,
                 kit::colour::quiet
             );
         }
-        row += 8;
+        row += card_h + metrics.padding;
     }
 
     const int32_t button_height = kit::compact_metrics.button_height;
