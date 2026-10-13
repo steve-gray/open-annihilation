@@ -1654,9 +1654,7 @@ int finish_game_files_check(const Options& options, int status) {
             break;
         case GameFilesRoute::demo:
             if (!fs::is_regular_file(
-                    data_folder / std::string(demo_1997.folder_name) /
-                        std::string(demo_1997.archive_name),
-                    error
+                    demo_bundle_directory(data_folder) / std::string(demo_1997.archive_name), error
                 ))
                 fail("the demo's game data was not unpacked");
             if (!fs::is_directory(run.game_folder, error))

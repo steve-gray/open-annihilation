@@ -193,12 +193,17 @@ class ContentSource {
     /// @param[out] error why it could not be resolved; may be null
     /// @return true when `resolved` is a file that can be read
     [[nodiscard]] virtual bool
-    locate(std::string_view name, std::filesystem::path& resolved, std::string* error);
+    locate(std::string_view name, std::filesystem::path& resolved, std::string* error) {
+        (void)name;
+        (void)resolved;
+        (void)error;
+        return false;
+    }
 
     /// Returns the directory the files are read from, when they are on disk.
     ///
     /// @return that directory, or empty when the source has none
-    [[nodiscard]] virtual std::filesystem::path disk_root() const;
+    [[nodiscard]] virtual std::filesystem::path disk_root() const { return {}; }
 };
 
 /// A folder of game files. Names match without regard to ASCII case, and a

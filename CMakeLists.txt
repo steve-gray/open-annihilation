@@ -738,7 +738,7 @@ if(BUILD_TESTING)
   # The demo's installer recognised and its archive unpacked, over a
   # synthetic installer; with --data, over the one OA_DEMO_INSTALLER names.
   add_executable(oa-demo-installer-test src/app/demo_installer_test.cpp)
-  target_link_libraries(oa-demo-installer-test PRIVATE oa-app-game-directory oa-app-headers oa-base-sha256
+  target_link_libraries(oa-demo-installer-test PRIVATE oa-app-game-files oa-app-game-directory oa-app-headers oa-base-sha256
     oa-formats-hpi oa-formats-pe-test-image oa-test-game-data oa-options)
   add_test(NAME demo-installer COMMAND oa-demo-installer-test)
   add_test(NAME demo-installer-data COMMAND oa-demo-installer-test --data)

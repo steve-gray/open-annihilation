@@ -1,14 +1,16 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The installer of the Total Annihilation demo (1997) as a game folder: the
+// The installer of the Total Annihilation demo (1997) as a base game: the
 // installer is recognised by its size and SHA-256, whatever its name, and the
-// game data archive it carries is unpacked into the per-user data folder and
-// checked, where the engine mounts it as the installation. Once that archive
-// is there and passes its check, the installer is recognised by its size
-// alone. The installer is only read; nothing in it runs.
+// game data archive it carries is unpacked into games/<folder> of the
+// player's folder, with the .oa-content record of that base game, where the
+// engine mounts it. Once that archive is there and passes its check, the
+// installer is recognised by its size alone. The installer is only read;
+// nothing in it runs.
 #pragma once
 
+#include "oa/app/content_copy.hpp"
 #include "oa/base/sha256.hpp"
 #include <cstdint>
 #include <filesystem>
@@ -36,7 +38,7 @@ struct DemoRelease {
     /// The archive's size, in bytes.
     uint64_t archive_size{};
     base::sha256::Digest archive_sha256{};
-    /// The folder under the per-user data folder that holds the unpacked archive.
+    /// The folder under games/ in the player's folder that holds the archive.
     std::string_view folder_name;
     /// The unpacked archive's file name.
     std::string_view archive_name;
@@ -57,9 +59,24 @@ inline constexpr DemoRelease demo_1997{
     20'474'804,
     base::sha256::parse_hex("fd53a2637ecf8fb5ca6d2c02a34b4ef783a4441f8be070137276afc4d5627e1e")
         .value(),
-    "demo-1997",
+    "totala-demo",
     "TADemo.hpi",
 };
+
+/// The folder a release's archive is unpacked into.
+///
+/// That is `player_folder`/games/`release.folder_name`, the same place a
+/// managed copy of that base game is stored.
+///
+/// @param player_folder the player's folder; empty stays empty
+/// @param release the release
+/// @return the folder, which may not exist yet
+[[nodiscard]] inline fs::path
+demo_bundle_directory(const fs::path& player_folder, const DemoRelease& release = demo_1997) {
+    if (player_folder.empty())
+        return {};
+    return player_folder / "games" / fs::path(std::string(release.folder_name));
+}
 
 /// What set_up_demo() found in a folder, and what came of it.
 enum class DemoOutcome : uint8_t {
@@ -92,8 +109,10 @@ struct DemoSetup {
 
 /// Recognises the installer of the Total Annihilation demo (1997) in a folder and prepares its archive.
 ///
-/// The archive goes to `data_folder`/release.folder_name/release.archive_name.
-/// An archive already there with the archive's size and SHA-256 is reused,
+/// The archive goes to `player_folder`/games/release.folder_name/release.archive_name.
+/// When that folder name is a base game, the folder also gains its
+/// .oa-content record. An archive already there with the archive's size and
+/// SHA-256 is reused,
 /// and the first regular file directly in `folder`, in name order, whose size
 /// is the installer's is then taken for the installer without being read:
 /// only unpacking needs its bytes. Otherwise every such file is hashed, and
@@ -107,13 +126,48 @@ struct DemoSetup {
 /// written through it, and the unpacking fails.
 ///
 /// @param folder the game folder the player named or chose
-/// @param data_folder the per-user data folder; empty when none is known,
-///     which fails the unpacking
+/// @param player_folder the player's folder, which holds games/; empty when
+///     none is known, which fails the unpacking
 /// @param release the release to recognise
 /// @return what was found and done
 [[nodiscard]] DemoSetup set_up_demo(
-    const fs::path& folder, const fs::path& data_folder, const DemoRelease& release = demo_1997
+    const fs::path& folder, const fs::path& player_folder, const DemoRelease& release = demo_1997
 );
+
+/// The demo's installer as a source a managed copy can read.
+///
+/// `open` recognises the installer by its size and SHA-256, in a file or in
+/// the first matching file of a folder. `list` names the archive the
+/// installer carries, and `stream_file` writes that archive. The installer
+/// is only read. A source that is not a file on disk leaves `locate` false.
+class DemoInstallerSource final : public ContentSource {
+  public:
+
+    /// Takes the installer, or a folder that holds it, and the release to
+    /// recognise. The release has to outlive the source.
+    ///
+    /// @param installer_or_folder the file, or the folder to search
+    /// @param release the release to recognise
+    DemoInstallerSource(fs::path installer_or_folder, const DemoRelease& release = demo_1997);
+
+    /// The installer the player named, or the folder that was searched.
+    [[nodiscard]] std::string origin() const override;
+    /// Recognises the installer by its size and SHA-256.
+    [[nodiscard]] bool open(std::string* error) override;
+    /// Lists the archive the installer carries, under the release's name.
+    [[nodiscard]] bool list(std::vector<ContentSourceFile>& files, std::string* error) override;
+    /// Writes that archive to `request.destination`, checking its SHA-256.
+    [[nodiscard]] bool
+    stream_file(const StreamRequest& request, StreamResult& result, std::string* error) override;
+
+  private:
+
+    fs::path place_;
+    const DemoRelease* release_;
+    fs::path installer_;
+    std::vector<uint8_t> bytes_;
+    bool opened_{};
+};
 
 /// Tests whether a file is a release's archive, by its size and SHA-256.
 ///

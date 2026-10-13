@@ -1192,14 +1192,6 @@ std::string_view unattended_copy_refusal() noexcept {
            "PATH.";
 }
 
-bool ContentSource::locate(std::string_view, fs::path&, std::string*) {
-    return false;
-}
-
-fs::path ContentSource::disk_root() const {
-    return {};
-}
-
 FolderContentSource::FolderContentSource(fs::path folder, std::span<const bundles::Bundle> table)
     : folder_(std::move(folder)), bundles_(table) {
 }

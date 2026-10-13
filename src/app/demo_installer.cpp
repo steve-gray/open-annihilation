@@ -5,11 +5,13 @@
 // unpacking the game data archive it carries.
 #include "oa/app/demo_installer.hpp"
 #include "oa/app/game_directory.hpp"
+#include "oa/data/content_bundles.hpp"
 #include "oa/formats/pe.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cstddef>
 #include <fstream>
 #include <optional>
 #include <span>
@@ -317,10 +319,108 @@ void unpack(std::span<const uint8_t> bytes, const DemoRelease& release, DemoSetu
     setup.unpacked = true;
 }
 
+/// Converts a file-clock time to whole seconds since 1970.
+template <typename Clock>
+[[nodiscard]] int64_t seconds_of_clock(typename Clock::time_point time) {
+    const auto count = [](auto system_time) {
+        return std::chrono::floor<std::chrono::seconds>(system_time).time_since_epoch().count();
+    };
+    if constexpr (requires { Clock::to_sys(time); })
+        return static_cast<int64_t>(count(Clock::to_sys(time)));
+    else {
+        const auto utc = Clock::to_utc(time);
+        using Utc = typename decltype(utc)::clock;
+        return static_cast<int64_t>(count(Utc::to_sys(utc)));
+    }
+}
+
+/// Whole seconds since 1970 of a file's modification time, as a copy's record stores it.
+[[nodiscard]] int64_t seconds_since_1970(fs::file_time_type time) {
+    return seconds_of_clock<fs::file_time_type::clock>(time);
+}
+
+/// Writes the base game's record beside an archive that just passed its check.
+///
+/// A release whose folder name is not a base game has no record. A record
+/// already there is replaced with this archive.
+void write_bundle_record(const DemoSetup& setup, const DemoRelease& release) {
+    const oa::data::content_bundles::Bundle* bundle =
+        oa::data::content_bundles::find_bundle(release.folder_name);
+    if (bundle == nullptr || bundle->kind != oa::data::content_bundles::Kind::base_game)
+        return;
+    ContentRecord record;
+    record.bundle_id = std::string(bundle->id);
+    record.source = path_to_utf8(setup.installer);
+    ContentRecordFile file;
+    file.copy_name = std::string(release.archive_name);
+    file.size = release.archive_size;
+    file.digest = release.archive_sha256;
+    std::error_code error;
+    const auto stamp = fs::last_write_time(setup.archive, error);
+    file.modified = error ? 0 : seconds_since_1970(stamp);
+    record.files.push_back(std::move(file));
+    std::string text = "oa-content 1\nbundle ";
+    text += record.bundle_id;
+    text += "\nsource ";
+    for (const char byte : record.source) {
+        if (byte == '\\')
+            text += "\\\\";
+        else if (byte == '\n')
+            text += "\\n";
+        else if (byte == '\r')
+            text += "\\r";
+        else
+            text.push_back(byte);
+    }
+    text += '\n';
+    for (const ContentRecordFile& item : record.files) {
+        text += "file ";
+        text += item.copy_name;
+        text += "\nsize ";
+        text += std::to_string(item.size);
+        text += "\nmodified ";
+        text += std::to_string(item.modified);
+        text += "\nsha256 ";
+        const auto hex = sha256::to_hex(item.digest);
+        text.append(hex.data(), hex.size());
+        text += '\n';
+    }
+    const fs::path record_path = setup.folder / fs::path(std::string(content_record_name));
+    std::ofstream output(record_path, std::ios::binary | std::ios::trunc);
+    output << text;
+}
+
+/// The archive resource of a recognised installer.
+///
+/// @param bytes the installer
+/// @param release the release
+/// @param[out] problem why the archive is not there, when the result is empty
+/// @return the archive's bytes, or an empty span
+[[nodiscard]] std::span<const uint8_t>
+archive_bytes(std::span<const uint8_t> bytes, const DemoRelease& release, std::string& problem) {
+    const auto lookup = formats::pe::find_resource(
+        bytes,
+        {release.archive_resource_type,
+         release.archive_resource_id,
+         release.archive_resource_language}
+    );
+    if (lookup.error != formats::pe::Error::none) {
+        problem = "its game data could not be found in it: " +
+                  std::string(formats::pe::describe(lookup.error));
+        return {};
+    }
+    if (lookup.range.size != release.archive_size) {
+        problem = "its game data is " + std::to_string(lookup.range.size) + " bytes, where " +
+                  std::to_string(release.archive_size) + " were expected";
+        return {};
+    }
+    return bytes.subspan(lookup.range.offset, lookup.range.size);
+}
+
 } // namespace
 
 DemoSetup
-set_up_demo(const fs::path& folder, const fs::path& data_folder, const DemoRelease& release) {
+set_up_demo(const fs::path& folder, const fs::path& player_folder, const DemoRelease& release) {
     DemoSetup setup;
     const auto candidates = list_candidates(folder, release);
     if (candidates.same_size.empty()) {
@@ -329,11 +429,15 @@ set_up_demo(const fs::path& folder, const fs::path& data_folder, const DemoRelea
             setup.rejected.empty() ? DemoOutcome::no_installer : DemoOutcome::unrecognised;
         return setup;
     }
-    const auto unpacked_folder =
-        data_folder.empty() ? fs::path{} : data_folder / fs::path(std::string(release.folder_name));
+    const auto unpacked_folder = demo_bundle_directory(player_folder, release);
     const auto archive = unpacked_folder / fs::path(std::string(release.archive_name));
-    const bool linked = !data_folder.empty() && leads_elsewhere(unpacked_folder, archive);
-    if (!data_folder.empty() && !linked) {
+    std::error_code games_error;
+    const auto games_status = fs::symlink_status(player_folder / "games", games_error);
+    const bool games_linked =
+        !player_folder.empty() && fs::exists(games_status) && !fs::is_directory(games_status);
+    const bool linked =
+        !player_folder.empty() && (games_linked || leads_elsewhere(unpacked_folder, archive));
+    if (!player_folder.empty() && !linked) {
         remove_abandoned_temporaries(unpacked_folder, release);
         // An archive unpacked before that passes its check needs nothing
         // from the installer: the first file of its size is taken for it
@@ -344,6 +448,7 @@ set_up_demo(const fs::path& folder, const fs::path& data_folder, const DemoRelea
             setup.rejected = candidates.programs;
             setup.folder = unpacked_folder;
             setup.archive = archive;
+            write_bundle_record(setup, release);
             return setup;
         }
     }
@@ -354,7 +459,7 @@ set_up_demo(const fs::path& folder, const fs::path& data_folder, const DemoRelea
         return setup;
     }
     setup.installer = std::move(search.installer);
-    if (data_folder.empty()) {
+    if (player_folder.empty()) {
         setup.outcome = DemoOutcome::unpack_failed;
         setup.problem = "no per-user data folder is known to unpack it to";
         return setup;
@@ -369,7 +474,144 @@ set_up_demo(const fs::path& folder, const fs::path& data_folder, const DemoRelea
         return setup;
     }
     unpack(search.bytes, release, setup);
+    if (setup.outcome == DemoOutcome::ready)
+        write_bundle_record(setup, release);
     return setup;
+}
+
+DemoInstallerSource::DemoInstallerSource(fs::path installer_or_folder, const DemoRelease& release)
+    : place_(std::move(installer_or_folder)), release_(&release) {
+}
+
+std::string DemoInstallerSource::origin() const {
+    return path_to_utf8(place_);
+}
+
+bool DemoInstallerSource::open(std::string* error) {
+    if (opened_)
+        return true;
+    std::error_code failure;
+    if (fs::is_regular_file(place_, failure)) {
+        auto bytes = read_file(place_, release_->installer_size);
+        if (!bytes || sha256::digest_of(*bytes) != release_->installer_sha256) {
+            if (error != nullptr)
+                *error = "that file is not the installer of the Total Annihilation demo (1997)";
+            return false;
+        }
+        installer_ = place_;
+        bytes_ = std::move(*bytes);
+        opened_ = true;
+        return true;
+    }
+    if (!fs::is_directory(place_, failure)) {
+        if (error != nullptr)
+            *error = "the installer could not be read";
+        return false;
+    }
+    const auto search = find_installer(list_candidates(place_, *release_), *release_);
+    if (search.installer.empty()) {
+        if (error != nullptr)
+            *error = "that folder holds no installer of the Total Annihilation demo (1997)";
+        return false;
+    }
+    installer_ = search.installer;
+    bytes_ = search.bytes;
+    opened_ = true;
+    return true;
+}
+
+bool DemoInstallerSource::list(std::vector<ContentSourceFile>& files, std::string* error) {
+    files.clear();
+    if (!open(error))
+        return false;
+    ContentSourceFile listed;
+    listed.name = std::string(release_->archive_name);
+    listed.size = release_->archive_size;
+    std::error_code failure;
+    const auto stamp = fs::last_write_time(installer_, failure);
+    listed.modified = failure ? 0 : seconds_since_1970(stamp);
+    files.push_back(std::move(listed));
+    return true;
+}
+
+bool DemoInstallerSource::stream_file(
+    const StreamRequest& request, StreamResult& result, std::string* error
+) {
+    result = {};
+    if (!open(error))
+        return false;
+    if (request.name != release_->archive_name) {
+        if (error != nullptr)
+            *error = "the installer does not hold that file";
+        return false;
+    }
+    std::string problem;
+    const std::span<const uint8_t> archive = archive_bytes(bytes_, *release_, problem);
+    if (archive.empty()) {
+        if (error != nullptr)
+            *error = problem.empty() ? "its game data could not be found in it" : problem;
+        return false;
+    }
+    uint64_t prefix = 0;
+    {
+        std::error_code failure;
+        if (fs::is_regular_file(request.destination, failure)) {
+            const auto existing = fs::file_size(request.destination, failure);
+            if (!failure)
+                prefix = static_cast<uint64_t>(existing);
+        }
+    }
+    if (prefix > archive.size())
+        prefix = 0;
+    if (prefix > 0) {
+        const auto kept = read_file(request.destination, prefix);
+        if (!kept || !std::equal(
+                         kept->begin(),
+                         kept->end(),
+                         archive.begin(),
+                         archive.begin() + static_cast<std::ptrdiff_t>(prefix)
+                     ))
+            prefix = 0;
+    }
+    if (prefix == 0) {
+        std::error_code failure;
+        fs::remove(request.destination, failure);
+    }
+    std::error_code parent_error;
+    fs::create_directories(request.destination.parent_path(), parent_error);
+    const auto mode =
+        prefix == 0 ? std::ios::binary | std::ios::trunc : std::ios::binary | std::ios::app;
+    std::ofstream output(request.destination, mode);
+    if (!output) {
+        if (error != nullptr)
+            *error = "its game data could not be written";
+        return false;
+    }
+    if (prefix < archive.size()) {
+        output.write(
+            reinterpret_cast<const char*>(archive.data() + prefix),
+            static_cast<std::streamsize>(archive.size() - prefix)
+        );
+    }
+    output.flush();
+    output.close();
+    if (!output) {
+        result.no_space = true;
+        if (error != nullptr)
+            *error = "its game data could not be written";
+        return false;
+    }
+    const auto digest = file_digest(request.destination, release_->archive_size);
+    if (!digest || *digest != release_->archive_sha256) {
+        std::error_code failure;
+        fs::remove(request.destination, failure);
+        if (error != nullptr)
+            *error = "the unpacked game data did not pass its SHA-256 check";
+        return false;
+    }
+    result.digest = *digest;
+    result.bytes = release_->archive_size;
+    return true;
 }
 
 bool archive_matches(const fs::path& archive, const DemoRelease& release) {
