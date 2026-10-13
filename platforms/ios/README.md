@@ -142,7 +142,7 @@ Where things are, in the game's data container:
 | `Documents/Open Annihilation/expansions` | expansions copied into the player's folder, each under the base game it extends |
 | `Documents/Total Annihilation (old)` | a folder set aside by a replacement, until removed |
 | `Library/Application Support/net.coreprime.open-annihilation/import/` | the copy being made (`Total Annihilation/`) and its state file |
-| `Library/Application Support/net.coreprime.open-annihilation/demo-1997/` | the demo's unpacked game data |
+| `Documents/Open Annihilation/games/totala-demo` | the demo, with its `.oa-content` record. An earlier unpack in `Library/Application Support/net.coreprime.open-annihilation/demo-1997/` is copied from once and left there |
 
 The Game files screen still fills `Documents/Total Annihilation`, and that folder is what the
 game plays from. The same start also copies the known files into `games` and `expansions` under

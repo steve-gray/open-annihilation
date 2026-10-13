@@ -7,6 +7,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/data/content_bundles.hpp"
 #include "oa/formats/pe.hpp"
+#include "oa/platform/file_clone.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cctype>
@@ -17,6 +18,7 @@
 #include <span>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace oa::app {
 namespace {
@@ -27,6 +29,8 @@ namespace sha256 = oa::base::sha256;
 constexpr size_t read_piece_size = size_t{1} << 16;
 /// The extension of a Windows program's name, in lower case.
 constexpr std::string_view program_extension = ".exe";
+/// Where an earlier version unpacked the demo, under the per-user data folder.
+constexpr std::string_view legacy_demo_folder = "demo-1997";
 /// Bytes in a megabyte, for the sizes told to the player.
 constexpr uint64_t megabyte = 1'000'000;
 /// Numbers this process's temporary files.
@@ -417,6 +421,80 @@ archive_bytes(std::span<const uint8_t> bytes, const DemoRelease& release, std::s
     return bytes.subspan(lookup.range.offset, lookup.range.size);
 }
 
+/// The earlier unpack, `data_folder`/demo-1997/release.archive_name.
+[[nodiscard]] fs::path legacy_archive(const fs::path& data_folder, const DemoRelease& release) {
+    return data_folder / std::string(legacy_demo_folder) /
+           fs::path(std::string(release.archive_name));
+}
+
+/// Copies `source` onto `destination`, sharing blocks where the volume can.
+///
+/// `destination` must not exist. A share that does not then match the
+/// release is removed. Otherwise the bytes are written to a temporary file
+/// and renamed into place. The source is only read.
+[[nodiscard]] bool
+copy_archive_file(const fs::path& source, const fs::path& destination, const DemoRelease& release) {
+    std::error_code error;
+    fs::create_directories(destination.parent_path(), error);
+    if (error)
+        return false;
+    std::string share_error;
+    if (oa::platform::share_file_blocks(source, destination, &share_error) &&
+        archive_matches(destination, release)) {
+        const auto stamp = fs::last_write_time(source, error);
+        if (!error)
+            fs::last_write_time(destination, stamp, error);
+        return true;
+    }
+    fs::remove(destination, error);
+    uint64_t available = 0;
+    if (!has_room(destination.parent_path(), release.archive_size, available))
+        return false;
+    const auto temporary =
+        destination.parent_path() /
+        (std::string(release.archive_name) + std::string(temporary_marker) +
+         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "-" +
+         std::to_string(temporary_sequence++));
+    const auto discard = [&temporary] {
+        std::error_code ignored;
+        fs::remove(temporary, ignored);
+    };
+    {
+        std::ifstream input(source, std::ios::binary);
+        std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+        if (!input || !output) {
+            discard();
+            return false;
+        }
+        std::vector<char> piece(read_piece_size);
+        while (input) {
+            input.read(piece.data(), static_cast<std::streamsize>(piece.size()));
+            const auto count = input.gcount();
+            if (count > 0)
+                output.write(piece.data(), count);
+        }
+        output.flush();
+        output.close();
+        if (!output || input.bad()) {
+            discard();
+            return false;
+        }
+    }
+    fs::rename(temporary, destination, error);
+    if (error) {
+        discard();
+        return false;
+    }
+    const auto stamp = fs::last_write_time(source, error);
+    if (!error)
+        fs::last_write_time(destination, stamp, error);
+    if (!archive_matches(destination, release)) {
+        fs::remove(destination, error);
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 DemoSetup
@@ -612,6 +690,48 @@ bool DemoInstallerSource::stream_file(
     result.digest = *digest;
     result.bytes = release_->archive_size;
     return true;
+}
+
+bool adopt_legacy_demo(
+    const fs::path& data_folder, const fs::path& player_folder, const DemoRelease& release
+) {
+    if (data_folder.empty() || player_folder.empty())
+        return false;
+    const fs::path folder = demo_bundle_directory(player_folder, release);
+    const fs::path archive = folder / fs::path(std::string(release.archive_name));
+    std::error_code games_error;
+    const auto games_status = fs::symlink_status(player_folder / "games", games_error);
+    const bool games_linked = fs::exists(games_status) && !fs::is_directory(games_status);
+    if (games_linked || leads_elsewhere(folder, archive))
+        return false;
+    const fs::path earlier = legacy_archive(data_folder, release);
+    if (archive_matches(archive, release)) {
+        std::error_code record_error;
+        const fs::path record = folder / fs::path(std::string(content_record_name));
+        if (!fs::is_regular_file(record, record_error)) {
+            DemoSetup setup;
+            setup.folder = folder;
+            setup.archive = archive;
+            setup.installer = fs::is_regular_file(earlier, record_error) ? earlier : archive;
+            write_bundle_record(setup, release);
+        }
+        return true;
+    }
+    if (!archive_matches(earlier, release))
+        return false;
+    std::error_code remove_error;
+    if (fs::exists(archive, remove_error))
+        fs::remove(archive, remove_error);
+    if (fs::exists(archive, remove_error))
+        return false;
+    if (!copy_archive_file(earlier, archive, release))
+        return false;
+    DemoSetup setup;
+    setup.folder = folder;
+    setup.archive = archive;
+    setup.installer = earlier;
+    write_bundle_record(setup, release);
+    return archive_matches(archive, release) && archive_matches(earlier, release);
 }
 
 bool archive_matches(const fs::path& archive, const DemoRelease& release) {

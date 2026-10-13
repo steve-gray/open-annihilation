@@ -2707,9 +2707,13 @@ folders it looked at, why each cannot be played, and the platform's advice
 installer of the Total Annihilation demo (1997) is usable too:
 `demo_installer.cpp` recognises the installer by its size and SHA-256, never
 by its name, and unpacks the game data archive it carries, checked by its
-SHA-256, into `demo-1997` in the per-user data folder (`--data-dir` names
-another), where later starts check it and use it again; while it passes that
-check the installer is recognised by its size alone, since only unpacking
+SHA-256, into `games/totala-demo` in the player's Open Annihilation folder
+(`--data-dir` names another folder only when the player's folder is not
+known), with its `.oa-content` record, where later starts check it and use
+it again. An earlier unpack in `demo-1997` of the per-user data folder is
+copied from once, sharing disk blocks where the volume can, and left there.
+While the archive passes that check the installer is recognised by its size
+alone, since only unpacking
 reads it. That folder is the installation, with the checked archive as its
 only archive whatever else the folder holds, and the folder the player chose
 is the one remembered. Temporary files an unpacking that stopped part way

@@ -21,6 +21,7 @@
 #include "oa/formats/hpi.hpp"
 #include "oa/test/game_data.hpp"
 #include "oa/test/pe_image.hpp"
+#include "oa/platform/file_clone.hpp"
 #include "oa/platform/system.hpp"
 #include <algorithm>
 #include <cctype>
@@ -645,6 +646,47 @@ void check_managed_switch(const fs::path& installer, const fs::path& scratch) {
     CHECK(back && back->installation == demo_folder && !back->archives.empty());
 }
 
+// An earlier demo-1997/TADemo.hpi of the right size and SHA-256 is copied once
+// into games/<folder>, the record is written, and the earlier file stays.
+void test_adopts_legacy_demo(const fs::path& temporary, const Synthetic& synthetic) {
+    DemoRelease release = synthetic.release;
+    release.folder_name = "totala-demo";
+    const fs::path data = temporary / "legacy-data";
+    const fs::path player = temporary / "legacy-player";
+    const fs::path earlier = data / "demo-1997" / release.archive_name;
+    std::error_code error;
+    fs::create_directories(earlier.parent_path(), error);
+    CHECK(!error);
+    write_bytes(earlier, synthetic.archive);
+    CHECK(adopt_legacy_demo(data, player, release));
+    const fs::path archive = player / "games" / "totala-demo" / release.archive_name;
+    CHECK(archive_matches(archive, release));
+    CHECK(archive_matches(earlier, release));
+    CHECK(read_bytes(archive) == synthetic.archive);
+    const auto record_bytes = read_bytes(archive.parent_path() / ".oa-content");
+    const std::string record(record_bytes.begin(), record_bytes.end());
+    CHECK(contains(record, "bundle totala-demo"));
+    CHECK(contains(record, "file TADemo.hpi"));
+    const bool shareable = oa::platform::blocks_can_be_shared(earlier, archive.parent_path());
+    if (shareable)
+        CHECK(fs::is_regular_file(archive, error) && fs::is_regular_file(earlier, error));
+    CHECK(adopt_legacy_demo(data, player, release));
+    CHECK(fs::is_regular_file(earlier, error));
+
+    const fs::path wrong_data = temporary / "legacy-wrong";
+    const fs::path wrong_player = temporary / "legacy-wrong-player";
+    const fs::path wrong = wrong_data / "demo-1997" / release.archive_name;
+    fs::create_directories(wrong.parent_path(), error);
+    auto damaged = synthetic.archive;
+    damaged.push_back(1);
+    write_bytes(wrong, damaged);
+    DemoRelease damaged_release = release;
+    damaged_release.archive_size = synthetic.archive.size();
+    CHECK(!adopt_legacy_demo(wrong_data, wrong_player, damaged_release));
+    CHECK(!fs::exists(wrong_player / "games" / "totala-demo" / release.archive_name, error));
+    CHECK(fs::is_regular_file(wrong, error));
+}
+
 // The installer OA_DEMO_INSTALLER names, unpacked into the player's games folder.
 void test_installed_release() {
     const auto named = oa::platform::environment_value("OA_DEMO_INSTALLER");
@@ -705,6 +747,7 @@ int main(int argc, char** argv) {
             test_failed_unpacking(temporary, synthetic);
             test_inspection(temporary, synthetic);
             test_resolution(temporary, synthetic);
+            test_adopts_legacy_demo(temporary, synthetic);
             std::error_code error;
             fs::remove_all(temporary, error);
         }

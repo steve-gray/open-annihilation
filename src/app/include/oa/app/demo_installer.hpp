@@ -134,6 +134,27 @@ struct DemoSetup {
     const fs::path& folder, const fs::path& player_folder, const DemoRelease& release = demo_1997
 );
 
+/// Copies an earlier unpack of the demo into the managed base game, once.
+///
+/// Before the demo lived in `player_folder`/games/release.folder_name, it was
+/// unpacked to `data_folder`/demo-1997/release.archive_name. When the managed
+/// folder has no matching archive and that earlier file has the archive's
+/// size and SHA-256, this copies it (sharing disk blocks where the volume
+/// can, otherwise byte by byte) and writes the .oa-content record. The
+/// earlier folder is left in place. A managed archive that already matches
+/// is kept, and gains its record when that is missing. A release whose
+/// folder name is not a base game is copied the same way and has no record.
+///
+/// @param data_folder the per-user data folder that may hold demo-1997
+/// @param player_folder the player's folder, which holds games/
+/// @param release the release whose archive the earlier file must be
+/// @return true when the managed archive matches afterwards
+[[nodiscard]] bool adopt_legacy_demo(
+    const fs::path& data_folder,
+    const fs::path& player_folder,
+    const DemoRelease& release = demo_1997
+);
+
 /// The demo's installer as a source a managed copy can read.
 ///
 /// `open` recognises the installer by its size and SHA-256, in a file or in
