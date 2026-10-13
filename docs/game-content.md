@@ -85,7 +85,10 @@ run, by the file's size and its SHA-256: the Windows installer
 `setup_total_annihilation_commander_pack_3.1_(22139).exe`, the macOS
 package `total_annihilation__commander_pack_en_1_3_15733.pkg`, and the
 disk image for older Macs
-`total_annihilation_commander_pack_2.0.0.10.dmg`. The 1997 demo installer
+`total_annihilation_commander_pack_2.0.0.10.dmg`. That image is read in
+place: it is not mounted. `--check-installer FILE` lists the bundles it
+holds and each file's size and SHA-256, and does not open a window. A
+bundle with no file in the image is left out. The 1997 demo installer
 is separate from these three, and is recognised where it is today.
 
 ## For a mod author
