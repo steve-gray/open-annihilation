@@ -1641,16 +1641,149 @@ void Runtime::check_tracking_zoom(NavigationGroup group) {
     if (match_tracking_ || match_->state().game.follow_unit != 0)
         fail("the followed unit's end did not end the tracking");
 
+    check_middle_pan();
+
     std::cout << "tracking zoom check: the wheel and a pinch kept the commander's follow, "
                  "zooming about it at the centre; the dialog zoomed between "
               << least_match_zoom() << " and " << kMaxBattlefieldZoom
               << " with the tracked unit at the centre, in play, under a menu and at the "
                  "map's corner, past its edges; the wheel at the map's edge kept the follow "
                  "held at the limit; a scroll, the view held at the map's edge too, a finger's "
-                 "drag, the minimap and the unit's end ended the tracking\n";
+                 "drag, the minimap and the unit's end ended the tracking; a middle click "
+                 "panned the view toward the pointer, a left click ended it with no order, "
+                 "and Home ended it without centering\n";
     stop_match_tracking();
     match_zoom_ = match_zoom_target_ = kDefaultBattlefieldZoom;
     return_to_skirmish_menu();
+}
+
+void Runtime::check_middle_pan() {
+    const auto fail_pan = [](const std::string& what) {
+        throw std::runtime_error("tracking zoom check: " + what);
+    };
+    if (match_ == nullptr)
+        fail_pan("middle-click pan had no match");
+    match_paused_ = false;
+    match_finished_ = false;
+    match_command_ = MatchCommand::none;
+    stop_match_tracking();
+    match_zoom_ = match_zoom_target_ = kDefaultBattlefieldZoom;
+    select_local_commander();
+    if (selected_match_unit_ == 0)
+        fail_pan("middle-click pan had no selected unit");
+    const uint16_t selected = selected_match_unit_;
+    begin_match_tracking(selected);
+    const auto [map_width, map_height] = shown_map_size();
+    if (map_width < visible_map_width() + 64)
+        fail_pan("the map has no room to scroll right");
+    const double mid_z = std::max(
+        0.0, (static_cast<double>(map_height) - static_cast<double>(visible_map_height())) * 0.5
+    );
+    view_hold_ = {};
+    place_match_view(0.0, mid_z);
+    const auto saved_speed = match_->state().game.scroll_speed;
+    match_->state().game.scroll_speed = 32;
+    const float centre_x = static_cast<float>(match_layout_.left) +
+                           static_cast<float>(match_layout_.battlefield_width()) * 0.5F;
+    const float centre_y = static_cast<float>(match_layout_.top) +
+                           static_cast<float>(match_layout_.battlefield_height()) * 0.5F;
+    bool running = true;
+    const auto pointer_button = [&](uint8_t button, bool down, float x, float y) {
+        SDL_Event event{};
+        event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+        event.button.which = 1;
+        event.button.button = button;
+        event.button.down = down;
+        event.button.clicks = 1;
+        event.button.x = x;
+        event.button.y = y;
+        handle_sdl_event(event, running);
+    };
+    const auto move_pointer = [&](float x, float y) {
+        SDL_Event event{};
+        event.type = SDL_EVENT_MOUSE_MOTION;
+        event.motion.which = 1;
+        event.motion.x = x;
+        event.motion.y = y;
+        handle_sdl_event(event, running);
+    };
+    constexpr uint64_t kPanFrameNs = 1'000'000'000ULL / 60ULL;
+    const auto advance = [&] {
+        frame_time_ns_ += kPanFrameNs;
+        move_match_camera();
+    };
+    pointer_button(SDL_BUTTON_MIDDLE, true, centre_x, centre_y);
+    pointer_button(SDL_BUTTON_MIDDLE, false, centre_x, centre_y);
+    if (middle_pan_.phase != middle_pan::Phase::clicked)
+        fail_pan("a middle click did not start a pan");
+    move_pointer(centre_x + 80.0F, centre_y);
+    scroll_clock_ = frame_time_ns_;
+    const int32_t began_x = match_camera_x_;
+    for (int step = 0; step < 31; ++step)
+        advance();
+    if (match_tracking_ || match_->state().game.follow_unit != 0)
+        fail_pan("a middle-click pan did not end the tracking");
+    if (match_camera_x_ < began_x + 4)
+        fail_pan(
+            "the view did not scroll right (" + std::to_string(match_camera_x_ - began_x) +
+            " map pixels)"
+        );
+
+    match_->stop_orders(selected);
+    const auto* ground = match_->ground_runtime(selected);
+    const auto* goal_before = ground == nullptr ? nullptr : ground->navigation.goal;
+    status_ = "marked";
+    const float order_x = static_cast<float>(match_layout_.left) + 24.0F;
+    const float order_y = static_cast<float>(match_layout_.top) + 24.0F;
+    pointer_button(SDL_BUTTON_LEFT, true, order_x, order_y);
+    pointer_button(SDL_BUTTON_LEFT, false, order_x, order_y);
+    if (middle_pan_.phase != middle_pan::Phase::idle)
+        fail_pan("a left click did not end the pan");
+    if (status_ != "marked" || selected_match_unit_ != selected)
+        fail_pan("the left click that ended the pan changed the selection or the status");
+    const auto* ground_after = match_->ground_runtime(selected);
+    const auto* goal_after = ground_after == nullptr ? nullptr : ground_after->navigation.goal;
+    if (goal_after != goal_before)
+        fail_pan("the left click that ended the pan gave an order");
+    match_pointer_known_ = false;
+    const int32_t held_x = match_camera_x_;
+    const int32_t held_z = match_camera_z_;
+    for (int step = 0; step < 10; ++step)
+        advance();
+    if (match_camera_x_ != held_x || match_camera_z_ != held_z)
+        fail_pan("the view kept scrolling after the left click");
+
+    pointer_button(SDL_BUTTON_MIDDLE, true, centre_x, centre_y);
+    pointer_button(SDL_BUTTON_MIDDLE, false, centre_x, centre_y);
+    move_pointer(centre_x + 80.0F, centre_y);
+    if (middle_pan_.phase != middle_pan::Phase::clicked)
+        fail_pan("a second middle click did not start a pan");
+    scroll_clock_ = frame_time_ns_;
+    const int32_t again_x = match_camera_x_;
+    for (int step = 0; step < 16; ++step)
+        advance();
+    if (match_camera_x_ < again_x + 4)
+        fail_pan("the second pan did not scroll right");
+    status_ = "keyed";
+    const int32_t before_key_x = match_camera_x_;
+    const int32_t before_key_z = match_camera_z_;
+    SDL_Event key{};
+    key.type = SDL_EVENT_KEY_DOWN;
+    key.key.key = SDLK_HOME;
+    key.key.scancode = SDL_SCANCODE_HOME;
+    key.key.down = true;
+    handle_sdl_event(key, running);
+    if (middle_pan_.phase != middle_pan::Phase::idle)
+        fail_pan("Home did not end the pan");
+    if (status_ != "keyed" || match_camera_x_ != before_key_x || match_camera_z_ != before_key_z)
+        fail_pan("Home ran its command after ending the pan");
+    match_pointer_known_ = false;
+    for (int step = 0; step < 10; ++step)
+        advance();
+    if (match_camera_x_ != before_key_x || match_camera_z_ != before_key_z)
+        fail_pan("the view kept scrolling after Home");
+    match_->state().game.scroll_speed = saved_speed;
+    stop_match_tracking();
 }
 
 } // namespace oa::app

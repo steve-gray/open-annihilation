@@ -1212,6 +1212,11 @@ void Runtime::apply_engine_settings(const settings::EngineSettings& chosen) {
     // them from the next frame, not from where it lies now.
     if (before.view_past_map_edge != chosen.view_past_map_edge)
         view_hold_ = {};
+    // Turning middle-click panning off stops a pan that is already running.
+    if (before.middle_click_pan && !chosen.middle_click_pan) {
+        middle_pan_ = {};
+        middle_pan_swallow_button_ = 0;
+    }
     // ui.megamap acts only while the wheel zoom is off.
     if (before.wheel_zoom != chosen.wheel_zoom && match_)
         megamap_wheel_zoom_changed();

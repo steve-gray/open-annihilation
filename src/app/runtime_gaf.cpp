@@ -534,6 +534,9 @@ void Runtime::tick_and_draw_cursor() {
     if (screen_ == Screen::match)
         select_game_cursor(pick_match_cursor());
     oa::ui::gui_input::follow_hover_cursor(gui_context_, pointer_over_top_panel());
+    // A middle-click pan draws its own direction at the pointer.
+    if (middle_pan_shows_direction())
+        return;
     if (match_use_layers_ && screen_ == Screen::match)
         return;
     // Over a screen of the OA layer the cursor is presented above the layer

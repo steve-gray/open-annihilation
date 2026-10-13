@@ -553,6 +553,8 @@ EngineSettings read_settings(
     read_word(
         values, key::view_past_map_edge, view_past_map_edge_words, settings.view_past_map_edge
     );
+    if (const auto number = stored_number(values, key::middle_click_pan))
+        settings.middle_click_pan = *number > 0;
     if (const auto number = stored_number(values, key::escape_opens_menu))
         settings.escape_opens_menu = *number > 0;
     if (const auto number = stored_number(values, key::unit_limit))
@@ -722,6 +724,14 @@ void write_settings(
         opened.view_past_map_edge,
         chosen.view_past_map_edge,
         defaults.view_past_map_edge,
+        restored
+    );
+    store(
+        values,
+        key::middle_click_pan,
+        switch_text(chosen.middle_click_pan),
+        chosen.middle_click_pan != opened.middle_click_pan,
+        chosen.middle_click_pan == defaults.middle_click_pan,
         restored
     );
     store(
