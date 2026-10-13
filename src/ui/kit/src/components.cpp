@@ -1845,6 +1845,10 @@ void draw_oa_button_corner(const Canvas& canvas, int32_t side, const OaButtonMar
 
 } // namespace
 
+void draw_spinner(const Canvas& canvas, const Rect& area, uint32_t turn) {
+    draw_oa_spinner(canvas, area, turn);
+}
+
 void draw_oa_button(
     const Canvas& canvas, int32_t side, OaButtonState state, const OaButtonMark& mark
 ) {

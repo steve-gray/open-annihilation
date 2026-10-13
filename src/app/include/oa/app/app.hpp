@@ -500,6 +500,9 @@ struct Options {
     // continues at online features over the main menu. The named --game-dir
     // is what the menu plays; the window copies the check's install.
     bool check_setup_window = false;
+    // Shows the progress dialog for a slow fixture, checks it animates and
+    // closes with no input, writes pictures, and checks the four languages.
+    bool check_progress = false;
     // Opens every Open Annihilation screen in English, German, French,
     // Spanish, Italian and Simplified Chinese, at 640x480 and 1280x720, and
     // fails when any text is wider than its box or crosses another text.
@@ -837,9 +840,9 @@ void note_launch_frame();
 /// Pumps events and redraws the quiet launch frame while start-up work runs
 /// off this thread.
 ///
-/// A moving bar appears once that frame has been up for a moment. After
-/// release_launch_window it does nothing, so it cannot draw over the setup
-/// or the menu.
+/// The frame stays the quiet colour. A moment that lasts shows the progress
+/// dialog over it. After release_launch_window it does nothing, so it cannot
+/// draw over the setup or the menu.
 void pump_launch_window();
 
 /// Stops the quiet launch frame.

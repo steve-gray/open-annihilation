@@ -325,6 +325,7 @@ void check_game_files_options(Options& options) {
         {options.check_language_notice, "--check-language-notice"},
         {options.check_first_run, "--check-first-run"},
         {options.check_setup_window, "--check-setup-window"},
+        {options.check_progress, "--check-progress"},
         {options.check_text_fit, "--check-text-fit"},
         {options.check_folder_chooser, "--check-folder-chooser"},
         {options.check_patrol_reclaim, "--check-patrol-reclaim"},
@@ -541,6 +542,7 @@ void check_director_options(Options& options) {
         {options.check_language_notice, "--check-language-notice"},
         {options.check_first_run, "--check-first-run"},
         {options.check_setup_window, "--check-setup-window"},
+        {options.check_progress, "--check-progress"},
         {options.check_text_fit, "--check-text-fit"},
         {options.check_folder_chooser, "--check-folder-chooser"},
         {options.check_patrol_reclaim, "--check-patrol-reclaim"},
@@ -620,6 +622,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_language_notice, "--check-language-notice"},
             {options.check_first_run, "--check-first-run"},
             {options.check_setup_window, "--check-setup-window"},
+            {options.check_progress, "--check-progress"},
             {options.check_text_fit, "--check-text-fit"},
             {options.check_folder_chooser, "--check-folder-chooser"},
             {options.check_patrol_reclaim, "--check-patrol-reclaim"},
@@ -825,6 +828,7 @@ constexpr FlagOption kFlagOptions[] = {
     {"--check-language-notice", &Options::check_language_notice},
     {"--check-first-run", &Options::check_first_run},
     {"--check-setup-window", &Options::check_setup_window},
+    {"--check-progress", &Options::check_progress},
     {"--check-text-fit", &Options::check_text_fit},
     {"--check-folder-chooser", &Options::check_folder_chooser},
     {"--check-patrol-reclaim", &Options::check_patrol_reclaim},
@@ -1405,6 +1409,7 @@ std::string launch_content_error(std::string_view problem) {
                      "[--check-language-switch] "
                      "[--check-language-registry] "
                      "[--check-language-notice] [--check-first-run] [--check-setup-window] "
+                     "[--check-progress] "
                      "[--check-text-fit] "
                      "[--check-folder-chooser] "
                      "[--check-patrol-reclaim] [--check-reclaim-cursor] [--check-build-preview] "
@@ -1572,6 +1577,10 @@ std::string launch_content_error(std::string_view problem) {
         throw std::runtime_error(
             "--check-render-tiers draws in a window and cannot be used with --headless-check"
         );
+    if (result.check_progress && result.headless_check)
+        throw std::runtime_error(
+            "--check-progress draws in a window and cannot be used with --headless-check"
+        );
     if (result.check_running_while_inactive && result.headless_check)
         throw std::runtime_error(
             "--check-running-while-inactive keeps a window and cannot be used with "
@@ -1601,8 +1610,8 @@ std::string launch_content_error(std::string_view problem) {
         result.check_kill_board || !result.check_unit_language.empty() ||
         result.check_language_switch || result.check_language_registry ||
         result.check_language_notice || result.check_first_run || result.check_setup_window ||
-        result.check_text_fit || result.check_folder_chooser || result.check_patrol_reclaim ||
-        result.check_reclaim_cursor || result.check_build_preview ||
+        result.check_progress || result.check_text_fit || result.check_folder_chooser ||
+        result.check_patrol_reclaim || result.check_reclaim_cursor || result.check_build_preview ||
         result.check_pointer_interfaces || result.check_megamap_clicks ||
         result.check_radar_orders || result.check_touch_controls || result.check_pad_controls ||
         result.check_running_while_inactive || result.check_director_view ||

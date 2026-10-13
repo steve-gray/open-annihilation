@@ -1069,6 +1069,26 @@ A mark taken before the log file is open is kept and written when the log
 opens. It is also written to the standard output when lines are not held
 for the log, so a check that never opens a log still prints the marks.
 
+A phase that runs longer than the progress dialog's threshold is drawn
+under that dialog. See The progress dialog below.
+
+## The progress dialog
+
+Work that lasts past 300 ms (`long_work_show_after_ms`) shows a dialog with
+the title Open Annihilation, one line and a bar or a spinner, and no
+buttons. It stays at least 800 ms (`long_work_stay_ms`) once it has
+appeared, then closes on its own. Quicker work shows nothing and logs
+`progress dialog: not shown`. The log lines are `progress dialog: shown`,
+`progress dialog: spinner` (once each time the spinner's eighth changes),
+`progress dialog: closed` and `progress dialog: not shown`. The timing
+marks are `progress dialog shown` and `progress dialog closed`.
+
+The dialog covers loading the game's archives, checking the copy of Total
+Annihilation, applying a language, a library copy, and a remount after a
+change (`Applying your changes`). The setup shows the same dialog while an
+installer scan is still reading on the game step. Pictures of the spinner
+and the bar at three window sizes are in `docs/images/progress/`.
+
 ## Kinds of test
 
 | Kind | What it does | Examples |

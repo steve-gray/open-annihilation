@@ -3,8 +3,9 @@
 
 // A notice and a question: their text wrapped and placed, their display
 // lists, what pointer, finger and key events do to them, and their drawing.
-// The arithmetic is the settings dialog's notices' and prompts', moved here
-// unchanged; a box's width and greatest height are its size class's.
+// A work dialog is the same panel with one line and a bar or a spinner, and
+// no buttons. The arithmetic is the settings dialog's notices' and prompts',
+// moved here unchanged; a box's width and greatest height are its size class's.
 
 #include "oa/ui/kit/components_more.hpp"
 
@@ -934,6 +935,77 @@ void add_progress(DisplayList& list, const Rect& bar, int32_t done, int32_t whol
     item.text = std::to_string(done);
     item.look = ProgressLook{done, whole};
     list.items.push_back(std::move(item));
+}
+
+PlacedWorkDialog place_work_dialog(const WorkDialog& dialog, const Measure& measure) {
+    const int32_t width = box_width(dialog.size_class);
+    const Metrics& sized = metrics_of(dialog.size_class);
+    const bool spinner = dialog.progress < 0;
+    const int32_t indicator = spinner ? work_spinner_side : metrics.progress_bar_height;
+    const int32_t content_bottom =
+        metrics.text_top + metrics.small_line + metrics.paragraph_gap + indicator;
+    const int32_t natural = content_bottom + metrics.text_bottom_gap + metrics.edge;
+    PlacedWorkDialog placed;
+    placed.height = std::clamp(natural, sized.least_notice_height, sized.greatest_notice_height);
+    placed.title = title_rect(width);
+    const int32_t line_width = line_width_in(width);
+    placed.line = PlacedLine{
+        fit(dialog.line, line_width, measure),
+        false,
+        false,
+        {text_left, metrics.text_top, line_width, metrics.small_line}
+    };
+    int32_t indicator_y = metrics.text_top + metrics.small_line + metrics.paragraph_gap;
+    if (natural < sized.least_notice_height)
+        indicator_y = placed.height - metrics.edge - metrics.text_bottom_gap - indicator;
+    if (spinner) {
+        placed.spinner = {
+            text_left + (line_width - work_spinner_side) / 2,
+            indicator_y,
+            work_spinner_side,
+            work_spinner_side
+        };
+    } else {
+        placed.bar = {text_left, indicator_y, line_width, metrics.progress_bar_height};
+    }
+    return placed;
+}
+
+PlacedWorkDialog place_work_dialog(const WorkDialog& dialog, const Fonts* fonts) {
+    return place_work_dialog(dialog, measure_in(fonts, FontRole::small));
+}
+
+DisplayList work_dialog_list(const WorkDialog& dialog, const Fonts* fonts) {
+    const PlacedWorkDialog placed = place_work_dialog(dialog, fonts);
+    const int32_t width = box_width(dialog.size_class);
+    DisplayList list;
+    add_body(
+        list,
+        work_dialog_word,
+        placed.title,
+        {placed.line},
+        body_text(dialog.title, {placed.line.text}, {})
+    );
+    add_face_and_header(list, placed.height, width, dialog.title);
+    add_text_line(list, placed.line, placed.line.text);
+    if (placed.bar.width > 0)
+        add_progress(list, placed.bar, dialog.progress, question_progress_whole);
+    add_edge(list, placed.height, width);
+    return list;
+}
+
+void draw_work_dialog(const Canvas& canvas, const WorkDialog& dialog) {
+    const PlacedWorkDialog placed = place_work_dialog(dialog, canvas.fonts);
+    const int32_t width = box_width(dialog.size_class);
+    const Rect whole{0, 0, width, placed.height};
+    draw_window_face(canvas, whole);
+    draw_header(canvas, header_of(dialog.title, width));
+    draw_text_line(canvas, placed.line, placed.line.text);
+    if (placed.bar.width > 0)
+        draw_progress(canvas, placed.bar, dialog.progress, question_progress_whole);
+    else if (placed.spinner.width > 0)
+        draw_spinner(canvas, placed.spinner, dialog.turn);
+    draw_window_edge(canvas, whole);
 }
 
 } // namespace oa::ui::kit

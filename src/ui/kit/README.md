@@ -215,7 +215,12 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   `QuestionButton::id`, or `<word>.button-<n>` from 1 without one, and
   both's text `<word>.body`, a control of kind `area` that is neither
   enabled nor focusable, so that no press, finger or key reaches it, whose
-  text is the title, the paragraphs and the failure, one a line.
+  text is the title, the paragraphs and the failure, one a line. The work
+  dialog is the same panel with no buttons: a title, one line and either a
+  bar (`progress` of 0 to `question_progress_whole`) or a spinner
+  (`progress` of -1, `work_spinner_side`, `draw_spinner`). Its word is
+  `progress` and its one control is `<progress>.body`, the same kind of
+  area. The spinner is drawn directly and is not a role of the display list.
 - `rows.hpp`: declared rows. A settings page is a table of `RowSpec`s,
   each made by a factory that takes the row's id first: `toggle`, `choice`,
   `slider`, `levels`, `value_and_button`, `buttons`, `text_field`, `link`

@@ -14,6 +14,7 @@
 #include "window_pixels.hpp"
 
 #include "oa/app/content_copy.hpp"
+#include "oa/app/long_work.hpp"
 #include "oa/app/disk_image_source.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/game_files_hooks.hpp"
@@ -33,6 +34,7 @@
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/canvas.hpp"
+#include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/paint/painter.hpp"
 
@@ -1429,6 +1431,27 @@ SetupBefore run_setup_before_game(
     first_run::Scene scene = relayout(room);
     SetupWindowDrive window_check;
 
+    /// The installer scan's dialog: shown once the game step has waited, and
+    /// kept up long enough to read after the scan finishes.
+    struct SetupProgress {
+        bool shown = false;
+        bool closed = false;
+        uint32_t shown_at = 0;
+        int last_eighth = -1;
+    };
+
+    SetupProgress progress_hold;
+    const auto scan_waiting = [&] {
+        return sources.started && !sources.applied && session.model.step == first_run::Step::game;
+    };
+    const auto progress_visible = [&](uint32_t now_ms) {
+        if (!progress_hold.shown)
+            return false;
+        if (scan_waiting())
+            return true;
+        return now_ms - progress_hold.shown_at < long_work_stay_ms;
+    };
+
     const auto present = [&] {
         if (viewport.width <= 0 || viewport.height <= 0)
             return;
@@ -1443,19 +1466,34 @@ SetupBefore run_setup_before_game(
         canvas.smooth.origin = {room.area.x, room.area.y};
         canvas.icon = app_icon;
         first_run::draw(canvas, scene, session);
-        // The game step is up while the installer scan finishes. After a
-        // moment a bar shows that the list is still being read. No new words.
-        if (sources.started && !sources.applied && session.model.step == first_run::Step::game &&
-            oa::platform::tick_ms() - step_timing.began_ms > 200) {
-            const int32_t bar_width = std::max(pixels.width / 5, 40);
-            const int32_t travel = std::max(pixels.width - bar_width, 1);
-            const uint32_t now_ms = oa::platform::tick_ms();
-            const int32_t bar_x =
-                static_cast<int32_t>((now_ms / 16U) % static_cast<uint32_t>(travel));
-            painter.fill_rect(
-                {bar_x, std::max(pixels.height - 36, 0), bar_width, 8},
-                paint::Rgba{0xc8, 0xc2, 0xb0, 255}
+        // The game step stays up while the installer scan finishes. After a
+        // moment the progress dialog says so, over the step, and the step's
+        // buttons stay live under it.
+        const uint32_t now_ms = oa::platform::tick_ms();
+        if (progress_visible(now_ms)) {
+            const uint32_t eighth = kit::refresh_eighth(now_ms - progress_hold.shown_at);
+            if (static_cast<int>(eighth) != progress_hold.last_eighth) {
+                progress_hold.last_eighth = static_cast<int>(eighth);
+                std::cerr << "open-annihilation: progress dialog: spinner\n";
+            }
+            kit::blend_rect(
+                canvas,
+                {0, 0, room.area.width, room.area.height},
+                kit::colour::backdrop,
+                kit::menu_backdrop_opacity
             );
+            kit::WorkDialog dialog;
+            dialog.title = std::string(languages::interface_text("Open Annihilation"));
+            dialog.line =
+                std::string(languages::interface_text("Checking your copy of Total Annihilation"));
+            dialog.progress = -1;
+            dialog.turn = eighth;
+            dialog.size_class = room.size_class;
+            const kit::PlacedWorkDialog placed = kit::place_work_dialog(dialog, nullptr);
+            const int32_t box = kit::metrics_of(room.size_class).notice_width;
+            const int32_t x = (room.area.width - box) / 2;
+            const int32_t y = (room.area.height - placed.height) / 2;
+            kit::draw_work_dialog(kit::placed_at(canvas, {x, y}), dialog);
         }
         static_cast<void>(frame.show(pixels, render_state, display.host));
         dirty = false;
@@ -1659,9 +1697,21 @@ SetupBefore run_setup_before_game(
         first_run::tick(session, dt);
         if (take_source_scan(sources, session.model))
             dirty = true;
-        if (sources.started && !sources.applied && session.model.step == first_run::Step::game &&
-            oa::platform::tick_ms() - step_timing.began_ms > 200)
+        const uint32_t progress_now = oa::platform::tick_ms();
+        if (!progress_hold.shown && scan_waiting() &&
+            progress_now - step_timing.began_ms >= long_work_show_after_ms) {
+            progress_hold.shown = true;
+            progress_hold.shown_at = progress_now;
+            std::cerr << "open-annihilation: progress dialog: shown\n";
+            oa::platform::log_files::note_timing("progress dialog shown");
+        }
+        if (progress_visible(progress_now))
             dirty = true;
+        else if (progress_hold.shown && !progress_hold.closed) {
+            progress_hold.closed = true;
+            std::cerr << "open-annihilation: progress dialog: closed\n";
+            oa::platform::log_files::note_timing("progress dialog closed");
+        }
         if (dirty) {
             scene = relayout(room);
             present();
@@ -1692,6 +1742,10 @@ SetupBefore run_setup_before_game(
     release_picked_sources();
     if (ended == SetupBefore::not_run)
         ended = SetupBefore::quit;
+    if (progress_hold.shown && !progress_hold.closed) {
+        std::cerr << "open-annihilation: progress dialog: closed\n";
+        oa::platform::log_files::note_timing("progress dialog closed");
+    }
     return ended;
 }
 
