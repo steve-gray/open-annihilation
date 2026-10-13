@@ -132,7 +132,8 @@ Annihilation, and that the installation is left as it is.
 
 The page word is Setup, the step is COPYING, and the count is 3 of 5. The
 title is "Copying Total Annihilation". Under it, a line says where the
-bytes are read from. The overall count is the files this copy takes from
+bytes are read from. The column is the game step's, as wide as Settings.
+The overall count is the files this copy takes from
 this source. A file the source does not hold is not in that count, so a
 finished copy reads 100%. The bundles the source holds sit in a panel
 under the bar. A bundle the source does not hold is not listed. While a

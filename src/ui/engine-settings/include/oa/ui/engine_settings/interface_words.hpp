@@ -252,7 +252,6 @@ inline constexpr std::string_view interface_words[] = {
     "Light",
     "Lines of 2x2 walls build as a double row.",
     "Locked during a game",
-    "Locked during a game.",
     "Low",
     "Lower it to save power.",
     "MANAGE…",

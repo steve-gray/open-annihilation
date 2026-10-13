@@ -68,8 +68,6 @@ constexpr std::string_view kInstallHint =
 constexpr std::string_view kIdGap = " \u00b7 \u00b7 \u00b7 ";
 /// What a download in progress adds to the files' size.
 constexpr std::string_view kInUse = " \u00b7 in use by downloads";
-/// RESET and EMPTY while a game is running.
-constexpr std::string_view kGameLock = "Locked during a game.";
 
 /// The check's captions, in ContentCheck's order.
 constexpr std::array<std::string_view, 3> kCaptions{
@@ -330,12 +328,13 @@ bool files_enabled(const RowModel& model) {
     return offer.kept_bytes > 0 && !offer.downloads_busy;
 }
 
-/// Returns the lock RESET and EMPTY show during a game.
+/// Returns the lock RESET and EMPTY show during a game: the words every
+/// other locked row of the dialog shows.
 ///
 /// @param model the row
 /// @return the lock's text; empty while a game is not running
 std::string_view game_lock(const RowModel& model) {
-    return game_running(locks_of(model)) ? kGameLock : std::string_view();
+    return game_running(locks_of(model)) ? geometry::lock_text(Lock::in_game) : std::string_view();
 }
 
 /// Returns how many ways the check offers.

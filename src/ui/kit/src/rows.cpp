@@ -943,14 +943,17 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
             break;
         }
         case RowKind::value_and_button:
-            // A label and a value that do not fit on one line with the button:
-            // the label keeps the first line and the value stands with the
-            // button on the next. An empty label leaves the value the first line.
-            if (drop_line && !view.label.empty() && has_area(row.control_area)) {
-                const int32_t value_right = row.control_area.x - kMetrics.label_gap;
+            // A label and a value that do not fit on one line with the button,
+            // or with the lock: the label keeps the first line and the value
+            // stands on the next, before the lock where there is one, else
+            // before the button. An empty label leaves the value the first line.
+            if (drop_line && !view.label.empty() &&
+                (has_area(row.lock_area) || has_area(row.control_area))) {
+                const Rect& after = has_area(row.lock_area) ? row.lock_area : row.control_area;
+                const int32_t value_right = after.x - kMetrics.label_gap;
                 row.value = {
                     placement.left,
-                    row.control_area.y,
+                    control_top,
                     std::max(value_right - placement.left, int32_t{0}),
                     line_height
                 };

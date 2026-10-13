@@ -384,8 +384,17 @@ void fit_measured(
         const int32_t button = shown.control_width > 0
                                    ? shown.control_width
                                    : oa::ui::kit::compact_metrics.button_row_width;
+        // What stands at the line's right end: the button, with the lock
+        // before it, or the lock alone in the button's place when the row's
+        // hint is its status.
+        int32_t beside = button;
+        if (!shown.lock.empty()) {
+            const int32_t lock = shown.lock_columns > 0 ? shown.lock_columns
+                                                        : oa::ui::kit::compact_metrics.lock_width;
+            beside = shown.hint_is_status ? lock : lock + label_gap + button;
+        }
         const int32_t side =
-            (label_w > 0 ? label_w + label_gap : 0) + value_width + label_gap + button;
+            (label_w > 0 ? label_w + label_gap : 0) + value_width + label_gap + beside;
         if (side > available_width)
             shown.control_below = true;
     }
@@ -2808,12 +2817,7 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
                     no_control,
                 }
             );
-            // Downloads' RESET and EMPTY say the sentence with its stop.
-            // Every other lock keeps the words the dialog has always used.
-            const std::string_view lock_line = row.downloads >= 0 && row.lock == Lock::in_game
-                                                   ? std::string_view("Locked during a game.")
-                                                   : layout::lock_text(row.lock);
-            row_text(text_area, lock_line, DialogFont::small);
+            row_text(text_area, layout::lock_text(row.lock), DialogFont::small);
         }
         for (std::size_t line = 0; line < row.hint_lines && line < view.hints.size(); ++line)
             if (!view.hints[line].empty())
