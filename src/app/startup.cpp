@@ -603,6 +603,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_running_while_inactive, "--check-running-while-inactive"},
             {options.check_game_files, "--check-game-files"},
             {!options.check_content_copy.empty(), "--check-content-copy"},
+            {!options.check_installer.empty(), "--check-installer"},
             {options.check_multiplayer_menu, "--check-multiplayer-menu"},
             {options.check_director_view, "--check-director-view"},
             {options.check_director_render, "--check-director-render"},

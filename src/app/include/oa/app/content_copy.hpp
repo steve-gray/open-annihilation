@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The game's own copy of a base game and its expansions. Files are read from
-// a source (a folder today; an installer through the same reader later) and
-// written under the player's folder, in games/<bundle> and
+// a source (a folder, or a Windows installer) and written under the player's
+// folder, in games/<bundle> and
 // expansions/<base>/<bundle>. Each bundle folder holds a .oa-content record
 // of where the files came from and each file's size, modification time and
-// SHA-256. The source is only read.
+// SHA-256. The source is only read. Each start checks a copied bundle against
+// that record: a file whose size and time still match is not read again, and
+// one whose SHA-256 is not in the table marks the bundle as differing.
 #pragma once
 
 #include "oa/data/content_bundles.hpp"
@@ -16,6 +18,7 @@
 #include <filesystem>
 #include <iosfwd>
 #include <limits>
+#include <memory>
 #include <span>
 #include <stdint.h>
 #include <string>
@@ -194,7 +197,11 @@ class ContentSource {
     /// @param request where the files go, and when to stop
     /// @param[out] result how the copy ended, when this returns true
     /// @return true when this source copied the files itself
-    [[nodiscard]] virtual bool copy_together(const CopyRequest& request, CopyResult& result);
+    [[nodiscard]] virtual bool copy_together(const CopyRequest& request, CopyResult& result) {
+        (void)request;
+        (void)result;
+        return false;
+    }
 
     /// Resolves a listed name to a file on disk, for a volume that can share
     /// its blocks.
@@ -206,12 +213,17 @@ class ContentSource {
     /// @param[out] error why it could not be resolved; may be null
     /// @return true when `resolved` is a file that can be read
     [[nodiscard]] virtual bool
-    locate(std::string_view name, std::filesystem::path& resolved, std::string* error);
+    locate(std::string_view name, std::filesystem::path& resolved, std::string* error) {
+        (void)name;
+        (void)resolved;
+        (void)error;
+        return false;
+    }
 
     /// Returns the directory the files are read from, when they are on disk.
     ///
     /// @return that directory, or empty when the source has none
-    [[nodiscard]] virtual std::filesystem::path disk_root() const;
+    [[nodiscard]] virtual std::filesystem::path disk_root() const { return {}; }
 };
 
 /// A folder of game files. Names match without regard to ASCII case, and a
@@ -249,6 +261,60 @@ class FolderContentSource final : public ContentSource {
     std::filesystem::path root_;
     std::span<const oa::data::content_bundles::Bundle> bundles_{};
     bool opened_{};
+};
+
+/// A Windows installer. Names are the installed paths, and streaming one file
+/// reads it out of the installer. The installer itself is only read.
+class WindowsInstallerSource final : public ContentSource {
+  public:
+
+    /// Takes the installer the player named. Every installed file is listed;
+    /// the copy matches that listing against `bundles`.
+    ///
+    /// @param file the installer
+    /// @param bundles the bundles a file of the right name and size belongs to.
+    ///        Not kept: matching reads the table again when the copy runs.
+    WindowsInstallerSource(
+        std::filesystem::path file, std::span<const oa::data::content_bundles::Bundle> bundles
+    );
+
+    /// Closes the installer.
+    ~WindowsInstallerSource() override;
+
+    WindowsInstallerSource(const WindowsInstallerSource&) = delete;
+    WindowsInstallerSource& operator=(const WindowsInstallerSource&) = delete;
+    WindowsInstallerSource(WindowsInstallerSource&&) = delete;
+    WindowsInstallerSource& operator=(WindowsInstallerSource&&) = delete;
+
+    /// The installer the player named, as the copy's record keeps it.
+    [[nodiscard]] std::string origin() const override;
+    /// Recognises the installer and reads its file list.
+    ///
+    /// A file whose size and SHA-256 are not the Windows installer this game
+    /// knows fails with "This installer is not recognised." A file that is
+    /// that installer but cannot be read fails with "This installer could
+    /// not be read."
+    [[nodiscard]] bool open(std::string* error) override;
+    /// Lists the installed files.
+    [[nodiscard]] bool list(std::vector<ContentSourceFile>& files, std::string* error) override;
+    /// Writes one listed file from the installer to `request.destination`.
+    [[nodiscard]] bool
+    stream_file(const StreamRequest& request, StreamResult& result, std::string* error) override;
+
+    /// The SHA-256 of one listed file. The installer is only read, and nothing
+    /// is written.
+    ///
+    /// @param name the listed name
+    /// @param[out] digest the digest, when the file was read
+    /// @param[out] error why it could not be read; may be null
+    /// @return true when `digest` is the file's
+    [[nodiscard]] bool
+    hash_file(std::string_view name, oa::base::sha256::Digest& digest, std::string* error);
+
+  private:
+
+    struct State;
+    std::unique_ptr<State> state_;
 };
 
 /// One file recorded in a bundle folder.
@@ -495,9 +561,10 @@ struct ManagedCopyRequest {
 ///
 /// --game-dir leaves the installation where it is. An unattended start never
 /// copies. An attended start copies from `installation` when that is a
-/// directory of game files. The installation is only read. A start whose
-/// player folder could not be resolved skips the copy when somebody is
-/// watching, and refuses when nobody is.
+/// directory of game files, or a Windows installer this game recognises.
+/// The installation is only read. A start whose player folder could not be
+/// resolved skips the copy when somebody is watching, and refuses when nobody
+/// is.
 ///
 /// @param request what this start was given
 /// @throws std::runtime_error when an unattended start has no managed base
@@ -628,6 +695,135 @@ class MacosInstallerSource final : public ContentSource {
 ///
 /// @param file the installer
 /// @return 0 when the check passed, 1 when it did not
-[[nodiscard]] int run_check_installer(const std::filesystem::path& file);
+[[nodiscard]] int run_macos_installer_check(const std::filesystem::path& file);
+
+/// One file of a copied bundle whose bytes are not a hash the table knows.
+struct ContentFileDifference {
+    /// The name it is stored under, relative to the bundle folder.
+    std::string copy_name;
+};
+
+/// One copied bundle, after the start's check.
+struct ContentBundleCheck {
+    /// The bundle id.
+    std::string id;
+    /// The name shown to the player, in English, as the table writes it.
+    std::string english_name;
+    /// Base game or expansion.
+    oa::data::content_bundles::Kind kind{};
+    /// How many files the table gives the bundle.
+    uint32_t file_count{};
+    /// How many of those files differ: missing, or not a hash the table knows.
+    uint32_t files_differ{};
+    /// The files that differ, in the table's order.
+    std::vector<ContentFileDifference> differing;
+};
+
+/// What a start knows about the managed copy.
+struct ContentCheck {
+    /// Every copied bundle, in the table's order, matching and differing.
+    std::vector<ContentBundleCheck> bundles;
+    /// Files read and hashed because their size or time was not the record's.
+    uint32_t files_hashed{};
+};
+
+/// Reports whether any copied bundle differs.
+///
+/// @param check the start's check
+/// @return true when a bundle has a file that differs
+[[nodiscard]] bool content_notice_due(const ContentCheck& check) noexcept;
+
+/// Reports whether this start shows the content notice.
+///
+/// A named --game-dir, a run nobody watches, and a notice already closed
+/// this start stay quiet. Nothing is stored for a later start: while the
+/// files differ, the next start shows it again.
+///
+/// @param game_dir_named the command line named --game-dir
+/// @param unwatched nobody is watching this run
+/// @param closed_this_run OK or Escape already closed it this start
+/// @param check the start's check
+/// @return true when the notice is shown
+[[nodiscard]] bool show_content_notice(
+    bool game_dir_named, bool unwatched, bool closed_this_run, const ContentCheck& check
+) noexcept;
+
+/// The words of one notice, in the language the interface shows.
+struct ContentNoticeCopy {
+    /// The header's title.
+    std::string title;
+    /// The text, top to bottom.
+    std::vector<std::string> lines;
+    /// The caption of the button that opens the list of files.
+    std::string details;
+    /// OK's caption.
+    std::string ok;
+};
+
+/// The main menu's notice of the bundles that differ.
+///
+/// The first line says the sizes do not match, then one line for each
+/// differing base game or expansion and how many of its files differ, then
+/// one line on what that means. A bundle that matches is left out.
+///
+/// @param check the start's check
+/// @return the notice
+[[nodiscard]] ContentNoticeCopy content_difference_notice(const ContentCheck& check);
+
+/// The list of files that differ, one line for each, under its bundle's name.
+///
+/// Settings' Game Content page replaces this list. Until then, DETAILS on
+/// the content notice shows it.
+///
+/// @param check the start's check
+/// @return the list
+[[nodiscard]] ContentNoticeCopy content_file_notice(const ContentCheck& check);
+
+/// What the Library says of one bundle's check.
+///
+/// None differing is "All files match", one is "1 file differs", and more
+/// is "{count} files differ" with the count filled in.
+///
+/// @param files_differ how many of the bundle's files differ
+/// @return the line, in the language the interface shows
+[[nodiscard]] std::string content_match_line(uint32_t files_differ);
+
+/// Checks every copied bundle in the player's folder.
+///
+/// A bundle with no readable record, or a record of another id, or a record
+/// with no file, is not copied and is left out. Each file in the table is
+/// compared with the record: the same size and the same modification time
+/// keep the recorded SHA-256 and are not read. Any other file is hashed
+/// whole, and the record then stores that size, time and SHA-256, so the
+/// next start does not read it again while they still match. A missing file
+/// is named and not hashed. A SHA-256 the table does not know marks the
+/// bundle as differing and names the file. An empty `table` uses the
+/// built-in table.
+///
+/// @param user_folder the player's folder
+/// @param table the bundles to check; empty uses the built-in table
+/// @return the check
+[[nodiscard]] ContentCheck check_managed_content(
+    const std::filesystem::path& user_folder,
+    std::span<const oa::data::content_bundles::Bundle> table
+);
+
+/// Reads a Windows installer and prints the bundles it holds.
+///
+/// Each bundle with at least one file is printed, then every file of that
+/// bundle with its SHA-256, or that it is missing. The installer is only
+/// read. An installer this game does not recognise is refused.
+///
+/// @param file the installer
+/// @return 0 when every file of every found bundle matches, 1 otherwise
+[[nodiscard]] int run_windows_installer_check(const std::filesystem::path& file);
+
+/// --check-installer: checks a recognised installer with the reader of its
+/// kind, known by its size. A file of no known installer's size goes to the
+/// Windows check, which refuses it.
+///
+/// @param file the installer
+/// @return 0 when the check passed, 1 when it did not
+[[nodiscard]] int run_installer_check(const std::filesystem::path& file);
 
 } // namespace oa::app

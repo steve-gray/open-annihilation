@@ -918,7 +918,7 @@ void apply_backup_setting(const GameFilesHooks& hooks, const ImportPaths& paths,
     set_backed_up(hooks, paths.game_folder, backed_up);
     set_backed_up(hooks, paths.staging, backed_up);
     if (!paths.data_folder.empty())
-        set_backed_up(hooks, paths.data_folder / fs::path(demo_1997.folder_name), backed_up);
+        set_backed_up(hooks, demo_bundle_directory(paths.data_folder), backed_up);
 }
 
 CopiedFiles find_copied_files(const ImportPaths& paths) {

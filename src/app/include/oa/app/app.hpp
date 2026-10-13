@@ -260,6 +260,10 @@ inline constexpr bool self_checks_built = true;
 struct Options {
     // Empty until main() resolves it when --game-dir is not passed.
     fs::path game_dir;
+    // True when the command line named --game-dir, set before
+    // find_game_directory fills game_dir. That folder is played as it
+    // stands: the content check still runs, and its notice stays closed.
+    bool game_dir_named = false;
     // Opens the folder dialog even when a usable folder is remembered.
     bool choose_game_dir = false;
     // The folder the dialog chose, which the runtime stores in the
@@ -515,8 +519,9 @@ struct Options {
     /// --check-content-copy PATH: copies a small fixture into PATH, standing in
     /// for Documents, and checks that copy. The run does nothing else.
     fs::path check_content_copy{};
-    /// --check-installer FILE: reads a macOS installer and checks the game
-    /// files it holds. The run does nothing else and copies nothing.
+    /// --check-installer FILE: reads a recognised Windows or macOS installer,
+    /// lists the bundles it holds and every file's SHA-256. The run does
+    /// nothing else and copies nothing.
     fs::path check_installer{};
     /// --no-game-files-screen: with no usable game folder, the notice with its look-again
     /// button instead of the Game files screen, where the platform offers both.

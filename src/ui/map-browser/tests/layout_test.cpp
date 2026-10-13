@@ -667,7 +667,7 @@ void header_and_footer_words() {
     OA_CHECK(header);
     OA_CHECK(details);
     OA_CHECK(
-        std::find(chips.begin(), chips.end(), "Fits TA 3.1c ✓") != chips.end() &&
+        std::find(chips.begin(), chips.end(), "Fits No Mod ✓") != chips.end() &&
         std::find(chips.begin(), chips.end(), "Fit with Ridge is checked when it's installed") !=
             chips.end()
     );

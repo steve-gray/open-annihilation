@@ -1283,7 +1283,7 @@ int report_macos_installer(
     return source.write_check(out);
 }
 
-int run_check_installer(const fs::path& file) {
+int run_macos_installer_check(const fs::path& file) {
     return report_macos_installer(file, bundles::bundles(), true, std::cout);
 }
 
