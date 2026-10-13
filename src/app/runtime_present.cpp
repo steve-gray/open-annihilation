@@ -1213,14 +1213,18 @@ void Runtime::render() {
                                       .count());
     }
     // The loading screen went out through the display sink as it was drawn.
-    if (screen_ == Screen::loading)
+    if (screen_ == Screen::loading) {
+        note_shown_frame();
         return;
+    }
     try {
         if (screen_ == Screen::match && match_use_layers_) {
             present_match_layers();
+            note_shown_frame();
             return;
         }
         present_front_end();
+        note_shown_frame();
     } catch (const PresentError& error) {
         note_present_error(error.what(), true);
     }

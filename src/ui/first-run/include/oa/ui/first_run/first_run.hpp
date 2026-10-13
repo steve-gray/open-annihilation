@@ -199,6 +199,9 @@ struct CopyBundle {
     int32_t done{};                      ///< the bar's filled part
     int32_t whole{1};                    ///< the bar's whole
     CopyPhase phase{CopyPhase::waiting}; ///< where this bundle is
+    /// The amount is a note, such as tracks the source did not hold. It is
+    /// not a failure, and the bundle still counts as matched.
+    bool note{false};
 };
 
 /// The copying step's progress. The host keeps it current.
@@ -245,6 +248,9 @@ struct Model {
     library::TextHooks sample_text{};
 };
 
+/// How long a finished, matching copy shows the countdown on Continue.
+inline constexpr int32_t copy_continue_wait_ms = 3000;
+
 /// The setup's controls and motion between layouts.
 struct Session {
     Model model{};                  ///< what the steps show
@@ -253,6 +259,14 @@ struct Session {
     kit::Interaction interaction{}; ///< the pointer and the focus
     uint32_t pulse_ms{};            ///< how long Start playing has been pulsing
     bool focus_ready{};             ///< the focus has been placed for this step
+    /// Milliseconds left before Continue presses itself. Negative means the
+    /// countdown is not running. Zero means the moment has come.
+    int32_t copy_continue_ms{-1};
+    /// The copy was under way on this visit, so a clear check may count down.
+    /// Coming back to a copy that already finished does not count down again.
+    bool copy_continue_armed{false};
+    /// The player did something, so the countdown stays off.
+    bool copy_continue_stopped{false};
 };
 
 /// What the player asked the host to do.
@@ -346,11 +360,28 @@ void bind(Session& session) noexcept;
 [[nodiscard]] Scene
 lay_out(const Session& session, const kit::Frame& frame, const kit::Fonts* fonts);
 
-/// Advances the carousel's move and Start playing's pulse.
+/// Advances the carousel's move, Start playing's pulse, and the copying
+/// step's countdown.
+///
+/// The countdown starts only after a copy that was under way on this visit
+/// has been checked and matches. It waits `copy_continue_wait_ms`, then
+/// reaches zero. The host moves on when it sees zero.
 ///
 /// @param[in,out] session the session
 /// @param dt_ms how much time passed, in milliseconds
 void tick(Session& session, uint32_t dt_ms) noexcept;
+
+/// Stops the copying step's countdown. A countdown that is not running is
+/// left as it is, so a press before the check does not block a later one.
+///
+/// @param[in,out] session the session
+/// @return true when a countdown was running and is now stopped
+bool stop_copy_continue(Session& session) noexcept;
+
+/// Forgets the copying step's countdown, including one the player stopped.
+///
+/// @param[in,out] session the session
+void reset_copy_continue(Session& session) noexcept;
 
 /// Places the focus on the step's first control, once per step.
 ///

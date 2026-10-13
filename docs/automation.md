@@ -408,7 +408,7 @@ Controls are listed as `oa.first-run.<step>.<control>`:
 | Back | `oa.first-run.language.back`, `oa.first-run.game.back`, `oa.first-run.online.back`, `oa.first-run.buttons.back` |
 | Next | `oa.first-run.language.next`, `oa.first-run.online.next` |
 | Copy the game | `oa.first-run.game.next` |
-| Pause, or Continue once the check has finished | `oa.first-run.copying.next` |
+| Pause, or Continue once the check has finished. A clear check counts down about three seconds on Continue, then goes on; a key, a press, the wheel or a gamepad stops that | `oa.first-run.copying.next` |
 | Locate another… | `oa.first-run.game.locate` |
 | A source row | `oa.first-run.game.source.<index>`, from 0 |
 | A language card | `oa.first-run.language.card.<tag>`, the tag in lower case and anything else a hyphen (`de`, `en-xa`) |

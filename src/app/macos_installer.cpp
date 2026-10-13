@@ -464,6 +464,9 @@ struct Pump {
     uint64_t done_bytes{};
     uint32_t done_files{};
     uint64_t bytes_total{};
+    /// Files this copy takes. Zero until the archive has been read to the end,
+    /// while the running count still uses every table slot.
+    uint32_t counted_total{};
 
     void fail(std::string_view text) {
         halt = Halt::fail;
@@ -515,7 +518,7 @@ struct Pump {
         }
         progress.bytes_total = bytes_total;
         progress.files_done = done_files;
-        progress.files_total = narrow_count(slots.size());
+        progress.files_total = counted_total > 0 ? counted_total : narrow_count(slots.size());
         progress.bundle_id = slot.bundle->id;
         progress.copy_name = slot.file->copy_name;
         progress.file_finished = finished;
@@ -864,6 +867,35 @@ struct Pump {
         return true;
     }
 
+    /// Once the archive has been read, the overall count is the files this
+    /// copy took. A file the installer did not hold is left out, so a finished
+    /// copy reads 100%.
+    void settle_taken() {
+        if (job != Job::copy || slots.empty())
+            return;
+        uint32_t taken = 0;
+        uint64_t bytes = 0;
+        const Slot* sample = nullptr;
+        for (const Slot& slot : slots) {
+            if (!(slot.complete || (slot.seen && slot.have_digest)))
+                continue;
+            taken = narrow_count(static_cast<std::size_t>(taken) + 1);
+            add_bytes(bytes, slot.file->size);
+            if (sample == nullptr)
+                sample = &slot;
+        }
+        const uint32_t table_files = narrow_count(slots.size());
+        const uint32_t not_taken = table_files >= taken ? table_files - taken : 0;
+        const CopyFileCount tally = copy_file_count(taken, table_files, not_taken);
+        done_files = tally.done;
+        counted_total = tally.total;
+        done_bytes = bytes;
+        if (bytes > 0)
+            bytes_total = bytes;
+        if (sample != nullptr)
+            note_progress(*sample, true);
+    }
+
     [[nodiscard]] bool finish_active() {
         if (!active.on)
             return true;
@@ -1075,7 +1107,10 @@ bool on_end(void* context) {
     auto* pump = static_cast<Pump*>(context);
     if (!pump->finish_active())
         return false;
-    return pump->fill_gaps();
+    if (!pump->fill_gaps())
+        return false;
+    pump->settle_taken();
+    return true;
 }
 
 [[nodiscard]] bool feed_cpio(
