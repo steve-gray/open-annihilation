@@ -184,7 +184,8 @@ Runtime::Runtime(
     start_user_folder();
     // Which copied files differ, for the main menu's notice and for the
     // Library and Settings. A named --game-dir still fills it; the notice
-    // stays closed then.
+    // stays closed then. A bundle this start's setup already copied and
+    // checked is answered from that result and is not read again.
     content_check_ = check_managed_content(user_folder_, {});
     // Stored after the one-time legacy import, which runs only while no
     // preferences file exists. An unwritable preferences file only costs the
