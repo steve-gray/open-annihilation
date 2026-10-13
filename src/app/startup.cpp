@@ -602,6 +602,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_pad_controls, "--check-pad-controls"},
             {options.check_running_while_inactive, "--check-running-while-inactive"},
             {options.check_game_files, "--check-game-files"},
+            {!options.check_content_copy.empty(), "--check-content-copy"},
             {options.check_multiplayer_menu, "--check-multiplayer-menu"},
             {options.check_director_view, "--check-director-view"},
             {options.check_director_render, "--check-director-render"},
@@ -887,6 +888,10 @@ take_folder_option(std::string_view argument, ArgumentCursor& cursor, Options& o
     }
     if (argument == "--open" || argument == "--install-mod") {
         options.open_files.push_back(opened_file_path(option_value(cursor)));
+        return true;
+    }
+    if (argument == "--check-content-copy") {
+        options.check_content_copy = path_from_utf8(option_value(cursor));
         return true;
     }
     return false;
@@ -1261,7 +1266,7 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
                    "[--check-patrol-reclaim] [--check-reclaim-cursor] [--check-build-preview] "
                    "[--check-megamap-clicks] [--check-radar-orders] "
                    "[--check-pointer-interfaces] [--check-pad-controls] [--check-touch-controls] "
-                   "[--check-game-files] "
+                   "[--check-game-files] [--check-content-copy PATH] "
                    "[--check-multiplayer-menu] "
                    "[--check-load-save] [--check-frontend-controls] "
                    "[--check-scroll-bars] [--check-engine-settings [--force-capable]] "
@@ -1494,6 +1499,8 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
     if ((extension_effects & option_effect::unattended) != 0)
         result.unattended = true;
     if (result.check_game_files)
+        result.unattended = true;
+    if (!result.check_content_copy.empty())
         result.unattended = true;
     if (!result.display_modes.empty() && !result.unattended)
         throw std::runtime_error(

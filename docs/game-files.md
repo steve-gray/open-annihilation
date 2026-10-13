@@ -4,8 +4,14 @@ On a phone or a tablet (see [the installation guide](installation/ios.md)),
 Open Annihilation keeps its own copy of your Total Annihilation files, in
 its own storage. When it starts without a game folder it can play, it opens
 the **Game files** screen, which brings the files in for you. On macOS,
-Windows and Linux the game reads your installation where it is, and the
-screen never opens there.
+Windows and Linux the screen never opens. The first start you are there
+for, when you have not named a folder with `--game-dir`, copies the known
+game files from the installation already in use into `games` and
+`expansions` inside your Open Annihilation folder. That installation is
+only read. A later start copies only what is missing. `--game-dir` does
+not copy: the named folder is used as it is. A run that nobody is watching
+does not copy either: it uses a copy already in your folder, or it stops
+and tells you to start the game so the files can be copied.
 
 ## The screen
 
@@ -105,6 +111,11 @@ replacements take effect from the next start of Open Annihilation, and
 
 - The game folder, `Total Annihilation`, in the folder the platform names
   (its documents folder), which the device's file manager reaches.
+- The managed copy of a base game, `games/<game>` in your Open Annihilation
+  folder (in Documents), and of an expansion,
+  `expansions/<game>/<expansion>`. Each of those folders holds a
+  `.oa-content` record: where the files came from, and each file's size,
+  modification time and SHA-256.
 - The copy being made, in `import/Total Annihilation` of the game's data
   folder (`--data-dir`, else the per-user data folder), with the import's
   state in `import/state`.
@@ -129,8 +140,20 @@ The platform's side is the `GameFilesHooks` seam
 (`src/app/include/oa/app/game_files_hooks.hpp`): the file picker, the
 listing, the reading of each file, the free space, time away from the
 screen, the backup setting and the platform's own words in the texts. The
-screen is offered only where a platform installs the hooks; the desktop
-installs none, so its start is unchanged.
+screen is offered only where a platform installs the hooks. The desktop
+installs none, so the screen never opens there.
+
+An attended start that was not given `--game-dir` copies the known files of
+the installation already in use into `games/<game>` and
+`expansions/<game>/<expansion>` under the player's Open Annihilation folder.
+The installation is only read. A file already recorded, with the same size
+and modification time, is left in place, and a copy that stopped continues
+from the bytes already written. `--game-dir` does not copy. A run that
+nobody is watching does not copy: it uses a managed base game already
+there, or it stops with a message. `--check-content-copy PATH` checks that
+copy against a small fixture, using PATH as the Documents folder, and does
+nothing else. Mounting the composed folder is separate: the game still
+plays from the installation folder.
 
 ### The check
 
