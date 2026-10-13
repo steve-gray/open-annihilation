@@ -603,6 +603,61 @@ void copy_fixture(const fs::path& install, const fs::path& user) {
     OA_CHECK(result.status == oa::app::CopyStatus::finished);
 }
 
+/// A bundle this run's copy already checked is not read by the start-up
+/// check. A bundle the copy did not check is. The check after that reads
+/// both, as a later start does.
+void test_startup_reuses_copy_check(const fs::path& scratch) {
+    const fs::path install = scratch / "install";
+    const fs::path user = scratch / "user";
+    copy_fixture(install, user);
+    const auto files = oa::app::copy_check_files();
+    const auto table = oa::app::copy_check_bundles();
+    const oa::app::ContentCheck copied = oa::app::check_managed_content(user, table);
+    const oa::app::ContentBundleCheck* copied_totala = bundle_named(copied, "totala");
+    OA_CHECK(copied_totala != nullptr);
+    OA_CHECK(bundle_named(copied, "campaign") != nullptr);
+    if (copied_totala == nullptr)
+        return;
+    oa::app::ContentCheck kept;
+    kept.bundles.push_back(*copied_totala);
+    oa::app::keep_this_run_copy_check(std::move(kept));
+
+    const fs::path rev = user / std::string(oa::app::managed_games_folder) / "totala" / "rev31.gp3";
+    const fs::path campaign = user / std::string(oa::app::managed_expansions_folder) / "totala" /
+                              "campaign" / "totala4.hpi";
+    std::string changed_rev(files[0].bytes);
+    changed_rev[0] = 'X';
+    place_file(rev, changed_rev);
+    bump_time(rev, 4);
+    std::string changed_campaign(files[2].bytes);
+    changed_campaign[0] = 'Y';
+    place_file(campaign, changed_campaign);
+    bump_time(campaign, 4);
+
+    const oa::app::ContentCheck start = oa::app::check_managed_content(user, table);
+    OA_CHECK(start.files_hashed == 1);
+    const oa::app::ContentBundleCheck* totala = bundle_named(start, "totala");
+    const oa::app::ContentBundleCheck* campaign_bundle = bundle_named(start, "campaign");
+    OA_CHECK(totala != nullptr);
+    OA_CHECK(campaign_bundle != nullptr);
+    if (totala != nullptr)
+        OA_CHECK(totala->files_differ == 0);
+    if (campaign_bundle != nullptr) {
+        OA_CHECK(campaign_bundle->files_differ == 1);
+        OA_CHECK(names_file(*campaign_bundle, "totala4.hpi"));
+    }
+
+    const oa::app::ContentCheck later = oa::app::check_managed_content(user, table);
+    OA_CHECK(later.files_hashed == 1);
+    totala = bundle_named(later, "totala");
+    OA_CHECK(totala != nullptr);
+    if (totala != nullptr) {
+        OA_CHECK(totala->files_differ == 1);
+        OA_CHECK(names_file(*totala, "rev31.gp3"));
+    }
+    oa::app::keep_this_run_copy_check({});
+}
+
 void test_content_difference(const fs::path& scratch) {
     const fs::path install = scratch / "install";
     const fs::path user = scratch / "user";
@@ -849,6 +904,7 @@ int main() {
     test_inside_source(scratch / "inside");
     test_clone(scratch / "clone");
     test_check(scratch / "check");
+    test_startup_reuses_copy_check(scratch / "G54-startup");
     test_content_difference(scratch / "G03-difference");
     test_sibling_and_absent(scratch / "G26-music");
     each_regular_file(scratch, unlock_one);

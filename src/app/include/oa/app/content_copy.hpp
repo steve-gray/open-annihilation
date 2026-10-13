@@ -8,7 +8,8 @@
 // of where the files came from and each file's size, modification time and
 // SHA-256. The source is only read. Each start checks a copied bundle against
 // that record: a file whose size and time still match is not read again, and
-// one whose SHA-256 is not in the table marks the bundle as differing.
+// one whose SHA-256 is not in the table marks the bundle as differing. A
+// bundle this run's copy already checked is not read again at that start.
 #pragma once
 
 #include "oa/data/content_bundles.hpp"
@@ -764,8 +765,8 @@ struct ContentNoticeCopy {
 
 /// The list of files that differ, one line for each, under its bundle's name.
 ///
-/// Settings' Game Content page replaces this list. Until then, DETAILS on
-/// the content notice shows it.
+/// Game Content lists each bundle. DETAILS on the content notice still
+/// shows the files that differ.
 ///
 /// @param check the start's check
 /// @return the list
@@ -811,13 +812,40 @@ struct ContentNoticeCopy {
 /// music file that is present and not a known hash is still named. An empty
 /// `table` uses the built-in table.
 ///
+/// A bundle remembered by keep_this_run_copy_check is answered from that
+/// result and its files are not read. That check forgets those bundles, so
+/// a later start reads them as usual. A bundle this run did not remember is
+/// checked as usual.
+///
+/// Called as each file of a copied bundle is considered. `files_done` counts
+/// files already considered and `files_total` the files of bundles that have
+/// a record. Return false to stop. The callback must not call interface_text.
+using ContentCheckProgress =
+    bool (*)(uint32_t files_done, uint32_t files_total, void* progress_context);
+
 /// @param user_folder the player's folder
 /// @param table the bundles to check; empty uses the built-in table
-/// @return the check
+/// @param on_progress optional; told after each file, and once before the first
+/// @param progress_context passed to on_progress
+/// @param stop when not null and set, the check returns what it has so far
+/// @return the check; a stopped check is not a finished answer
 [[nodiscard]] ContentCheck check_managed_content(
     const std::filesystem::path& user_folder,
-    std::span<const oa::data::content_bundles::Bundle> table
+    std::span<const oa::data::content_bundles::Bundle> table,
+    ContentCheckProgress on_progress = nullptr,
+    void* progress_context = nullptr,
+    const std::atomic<bool>* stop = nullptr
 );
+
+/// Remembers bundles this run's copy already checked.
+///
+/// The next check_managed_content answers those bundle ids from `check` and
+/// does not read their files. A bundle that is not listed is checked as
+/// usual. That next check forgets the list, so a later start checks every
+/// copied bundle as usual. An empty `check` forgets a list already kept.
+///
+/// @param check the bundles this run's copy checked, and nothing else
+void keep_this_run_copy_check(ContentCheck check);
 
 /// Reads a Windows installer and prints the bundles it holds.
 ///

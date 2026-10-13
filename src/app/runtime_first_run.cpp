@@ -1,9 +1,12 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The first-run setup over the main menu: language, online features, then
-// the OA buttons. The screen asks; this file applies the answer and writes
-// the preference when the player finishes or skips.
+// The first-run setup over the main menu. A player who already has the game
+// sees language, online features, then the OA buttons. A start that copied
+// the game on the way in continues that walk at online features, then the
+// buttons. --check-first-run walks all five steps here, including the game
+// and the copy. The screen asks; this file applies the answer and writes
+// the preference when the player finishes or skips. Quit does not.
 
 #include "oa_layer.hpp"
 #include "engine_settings_menu_host.hpp"
@@ -15,6 +18,7 @@
 #include "oa/app/content/settings.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/app/setup_before_game.hpp"
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/ui/engine_settings.hpp"
@@ -493,12 +497,24 @@ class FirstRunScreen final : public LayerScreen {
     /// @param step the step it opens on
     FirstRunScreen(Runtime& runtime, first_run::Step step) : runtime_(runtime) {
         session_.model.step = step;
+        // The check walks all five steps on this screen. A staged game or
+        // copying step is part of that walk too. Anything else follows the
+        // walk this start is on: the welcome, or the setup after a copy.
+        if (runtime_.options_.check_first_run || step == first_run::Step::game ||
+            step == first_run::Step::copying)
+            session_.model.walk = first_run::Walk::setup;
+        else
+            session_.model.walk = setup_menu_walk();
     }
 
     /// Takes a previewed language's fonts off both stacks, so a setup
     /// closed while such a language is in the middle leaves only the
-    /// language in use.
+    /// language in use. A copy this screen started is stopped, and the
+    /// screen is allowed to sleep again.
     ~FirstRunScreen() override {
+        if (copy_woke_screen_)
+            SDL_EnableScreenSaver();
+        setup_stop_join();
         if (preview_fonts_tag_.empty())
             return;
         note_first_run_preview_fonts({});
@@ -694,11 +710,13 @@ class FirstRunScreen final : public LayerScreen {
     }
 
     /// On the language step, the next and previous focus actions move the carousel.
+    /// On the game step they move between the places the game was found.
     ///
     /// @param action the gamepad action
     /// @return what the setup did; pass lets the action become a key
     LayerAnswer pad_action(oa::ui::pad_controls::Action action) override {
-        if (session_.model.step != first_run::Step::language)
+        if (session_.model.step != first_run::Step::language &&
+            session_.model.step != first_run::Step::game)
             return LayerAnswer::pass;
         if (action == oa::ui::pad_controls::Action::focus_next)
             return apply(first_run::key(session_, scene_, kit::Key::right));
@@ -742,8 +760,20 @@ class FirstRunScreen final : public LayerScreen {
         const bool slid = session_.carousel.elapsed_ms != elapsed_before;
         const bool moved = runtime_.oa_layer_ != nullptr && refill(runtime_.oa_layer().view());
         const bool pulse = session_.model.step == first_run::Step::buttons && dt_ms > 0;
+        bool copy_moved = false;
+        if (session_.model.step == first_run::Step::copying) {
+            first_run::CopyView view;
+            if (setup_pull_copy(view)) {
+                session_.model.copy = std::move(view);
+                copy_moved = true;
+            }
+        }
+        const bool controller =
+            SDL_WasInit(SDL_INIT_GAMEPAD) == SDL_INIT_GAMEPAD && SDL_HasGamepad();
+        const bool controller_moved = controller != session_.model.controller;
+        session_.model.controller = controller;
         const uint64_t before = revision_;
-        if (moved || slid || pulse)
+        if (moved || slid || pulse || copy_moved || controller_moved)
             relayout();
         return revision_ == before ? LayerAnswer::none : LayerAnswer::redraw;
     }
@@ -953,16 +983,62 @@ class FirstRunScreen final : public LayerScreen {
             leave = true;
             break;
         case first_run::Ask::back:
-            if (session_.model.step == first_run::Step::online)
-                session_.model.step = first_run::Step::language;
-            else if (session_.model.step == first_run::Step::buttons)
+            if (session_.model.step == first_run::Step::online) {
+                if (session_.model.walk == first_run::Walk::setup) {
+                    first_run::CopyView view;
+                    static_cast<void>(setup_pull_copy(view));
+                    if (!view.bundles.empty() || view.checked)
+                        session_.model.copy = std::move(view);
+                    session_.model.copy.checked = true;
+                    session_.model.copy.running = false;
+                    session_.model.copy.paused = false;
+                    session_.model.step = first_run::Step::copying;
+                } else {
+                    session_.model.step = first_run::Step::language;
+                }
+            } else if (session_.model.step == first_run::Step::buttons) {
                 session_.model.step = first_run::Step::online;
+            } else if (session_.model.step == first_run::Step::game) {
+                session_.model.step = first_run::Step::language;
+            }
             session_.focus_ready = false;
             break;
         case first_run::Ask::advance:
             if (session_.model.step == first_run::Step::language) {
-                session_.model.step = first_run::Step::online;
+                const int32_t index = session_.carousel.selected;
+                if (index >= 0 && static_cast<std::size_t>(index) < session_.model.cards.size()) {
+                    const first_run::Card& card =
+                        session_.model.cards[static_cast<std::size_t>(index)];
+                    const languages::Language* known = languages::find_by_tag(card.tag);
+                    if (known != nullptr && languages::playable(*known))
+                        FirstRunHost::switch_language(runtime_, card.tag);
+                }
+                if (session_.model.walk == first_run::Walk::setup) {
+                    session_.model.step = first_run::Step::game;
+                    if (runtime_.options_.check_first_run)
+                        setup_install_check_source(runtime_.user_folder(), session_.model);
+                } else {
+                    session_.model.step = first_run::Step::online;
+                }
                 session_.focus_ready = false;
+            } else if (session_.model.step == first_run::Step::game) {
+                if (setup_begin_copy(runtime_.user_folder(), session_.model)) {
+                    session_.model.step = first_run::Step::copying;
+                    session_.focus_ready = false;
+                    if (!copy_woke_screen_) {
+                        SDL_DisableScreenSaver();
+                        copy_woke_screen_ = true;
+                    }
+                }
+            } else if (session_.model.step == first_run::Step::copying) {
+                if (session_.model.copy.checked) {
+                    if (copy_woke_screen_) {
+                        SDL_EnableScreenSaver();
+                        copy_woke_screen_ = false;
+                    }
+                    session_.model.step = first_run::Step::online;
+                    session_.focus_ready = false;
+                }
             } else if (session_.model.step == first_run::Step::online) {
                 FirstRunHost::apply_online(runtime_, session_.model.online_on);
                 session_.model.step = first_run::Step::buttons;
@@ -984,9 +1060,37 @@ class FirstRunScreen final : public LayerScreen {
         case first_run::Ask::choose_on:
         case first_run::Ask::choose_off:
             break;
+        case first_run::Ask::locate:
+            if (setup_locate_source(runtime_.sdl_.window, runtime_.user_folder(), session_.model))
+                session_.focus_ready = false;
+            break;
+        case first_run::Ask::pause_copy:
+            setup_set_paused(!session_.model.copy.paused);
+            break;
+        case first_run::Ask::cancel_copy:
+            setup_request_cancel();
+            setup_stop_join();
+            if (copy_woke_screen_) {
+                SDL_EnableScreenSaver();
+                copy_woke_screen_ = false;
+            }
+            session_.model.copy.running = false;
+            session_.model.copy.paused = false;
+            session_.model.step = first_run::Step::game;
+            session_.focus_ready = false;
+            break;
+        case first_run::Ask::quit:
+            leave = true;
+            break;
         }
         if (leave)
             return LayerAnswer::close;
+        if (session_.model.step == first_run::Step::copying ||
+            outcome.ask == first_run::Ask::pause_copy) {
+            first_run::CopyView view;
+            if (setup_pull_copy(view))
+                session_.model.copy = std::move(view);
+        }
         if (outcome.redraw || outcome.ask != first_run::Ask::none) {
             refill(runtime_.oa_layer().view());
             relayout();
@@ -1011,6 +1115,7 @@ class FirstRunScreen final : public LayerScreen {
     mutable std::string preview_fonts_tag_{};
     mutable uint64_t preview_fonts_generation_{}; ///< the font generation that addition followed
     mutable bool preview_fonts_ready_{};          ///< prepare_preview_fonts has run
+    bool copy_woke_screen_{}; ///< this screen asked the display to stay awake for a copy
 };
 
 /// Returns the setup, showing or waiting.
@@ -1140,7 +1245,9 @@ void FirstRunHost::tell(Runtime& runtime) {
         oa::ui::frontend_dialogs::dialog_count() != 0 ||
         runtime.engine_settings_dialog() != nullptr || runtime.engine_settings_fonts() == nullptr)
         return;
-    layer.show_when_free(std::make_unique<FirstRunScreen>(runtime, first_run::Step::language));
+    const first_run::Step opening =
+        runtime.options_.check_first_run ? first_run::Step::language : setup_menu_step();
+    layer.show_when_free(std::make_unique<FirstRunScreen>(runtime, opening));
     if (FirstRunScreen* opened = dynamic_cast<FirstRunScreen*>(layer.find(kScreenName)))
         FirstRunHost::note_open(runtime, opened->step());
 }
@@ -1189,6 +1296,8 @@ bool Runtime::first_run_blocks_language_notice() {
 void Runtime::forget_first_run() {
     preference_values_.erase(std::string(first_run::preference_key));
     preferences_dirty_ = true;
+    // SHOW AGAIN is the short welcome: language, online features, the buttons.
+    setup_welcome_again();
 }
 
 bool Runtime::open_staged_first_run(std::string_view token) {
