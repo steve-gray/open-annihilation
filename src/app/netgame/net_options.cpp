@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace oa::app {
 namespace {
@@ -25,6 +26,18 @@ using netgame::LaunchPlan;
 using netgame::LaunchRefusal;
 using netgame::LaunchRole;
 using netgame::read_launch_file;
+
+/// The refusal the last check_options kept.
+///
+/// The combined option table's context is not these options, and a unit test
+/// parses a context of its own, so the message is kept here until parsing
+/// raises it outside the hook.
+///
+/// @return the message, empty when the file was accepted
+std::string& held_launch_refusal() {
+    static std::string held;
+    return held;
+}
 
 /// Parses a UDP port number.
 ///
@@ -290,37 +303,44 @@ void apply_launch_file(NetgameContext& netgame) {
 /// multiplayer over TCP/IP at once, whatever connection "-n" named.
 /// --list-content needs --json, and --json needs --list-content. A refused
 /// combination throws std::runtime_error. A launch file that cannot be used
-/// throws LaunchRefusal.
+/// is kept, and raise_launch_refusal raises it after the hook returns.
 ///
 /// @param context The NetgameContext whose options are checked.
 void check_options(void* context) {
     auto& netgame = context_of(context);
     auto& options = netgame.options;
-    if (options.list_content && !options.json_requested)
-        throw std::runtime_error("--list-content needs --json");
-    if (options.json_requested && !options.list_content)
-        throw std::runtime_error("--json needs --list-content");
-    if (netgame.launch.ini_seen && !options.launch_yaml.empty())
-        throw LaunchRefusal(
-            options.launch_yaml + ": the file: a launch file and -c cannot both be given"
+    options.launch_refusal.clear();
+    held_launch_refusal().clear();
+    try {
+        if (options.list_content && !options.json_requested)
+            throw std::runtime_error("--list-content needs --json");
+        if (options.json_requested && !options.list_content)
+            throw std::runtime_error("--json needs --list-content");
+        if (netgame.launch.ini_seen && !options.launch_yaml.empty())
+            throw LaunchRefusal(
+                options.launch_yaml + ": the file: a launch file and -c cannot both be given"
+            );
+        if (netgame.launch.ini_seen && netgame.launch.ini_path.empty())
+            throw LaunchRefusal("-c: the file: -c needs a file");
+        if (netgame.launch.ini_seen || !options.launch_yaml.empty())
+            apply_launch_file(netgame);
+        const auto& game = options.direct_game;
+        if (game.kind == oa::ui::frontend_multiplayer::DirectGame::Kind::none) {
+            if (!game.player_name.empty())
+                throw std::runtime_error("--player-name needs --host or --join");
+            if (!game.game_name.empty())
+                throw std::runtime_error("--game-name needs --host or --join");
+            if (!game.password.empty())
+                throw std::runtime_error("--game-password needs --host or --join");
+            return;
+        }
+        oa::app::netgame::launch::set_connection_type(
+            netgame.launch, oa::app::netgame::launch::connection_type::tcpip
         );
-    if (netgame.launch.ini_seen && netgame.launch.ini_path.empty())
-        throw LaunchRefusal("-c: the file: -c needs a file");
-    if (netgame.launch.ini_seen || !options.launch_yaml.empty())
-        apply_launch_file(netgame);
-    const auto& game = options.direct_game;
-    if (game.kind == oa::ui::frontend_multiplayer::DirectGame::Kind::none) {
-        if (!game.player_name.empty())
-            throw std::runtime_error("--player-name needs --host or --join");
-        if (!game.game_name.empty())
-            throw std::runtime_error("--game-name needs --host or --join");
-        if (!game.password.empty())
-            throw std::runtime_error("--game-password needs --host or --join");
-        return;
+    } catch (const LaunchRefusal& refusal) {
+        options.launch_refusal = refusal.what();
+        held_launch_refusal() = options.launch_refusal;
     }
-    oa::app::netgame::launch::set_connection_type(
-        netgame.launch, oa::app::netgame::launch::connection_type::tcpip
-    );
 }
 
 /// Returns the handler of the 3.1c network switches (Extension::switch_handler).
@@ -422,6 +442,14 @@ void match_game(void* context, oa::Game& game) {
 }
 
 } // namespace
+
+void raise_launch_refusal() {
+    if (held_launch_refusal().empty())
+        return;
+    const std::string refusal = std::move(held_launch_refusal());
+    held_launch_refusal().clear();
+    throw netgame::LaunchRefusal(refusal);
+}
 
 NetgameContext& netgame_context() {
     static NetgameContext context{};

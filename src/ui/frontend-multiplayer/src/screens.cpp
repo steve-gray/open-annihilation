@@ -3112,14 +3112,22 @@ void apply_game_list_action(ScreenContext* ctx, ConnectAction action) {
 
 /// Creates the game NEWMULTI accepted and opens the battle room.
 ///
+/// A direct game that reached NEWMULTI is marked entering, including a launch
+/// that hosts at once and never types its names through OK. The battle room
+/// reports that arrival. A direct game that cannot be created is refused.
+///
 /// @param ctx Screen context of the running frontend.
 void host_new_game(ScreenContext* ctx) {
     auto& state = ui();
     if (connect_host(state.lobby, state.connect)) {
         state.in_lobby = false;
+        if (g_direct.stage == DirectStage::new_game)
+            g_direct.stage = DirectStage::entering;
         app::screen_request(ctx, kScreenBattleroom);
     } else {
         state.message = "The game could not be created.";
+        if (g_direct.stage == DirectStage::new_game)
+            fail_direct_game("The game could not be created.");
     }
 }
 

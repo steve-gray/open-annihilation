@@ -13,7 +13,9 @@ check runs beside anything else on this machine:
 - a file whose metal is above the slider ends with status 2 and names the field;
 - --list-content --json prints one JSON object and ends with status 0.
 
-The file starts the host. The password in the file is never printed.
+The file starts the host. The battle room's lines are read from the game's
+log (--log-dir), which is where those lines are kept. The password in the
+file is never printed.
 """
 import argparse
 import json
@@ -111,11 +113,12 @@ def free_port():
 
 
 class Game:
-    """One running game, whose standard output the check reads line by line."""
+    """One running game. Standard output and, when asked, the log are both read."""
 
-    def __init__(self, native, game_dir, workdir, name, arguments):
+    def __init__(self, native, game_dir, workdir, name, arguments, log_dir=None):
         self.name = name
         self.lines = []
+        self.log_dir = log_dir
         self._queue = queue.Queue()
         self._ended = False
         environment = dict(os.environ, SDL_VIDEO_DRIVER="dummy", SDL_AUDIO_DRIVER="dummy",
@@ -150,6 +153,15 @@ class Game:
         self.lines.append(line)
         return True
 
+    def log_text(self):
+        """Returns the text of every log file written so far."""
+        if self.log_dir is None or not self.log_dir.is_dir():
+            return ""
+        parts = []
+        for path in sorted(self.log_dir.glob("*.log")):
+            parts.append(path.read_text(encoding="utf-8", errors="replace"))
+        return "\n".join(parts)
+
     def wait_for(self, expected):
         """Waits for a line of the game's output; raises LaunchFileFailure when it never comes."""
         deadline = time.monotonic() + LINE_TIMEOUT
@@ -158,6 +170,24 @@ class Game:
                 break
         if expected not in self.lines:
             raise LaunchFileFailure(f"{self.name} never printed: {expected}")
+
+    def wait_in_log(self, expected):
+        """Waits for a line of the game's log; raises LaunchFileFailure when it never comes.
+
+        Standard output may have been sent to the log. The process staying up
+        is not the end of the log, so a closed standard output is not the end
+        of the wait.
+        """
+        deadline = time.monotonic() + LINE_TIMEOUT
+        while expected not in self.log_text() and time.monotonic() < deadline:
+            if self.process.poll() is not None:
+                time.sleep(0.2)
+                break
+            time.sleep(0.2)
+        while self._take(0):
+            pass
+        if expected not in self.log_text():
+            raise LaunchFileFailure(f"{self.name} never logged: {expected}\n{self.log_text()}")
 
     def wait_status(self, expected):
         """Waits for the game to end; raises LaunchFileFailure unless the status is expected."""
@@ -184,27 +214,32 @@ class Game:
 
 def require_quiet_password(game):
     """Raises LaunchFileFailure when the game printed the file's password."""
-    if "secret" in game.output():
+    if "secret" in game.output() or "secret" in game.log_text():
         raise LaunchFileFailure(f"{game.name} printed the password")
 
 
 def battle_room(native, game_dir, workdir, name, launch_arguments):
-    """Starts a host from a launch file and waits for its map and rules."""
+    """Starts a host from a launch file and waits for its map and rules in the log."""
     port = free_port()
     user = workdir / f"{name}-user"
     user.mkdir()
+    logs = workdir / f"{name}-log"
+    logs.mkdir()
     game = Game(native, game_dir, workdir, name, [
         "--skip-intro", "--dplay-port", str(port), "--player-name", "Commander",
-        "--user-folder", str(user), *launch_arguments,
-    ])
+        "--user-folder", str(user), "--log-dir", str(logs), *launch_arguments,
+    ], log_dir=logs)
     try:
-        game.wait_for(ROOM_LINE)
-        game.wait_for(MAP_LINE)
-        game.wait_for(RULES)
+        game.wait_in_log(ROOM_LINE)
+        game.wait_in_log(MAP_LINE)
+        game.wait_in_log(RULES)
         require_quiet_password(game)
     finally:
         game.stop()
     require_quiet_password(game)
+    print(f"{name}: {ROOM_LINE}")
+    print(f"{name}: {MAP_LINE}")
+    print(f"{name}: {RULES}")
 
 
 def check_bad_file(native, game_dir, workdir):
@@ -223,8 +258,10 @@ def check_bad_file(native, game_dir, workdir):
     text = game.output()
     if "rules.metal" not in text:
         raise LaunchFileFailure("bad-file did not name rules.metal")
-    if "secret" in text:
+    if "secret" in text or "secret" in game.log_text():
         raise LaunchFileFailure("bad-file printed the password")
+    named = next(line for line in game.lines if "rules.metal" in line)
+    print(f"bad-file: {named}")
 
 
 def check_list(native, game_dir, workdir):
@@ -259,6 +296,12 @@ def check_list(native, game_dir, workdir):
             raise LaunchFileFailure(
                 f"Acid Foursome is {item.get('players')} players, size {item.get('size')!r}"
             )
+    shown = foursome[0] if foursome else {"players": None, "size": None}
+    print(
+        f"list-content: {len(listed['maps'])} maps, {len(listed['mods'])} mods, "
+        f"{len(listed['expansions'])} expansions; "
+        f"Acid Foursome players {shown.get('players')} size {shown.get('size')!r}"
+    )
 
 
 def check(native, game_dir, workdir):

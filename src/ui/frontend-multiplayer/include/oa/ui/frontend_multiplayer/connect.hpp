@@ -281,9 +281,10 @@ int32_t panel_add_entry(
 
 /// Prepares NEWMULTI.GUI with the game name, nickname (the account name when none is stored) and password.
 ///
-/// While a launch is active its user name is the nickname. A
-/// launched game goes on to host at once (ConnectState::host_at_once and the
-/// host signal), and its password entry is left as loaded.
+/// While a launch is active its user name is the nickname and its session
+/// name is the game name. A launched game goes on to host at once
+/// (ConnectState::host_at_once and the host signal), and its password entry
+/// is left as loaded.
 ///
 /// @param[in,out] lobby Lobby state, its game block, network table and launch.
 /// @param[in,out] state Connection screens' state.

@@ -1535,6 +1535,8 @@ std::string launch_content_error(std::string_view problem) {
             "--frame-log, --scroll-camera, --march, --follow and --frame-clock need --frame-rate"
         );
     call_hook_or_raise<&Extension::check_options>(extension);
+    // A launch file refused inside the hook is raised here, so main exits 2.
+    raise_launch_refusal();
     adopt_launch_run(result);
     if (const auto env = oa::platform::environment_value("OA_DEBUG_ORDER_LINES");
         env && !env->empty())

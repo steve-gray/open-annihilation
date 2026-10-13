@@ -97,6 +97,9 @@ struct NetOptions {
     bool launch_content_applied = false;
     // The launch names a mod the run has not resolved to a folder yet.
     bool launch_mod_pending = false;
+    // A launch file check_options refused. The message is raised after the
+    // hook returns, so the process exits 2. Empty when the file was accepted.
+    std::string launch_refusal{};
 };
 
 // A recording the engine handed network play to replay
@@ -158,6 +161,13 @@ struct NetgameContext {
 void fill_option_hooks(Extension& table, NetgameContext& context);
 
 struct Options;
+
+/// Raises a launch-file refusal that check_options kept.
+///
+/// check_options runs as a hook. A hook's exception is reported as
+/// std::runtime_error, and the process would exit 1. The refusal is kept
+/// and raised here, after the hook returns, so the process exits 2.
+void raise_launch_refusal();
 
 /// Copies a launch file's content onto the run when the command line did not name --content.
 ///

@@ -5756,12 +5756,20 @@ void test_launch_screens(const oa::AssetStore& assets) {
     if (!load_gui(assets, "newmulti.gui", newmulti))
         return;
     std::snprintf(launch_block.user_name, sizeof launch_block.user_name, "%s", "Ghost_Commander");
+    std::snprintf(
+        launch_block.session_name, sizeof launch_block.session_name, "%s", "Example game"
+    );
     game->frontend_pending_signal = 0;
     mp::new_game_open(lobby, state, newmulti);
     expect(
         std::strcmp(mp::lobby_nickname(*game), "Ghost_Commander") == 0 &&
             mp::panel_text(newmulti, "NICKNAME") == "Ghost_Commander",
         "the launch's user name is the nickname"
+    );
+    expect(
+        std::strcmp(mp::lobby_game_name(*game), "Example game") == 0 &&
+            mp::panel_text(newmulti, "GAMENAME") == "Example game",
+        "the launch's session name is the game name"
     );
     expect(
         state.host_at_once && game->frontend_pending_signal == 0x11,
