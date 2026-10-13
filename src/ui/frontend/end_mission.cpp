@@ -311,9 +311,21 @@ void end_mission_open(
         campaign::update_end_mission_buttons(context.campaign, context.world->game, &host);
     }
     panel.dirty = true;
+    // The count-up belongs to the first arrival from the mission. This open
+    // is the return from Save Game, Load Game or Adjust Difficulty, so the
+    // bars and numbers are already at their finals.
+    for (uint32_t row = 0; row < scores.row_count; ++row) {
+        for (campaign::ScoreBar& bar : scores.rows[row].bars) {
+            bar.active = true;
+            bar.current = bar.value;
+            bar.running = false;
+        }
+    }
+    if (context.world != nullptr)
+        context.world->game.endgame_column = static_cast<int32_t>(campaign::score_column_count);
     if (context.frontend != nullptr && context.state != nullptr) {
         context.frontend->set_app_mode(*context.state, kEndGameMode);
-        context.frontend->set_endgame_state(*context.state, OA_ENDGAME_STAT_BARS);
+        context.frontend->set_endgame_state(*context.state, OA_ENDGAME_PANEL);
     }
 }
 
