@@ -503,6 +503,10 @@ class NetworkPlay {
     PresenceFacts presence_facts_{};
     bool presence_taken_ = false;
     uint32_t presence_reported_ = 0;
+    // The base game, expansions and language the bound record was written
+    // from. They are not part of PresenceFacts. Read through Runtime's
+    // public methods only.
+    std::string presence_content_key_;
 };
 
 } // namespace oa::app

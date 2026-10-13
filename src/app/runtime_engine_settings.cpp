@@ -23,6 +23,7 @@
 #include "oa/app/content/service.hpp"
 #include "oa/app/content/settings.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/netgame/presence.hpp"
 #include "oa/app/view_rules.hpp"
 #include "oa/data/registry/descriptor.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -1800,6 +1801,44 @@ oa::data::content_bundles::ContentChoice Runtime::content_choice() const {
     const std::vector<std::string> copied = copied_content_bundles(options_.game_dir);
     const std::vector<std::string_view> copied_ids = id_views(copied);
     return content_choice_from_preferences(preference_values_, copied_ids, options_.content);
+}
+
+bool Runtime::managed_content_mounted() const noexcept {
+    return options_.managed_content;
+}
+
+Runtime::PresenceAnnouncement Runtime::presence_announcement() const {
+    PresenceAnnouncement played;
+    played.language = std::string(shown_language().english_name);
+    if (!managed_content_mounted())
+        return played;
+    const oa::data::content_bundles::ContentChoice choice = content_choice();
+    if (!choice.error.empty() || choice.base_game.empty())
+        return played;
+    played.announce_bundles = true;
+    played.base_game = choice.base_game;
+    for (const std::string& expansion_id : choice.expansions) {
+        if (expansion_id != oa::netgame::presence_uncompared_expansion)
+            played.expansions.push_back(expansion_id);
+    }
+    const ContentCheck& known = content_check();
+    for (const ContentBundleCheck& bundle : known.bundles) {
+        if (bundle.files_differ == 0 || bundle.id == oa::netgame::presence_uncompared_expansion)
+            continue;
+        if (bundle.id == played.base_game) {
+            played.differs_from_known = true;
+            break;
+        }
+        for (const std::string& expansion_id : played.expansions) {
+            if (expansion_id == bundle.id) {
+                played.differs_from_known = true;
+                break;
+            }
+        }
+        if (played.differs_from_known)
+            break;
+    }
+    return played;
 }
 
 oa::data::content_bundles::ContentChangeResult Runtime::turn_content_expansion(

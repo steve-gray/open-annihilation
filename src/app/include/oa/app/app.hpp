@@ -264,6 +264,10 @@ struct Options {
     // find_game_directory fills game_dir. That folder is played as it
     // stands: the content check still runs, and its notice stays closed.
     bool game_dir_named = false;
+    /// True when this start plays the managed copy: the game folder's source
+    /// is managed after the last compose. A named --game-dir stays false.
+    /// Presence names the base game and expansions only then.
+    bool managed_content = false;
     // Opens the folder dialog even when a usable folder is remembered.
     bool choose_game_dir = false;
     // The folder the dialog chose, which the runtime stores in the

@@ -55,6 +55,9 @@ Every document in the repository, by what you want to do.
 - [game-content.md](game-content.md): the base games and expansions the
   engine knows, the files each one is made of, and which expansions need
   which others.
+- [multiplayer/content.md](multiplayer/content.md): the base game and
+  expansions each player shows in the battle room, and when a difference
+  keeps the game from starting.
 - [typing.md](typing.md): typing in any script, Chinese among them, in
   the chat lines, a saved game's name and the whiteboard: input methods,
   commands, saves and recordings named in any script, the iPhone and iPad
