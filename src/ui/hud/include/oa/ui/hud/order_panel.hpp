@@ -459,6 +459,16 @@ void format_build_page_name(char* out, std::size_t size, const UnitDef& def, uin
 /// @param side_prefix Side prefix; null is taken as empty.
 void format_general_page_name(char* out, std::size_t size, const char* side_prefix);
 
+/// Formats the idle page layout name, "<side prefix>MAIN2.GUI".
+///
+/// Shown under the minimap when nothing is selected. A selected unit keeps
+/// the general order page.
+///
+/// @param[out] out Destination buffer.
+/// @param size Size of `out` in bytes.
+/// @param side_prefix Side prefix; null is taken as empty.
+void format_idle_page_name(char* out, std::size_t size, const char* side_prefix);
+
 /// Greys the side's PREV and NEXT buttons (value 0) when a type has fewer than two build pages.
 ///
 /// @param controls Named controls of the loaded panel.

@@ -6066,6 +6066,7 @@ class Runtime final : public menu::Host,
         HudRect unit_metal_use{350, 468, 0, 8};
         HudRect unit_energy_make{400, 458, 0, 8};
         HudRect unit_energy_use{400, 468, 0, 8};
+        HudRect logo{132, 5, 21, 21};          // SIDEDATA LOGO: the viewed player's colour
         HudRect logo2{132, 455, 21, 21};       // SIDEDATA LOGO2: the cursor unit owner's logo
         HudRect mission_text{385, 449, 16, 2}; // MISSIONTEXT: head order status, centred on x
         HudRect unit_name2{555, 452, 1, 9};    // UNITNAME2: the second unit, centred on x
@@ -6173,6 +6174,16 @@ class Runtime final : public menu::Host,
     /// @param height rectangle height
     /// @param palette_index match palette colour
     void fill_source_rect(int x, int y, int width, int height, uint8_t palette_index);
+
+    /// Draws one player's colour mark into a HUD rectangle.
+    ///
+    /// The mark is the frame of the logo sheet that the player's colour names,
+    /// fitted to `at` the same way the unit panel fits its owner's mark. An
+    /// empty rectangle, or a player with no frame, draws nothing.
+    ///
+    /// @param player player whose colour is drawn
+    /// @param at rectangle in HUD source space
+    void draw_player_mark(const oa::Player& player, const HudRect& at);
 
     /// Draws a SIDEDATA resource trough: the fill to the shown amount and the share threshold's
     /// marker.

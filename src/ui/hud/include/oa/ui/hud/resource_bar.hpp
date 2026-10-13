@@ -39,6 +39,7 @@ struct SideLayout {
     Rect unit_metal_use{350, 468, 0, 8};
     Rect unit_energy_make{400, 458, 0, 8};
     Rect unit_energy_use{400, 468, 0, 8};
+    Rect logo{132, 5, 21, 21};          // the viewed player's colour, left of metal
     Rect logo2{132, 455, 21, 21};       // the cursor unit owner's logo
     Rect mission_text{385, 449, 16, 2}; // head order's status text, centred on x
     Rect unit_name2{555, 452, 1, 9};    // second unit's name, centred on x
