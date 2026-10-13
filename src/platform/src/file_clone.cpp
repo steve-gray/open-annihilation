@@ -80,14 +80,32 @@ bool volume_is_refs(const wchar_t* root) noexcept {
     return same_volume_path(name, L"ReFS");
 }
 
+/// Finds the root of the volume a path is on.
+///
+/// GetVolumePathNameW is looked up when it is used: Windows 95 does not have
+/// it, and no volume there can share blocks.
+///
+/// @param path the path
+/// @param[out] root the volume's root, with its closing backslash
+/// @return true when the root was found
+bool volume_root(const std::filesystem::path& path, wchar_t (&root)[MAX_PATH]) noexcept {
+    using VolumePathName = BOOL(WINAPI*)(LPCWSTR, LPWSTR, DWORD);
+    const HMODULE kernel = GetModuleHandleW(L"kernel32.dll");
+    const auto volume_path_name =
+        kernel != nullptr
+            ? reinterpret_cast<VolumePathName>(
+                  reinterpret_cast<void*>(GetProcAddress(kernel, "GetVolumePathNameW"))
+              )
+            : nullptr;
+    return volume_path_name != nullptr && volume_path_name(path.c_str(), root, MAX_PATH) != 0;
+}
+
 bool windows_can_share(
     const std::filesystem::path& source, const std::filesystem::path& directory
 ) noexcept {
     wchar_t source_root[MAX_PATH]{};
     wchar_t directory_root[MAX_PATH]{};
-    if (GetVolumePathNameW(source.c_str(), source_root, MAX_PATH) == 0)
-        return false;
-    if (GetVolumePathNameW(directory.c_str(), directory_root, MAX_PATH) == 0)
+    if (!volume_root(source, source_root) || !volume_root(directory, directory_root))
         return false;
     if (!same_volume_path(source_root, directory_root))
         return false;
