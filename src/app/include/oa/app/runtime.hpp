@@ -4760,6 +4760,24 @@ class Runtime final : public menu::Host,
     /// scaled picture and under the OA layer's screens.
     void present_menu_icon_buttons();
 
+    /// Forgets that this frame's cursor is presented above the main menu's
+    /// window-pixel buttons.
+    void clear_menu_button_cursor_hold() noexcept;
+
+    /// When the cursor covers a main-menu button that a larger window draws
+    /// again in its own pixels, leaves the cursor out of the picture. The
+    /// picture's button then still matches what was drawn, so the window-pixel
+    /// icon replaces it, and the cursor is presented above that icon.
+    ///
+    /// @return true when the cursor stays out of the picture
+    bool hold_menu_button_cursor();
+
+    /// Tells whether this frame presents the cursor above the main menu's
+    /// window-pixel buttons.
+    ///
+    /// @return true when hold_menu_button_cursor left it out of the picture
+    [[nodiscard]] bool menu_button_cursor_held() const noexcept;
+
     /// Destroys the main menu buttons' window-pixel textures, while the
     /// renderer that made them is still alive.
     void release_menu_button_textures() noexcept;
