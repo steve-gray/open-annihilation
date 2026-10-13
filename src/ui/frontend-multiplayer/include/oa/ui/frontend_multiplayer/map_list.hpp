@@ -30,7 +30,7 @@ struct MapListFact {
 ///
 /// A pack map shows its index name, or the map file's title when the index
 /// has none, or the map's own name (the part of `key` before `@`) when
-/// neither is known. The `name@package` key is never shown. A pack row whose
+/// neither is known. The `name\@package` key is never shown. A pack row whose
 /// words would match another row adds the pack's name in brackets, or the
 /// pack's id when the pack has no name. A greyed row then adds its reason
 /// after two spaces.

@@ -611,7 +611,7 @@ void multiplayer_reload_maps();
 ///
 /// A pack map shows the title its index gives, or the map file's title when
 /// the source already holds one, or its own name when neither is known. A
-/// shared title adds the pack's name in brackets. The `name@package` key is
+/// shared title adds the pack's name in brackets. The `name\@package` key is
 /// not shown. A base map's row is its file name. A name the list does not
 /// hold is shown as its own name when it is a pack map, and as itself
 /// otherwise.
