@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -333,6 +334,291 @@ bool press_on(
     return true;
 }
 
+/// Returns the registry the inputs name.
+///
+/// @param inputs the inputs
+/// @param id the registry's id
+/// @return the registry; null when the inputs do not name it
+const Registry* registry_named(const Inputs& inputs, std::string_view id) {
+    for (const Registry& registry : inputs.registries) {
+        if (registry.id == id)
+            return &registry;
+    }
+    return nullptr;
+}
+
+/// Tells whether an offered expansion extends a base game.
+///
+/// An empty list extends none.
+///
+/// @param offered the offer
+/// @param base the base game id
+/// @return true when the offer names that game
+bool offer_extends(const DownloadableExpansion& offered, std::string_view base) {
+    for (const std::string& game : offered.extends) {
+        if (game == base)
+            return true;
+    }
+    return false;
+}
+
+/// The registry an expansion's download arrow uses.
+struct ExpansionOffer {
+    const DownloadableExpansion* chosen{}; ///< the offer; null when none matches
+    bool downloads_on{};                   ///< that registry's downloads are on
+    std::string registry_name{};           ///< the name the blocked line uses
+    std::string off_reason{};              ///< the registry's own reason; empty for the shared one
+};
+
+/// Picks the offer for one expansion of the pending base game.
+///
+/// A built-in registry whose downloads are on wins, then any whose downloads
+/// are on, then any match. An offer that names no base game matches none.
+///
+/// @param library the Library
+/// @param id the expansion
+/// @param base the pending base game
+/// @return the offer
+ExpansionOffer offer_for(const Library& library, std::string_view id, std::string_view base) {
+    const DownloadableExpansion* built_in_on = nullptr;
+    const DownloadableExpansion* any_on = nullptr;
+    const DownloadableExpansion* any = nullptr;
+    for (const DownloadableExpansion& offered : library.inputs.downloadable_expansions) {
+        if (offered.id != id || !offer_extends(offered, base))
+            continue;
+        const Registry* registry = registry_named(library.inputs, offered.registry);
+        const bool downloads_on = registry != nullptr && registry->downloads_on;
+        if (any == nullptr)
+            any = &offered;
+        if (!downloads_on)
+            continue;
+        if (any_on == nullptr)
+            any_on = &offered;
+        if (registry->built_in && built_in_on == nullptr)
+            built_in_on = &offered;
+    }
+    ExpansionOffer offer;
+    if (built_in_on != nullptr)
+        offer.chosen = built_in_on;
+    else if (any_on != nullptr)
+        offer.chosen = any_on;
+    else
+        offer.chosen = any;
+    if (offer.chosen == nullptr)
+        return offer;
+    const Registry* registry = registry_named(library.inputs, offer.chosen->registry);
+    offer.downloads_on = registry != nullptr && registry->downloads_on;
+    if (registry != nullptr) {
+        offer.registry_name = registry->name.empty() ? registry->id : registry->name;
+        offer.off_reason = registry->downloads_off_reason;
+    }
+    return offer;
+}
+
+/// Returns an expansion's queue item.
+///
+/// @param library the Library
+/// @param id the expansion
+/// @return the item; null when the queue has none
+const QueueItem* expansion_item(const Library& library, std::string_view id) {
+    for (const QueueItem& item : library.inputs.queue) {
+        if (item.expansion && item.key == id)
+            return &item;
+    }
+    return nullptr;
+}
+
+/// Tells whether a queue item is still to finish.
+///
+/// @param phase the item's phase
+/// @return true until it has failed or is installed
+bool download_pending(QueueItem::Phase phase) {
+    return phase != QueueItem::Phase::failed && phase != QueueItem::Phase::installed;
+}
+
+/// Remembers that the player asked to download an expansion.
+///
+/// The choice is not edited, so closing the Library before the copy arrives
+/// mounts nothing.
+///
+/// @param[in,out] library the Library
+/// @param id the expansion
+void remember_download(Library& library, std::string_view id) {
+    if (!holds(library.content.downloads, id))
+        library.content.downloads.emplace_back(id);
+}
+
+/// Forgets an expansion the player asked to download.
+///
+/// @param[in,out] library the Library
+/// @param id the expansion
+void forget_download(Library& library, std::string_view id) {
+    std::vector<std::string>& asked = library.content.downloads;
+    asked.erase(std::remove(asked.begin(), asked.end(), id), asked.end());
+}
+
+/// Returns why an expansion's GET or RETRY is off.
+///
+/// @param library the Library
+/// @param offer the offer
+/// @return the words; empty when the arrow can be pressed, or when the reason
+///         is only that `--content` locked the run
+std::string arrow_blocked(const Library& library, const ExpansionOffer& offer) {
+    const TextHooks& text = library.text;
+    if (library.inputs.in_match)
+        return std::string(shown(text, words::blocked_in_match));
+    if (!offer.downloads_on) {
+        if (!offer.off_reason.empty())
+            return offer.off_reason;
+        return filled(text, words::blocked_downloads_off, {{"registry", offer.registry_name}});
+    }
+    return {};
+}
+
+/// Writes the hint for an expansion download that is under way or has failed.
+///
+/// The expansion the player asked for is named first.
+///
+/// @param library the Library
+/// @return the line; empty when no such download is listed
+std::string expansion_download_hint(const Library& library) {
+    const QueueItem* chosen = nullptr;
+    for (const std::string& id : library.content.downloads) {
+        const QueueItem* item = expansion_item(library, id);
+        if (item != nullptr && item->phase != QueueItem::Phase::installed) {
+            chosen = item;
+            break;
+        }
+    }
+    if (chosen == nullptr) {
+        for (const QueueItem& item : library.inputs.queue) {
+            if (!item.expansion || item.phase == QueueItem::Phase::installed)
+                continue;
+            chosen = &item;
+            break;
+        }
+    }
+    if (chosen == nullptr)
+        return {};
+    return queue_status_text(*chosen, library.text);
+}
+
+/// Writes why the first offered expansion's download arrow is off.
+///
+/// @param library the Library
+/// @param base the pending base game
+/// @return the words; empty when every offered arrow can be pressed
+std::string expansion_blocked_hint(const Library& library, std::string_view base) {
+    for (const bundles::Bundle* bundle : expansions_of(base)) {
+        if (holds(library.inputs.content.copied, bundle->id))
+            continue;
+        const ExpansionOffer offer = offer_for(library, bundle->id, base);
+        if (offer.chosen == nullptr || offer.downloads_on)
+            continue;
+        const QueueItem* queued = expansion_item(library, bundle->id);
+        if (queued != nullptr && download_pending(queued->phase))
+            continue;
+        return arrow_blocked(library, offer);
+    }
+    return {};
+}
+
+/// Sets the download arrow on a pill that is not copied.
+///
+/// @param[in,out] pill the pill
+/// @param library the Library
+/// @param offer the offer; none leaves the pill as ADD FROM…
+/// @param pills_on false during a match and while `--content` locked the run
+void set_download_arrow(
+    ExpansionPill& pill, const Library& library, const ExpansionOffer& offer, bool pills_on
+) {
+    if (offer.chosen == nullptr)
+        return;
+    pill.download_registry = offer.chosen->registry;
+    const QueueItem* queued = expansion_item(library, pill.id);
+    const bool asked = holds(library.content.downloads, pill.id);
+    if (queued != nullptr && download_pending(queued->phase)) {
+        pill.arrow = ExpansionArrow::cancel;
+        pill.arrow_enabled = true;
+    } else if (
+        queued != nullptr && queued->phase == QueueItem::Phase::failed && queued->retryable
+    ) {
+        pill.arrow = ExpansionArrow::retry;
+        pill.arrow_enabled = offer.downloads_on && pills_on;
+    } else if (queued != nullptr) {
+        pill.arrow = std::nullopt;
+        pill.arrow_enabled = false;
+    } else if (asked) {
+        pill.arrow = ExpansionArrow::cancel;
+        pill.arrow_enabled = true;
+    } else {
+        pill.arrow = ExpansionArrow::get;
+        pill.arrow_enabled = offer.downloads_on && pills_on;
+    }
+    if (pill.arrow == ExpansionArrow::cancel)
+        pill.enabled = true;
+    if (pill.arrow && !pill.arrow_enabled)
+        pill.blocked = arrow_blocked(library, offer);
+}
+
+/// Presses an expansion that is not copied.
+///
+/// No offer is ADD FROM…. An offer downloads it, or cancels or retries the
+/// download already asked for. GET and RETRY are refused during a match,
+/// while `--content` locked the run, and while that registry's downloads are
+/// off. CANCEL is not.
+///
+/// @param[in,out] library the Library
+/// @param id the expansion
+/// @param base the pending base game
+/// @return what the press did
+ContentPress press_uncopied(Library& library, std::string_view id, std::string_view base) {
+    ContentPress result;
+    const ExpansionOffer offer = offer_for(library, id, base);
+    const QueueItem* queued = expansion_item(library, id);
+    const bool choosing_locked = library.inputs.content.locked || library.inputs.in_match;
+    if (queued != nullptr && download_pending(queued->phase)) {
+        forget_download(library, id);
+        result.kind = ContentPressKind::cancel_download;
+        result.expansion = std::string(id);
+        result.registry = queued->registry;
+        return result;
+    }
+    if (queued != nullptr && queued->phase == QueueItem::Phase::failed && queued->retryable &&
+        offer.chosen != nullptr && offer.downloads_on && !choosing_locked) {
+        remember_download(library, id);
+        result.kind = ContentPressKind::retry_download;
+        result.expansion = std::string(id);
+        result.registry = queued->registry;
+        return result;
+    }
+    if (queued != nullptr)
+        return result;
+    if (holds(library.content.downloads, id)) {
+        const std::string registry =
+            offer.chosen != nullptr ? offer.chosen->registry : std::string{};
+        forget_download(library, id);
+        result.kind = ContentPressKind::cancel_download;
+        result.expansion = std::string(id);
+        result.registry = registry;
+        return result;
+    }
+    if (offer.chosen == nullptr) {
+        if (choosing_locked)
+            return result;
+        result.kind = ContentPressKind::add;
+        result.expansion = std::string(id);
+        return result;
+    }
+    if (choosing_locked || !offer.downloads_on)
+        return result;
+    remember_download(library, id);
+    result.kind = ContentPressKind::download;
+    result.expansion = std::string(id);
+    result.registry = offer.chosen->registry;
+    return result;
+}
+
 /// Returns the name of the mod being played, when the pending choice has not
 /// already unloaded it.
 ///
@@ -358,7 +644,11 @@ void note_content(Library& library) {
     const std::string base = resolved_base(library.inputs.content.base_id);
     const std::vector<std::string>& enabled = library.inputs.content.enabled;
     ContentDraft& draft = library.content;
-    if (draft.edited && draft.seed_base == base && same_ids(draft.seed_enabled, enabled))
+    const bool same_seed = draft.seed_base == base && same_ids(draft.seed_enabled, enabled);
+    // A download asked for before the copy arrives has not edited the choice.
+    // A refresh that brings the same stored choice keeps that ask. A different
+    // stored choice drops it, as it drops an edit.
+    if (same_seed && (draft.edited || !draft.downloads.empty()))
         return;
     draft = {};
     draft.seed_base = base;
@@ -422,9 +712,10 @@ ActiveContent active_content(const Library& library) {
         const bool copied = holds(stored.copied, bundle->id);
         if (on)
             ++on_count;
+        const ExpansionOffer offer = offer_for(library, bundle->id, pending.base);
         if (on)
             pill.face = ExpansionFace::on;
-        else if (!copied)
+        else if (!copied && offer.chosen == nullptr)
             pill.face = ExpansionFace::add;
         else
             pill.face = ExpansionFace::off;
@@ -442,6 +733,8 @@ ActiveContent active_content(const Library& library) {
         else
             pill.text = std::string(bundle->english_name);
         pill.enabled = pills_on;
+        if (!copied && !on)
+            set_download_arrow(pill, library, offer, pills_on);
         face.pills.push_back(std::move(pill));
     }
 
@@ -472,8 +765,16 @@ ActiveContent active_content(const Library& library) {
         face.hint = filled(
             text, draft.last_on ? words::active_turns_on : words::active_turns_off, {{"name", name}}
         );
+    } else if (
+        const std::string downloading = expansion_download_hint(library); !downloading.empty()
+    ) {
+        face.hint = downloading;
     } else if (!draft.edited && library.expansion_note) {
         face.hint = std::string(shown(text, words::mod_unloaded_note));
+    } else if (
+        const std::string blocked = expansion_blocked_hint(library, pending.base); !blocked.empty()
+    ) {
+        face.hint = blocked;
     } else if (!expansions.empty()) {
         for (const bundles::Bundle* bundle : expansions) {
             if (holds(pending.choice.expansions, bundle->id) || bundle->needs.empty())
@@ -499,16 +800,13 @@ ContentPress press_expansion(Library& library, std::string_view id) {
     if (bundle == nullptr || bundle->kind != bundles::Kind::expansion ||
         !extends_game(*bundle, pending.base))
         return result;
-    if (library.inputs.content.locked || library.inputs.in_match)
-        return result;
 
     const bool copied = holds(library.inputs.content.copied, id);
     const bool on_now = holds(pending.choice.expansions, id);
-    if (!copied && !on_now) {
-        result.kind = ContentPressKind::add;
-        result.expansion = std::string(id);
+    if (!copied && !on_now)
+        return press_uncopied(library, id, pending.base);
+    if (library.inputs.content.locked || library.inputs.in_match)
         return result;
-    }
 
     const std::vector<std::string_view> copied_ids = id_views(library.inputs.content.copied);
     // The mod is already coming off, so a later pill does not ask again.
@@ -537,6 +835,33 @@ ContentPress press_expansion(Library& library, std::string_view id) {
     keep_choice(library, turned.choice, id, on_after);
     result.kind = ContentPressKind::redraw;
     return result;
+}
+
+void drop_expansion_download(Library& library, std::string_view id) {
+    forget_download(library, id);
+}
+
+void adopt_downloaded_expansions(Library& library) {
+    if (library.content.downloads.empty())
+        return;
+    if (library.inputs.in_match || library.inputs.content.locked || library.content.asking)
+        return;
+    std::vector<std::string> waiting;
+    for (const std::string& id : library.content.downloads) {
+        if (!holds(library.inputs.content.copied, id)) {
+            waiting.push_back(id);
+            continue;
+        }
+        const PendingChoice pending = pending_choice(library);
+        if (holds(pending.choice.expansions, id))
+            continue;
+        const std::vector<std::string_view> copied_ids = id_views(library.inputs.content.copied);
+        bundles::ContentChoice after;
+        if (!press_on(pending.choice, id, copied_ids, false, after))
+            continue;
+        keep_choice(library, after, id, true);
+    }
+    library.content.downloads = std::move(waiting);
 }
 
 void accept_expansion_off(Library& library) {

@@ -2618,6 +2618,196 @@ void test_expansion_pills() {
     OA_CHECK(face.pills.empty());
 }
 
+/// Returns one expansion pill.
+///
+/// @param face the Active tab's content
+/// @param id the expansion
+/// @return the pill; null when the tile has none
+const lib::ExpansionPill* pill_of(const lib::ActiveContent& face, std::string_view id) {
+    for (const lib::ExpansionPill& pill : face.pills) {
+        if (pill.id == id)
+            return &pill;
+    }
+    return nullptr;
+}
+
+/// An offered expansion shows a download arrow. The pill turns on once the
+/// copy is in the game's folder, and only on the pending draft.
+void test_expansion_download() {
+    lib::Inputs inputs;
+    inputs.content.base_id = "totala";
+    lib::Registry built_in;
+    built_in.id = std::string(core);
+    built_in.name = "Fixture Core";
+    built_in.built_in = true;
+    lib::Registry added;
+    added.id = std::string(example);
+    added.name = "Example Maps";
+    inputs.registries = {built_in, added};
+
+    lib::DownloadableExpansion units;
+    units.id = "cavedog-units";
+    units.registry = std::string(core);
+    units.name = "Cavedog units";
+    units.extends = {"totala"};
+    lib::DownloadableExpansion from_added = units;
+    from_added.registry = std::string(example);
+    lib::DownloadableExpansion nowhere;
+    nowhere.id = "cavedog-units";
+    nowhere.registry = std::string(core);
+    nowhere.extends = {};
+    inputs.downloadable_expansions = {nowhere, from_added, units};
+
+    lib::Library library;
+    lib::refresh(library, inputs);
+    const lib::ActiveContent offered = lib::active_content(library);
+    const lib::ExpansionPill* units_pill = pill_of(offered, "cavedog-units");
+    const lib::ExpansionPill* tactics = pill_of(offered, "battle-tactics");
+    OA_CHECK(units_pill != nullptr && units_pill->face == lib::ExpansionFace::off);
+    OA_CHECK(units_pill != nullptr && units_pill->text == "Cavedog units");
+    OA_CHECK(units_pill != nullptr && units_pill->arrow == lib::ExpansionArrow::get);
+    OA_CHECK(units_pill != nullptr && units_pill->arrow_enabled);
+    OA_CHECK(units_pill != nullptr && units_pill->download_registry == core);
+    OA_CHECK(tactics != nullptr && tactics->face == lib::ExpansionFace::add);
+    OA_CHECK(tactics != nullptr && tactics->text.find("ADD FROM") != std::string::npos);
+    OA_CHECK(tactics != nullptr && !tactics->arrow);
+
+    const lib::ContentPress add = lib::press_expansion(library, "battle-tactics");
+    OA_CHECK(add.kind == lib::ContentPressKind::add);
+    OA_CHECK(!holds_id(library.content.expansions, "battle-tactics"));
+
+    const lib::ContentPress got = lib::press_expansion(library, "cavedog-units");
+    OA_CHECK(got.kind == lib::ContentPressKind::download);
+    OA_CHECK(got.expansion == "cavedog-units");
+    OA_CHECK(got.registry == core);
+    OA_CHECK(holds_id(library.content.downloads, "cavedog-units"));
+    OA_CHECK(!library.content.edited);
+    OA_CHECK(!library.content.applied);
+    OA_CHECK(!holds_id(library.content.expansions, "cavedog-units"));
+
+    lib::Inputs queued_inputs = library.inputs;
+    lib::QueueItem downloading = queued(core, "cavedog-units", "Cavedog units", Phase::downloading);
+    downloading.expansion = true;
+    downloading.done_bytes = 19083674;
+    downloading.total_bytes = 64 * mib;
+    queued_inputs.queue.push_back(downloading);
+    lib::refresh(library, queued_inputs);
+    OA_CHECK(holds_id(library.content.downloads, "cavedog-units"));
+    const lib::ExpansionPill* busy = pill_of(lib::active_content(library), "cavedog-units");
+    OA_CHECK(busy != nullptr && busy->arrow == lib::ExpansionArrow::cancel && busy->arrow_enabled);
+    OA_CHECK(lib::active_content(library).hint.find("Downloading") != std::string::npos);
+    OA_CHECK(lib::queue_lines(library).first.find("Downloading") != std::string::npos);
+    OA_CHECK(lib::queue_lines(library).first.find("Cavedog units") != std::string::npos);
+
+    const lib::ContentPress stopped = lib::press_expansion(library, "cavedog-units");
+    OA_CHECK(stopped.kind == lib::ContentPressKind::cancel_download);
+    OA_CHECK(stopped.registry == core);
+    OA_CHECK(!holds_id(library.content.downloads, "cavedog-units"));
+
+    lib::Inputs failed_inputs = library.inputs;
+    failed_inputs.queue.clear();
+    lib::QueueItem failed = queued(core, "cavedog-units", "Cavedog units", Phase::failed);
+    failed.expansion = true;
+    failed.retryable = true;
+    failed.problem = "The server could not be reached";
+    failed_inputs.queue.push_back(failed);
+    lib::refresh(library, failed_inputs);
+    const lib::ExpansionPill* again = pill_of(lib::active_content(library), "cavedog-units");
+    OA_CHECK(again != nullptr && again->arrow == lib::ExpansionArrow::retry);
+    const lib::ContentPress retried = lib::press_expansion(library, "cavedog-units");
+    OA_CHECK(retried.kind == lib::ContentPressKind::retry_download);
+    OA_CHECK(holds_id(library.content.downloads, "cavedog-units"));
+
+    lib::Inputs stuck_inputs = library.inputs;
+    stuck_inputs.queue[0].retryable = false;
+    lib::refresh(library, stuck_inputs);
+    const lib::ExpansionPill* stuck = pill_of(lib::active_content(library), "cavedog-units");
+    OA_CHECK(stuck != nullptr && !stuck->arrow);
+    OA_CHECK(lib::active_content(library).hint == "The server could not be reached");
+    OA_CHECK(lib::press_expansion(library, "cavedog-units").kind == lib::ContentPressKind::none);
+
+    lib::Inputs during = library.inputs;
+    during.queue[0].phase = Phase::downloading;
+    during.queue[0].retryable = false;
+    during.in_match = true;
+    lib::refresh(library, during);
+    OA_CHECK(
+        lib::press_expansion(library, "cavedog-units").kind ==
+        lib::ContentPressKind::cancel_download
+    );
+    library.content.downloads.clear();
+    during.in_match = false;
+    during.content.locked = true;
+    during.queue.clear();
+    lib::refresh(library, during);
+    OA_CHECK(lib::press_expansion(library, "cavedog-units").kind == lib::ContentPressKind::none);
+
+    lib::Inputs quiet = library.inputs;
+    quiet.content.locked = false;
+    quiet.queue.clear();
+    quiet.registries[0].downloads_on = false;
+    quiet.registries[1].downloads_on = false;
+    library.content.downloads.clear();
+    lib::refresh(library, quiet);
+    const lib::ExpansionPill* off = pill_of(lib::active_content(library), "cavedog-units");
+    OA_CHECK(off != nullptr && off->arrow == lib::ExpansionArrow::get && !off->arrow_enabled);
+    OA_CHECK(lib::active_content(library).hint.find("Downloads from") != std::string::npos);
+    OA_CHECK(lib::press_expansion(library, "cavedog-units").kind == lib::ContentPressKind::none);
+
+    // The copy arrived without the expansions it needs. The pill stays off.
+    lib::Inputs short_copy = library.inputs;
+    short_copy.registries[0].downloads_on = true;
+    short_copy.content.locked = false;
+    short_copy.queue.clear();
+    lib::refresh(library, short_copy);
+    OA_CHECK(
+        lib::press_expansion(library, "cavedog-units").kind == lib::ContentPressKind::download
+    );
+    short_copy.content.copied = {"cavedog-units"};
+    lib::refresh(library, short_copy);
+    OA_CHECK(!library.content.edited);
+    OA_CHECK(!holds_id(library.content.downloads, "cavedog-units"));
+    OA_CHECK(!holds_id(library.content.expansions, "cavedog-units"));
+    const lib::ExpansionPill* unmet = pill_of(lib::active_content(library), "cavedog-units");
+    OA_CHECK(unmet != nullptr && unmet->face == lib::ExpansionFace::off && !unmet->arrow);
+
+    lib::Library arriving;
+    lib::Inputs copied = inputs;
+    lib::refresh(arriving, copied);
+    OA_CHECK(
+        lib::press_expansion(arriving, "cavedog-units").kind == lib::ContentPressKind::download
+    );
+    copied.content.copied = {"campaign", "core-contingency", "cavedog-units"};
+    lib::refresh(arriving, copied);
+    const lib::ExpansionPill* on = pill_of(lib::active_content(arriving), "cavedog-units");
+    OA_CHECK(on != nullptr && on->face == lib::ExpansionFace::on && !on->arrow);
+    OA_CHECK(holds_id(arriving.content.expansions, "cavedog-units"));
+    OA_CHECK(holds_id(arriving.content.expansions, "campaign"));
+    OA_CHECK(holds_id(arriving.content.expansions, "core-contingency"));
+    OA_CHECK(arriving.content.edited);
+    OA_CHECK(!arriving.content.applied);
+    OA_CHECK(
+        lib::active_content(arriving).hint.find("turns on when the Library closes") !=
+        std::string::npos
+    );
+    OA_CHECK(!holds_id(arriving.content.downloads, "cavedog-units"));
+
+    // A queue item for the expansion is not a mod row, even when a mod shares its key.
+    lib::Inputs collided = copied;
+    collided.content.copied.clear();
+    collided.content.enabled.clear();
+    lib::Listing same_key = listing(core, Kind::mod, "cavedog-units", "Not the expansion");
+    collided.listings.push_back(same_key);
+    lib::QueueItem row = queued(core, "cavedog-units", "Cavedog units", Phase::downloading);
+    row.expansion = true;
+    collided.queue = {row};
+    lib::Library rows;
+    lib::refresh(rows, std::move(collided));
+    const lib::Entry* entry = at(rows, core, Kind::mod, "cavedog-units");
+    OA_CHECK(entry != nullptr && entry->queued == nullptr);
+    OA_CHECK(lib::queue_lines(rows).first.find("Cavedog units") != std::string::npos);
+}
+
 /// The base game chooser marks a game and keeps the choice on the draft.
 void test_base_chooser() {
     lib::Inputs inputs;
@@ -3195,6 +3385,7 @@ int main() {
     test_switch_off();
     test_base_game();
     test_expansion_pills();
+    test_expansion_download();
     test_base_chooser();
     test_base_game_after_required_off();
     test_check_now();

@@ -297,7 +297,7 @@ bool designed_name(const std::string& name) {
         "open-folder|homepage)|"
         "details|back|refresh|close-x|close|status|queue|note|from|rules|"
         "active\\.(mod|language|base|expansions|unload|change|search|map\\.[1-9][0-9]*|"
-        "from\\.[1-9][0-9]*|expansion\\.[a-z0-9-]+)|"
+        "from\\.[1-9][0-9]*|expansion\\.[a-z0-9-]+(\\.(get|cancel|retry))?)|"
         "add-registry|registries\\.(note|notice)|"
         "registry\\.[a-z0-9-]+(\\.(remove|add-mirror|key|refresh|address|refreshed))?)"
     );
@@ -3641,6 +3641,59 @@ void active_maps_fill_scroll_and_filter() {
     }
 }
 
+/// An expansion a registry offers draws the download arrow beside its pill.
+void expansion_download_arrow_sits_beside_the_pill() {
+    const kit::Frame regular = fixture::frames()[1].frame;
+    lib::Inputs inputs = fixture::fixture_inputs();
+    lib::DownloadableExpansion units;
+    units.id = "cavedog-units";
+    units.registry = std::string(fixture::core);
+    units.name = "Cavedog units";
+    units.extends = {"totala"};
+    inputs.downloadable_expansions.push_back(std::move(units));
+    lib::Library library;
+    lib::refresh(library, std::move(inputs));
+    lib::set_tab(library, lib::Tab::active);
+    lib::ScreenState state;
+    const kit::DisplayList list = laid_out(library, state, regular);
+    OA_EXPECT_NONE(meeting_controls(list), "expansion arrow");
+    OA_EXPECT_NONE(order_problems(list), "expansion arrow");
+    OA_EXPECT_NONE(name_problems(list), "expansion arrow");
+    OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), "expansion arrow");
+    const kit::Control* pill = fixture::named(list, "library.active.expansion.cavedog-units");
+    const kit::Control* arrow = fixture::named(list, "library.active.expansion.cavedog-units.get");
+    const kit::Control* add = fixture::named(list, "library.active.expansion.campaign");
+    OA_CHECK(pill != nullptr && arrow != nullptr && add != nullptr);
+    OA_CHECK(pill != nullptr && pill->text.find("ADD FROM") == std::string::npos);
+    OA_CHECK(add != nullptr && add->text.find("ADD FROM") != std::string::npos);
+    OA_CHECK(arrow != nullptr && arrow->text == "GET" && arrow->enabled && arrow->focusable);
+    if (pill != nullptr && arrow != nullptr) {
+        OA_CHECK(arrow->rect.x >= pill->rect.x + pill->rect.width);
+        OA_CHECK(arrow->rect.y == pill->rect.y);
+        OA_CHECK(arrow->rect.width == kit::compact_metrics.state_icon_side);
+    }
+    const kit::Item* chip_item = nullptr;
+    if (arrow != nullptr) {
+        for (const kit::Item& item : list.items) {
+            if (item.control == arrow->id)
+                chip_item = &item;
+        }
+    }
+    OA_CHECK(chip_item != nullptr);
+    if (chip_item != nullptr) {
+        const auto* chip = std::get_if<kit::ChipLook>(&chip_item->look);
+        OA_CHECK(chip != nullptr && chip->icon == kit::StateIcon::download_arrow);
+    }
+    const lib::ScreenResult result =
+        click(library, state, list, "library.active.expansion.cavedog-units.get");
+    OA_CHECK(result.action == lib::Action::get);
+    OA_CHECK(result.expansion == "cavedog-units");
+    OA_CHECK(result.registry == fixture::core);
+    OA_CHECK(result.entry.key.empty());
+    OA_CHECK(library.content.downloads.size() == 1);
+    OA_CHECK(!library.content.edited);
+}
+
 } // namespace
 
 int main() {
@@ -3666,6 +3719,7 @@ int main() {
     compact_expansions_hint_wraps();
     active_maps_fill_scroll_and_filter();
     active_base_game_is_a_tile();
+    expansion_download_arrow_sits_beside_the_pill();
     the_base_chooser_names_its_rows();
     base_badge_is_nearest_and_tabs_are_bracketed();
     unload_mod_asks_switch_off();

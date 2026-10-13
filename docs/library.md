@@ -108,9 +108,16 @@ under them, so the maps pane keeps a row.
   run, and while the command line chose the run's mod.
 - **EXPANSIONS**: one pill for each expansion of that base game. A pill
   that is on is filled. One that is copied and off is plain, in the
-  expansion's name. One that is not copied reads "Campaign · ADD FROM…",
-  and that press is the control that will open the locator; this tab does
-  not open it. The heading counts them, "EXPANSIONS · 5 OF 6 ON". A game
+  expansion's name. One that is not copied, and that a registry offers,
+  keeps the expansion's name and shows the same download arrow as a mod
+  or a map row. That press downloads and installs it, with the same
+  progress, errors and **CANCEL** as any other package. When the copy is
+  in the game's folder the pill turns on. The choice applies when the
+  Library closes, as any other expansion change does, and the expansion
+  is not mounted while the Library stays open. One that no registry
+  offers reads "Campaign · ADD FROM…", and that press is the control that
+  will open the locator; this tab does not open it. The heading counts
+  them, "EXPANSIONS · 5 OF 6 ON". A game
   with none says "EXPANSIONS" and "This game has no expansions." A hint
   under the pills names what the first expansion that is off still needs
   ("Core Contingency needs Campaign."). Pressing a pill follows the
@@ -187,7 +194,8 @@ is one line. On the largest the maps stand in two columns when you have
 more than one. The tab has no catalogue search and no filters. The base,
 expansions, mod and language labels and each map's title line take no
 press, except the title of a map whose pack holds only that map: that
-title is the link to the pack. **CHANGE…**, each expansion pill, **UNLOAD
+title is the link to the pack. **CHANGE…**, each expansion pill, a
+download arrow beside an expansion a registry offers, **UNLOAD
 MOD**, each map's link to its pack while that link shows, and the maps
 search do take a press. Tab and the arrows reach them. The expansions
 hint wraps onto as many lines as it needs.
@@ -547,7 +555,10 @@ installed before. Then:
   ([map packs](maps/README.md));
 - **a language pack** goes into your Languages folder. Its row offers
   **USE NOW** at once, and Settings › Language offers it at once
-  ([languages](languages.md)).
+  ([languages](languages.md));
+- **an expansion** goes into the game's folder. Its pill turns on, and
+  the game mounts it when the Library closes. It is not mounted while
+  the Library stays open.
 
 Whether a download asks you anything first depends on where it comes from
 and what you already have: [which downloads ask first](#which-downloads-ask-first).

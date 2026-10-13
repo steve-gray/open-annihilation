@@ -279,7 +279,9 @@ app removes the folder (`Runtime::library_uninstall`,
     the version and, when the inputs name them, the source and the file
     check, and CHANGE… (`library.active.change`) at the bottom right.
     The expansions tile has one pill `library.active.expansion.<id>` for
-    each expansion of that game. The mod tile has a large badge, the name,
+    each expansion of that game. One that is not copied and that a registry
+    offers has a download arrow beside it, `library.active.expansion.<id>.get`
+    (or `.cancel` or `.retry` while that download is in the queue). The mod tile has a large badge, the name,
     the version and revision and the author, with Playing as a pill on the
     title's line at the top right, or No Mod with an em dash and "Total
     Annihilation as it was made" and no pill.

@@ -149,11 +149,12 @@ struct ScreenResult {
     /// does for browsing, DETAILS and the way back from the details page.
     std::optional<Action> action{};
     EntryId entry{}; ///< the entry an entry's action is for; empty for the others
-    /// The registry a Registries-tab action names: REFRESH, ADD MIRROR…, REMOVE or its switch.
+    /// The registry a Registries-tab action names, or the registry an expansion's
+    /// download uses.
     std::string registry{};
     /// The switch's new state, for Action::set_registry.
     bool registry_on{};
-    /// The expansion ADD FROM… or the expansion-off question names.
+    /// The expansion ADD FROM…, a download arrow, or the expansion-off question names.
     std::string expansion{};
     /// The base game USE THIS GAME asked the host to copy.
     std::string base_game{};

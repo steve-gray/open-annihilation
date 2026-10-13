@@ -734,7 +734,7 @@ void Runtime::LibraryHost::rebuild(Runtime& runtime) {
         staying.reserve(inputs.queue.size());
         for (library::QueueItem& item : inputs.queue) {
             bool leave_out = false;
-            if (item.kind == library::Kind::mod) {
+            if (item.kind == library::Kind::mod && !item.expansion) {
                 for (const ModInstallState::LibraryNote& note :
                      runtime.mod_install_state_->library_notes) {
                     if (note.registry != item.registry || note.key != item.key)
@@ -1523,6 +1523,7 @@ library::Inputs Runtime::library_inputs() {
         library::QueueItem item;
         item.registry = queued.target.registry;
         item.kind = kind_of(queued.target.kind);
+        item.expansion = queued.target.kind == data::catalogue::Kind::expansion;
         item.key = queued.target.key;
         item.name = queued.target.name;
         item.release = queued.target.release;
@@ -2355,6 +2356,48 @@ struct Runtime::LibraryScreen final : LayerScreen {
         runtime_.library_host().rebuild(runtime_);
     }
 
+    /// Downloads, cancels or retries an expansion from its pill's arrow.
+    ///
+    /// The package is copied into the game's folder. The pill turns on once
+    /// that copy is read, on the pending choice. The game mounts the choice
+    /// when the Library closes, not while the Library stays open. A refused
+    /// GET forgets the ask, so the arrow is GET again.
+    ///
+    /// @param result the press; `expansion` is the bundle id and `registry` the offer
+    void download_expansion(const library::ScreenResult& result) {
+        LibraryHost& host = runtime_.library_host();
+        const library::Action action = *result.action;
+        const std::string& expansion_id = result.expansion;
+        const std::string& registry_id = result.registry;
+        if (action == library::Action::get) {
+            if (host.feed.enqueue == nullptr || registry_id.empty()) {
+                library::drop_expansion_download(host.model, expansion_id);
+                ++host.model_revision;
+                return;
+            }
+            std::string why;
+            const std::optional<uint64_t> item = host.feed.enqueue(
+                host.feed.context, registry_id, expansion_id, content::DownloadReason::install, &why
+            );
+            if (!item) {
+                library::drop_expansion_download(host.model, expansion_id);
+                if (!why.empty()) {
+                    runtime_.status_ = why;
+                    std::cerr << "open-annihilation: library: " << why << '\n';
+                }
+                ++host.model_revision;
+            }
+            return;
+        }
+        if (action == library::Action::cancel) {
+            if (host.feed.cancel != nullptr && !registry_id.empty())
+                host.feed.cancel(host.feed.context, registry_id, expansion_id);
+            return;
+        }
+        if (action == library::Action::retry && host.feed.retry != nullptr && !registry_id.empty())
+            host.feed.retry(host.feed.context, registry_id, expansion_id);
+    }
+
     /// Carries out one of the Library's actions.
     ///
     /// @param result what the input asked for
@@ -2363,6 +2406,12 @@ struct Runtime::LibraryScreen final : LayerScreen {
         const library::Action action = *result.action;
         const library::EntryId& id = result.entry;
         LibraryHost& host = runtime_.library_host();
+        if (!result.expansion.empty() &&
+            (action == library::Action::get || action == library::Action::cancel ||
+             action == library::Action::retry)) {
+            download_expansion(result);
+            return false;
+        }
         const library::Entry* entry = library::find_entry(host.model, id);
         switch (action) {
         case library::Action::get:
