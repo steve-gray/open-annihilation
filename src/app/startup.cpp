@@ -74,6 +74,18 @@ const char* next_value(void* arguments) {
     return cursor.argv[*cursor.index];
 }
 
+/// Names the argument after the option without taking it (OptionValues::following).
+///
+/// @param arguments the ArgumentCursor
+/// @return that argument, or null when the command line ends on the option
+const char* following_value(void* arguments) {
+    const auto& cursor = *static_cast<ArgumentCursor*>(arguments);
+    const int following = *cursor.index + 1;
+    if (following >= cursor.argc)
+        return nullptr;
+    return cursor.argv[following];
+}
+
 // The extension's text for `which`, or `fallback` when it has none.
 const char* extension_text(const Extension& extension, ExtensionText which, const char* fallback) {
     const char* text = call_hook_or_raise<&Extension::text>(extension, which);
@@ -1458,7 +1470,7 @@ std::string launch_content_error(std::string_view problem) {
                   << extension_text(extension, ExtensionText::usage_note, "");
             write_startup_line(usage.str());
         } else if (argument.starts_with("--")) {
-            const OptionValues values{&cursor, next_value};
+            const OptionValues values{&cursor, next_value, following_value};
             uint32_t effects = 0;
             if (!call_hook_or_raise<&Extension::take_option>(
                     extension, argv[index], values, effects

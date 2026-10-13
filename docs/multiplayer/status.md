@@ -19,6 +19,11 @@ first line. `--quit-after-game` leaves once the game has ended.
 `--quit-after-game=after-score` waits until the player has left the score
 screen. A word after `--quit-after-game` is not part of the option.
 
+A launch file's `status` block turns the same options on
+([launch-file.md](launch-file.md)). The command line replaces one field
+of that block at a time. A file read from standard input (`--launch -`)
+does not turn them on: that stream is the launch file itself.
+
 The lines use the same events as the automation endpoint
 ([automation.md](../automation.md)). `hello` and `exit` only frame the
 stream.

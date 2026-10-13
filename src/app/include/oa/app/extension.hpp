@@ -266,6 +266,13 @@ struct OptionValues {
     /// @return the argument, which lives as long as the process; throws
     ///         "<option> requires a value" when none is left or it is empty
     const char* (*next)(void* arguments){};
+    /// Names the next argument without taking it, so an extension can read
+    /// a value another extension takes.
+    ///
+    /// @param arguments OptionValues::arguments
+    /// @return the argument, which lives as long as the process; null when
+    ///         none is left. Empty when the argument is empty
+    const char* (*following)(void* arguments){};
 };
 
 // Engine options an extension option implies (Extension::take_option).
