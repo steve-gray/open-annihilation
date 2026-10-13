@@ -404,6 +404,13 @@ the same files would give:
   game folder is never layered, searched or mounted from: a mod folder keeps
   the version an update replaced there ([4.6](#46-the-oamod-package)).
 
+A start that does not name `--game-dir` plays a managed copy. The loose
+folders, highest first, are the mod folder when a mod is playing, then each
+expansion that is on, then the base game under `Games/<game>`. An
+expansion's folder is never the mod folder. Archive discovery runs over
+those folders merged, file by file, in the same order as a copied install
+of the same files. `--game-dir` still scans the one folder it names.
+
 ### 4.2 Choosing a mod
 
 One profile plays per run. The profile comes from, in order:
@@ -436,7 +443,7 @@ hide such folders: the folders an install of a `.oamod` package keeps in
 | Option | What it does |
 | --- | --- |
 | `--mod FILE` | Reads the profile from `FILE` instead of the folder's own, for development and for mods that do not ship a profile. |
-| `--mod-dir PATH` | Plays the mod folder at `PATH`, layered over the game folder. |
+| `--mod-dir PATH` | Plays the mod folder at `PATH`, layered over the expansions that are on and the base game, or over the folder `--game-dir` names. |
 | `--base-game` | Plays without the remembered mod folder. It cannot be combined with `--mod-dir`. |
 | `--print-profile` | Prints the resolved profile of `--mod FILE`, or of the `--mod-dir` or `--game-dir` folder, and exits. The output is the effective profile as indented JSON, then a `sha256-sim` line and a `sha256-full` line with the two hashes. The folder's INI settings are applied, as a game applies them. A folder without a profile prints that it plays 3.1c; a profile with errors prints each, one a line, and exits with status 1. |
 | `--accept-unimplemented-hacks` | Accepts, with a warning each, hacks this build does not implement yet. For development only; it needs a mod (`--mod`, `--mod-dir`, `--game-dir` or `--print-profile`). |
@@ -772,7 +779,8 @@ Each installation-archive name is a file name of 1 to 64 characters: no
 slash, backslash or colon, and not `.` or `..`. Names are matched without
 case. The same name twice is refused, and so are two names that differ only
 in the case of their letters. The name is sought in the merged top-level
-listing of the mod folder and the game folder, the same listing a copied
+listing of the folders the start mounts (the mod folder, each expansion
+that is on, and the base game, or the one folder `--game-dir` names), the same listing a copied
 install of those files would give. One that no folder holds is reported
 while mounting, with no line and column, as
 `file: layout.installation-archives: installation archive 'NAME' is missing`.
@@ -1307,8 +1315,8 @@ What it plays:
 | 3.1c | Total Annihilation at version 3.1c, unmodified. Every baseline in this document is its behaviour. |
 | Profile, `oamod.yaml` | The strict YAML file in the root of a mod's folder that describes the mod as changes from 3.1c. |
 | Package, packaging revision | A mod's profile and files as one person put them together on one day; its revision counts the updates of that package from 1. |
-| Game folder | The installed game. Under a mod folder it must be plain 3.1c, with no `oamod.yaml`. |
-| Mod folder | A folder holding a mod's files and its `oamod.yaml`, in the game folder's `mods` folder or named with `--mod-dir`. It plays as if copied over the game folder. |
+| Game folder | The installed game. Under a mod folder it must be plain 3.1c, with no `oamod.yaml`. A managed start plays `Games/<game>` as that folder. |
+| Mod folder | A folder holding a mod's files and its `oamod.yaml`, in the game folder's `mods` folder or named with `--mod-dir`. It plays as if copied over the expansions that are on and the base game. An expansion folder is not a mod folder. |
 | Copied install | A mod installed by copying its files into the game folder itself. |
 | Hack registry | The catalogue of every entry a profile may name, with its parameters, baselines and defaults: `src/data/mod-profile/registry/hack-registry.yaml`. |
 | Catalogue | The version of the hack registry's contents; this document describes catalogue 1. |

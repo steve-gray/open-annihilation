@@ -243,9 +243,14 @@ folder supplies `id@release`, such as `ridge@28`. A folder with no release
 uses the profile's id, and the check warns that the key has no release.
 
 For each map and each target the check builds the store the game would:
-the mod's folder first, the game's archives mounted, and that profile's
-data layout. It mounts that one map from the pack, runs the four rules,
-and unmounts it before the next map. A map that does not fit `ta-3.1c`
+the mod's folder first, then the base game, and that profile's data layout.
+The check mounts that one map from the pack, runs the four rules, and
+unmounts it before the next map.
+
+The map lists and the battle room show a pack map's title. The joined name
+is what is sent and saved. A map stays listed, and is greyed, when
+`supportedGames` does not include the base game in use or an id in
+`requiredExpansions` is off. Choosing it says why. A map that does not fit `ta-3.1c`
 refuses the pack. A clash with a mod is reported, and the pack is still
 accepted. Text prints one line per map and target, then each failure.
 JSON adds `maps`, and each map's `compatible` object lists `ta-3.1c` and

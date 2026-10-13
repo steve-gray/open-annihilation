@@ -83,10 +83,9 @@ player's folder. A package the table does not know is refused whole.
 ## 5. Where it installs
 
 The files are copied into `Expansions/<game>/<id>`. `<id>` is the
-manifest's id. `<game>` is the first base game in `extends`. The folder
-name `expansions` is the name the game uses for managed expansions. A later
-change capitalises that folder; this standard names the name the code uses
-today.
+manifest's id. `<game>` is the first base game in `extends`. `Expansions`
+is the folder a managed copy uses, beside `Games`. That folder is the
+expansion. It is not a mod folder, and the Mods tab does not list it.
 
 The folder holds the expansion's files and a `.oa-content` record. The
 record's bundle id is the expansion's id. Its source is `registry <id>`

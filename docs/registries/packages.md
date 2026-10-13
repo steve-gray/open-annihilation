@@ -4,8 +4,8 @@ A registry serves four kinds of package. Each is a zip archive. OA installs
 a mod into `Mods/<id>`, a map pack into `Maps/<id>`, a language pack into
 `Languages/<tag>`, and an expansion into `Expansions/<game>/<id>`, using the
 id or tag inside the manifest, whatever the file is called. `<game>` is the
-first base game the expansion extends. The folder name `expansions` is the
-name the game uses today.
+first base game the expansion extends. `Expansions` is the folder a
+managed copy uses. That folder is the expansion, not a mod.
 
 | Kind | Manifest | Standard |
 |---|---|---|

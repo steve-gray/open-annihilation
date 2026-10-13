@@ -44,7 +44,7 @@ The Library opens on the main menu, from:
   gears (the same size, a quarter of a side apart, 12 pixels in from the
   frame). It opens on the [Active](#the-active-tab) tab. Its bottom-right
   corner shows how many mods the Mods tab lists under All (every mod the
-  registries list, plus your own, without the Base Game entry): `7`, `123`,
+  registries list, plus your own, without the No Mod row): `7`, `123`,
   or `999+` above 999. While the catalogues are still being read and that
   number is not final, a small spinner turns there instead, and stops once
   the list is in. While updates you can install wait, the button also wears
@@ -443,6 +443,9 @@ the same **SWITCH MOD** question as **SWITCH OFF** on the mod you play
 and, on **SWITCH**, reloads the game with no mod. It is greyed during a
 game and while the command line chose the run's mod, and the details then
 say "The command line chose this run's mod."
+
+An expansion's folder under `Expansions` is that expansion. The Mods tab
+does not list it, and playing it is the Active tab's pill, not a mod.
 
 The Mods tab then lists every mod you can play: the ones you installed, from a
 registry or a file, and every other folder the game can play as a mod,
