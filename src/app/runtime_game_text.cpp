@@ -13,6 +13,8 @@
 #include "oa/app/view_rules.hpp"
 #include "language_packs.hpp"
 
+#include "oa/platform/log_files.hpp"
+#include "oa/platform/system.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/present/game_text.hpp"
@@ -214,12 +216,14 @@ void follow_language(
     const std::string_view warmup = runtime.language_warmup();
     if (stack == nullptr || warmup.empty())
         return;
+    const uint32_t fonts_began = oa::platform::tick_ms();
     for (const auto face :
          {oa::present::TextFace::message,
           oa::present::TextFace::status,
           oa::present::TextFace::label})
         std::ignore =
             stack->layout(warmup, face_style(face, scale, text_size, fonts.least_cjk_size));
+    oa::platform::log_files::note_timing_span("fonts", fonts_began);
 }
 
 /// Draws a line in the stack; null when it cannot.

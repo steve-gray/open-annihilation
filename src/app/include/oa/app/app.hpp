@@ -824,6 +824,25 @@ struct Extension;
 /// @param text the notice
 [[noreturn]] void write_startup_line(std::string_view text);
 
+/// Records the window's first frame once.
+///
+/// The quiet frame drawn when the renderer is ready records it. A later
+/// present does not write that line again.
+void note_launch_frame();
+
+/// Pumps events and redraws the quiet launch frame while start-up work runs
+/// off this thread.
+///
+/// A moving bar appears once that frame has been up for a moment. After
+/// release_launch_window it does nothing, so it cannot draw over the setup
+/// or the menu.
+void pump_launch_window();
+
+/// Stops the quiet launch frame.
+///
+/// The setup and the menu draw the window from then on.
+void release_launch_window();
+
 /// Parses the command line into the run options.
 ///
 /// Long options the engine knows set their fields; any other long option goes

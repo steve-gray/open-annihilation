@@ -54,6 +54,7 @@
 #include "oa/ui/gadget_render.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <atomic>
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
@@ -71,6 +72,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -233,6 +235,67 @@ RecordsPlace records_place(const Options& options) {
     return place;
 }
 
+namespace {
+
+/// The quiet frame drawn as soon as the renderer exists, until the setup or
+/// the menu takes the window.
+struct LaunchFrame {
+    SDL_Window* window = nullptr;
+    SDL_Renderer* renderer = nullptr;
+    bool shown = false;
+    bool released = false;
+    uint32_t shown_ms = 0;
+};
+
+LaunchFrame& launch_frame() {
+    static LaunchFrame frame;
+    return frame;
+}
+
+/// How long the quiet frame stays plain before a bar shows the launch is working.
+constexpr uint32_t kWorkingAfterMs = 200;
+
+/// Clears the window to the setup's backdrop, and draws a bar once the launch
+/// has been working for a moment. The window's first frame is recorded when
+/// the present succeeds.
+void draw_launch_frame() {
+    LaunchFrame& frame = launch_frame();
+    if (frame.renderer == nullptr || frame.released)
+        return;
+    if (!SDL_SetRenderDrawColor(frame.renderer, 0x1b, 0x1e, 0x19, 255) ||
+        !SDL_RenderClear(frame.renderer))
+        return;
+    const uint32_t now = oa::platform::tick_ms();
+    if (frame.shown && now - frame.shown_ms > kWorkingAfterMs) {
+        int output_width = 0;
+        int output_height = 0;
+        if (SDL_GetRenderOutputSize(frame.renderer, &output_width, &output_height) &&
+            output_width > 0 && output_height > 0) {
+            const int bar_width = std::max(output_width / 5, 40);
+            const int travel = std::max(output_width - bar_width, 1);
+            const int bar_x = static_cast<int>((now / 16U) % static_cast<uint32_t>(travel));
+            if (SDL_SetRenderDrawColor(frame.renderer, 0xc8, 0xc2, 0xb0, 255)) {
+                const SDL_FRect bar{
+                    static_cast<float>(bar_x),
+                    static_cast<float>(std::max(output_height - 48, 0)),
+                    static_cast<float>(bar_width),
+                    8.F
+                };
+                std::ignore = SDL_RenderFillRect(frame.renderer, &bar);
+            }
+        }
+    }
+    if (!SDL_RenderPresent(frame.renderer))
+        return;
+    if (!frame.shown) {
+        frame.shown = true;
+        frame.shown_ms = now;
+        oa::platform::log_files::note_timing("window first frame");
+    }
+}
+
+} // namespace
+
 struct HostDisplay {
     SDL_Window* window = nullptr;
     // The window's renderer, made by walking SDL's render drivers, and what
@@ -272,6 +335,7 @@ struct HostDisplay {
     ///
     /// @param options the parsed command line
     void initialize(const Options& options) {
+        const uint32_t probe_began = oa::platform::tick_ms();
         initialized = true;
         if (!SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1"))
             throw std::runtime_error("SDL mouse focus click-through hint was rejected");
@@ -376,6 +440,13 @@ struct HostDisplay {
         // view; the desktop has no such hook.
         if (const PlatformHooks& hooks = platform_hooks(); hooks.window_ready != nullptr)
             hooks.window_ready(hooks.context, window);
+        // Something is on screen as soon as the renderer exists. The setup or
+        // the menu replaces this frame; start-up work after here can run
+        // with the window already up.
+        launch_frame().window = window;
+        launch_frame().renderer = renderer_host.renderer();
+        draw_launch_frame();
+        oa::platform::log_files::note_timing_span("display and renderer probe", probe_began);
     }
 
     /// Ends the run's renderer records cleanly, deleting the sentinel, and
@@ -445,12 +516,15 @@ void play_intro_file(
 /// @param options the parsed command line, with the mod profile played
 /// @param host the window the movies show in; null for a headless run
 void play_intro(const Options& options, HostDisplay* host) {
+    const uint32_t intro_began = oa::platform::tick_ms();
     // The game's -c, -n and -y switches skip the movies too. This startup
     // path runs before the preferences load, so the PlayMovie preference
     // does not bring them back; in 3.1c the movies still play under those
     // switches while PlayMovie is set.
-    if (options.skip_intro || options.launch.skip_intro != 0)
+    if (options.skip_intro || options.launch.skip_intro != 0) {
+        oa::platform::log_files::note_timing_span("intro", intro_began);
         return;
+    }
     // Frontend state 0 plays the logo movie (Data/1.zrb, the publisher's
     // logo, in 3.1c), then state 1 the intro (Data/2.zrb), then state 2
     // loads MAINMENU.GUI. The mod profile names each movie's file
@@ -469,6 +543,7 @@ void play_intro(const Options& options, HostDisplay* host) {
     const auto& movies = options.mod_profile ? options.mod_profile->media.movies : base_movies;
     play(movies.logo, false);
     play(movies.intro, true);
+    oa::platform::log_files::note_timing_span("intro", intro_began);
 }
 
 /// Writes each game file and listing a run looks up to a file, one a line,
@@ -1381,14 +1456,45 @@ int run_once(
     // choice is read from the preferences on every start, including the soft
     // restart a mod switch uses, so a change of choice is what the next start
     // mounts. --game-dir keeps the scan of the named folder.
+    // The window is up before the folder is resolved, so a slow look at the
+    // copy does not leave the screen blank. A run nobody watches can ask no
+    // dialog, so that look leaves this thread and the window keeps drawing.
+    if (!options.headless_check && !display.initialized)
+        display.initialize(options);
     std::optional<GameDirectory> game_directory;
-    if (mount_copy)
-        game_directory = compose_for_run(options);
     GameFilesNeeded needed;
-    if (!game_directory)
-        game_directory = find_game_directory(
-            options, (game_files.offered || folder_chooser_offered(options)) ? &needed : nullptr
-        );
+    const uint32_t folder_began = oa::platform::tick_ms();
+    const auto resolve_folder = [&] {
+        if (mount_copy)
+            game_directory = compose_for_run(options);
+        if (!game_directory)
+            game_directory = find_game_directory(
+                options, (game_files.offered || folder_chooser_offered(options)) ? &needed : nullptr
+            );
+    };
+    const bool folder_aside = display.initialized && (options.unattended || options.headless_check);
+    if (folder_aside) {
+        std::exception_ptr folder_error;
+        std::atomic<bool> folder_done{false};
+        std::thread folder_thread([&] {
+            try {
+                resolve_folder();
+            } catch (...) {
+                folder_error = std::current_exception();
+            }
+            folder_done.store(true);
+        });
+        while (!folder_done.load()) {
+            pump_launch_window();
+            SDL_Delay(16);
+        }
+        folder_thread.join();
+        if (folder_error)
+            std::rethrow_exception(folder_error);
+    } else {
+        resolve_folder();
+    }
+    oa::platform::log_files::note_timing_span("game folder", folder_began);
     // Without a usable folder where the in-engine chooser is asked for, it picks one.
     if (!game_directory && needed.needed && needed.chooser) {
         ChooserDisplay chooser{&display, &options};
@@ -1516,10 +1622,12 @@ int run_once(
         archives = std::move(game_directory->archives);
     if (archives.empty())
         throw std::runtime_error("no game archives were selected");
+    const uint32_t mount_began = oa::platform::tick_ms();
     for (const auto& candidate : archives) {
         const auto archive = candidate.is_absolute() ? candidate : options.game_dir / candidate;
         assets.mount(archive);
     }
+    oa::platform::log_files::note_timing_span("mounting", mount_began);
     if (game_directory->demo.outcome == DemoOutcome::ready)
         std::cout << "open-annihilation: " << describe_ready(game_directory->demo) << '\n';
     // A capture starts before the runtime, which starts the menu's
@@ -1846,6 +1954,34 @@ void publish_managed_copy(
 }
 
 } // namespace
+
+void note_launch_frame() {
+    LaunchFrame& frame = launch_frame();
+    if (frame.shown)
+        return;
+    frame.shown = true;
+    frame.shown_ms = oa::platform::tick_ms();
+    oa::platform::log_files::note_timing("window first frame");
+}
+
+void pump_launch_window() {
+    LaunchFrame& frame = launch_frame();
+    if (!frame.shown || frame.released || frame.renderer == nullptr)
+        return;
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+            std::ignore = SDL_PushEvent(&event);
+            break;
+        }
+    }
+    draw_launch_frame();
+}
+
+void release_launch_window() {
+    launch_frame().released = true;
+}
+
 } // namespace oa::app
 
 using namespace oa::app;
@@ -1860,6 +1996,7 @@ int status_exit_code(int played) noexcept;
 } // namespace oa::app::automation
 
 int main(int argc, char** argv) {
+    const uint32_t process_started_ms = oa::platform::tick_ms();
     // --version prints one line and leaves before the log folder, the
     // preferences, the game data or a window are touched. Other options on
     // the same line are not read.
@@ -1926,6 +2063,7 @@ int main(int argc, char** argv) {
                                                    !oa::platform::log_files::output_captured())
         )
             start_log();
+        oa::platform::log_files::note_timing_at("process start", process_started_ms);
         if (automation::status_following())
             automation::begin_status_lines(running_engine_version_line());
         // The files the start carries are opened once the main menu shows,

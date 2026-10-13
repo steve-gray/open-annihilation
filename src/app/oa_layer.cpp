@@ -21,6 +21,8 @@
 #include "oa/app/frame_coordinates.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/data/languages/interface_text.hpp"
+#include "oa/platform/log_files.hpp"
+#include "oa/platform/system.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/ui/display_layout.hpp"
 #include "oa/ui/engine_settings.hpp"
@@ -1708,7 +1710,9 @@ text_font::FontStack* OaLayer::smooth_fonts() const {
     if (!smooth_fonts_tried_) {
         smooth_fonts_tried_ = true;
         try {
+            const uint32_t fonts_began = oa::platform::tick_ms();
             smooth_fonts_ = text_font::FontStack::open(text_font::bundled_font_directory());
+            oa::platform::log_files::note_timing_span("fonts", fonts_began);
         } catch (const std::exception&) {
             smooth_fonts_.reset();
         }

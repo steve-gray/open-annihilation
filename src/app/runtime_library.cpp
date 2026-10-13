@@ -1894,6 +1894,7 @@ struct Runtime::LibraryScreen final : LayerScreen {
         kit::Canvas drawn = canvas;
         drawn.icon = Runtime::EngineSettingsMenuHost::mods_icon(runtime_);
         library::draw_library(drawn, list_);
+        runtime_.finish_screen_change("library");
     }
 
     /// Takes a pointer's move, press or release.
@@ -2554,6 +2555,7 @@ void Runtime::open_library(std::optional<library::Tab> tab) {
         oa::ui::frontend_dialogs::dialog_count() != 0 || saves_notice_shown() ||
         engine_settings_fonts() == nullptr)
         return;
+    begin_screen_change("library");
     LibraryHost& host = library_host();
     // The catalogues are asked for again as the player's setting allows; a
     // run nobody watches fetches nothing.
@@ -2591,6 +2593,7 @@ void Runtime::close_library() {
     const LayerScreen* shown = layer.find(library_screen_name);
     if (shown == nullptr)
         return;
+    begin_screen_change("main menu");
     layer.return_to(library_screen_name);
     layer.close(shown);
 }
