@@ -283,6 +283,11 @@ struct Options {
     fs::path mod_dir;
     // Plays the game folder without the remembered mod folder (--base-game).
     bool base_game = false;
+    /// The base game and expansions for this run (--content
+    /// GAME[:EXPANSION,...]). Empty when the run uses the remembered choice.
+    /// It is not written to the preferences, and the mounted files change
+    /// with the next mount.
+    std::string content{};
     // The folders loose files come from, highest precedence first: the mod
     // folder, then game_dir. main() fills it; empty means game_dir alone.
     std::vector<fs::path> game_folders;

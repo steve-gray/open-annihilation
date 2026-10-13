@@ -1771,4 +1771,80 @@ void set_unit_limit(Runtime& runtime, int32_t units_per_player, SettingScope sco
         Runtime::EngineSettingsState::report_failed_save(runtime, *failure);
 }
 
+namespace {
+
+/// Reports whether a mod folder is remembered.
+///
+/// @param values the preferences
+/// @return true when the mod key names a folder
+[[nodiscard]] bool mod_is_remembered(const oa::platform::preferences::Values& values) {
+    const auto found = values.find(std::string(settings::key::mod_directory));
+    return found != values.end() && !found->second.empty();
+}
+
+/// Views of ids owned by `ids`.
+///
+/// @param ids the ids
+/// @return views of them, in the same order
+[[nodiscard]] std::vector<std::string_view> id_views(const std::vector<std::string>& ids) {
+    std::vector<std::string_view> views;
+    views.reserve(ids.size());
+    for (const std::string& id : ids)
+        views.emplace_back(id);
+    return views;
+}
+
+} // namespace
+
+oa::data::content_bundles::ContentChoice Runtime::content_choice() const {
+    const std::vector<std::string> copied = copied_content_bundles(options_.game_dir);
+    const std::vector<std::string_view> copied_ids = id_views(copied);
+    return content_choice_from_preferences(preference_values_, copied_ids, options_.content);
+}
+
+oa::data::content_bundles::ContentChangeResult Runtime::turn_content_expansion(
+    std::string_view bundle_id, bool on, std::span<const std::string_view> required
+) {
+    namespace bundles = oa::data::content_bundles;
+    const std::vector<std::string> copied = copied_content_bundles(options_.game_dir);
+    const std::vector<std::string_view> views = id_views(copied);
+    const bundles::ContentChoice now =
+        content_choice_from_preferences(preference_values_, views, options_.content);
+    const bundles::ContentChangeResult result = bundles::turn_content_expansion(
+        now, bundle_id, on, views, match_running(), mod_is_remembered(preference_values_), required
+    );
+    if (!store_content_change(preference_values_, result))
+        return result;
+    if (result.mod_cleared != bundles::ModClearReason::none && engine_settings_) {
+        engine_settings_->current.mod_folder.clear();
+        engine_settings_->dropped_mod_folder.clear();
+    }
+    preferences_dirty_ = true;
+    if (const auto failure = EngineSettingsState::flush(*this))
+        EngineSettingsState::report_failed_save(*this, *failure);
+    return result;
+}
+
+oa::data::content_bundles::ContentChangeResult
+Runtime::choose_content_base_game(std::string_view bundle_id) {
+    namespace bundles = oa::data::content_bundles;
+    const std::vector<std::string> copied = copied_content_bundles(options_.game_dir);
+    const std::vector<std::string_view> views = id_views(copied);
+    const bundles::ContentChoice now =
+        content_choice_from_preferences(preference_values_, views, options_.content);
+    const bundles::ContentChangeResult result = bundles::choose_content_base_game(
+        now, bundle_id, views, match_running(), mod_is_remembered(preference_values_)
+    );
+    if (!store_content_change(preference_values_, result))
+        return result;
+    if (result.mod_cleared != bundles::ModClearReason::none && engine_settings_) {
+        engine_settings_->current.mod_folder.clear();
+        engine_settings_->dropped_mod_folder.clear();
+    }
+    preferences_dirty_ = true;
+    if (const auto failure = EngineSettingsState::flush(*this))
+        EngineSettingsState::report_failed_save(*this, *failure);
+    return result;
+}
+
 } // namespace oa::app
