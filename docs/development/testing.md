@@ -1049,6 +1049,26 @@ The installation of Total Annihilation 3.1c is not CI's to download: the
 game-data tests and the native checks over it run only on contributors'
 machines, so run them before asking for review.
 
+## Start-up and screen timing
+
+A run writes `open-annihilation: timing:` lines. Each line ends with a
+millisecond mark from process start (`oa::platform::tick_ms`). A phase that
+has a measured length also names it, as `preferences (span 40 ms) 120`.
+
+The phases are process start, preferences, user folder, the content check,
+mounting, fonts, language, catalogue and registries, the display and
+renderer probe, the window's first frame, the intro, and the main menu's
+first frame. The window's first frame is the first present, including the
+quiet frame drawn when the renderer is ready. A screen change writes
+`screen <name> begin` and, when that screen is first presented,
+`screen <name> first frame`. The setup's steps use `screen setup` and the
+step's word: language, game, copying, online or buttons. A scan of
+installers that runs off the main thread writes `sources` when it finishes.
+
+A mark taken before the log file is open is kept and written when the log
+opens. It is also written to the standard output when lines are not held
+for the log, so a check that never opens a log still prints the marks.
+
 ## Kinds of test
 
 | Kind | What it does | Examples |

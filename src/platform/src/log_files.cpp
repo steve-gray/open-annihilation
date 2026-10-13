@@ -4,9 +4,11 @@
 #include "oa/platform/log_files.hpp"
 
 #include "oa/platform/files.hpp"
+#include "oa/platform/system.hpp"
 
 #include <algorithm>
 #include <charconv>
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <system_error>
@@ -39,6 +41,8 @@ struct State {
     int terminal = -1; // descriptor of the standard error the program began with, when a terminal
     bool active = false;
     bool hold = false; // write_line drops text until begin() succeeds
+    // Marks taken before begin() succeeds, written once the streams are the log.
+    std::vector<std::string> pending_timing;
 };
 
 State& state() {
@@ -309,6 +313,13 @@ bool begin(const fs::path& folder, const Limits& limits) {
     current.active = true;
     prune(folder, now, limits, path);
     write_first_line(now);
+    // Marks taken while the streams still went elsewhere, kept in order.
+    for (const std::string& line : current.pending_timing) {
+        std::fwrite(line.data(), 1, line.size(), stdout);
+        std::fputc('\n', stdout);
+    }
+    current.pending_timing.clear();
+    std::fflush(stdout);
     return true;
 }
 
@@ -355,6 +366,42 @@ void write_line(std::string_view text) {
     std::fwrite(text.data(), 1, text.size(), stdout);
     std::fputc('\n', stdout);
     std::fflush(stdout);
+}
+
+void note_timing_at(std::string_view phase, uint32_t milliseconds) {
+    std::string line = "open-annihilation: timing: ";
+    line.append(phase);
+    line.push_back(' ');
+    line.append(std::to_string(milliseconds));
+    auto& current = state();
+    if (current.active) {
+        std::fwrite(line.data(), 1, line.size(), stdout);
+        std::fputc('\n', stdout);
+        std::fflush(stdout);
+        return;
+    }
+    // A check that never opens the log still has the marks on its output.
+    // A launcher that asked to hold lines does not see them on the stream it
+    // reads; begin() writes the kept lines into the log.
+    if (!current.hold) {
+        std::fwrite(line.data(), 1, line.size(), stdout);
+        std::fputc('\n', stdout);
+        std::fflush(stdout);
+    }
+    current.pending_timing.push_back(std::move(line));
+}
+
+void note_timing(std::string_view phase) {
+    note_timing_at(phase, oa::platform::tick_ms());
+}
+
+void note_timing_span(std::string_view phase, uint32_t began_ms) {
+    const uint32_t now = oa::platform::tick_ms();
+    std::string text(phase);
+    text.append(" (span ");
+    text.append(std::to_string(now - began_ms));
+    text.append(" ms)");
+    note_timing_at(text, now);
 }
 
 bool output_captured() {
