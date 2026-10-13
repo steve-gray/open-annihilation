@@ -3,7 +3,7 @@
 
 // The oaexp kind: an expansion package. Its files are the built-in table's
 // files, by name, size and SHA-256, and they are copied into
-// expansions/<game>/<id> with the .oa-content record. The game's install
+// Expansions/<game>/<id> with the .oa-content record. The game's install
 // path is install_oaexp, which uses that table only.
 #pragma once
 
@@ -141,7 +141,7 @@ refused_prompt(std::string_view file_name, const Problem& problem, bool change_f
 ///
 /// The manifest's id is a built-in expansion, and every file is checked
 /// against that expansion's table. Bytes the table does not know are not
-/// written. The copy lands in expansions/<game>/<id>, using the expansions
+/// written. The copy lands in Expansions/<game>/<id>, using the expansions
 /// folder's name, with a .oa-content record. `registry_id` empty records the
 /// package file's path as the source; otherwise the source is
 /// "registry <id>". A registry id that holds a newline is refused.

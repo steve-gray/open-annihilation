@@ -129,7 +129,7 @@ void test_install() {
     OA_CHECK(folder.filename() == "cavedog-units");
     OA_CHECK(folder.parent_path().filename() == "totala");
     // The managed expansions folder, the name the installer uses.
-    OA_CHECK(folder.parent_path().parent_path().filename() == "expansions");
+    OA_CHECK(folder.parent_path().parent_path().filename() == bundles::managed_expansions_folder);
     OA_CHECK(folder.parent_path().parent_path().parent_path() == player);
     OA_CHECK(read_text(folder / "unit.fbi") == "abcd");
     OA_CHECK(!fs::exists(folder / "oaexp.yaml"));

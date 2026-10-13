@@ -82,7 +82,7 @@ player's folder. A package the table does not know is refused whole.
 
 ## 5. Where it installs
 
-The files are copied into `expansions/<game>/<id>`. `<id>` is the
+The files are copied into `Expansions/<game>/<id>`. `<id>` is the
 manifest's id. `<game>` is the first base game in `extends`. The folder
 name `expansions` is the name the game uses for managed expansions. A later
 change capitalises that folder; this standard names the name the code uses
@@ -99,7 +99,7 @@ expansion. A file the table does not name, left in the folder, is removed
 with the old folder. A link in the expansion's place is left where it is,
 and so is a folder whose record names something else.
 
-Uninstalling removes `expansions/<game>/<id>` when the record's bundle id
+Uninstalling removes `Expansions/<game>/<id>` when the record's bundle id
 is that expansion. Another expansion's folder is left in place. A link is
 left in place.
 

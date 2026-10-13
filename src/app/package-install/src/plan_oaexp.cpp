@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Installing an expansion package: the manifest and the files are checked
-// against a table, then the files are copied into expansions/<game>/<id>
+// against a table, then the files are copied into Expansions/<game>/<id>
 // with the .oa-content record. install_oaexp uses the built-in table.
 
 #include "files.hpp"
@@ -118,14 +118,17 @@ void discard_folder(const fs::path& folder) {
     fs::remove_all(folder, error);
 }
 
-/// Reports whether an existing path on the way to `path` is a link.
+/// Reports whether an existing path from `base` down to `path` is a link.
+/// The folders above `base` are the player's own (a linked Documents
+/// folder, macOS's /var) and are not looked at.
 ///
-/// @param path the path
+/// @param base the folder the walk starts below
+/// @param path the path, inside `base`
 /// @param[out] problem the link, when one is found
 /// @return true when a link was found
-bool link_on_the_way(const fs::path& path, Problem& problem) {
-    fs::path walked;
-    for (const fs::path& part : path) {
+bool link_on_the_way(const fs::path& base, const fs::path& path, Problem& problem) {
+    fs::path walked = base;
+    for (const fs::path& part : path.lexically_relative(base)) {
         walked /= part;
         std::error_code error;
         if (!fs::exists(walked, error) || error)
@@ -448,7 +451,7 @@ bool copy_files(
             return false;
         }
         const fs::path destination = staging / detail::path_of(relative);
-        if (link_on_the_way(destination, problem))
+        if (link_on_the_way(staging, destination, problem))
             return false;
         std::error_code created;
         fs::create_directories(destination.parent_path(), created);
@@ -545,14 +548,19 @@ bool write_record(
 /// back.
 ///
 /// @param staging the folder just filled
+/// @param user_folder the player's folder `dest` lies in
 /// @param dest where the expansion belongs
 /// @param id the expansion's id
 /// @param[out] problem why it was not put in place
 /// @return true when `dest` is the new folder
 bool put_in_place(
-    const fs::path& staging, const fs::path& dest, std::string_view id, Problem& problem
+    const fs::path& staging,
+    const fs::path& user_folder,
+    const fs::path& dest,
+    std::string_view id,
+    Problem& problem
 ) {
-    if (link_on_the_way(dest, problem) || is_link_or_junction(dest)) {
+    if (link_on_the_way(user_folder, dest, problem) || is_link_or_junction(dest)) {
         if (problem.refusal == Refusal::none)
             problem.refusal = Refusal::link;
         if (problem.subject.empty())
@@ -697,7 +705,7 @@ bool install_checked(
     if (!copy_files(archive, directory, located, staging, held, problem) ||
         !files_match(*table, held, problem) ||
         !write_record(staging, *table, source, held, problem) ||
-        !put_in_place(staging, dest, table->id, problem)) {
+        !put_in_place(staging, user_folder, dest, table->id, problem)) {
         discard_folder(staging);
         return false;
     }

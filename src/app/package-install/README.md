@@ -8,7 +8,7 @@ is a zip archive of a mod's folder, the one that holds its `oamod.yaml`; it
 installs into `Mods/<id>`, by the id its profile gives, whatever the file is
 called. A map pack installs into `Maps/<id>`. A language pack installs into
 `Languages/<tag>`, by the tag its `language.yaml` gives. An expansion
-installs into `expansions/<game>/<id>` and is copied by `install_oaexp`,
+installs into `Expansions/<game>/<id>` and is copied by `install_oaexp`,
 which writes the table's files and a `.oa-content` record. The module has no
 SDL: the game's runtime shows what it asks
 and answers (`src/app/runtime_mod_install.cpp`,
@@ -419,7 +419,7 @@ a replace that fails leaves the previous record as it was.
   unpacking and an entry the shared names check refuses.
 - `app-package-install-oaexp`: the fixture package is refused by the
   built-in table with nothing written; the same package, checked against
-  the test table, lands in `expansions/<game>/<id>` with `.oa-content`; a
+  the test table, lands in `Expansions/<game>/<id>` with `.oa-content`; a
   reinstall drops a file the table does not name; uninstall removes that
   folder and leaves a sibling; a link in the expansion's place is left
   alone.

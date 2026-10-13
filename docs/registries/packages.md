@@ -2,7 +2,7 @@
 
 A registry serves four kinds of package. Each is a zip archive. OA installs
 a mod into `Mods/<id>`, a map pack into `Maps/<id>`, a language pack into
-`Languages/<tag>`, and an expansion into `expansions/<game>/<id>`, using the
+`Languages/<tag>`, and an expansion into `Expansions/<game>/<id>`, using the
 id or tag inside the manifest, whatever the file is called. `<game>` is the
 first base game the expansion extends. The folder name `expansions` is the
 name the game uses today.
@@ -62,7 +62,7 @@ the catalogue names, and, for a map, whether it fits.
 
 An expansion is checked against the built-in table before anything is
 written. Each file must be that expansion's file by name, size and SHA-256.
-The copy lands in `expansions/<game>/<id>` with a `.oa-content` record. The
+The copy lands in `Expansions/<game>/<id>` with a `.oa-content` record. The
 source is `registry <id>` when the package came from a registry, and the
 package file's path when the player opened the file. The generic installer
 does not unpack an expansion, and the folder does not hold an

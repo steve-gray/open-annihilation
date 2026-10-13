@@ -19,7 +19,7 @@
 // root folder is Maps, the oalang kind, whose manifest is language.yaml
 // and whose root folder is Languages, and the expansion kind, whose
 // manifest is oaexp.yaml. An expansion is copied by install_oaexp into
-// expansions/<game>/<id> with the .oa-content record; its plan refuses the
+// Expansions/<game>/<id> with the .oa-content record; its plan refuses the
 // generic unpack. No function here throws: errors are values.
 #pragma once
 
