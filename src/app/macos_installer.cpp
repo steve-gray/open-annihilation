@@ -1311,45 +1311,60 @@ bool MacosInstallerSource::copy_together(const CopyRequest& request, CopyResult&
 }
 
 int MacosInstallerSource::write_check(std::ostream& out) {
-    out << "Checking the macOS installer...\n";
     std::string problem;
     if (!ensure(&problem, nullptr)) {
-        out << "check-installer: FAILED: " << sentence(problem.empty() ? open_error_ : problem)
-            << '\n';
+        out << sentence(problem.empty() ? open_error_ : problem) << '\n';
+        out << "installer check: FAILED\n";
         return 1;
     }
     Pump pump;
     pump.job = Job::check;
     pump.error = &problem;
     if (!InstallerWalk::run(*this, pump)) {
-        out << "check-installer: FAILED: "
-            << sentence(problem.empty() ? "the installer could not be read" : problem) << '\n';
+        out << sentence(problem.empty() ? "the installer could not be read" : problem) << '\n';
+        out << "installer check: FAILED\n";
         return 1;
     }
-    out << "macOS installer\n";
-    bool missing = false;
-    bool unknown = false;
-    for (const Slot& slot : pump.slots) {
-        if (!slot.seen || !slot.have_digest) {
-            out << "missing " << slot.bundle->id << ' ' << slot.file->copy_name << '\n';
-            missing = true;
-            continue;
+    // The same report as the other installers: each bundle with at least one
+    // file in the installer, then each of its files; a bundle with none is
+    // left out.
+    out << "macOS installer: " << path_to_utf8(file_) << '\n';
+    bool passed = true;
+    bool any = false;
+    for (std::size_t first = 0; first < pump.slots.size();) {
+        const bundles::Bundle* bundle = pump.slots[first].bundle;
+        std::size_t end = first;
+        bool held = false;
+        while (end < pump.slots.size() && pump.slots[end].bundle == bundle) {
+            held = held || (pump.slots[end].seen && pump.slots[end].have_digest);
+            ++end;
         }
-        const auto hex = oa::base::sha256::to_hex(slot.digest);
-        out << slot.bundle->id << ' ' << slot.file->copy_name << ' ' << slot.file->size << ' ';
-        out.write(hex.data(), static_cast<std::streamsize>(hex.size()));
-        out << '\n';
-        if (!bundles::known_hash(*slot.file, slot.digest))
-            unknown = true;
+        if (held) {
+            any = true;
+            out << "bundle " << bundle->id << '\n';
+            for (std::size_t index = first; index < end; ++index) {
+                const Slot& slot = pump.slots[index];
+                out << "  " << slot.file->copy_name;
+                if (!slot.seen || !slot.have_digest) {
+                    out << " missing\n";
+                    passed = false;
+                    continue;
+                }
+                const auto hex = oa::base::sha256::to_hex(slot.digest);
+                out << ' ';
+                out.write(hex.data(), static_cast<std::streamsize>(hex.size()));
+                const bool known = bundles::known_hash(*slot.file, slot.digest);
+                out << (known ? " ok\n" : " unknown\n");
+                passed = passed && known;
+            }
+        }
+        first = end;
     }
-    if (missing || unknown) {
-        out << "check-installer: FAILED: "
-            << (missing ? "A game file is missing."
-                        : "A game file is not the one this installer is known by.")
-            << '\n';
+    if (!any || !passed) {
+        out << "installer check: FAILED\n";
         return 1;
     }
-    out << "check-installer: passed\n";
+    out << "installer check: passed\n";
     return 0;
 }
 

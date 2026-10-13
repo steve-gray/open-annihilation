@@ -256,7 +256,7 @@ void copy_and_check() {
     OA_CHECK(
         oa::app::report_macos_installer(pkg, oa::app::copy_check_bundles(), false, report) == 0
     );
-    OA_CHECK(report.str().find("check-installer: passed") != std::string::npos);
+    OA_CHECK(report.str().find("installer check: passed") != std::string::npos);
     OA_CHECK(report.str().find("macOS installer") != std::string::npos);
 
     const std::vector<uint8_t> changed =
@@ -267,7 +267,7 @@ void copy_and_check() {
     OA_CHECK(
         oa::app::report_macos_installer(other, oa::app::copy_check_bundles(), false, failed) == 1
     );
-    OA_CHECK(failed.str().find("check-installer: FAILED:") != std::string::npos);
+    OA_CHECK(failed.str().find("installer check: FAILED") != std::string::npos);
 
     std::ostringstream refused;
     OA_CHECK(
