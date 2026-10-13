@@ -820,6 +820,45 @@ void test_published() {
     OA_CHECK(!catalogue::parse_day(""));
 }
 
+void test_content_needs() {
+    const auto named = read_ok(catalogue_of(bare(
+        "oamod",
+        "ridge",
+        "\"supportedGames\":[\"totala\"],\"requiredExpansions\":[\"battle-tactics\"]"
+    )));
+    OA_CHECK(named.packages.size() == 1);
+    if (!named.packages.empty()) {
+        OA_CHECK(named.packages[0].supported_games == std::vector<std::string>{"totala"});
+        OA_CHECK(
+            named.packages[0].required_expansions == std::vector<std::string>{"battle-tactics"}
+        );
+    }
+    const auto omitted = read_ok(catalogue_of(bare("oamod", "ridge")));
+    OA_CHECK(omitted.packages.size() == 1);
+    if (!omitted.packages.empty()) {
+        OA_CHECK(omitted.packages[0].supported_games.empty());
+        OA_CHECK(omitted.packages[0].required_expansions.empty());
+    }
+    const auto none_required =
+        read_ok(catalogue_of(bare("oamod", "ridge", "\"requiredExpansions\":[]")));
+    OA_CHECK(none_required.packages.size() == 1);
+    if (!none_required.packages.empty()) {
+        OA_CHECK(none_required.packages[0].supported_games.empty());
+        OA_CHECK(none_required.packages[0].required_expansions.empty());
+    }
+    skips_one(bare("oamod", "ridge", "\"supportedGames\":[]"), "supportedGames");
+    skips_one(bare("oamod", "ridge", "\"supportedGames\":[\"ridge\"]"), "supportedGames");
+    skips_one(bare("oamod", "ridge", "\"requiredExpansions\":[\"totala\"]"), "requiredExpansions");
+    skips_one(
+        bare(
+            "oamod",
+            "ridge",
+            "\"supportedGames\":[\"totala-demo\"],\"requiredExpansions\":[\"battle-tactics\"]"
+        ),
+        "extends"
+    );
+}
+
 } // namespace
 
 int main() {
@@ -831,5 +870,6 @@ int main() {
     test_structure();
     test_utc_time();
     test_published();
+    test_content_needs();
     return oa::test::check_exit_status();
 }

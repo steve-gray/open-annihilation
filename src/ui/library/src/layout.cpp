@@ -160,6 +160,8 @@ std::string_view action_word(Action action) {
         return "add-from";
     case Action::ask_expansion_off:
         return "turn-off";
+    case Action::turn_on:
+        return "turn-on";
     }
     return "action";
 }
@@ -771,7 +773,13 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     look.maker = shown_maker(entry_maker(entry));
     const std::string version = entry_version(library, entry);
     const std::string size = entry_size(library, entry);
+    const ContentLines lines = content_lines(library, entry);
+    const bool named = !lines.row.empty();
     if (form == RowForm::compact) {
+        if (named) {
+            look.lines.push_back(lines.row);
+            return look;
+        }
         std::string line = version;
         if (is_built_in_language(entry.id)) {
             const std::string_view english = entry_summary(entry);
@@ -794,7 +802,9 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
         return look;
     }
     look.by = byline(entry, library.text);
-    if (entry.listing != nullptr && !entry.listing->summary.empty())
+    if (named)
+        look.lines.push_back(lines.row);
+    else if (entry.listing != nullptr && !entry.listing->summary.empty())
         look.lines.push_back(entry.listing->summary);
     else if (is_base_game(entry.id) || is_built_in_language(entry.id)) {
         const std::string_view about = entry_summary(entry);
