@@ -7,6 +7,8 @@
 
 #include "oa/ui/kit/rows.hpp"
 
+#include "oa/ui/kit/text.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -838,21 +840,47 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
         row.top = top;
         const int32_t label_top = top + 1 + placement.row_padding;
         const bool locked = !view.lock.empty();
-        const int32_t lock_width = view.lock_columns > 0 ? view.lock_columns : kMetrics.lock_width;
-        // The lock, right-aligned on the label line; the label ends short of it.
-        const Rect right_lock{placement.right - lock_width, label_top, lock_width, line_height};
+        int32_t lock_width = view.lock_columns > 0 ? view.lock_columns : kMetrics.lock_width;
         int32_t label_right = placement.right;
         const int32_t control_width = label_line_control_width(view);
-        // A label-line control that does not fit beside its label and its
-        // lock stands on the next line. The lock stays on the label line:
-        // immediately left of a control that sits there, otherwise at the
-        // line's right. A slider's track, a drop-down and a text field stay
-        // on a line of their own either way. A lock never hides a control.
+        // A control that does not fit beside its label stands on the next
+        // line. The lock stays on the label line — immediately left of a
+        // control that sits there, otherwise at the line's right — unless
+        // the label, the lock and that control do not fit on one line. Then
+        // the lock moves to the start of the line under the label and the
+        // control stays, drawn faded. A slider's track, a drop-down and a
+        // text field stay on a line of their own either way. A lock never
+        // hides a control, and a label is never narrowed below its text to
+        // make room for a lock.
         const bool drop_line = view.control_below && control_width > 0;
-        int32_t control_top = label_top;
-        if (drop_line)
-            control_top = label_top + line_height + kMetrics.hint_gap;
         const bool on_label = control_width > 0 && !drop_line && view.kind != RowKind::link;
+        bool lock_below = locked && view.lock_below;
+        if (locked && !lock_below && view.lock_columns <= 0 && on_label && !view.label.empty()) {
+            const int32_t label_columns = estimated_width(view.label);
+            const int32_t need = label_columns + kMetrics.label_gap + lock_width +
+                                 kMetrics.label_gap + control_width;
+            if (need > width)
+                lock_below = true;
+        }
+        if (lock_below) {
+            // A measured lock is exactly its icon and words. Without a
+            // measure, the box is at least the class's, and wide enough for
+            // the estimated words, so a long lock is not cut. Right-aligned
+            // inside that box, the words start at the line's left.
+            int32_t dropped = lock_width;
+            if (view.lock_columns <= 0) {
+                const int32_t words =
+                    estimated_width(view.lock) + kMetrics.padlock_width + kMetrics.padlock_gap;
+                dropped = std::max(kMetrics.lock_width, words);
+            }
+            lock_width = std::min(dropped, std::max(width, int32_t{1}));
+        }
+        int32_t control_top = label_top;
+        if (drop_line) {
+            control_top = label_top + line_height + kMetrics.hint_gap;
+            if (lock_below)
+                control_top += line_height + kMetrics.hint_gap;
+        }
         if (drop_line) {
             row.control_area = {
                 placement.right - control_width, control_top, control_width, line_height
@@ -862,7 +890,13 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
                 placement.right - control_width, label_top, control_width, line_height
             };
         }
-        if (locked) {
+        if (locked && lock_below) {
+            row.lock_area = {
+                placement.left, label_top + line_height + kMetrics.hint_gap, lock_width, line_height
+            };
+            if (on_label)
+                label_right = row.control_area.x - kMetrics.label_gap;
+        } else if (locked) {
             if (on_label) {
                 row.lock_area = {
                     row.control_area.x - kMetrics.label_gap - lock_width,
@@ -871,7 +905,7 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
                     line_height
                 };
             } else {
-                row.lock_area = right_lock;
+                row.lock_area = {placement.right - lock_width, label_top, lock_width, line_height};
             }
             label_right = row.lock_area.x - kMetrics.label_gap;
         } else if (on_label) {
@@ -886,7 +920,13 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
         } else {
             row.label = {placement.left, label_top, label_right - placement.left, line_height};
         }
-        int32_t bottom = (drop_line ? control_top : label_top) + line_height + kMetrics.hint_gap;
+        // Hints follow the lowest of the label line, a lock that dropped
+        // under it, and a control that dropped under that.
+        const int32_t followed = lock_below && drop_line ? row.control_area.y
+                                 : lock_below            ? row.lock_area.y
+                                 : drop_line             ? control_top
+                                                         : label_top;
+        int32_t bottom = followed + line_height + kMetrics.hint_gap;
         for (std::size_t line = 0; line < view.hints.size(); ++line) {
             if (line > 0 && placement.tall)
                 bottom += kMetrics.tall_hint_line_gap;
@@ -928,11 +968,11 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
             break;
         }
         case RowKind::value_and_button:
-            // A label and a value that do not fit on one line with the button
-            // and the lock: the label keeps the first line, the lock stays
-            // there, and the value stands on the control's line, ending
-            // label_gap before the button. An empty label leaves the value
-            // the first line.
+            // A label and a value that do not fit on one line with the button:
+            // the label keeps the first line and the value stands on the
+            // control's line, ending label_gap before the button. The lock
+            // stays on the label line unless it has dropped under the label.
+            // An empty label leaves the value the first line.
             if (drop_line && !view.label.empty() && has_area(row.control_area)) {
                 const int32_t value_right = row.control_area.x - kMetrics.label_gap;
                 row.value = {
@@ -1046,9 +1086,9 @@ void add_rows(DisplayList& list, const PlacedRows& placed, const RowsState& stat
         push_control(list, row, control, state);
         if (locked) {
             // A status is the player's explanation and keeps its strength.
-            // Such a row fades its label line, and a control that dropped
-            // under it, and stops at the status. Every other locked row
-            // fades whole.
+            // Such a row fades its label line, and a lock or a control that
+            // dropped under it, and stops at the status. Every other locked
+            // row fades whole.
             int32_t cover_end = row.top + row.height;
             if (view.hint_is_status) {
                 cover_end = row.lock_area.y + kMetrics.regular_line + kMetrics.hint_gap;

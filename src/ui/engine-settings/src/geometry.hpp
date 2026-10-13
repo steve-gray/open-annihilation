@@ -1094,10 +1094,13 @@ using TextWidth = std::function<int32_t(std::string_view)>;
 /// Places the rows of a section; Developer's own, over its list, with
 /// developer_row_padding.
 ///
-/// A locked row keeps its control, drawn faded, with its lock on the label
-/// line: left of a button or a switch that sits there, otherwise at the
-/// line's right. A row whose hint lines are its status fades only that
-/// line and its control.
+/// A locked row keeps its control, drawn faded. Its lock stands on the
+/// label line, left of a button or a switch that sits there, otherwise at
+/// the line's right. When the label, the lock and that control do not fit
+/// on one line, the lock moves to the start of the line under the label,
+/// before the hint, and the control stays. A row whose hint lines are its
+/// status fades that line and a lock or a control that dropped under it,
+/// and stops before the status.
 ///
 /// @param page the section
 /// @param locks the dialog's locks

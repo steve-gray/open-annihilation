@@ -475,6 +475,9 @@ void reset_and_empty_are_disabled_when_they_cannot_act() {
 void a_game_locks_reset_and_empty() {
     settings::Dialog dialog = opened(offer_of({core_prime()}));
     dialog.locks = settings::settings_locks(settings::GameState{true, false, false, false});
+    // The locks drop under the labels, so the page scrolls. EMPTY is the
+    // last row's button; the end of the scroll shows it whole.
+    dialog.scroll[static_cast<std::size_t>(Page::downloads)] = settings::scroll_limit(dialog);
     OA_CHECK(layout_has(dialog, "Locked during a game"));
     OA_CHECK(!control_named(dialog, "settings.install-id.core-prime.reset").found);
     OA_CHECK(!control_named(dialog, "settings.downloaded-files.empty").found);

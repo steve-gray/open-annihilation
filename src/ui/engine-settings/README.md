@@ -570,7 +570,9 @@ host's offer (`set_downloads_offer`), not from a fixed list of settings:
 In a game the page still shows. RESET and EMPTY stay where they are,
 drawn faded, and an accent button loses its accent. The padlock and
 "Locked during a game" stand at the right of the label line, immediately
-left of the button when the button sits on that line. Downloaded files
+left of the button when the button sits on that line. When the label, the
+lock and the button do not fit on that line, the lock moves to the start
+of the line under the label and the button stays. Downloaded files
 shows no size line while locked: its label, the lock and the faded EMPTY.
 The check and the install-ID switch stay editable. The link is not listed.
 
@@ -620,10 +622,14 @@ opens every window at native density). Every locked row uses one look.
 The control stays where it is, drawn in that fade, and an accent button
 loses its accent. The padlock stands at the right end of the label line,
 immediately left of the control when the control sits on that line (a
-button or a switch). A control that does not fit there stands on the next
-line, and the padlock stays on the label line. A row whose hint lines are
-its status, Hardware acceleration's strip, fades only its label line and
-that control, so that the status keeps its strength.
+button or a switch). When the label, the padlock and that control do not
+fit on one line, the padlock moves to the start of the line under the
+label, before the hint, and the control stays. A control that does not
+fit beside its label stands on the next line, and the padlock stays on
+the label line unless the label and the padlock do not fit there either.
+A row whose hint lines are its status fades its label line and a lock or
+a control that dropped under it, and stops at the status, so that the
+status keeps its strength.
 
 Changes show at once; OK keeps them, Cancel puts back what the dialog opened
 with, Restore defaults resets every setting that is not locked. A click on a

@@ -315,9 +315,11 @@ void fit_control(kit::RowView& shown, int32_t available_width, const TextWidth& 
 }
 
 /// Widens a switch, a row of buttons or SHOW AGAIN to the caption in the
-/// small font, and gives a label that does not fit beside them the whole
-/// line. An estimated measure leaves the class's boxes, which the layout
-/// tests pin.
+/// small font. A label that does not fit beside its control takes the whole
+/// line and the control drops under it. When the label, the lock and a
+/// control on that line do not fit, the lock drops under the label and the
+/// control stays. An estimated measure leaves the class's boxes, which the
+/// layout tests pin; place_rows makes the same drop from the estimate.
 ///
 /// @param[in,out] shown the row
 /// @param available_width the section's width
@@ -384,51 +386,26 @@ void fit_measured(
         const int32_t button = shown.control_width > 0
                                    ? shown.control_width
                                    : oa::ui::kit::compact_metrics.button_row_width;
-        // What stands at the label line's right: the button, with the lock
-        // before it. The lock never takes the button's place.
-        int32_t beside = button;
-        if (!shown.lock.empty()) {
-            const int32_t lock = shown.lock_columns > 0 ? shown.lock_columns
-                                                        : oa::ui::kit::compact_metrics.lock_width;
-            beside = lock + label_gap + button;
-        }
-        const int32_t side =
-            (label_w > 0 ? label_w + label_gap : 0) + value_width + label_gap + beside;
-        if (side > available_width)
+        const int32_t lock = shown.lock.empty() ? 0
+                                                : (shown.lock_columns > 0
+                                                       ? shown.lock_columns
+                                                       : oa::ui::kit::compact_metrics.lock_width) +
+                                                      label_gap;
+        // The value drops onto the button's line only when it does not fit
+        // beside the label and the button. The lock drops under the label
+        // instead of taking that room, and never takes the button's place.
+        const int32_t without =
+            (label_w > 0 ? label_w + label_gap : 0) + value_width + label_gap + button;
+        if (without > available_width)
             shown.control_below = true;
+        else if (lock > 0 && without + lock > available_width)
+            shown.lock_below = true;
     }
     if (shown.label.empty())
         return;
     const int32_t label_width = (*regular)(shown.label);
     if (label_width <= 0)
         return;
-    auto reserved = [&]() {
-        const int32_t control = [&]() {
-            if (shown.kind == kit::RowKind::toggle)
-                return std::max(oa::ui::kit::compact_metrics.switch_width, shown.control_width);
-            if (shown.kind == kit::RowKind::levels)
-                return shown.count * shown.control_width + 2;
-            if (shown.kind == kit::RowKind::buttons && !shown.button_widths.empty()) {
-                int32_t width = 0;
-                for (std::size_t at = 0; at < shown.button_widths.size(); ++at)
-                    width += shown.button_widths[at] +
-                             (at > 0 ? oa::ui::kit::compact_metrics.folder_button_gap : 0);
-                return width;
-            }
-            if (shown.kind == kit::RowKind::buttons || shown.kind == kit::RowKind::value_and_button)
-                return shown.control_width > 0 ? shown.control_width
-                                               : oa::ui::kit::compact_metrics.button_row_width;
-            return int32_t{0};
-        }();
-        if (control <= 0)
-            return int32_t{0};
-        int32_t width = label_width + label_gap + control;
-        if (!shown.lock.empty())
-            width += (shown.lock_columns > 0 ? shown.lock_columns
-                                             : oa::ui::kit::compact_metrics.lock_width) +
-                     label_gap;
-        return width;
-    };
     const auto lock_span = [&]() {
         if (shown.lock.empty())
             return int32_t{0};
@@ -436,15 +413,14 @@ void fit_measured(
                                        : oa::ui::kit::compact_metrics.lock_width) +
                label_gap;
     };
-    if (shown.kind == kit::RowKind::levels && shown.count > 0) {
+    if (shown.kind == kit::RowKind::levels && shown.count > 0 && !shown.control_below) {
         int32_t least = 1;
         for (const std::string& caption : shown.captions)
             least = std::max(least, small(caption) + 8);
-        const int32_t beside = shown.lock.empty() ? 0 : lock_span();
-        // Beside the label and the lock. A caption that does not fit there
-        // takes the line under the label. The lock stays on the label line,
-        // so the dropped strip is as wide as the section.
-        const int32_t room = available_width - label_width - label_gap - beside;
+        // Beside the label only. The lock drops under the label when it
+        // does not fit, and never narrows the strip. A caption that does not
+        // fit beside the label takes the line under it.
+        const int32_t room = available_width - label_width - label_gap;
         const int32_t segment = (room - 2) / shown.count;
         const int32_t full = std::max((available_width - 2) / shown.count, int32_t{1});
         if (segment < least) {
@@ -454,12 +430,41 @@ void fit_measured(
             shown.control_width = segment;
         }
     }
-    // A label wider than the section still takes the whole line, rather than
-    // the sliver beside its control. A lock on a slider's or a drop-down's
-    // label line is counted here too: that control stands on a line of its own.
-    if (label_width > available_width || label_width + lock_span() > available_width ||
-        reserved() > available_width)
-        shown.control_below = true;
+    // A label that does not fit beside its control takes the whole line and
+    // the control drops. When the three do not fit but the label and the
+    // control do, the lock drops and the control stays. A slider's track and
+    // a drop-down already stand on a line of their own, so their lock stays
+    // at the label line's right.
+    const int32_t on_line = [&]() {
+        if (shown.kind == kit::RowKind::toggle)
+            return std::max(oa::ui::kit::compact_metrics.switch_width, shown.control_width);
+        if (shown.kind == kit::RowKind::levels)
+            return shown.count * shown.control_width + 2;
+        if (shown.kind == kit::RowKind::buttons && !shown.button_widths.empty()) {
+            int32_t summed = 0;
+            for (std::size_t at = 0; at < shown.button_widths.size(); ++at)
+                summed += shown.button_widths[at] +
+                          (at > 0 ? oa::ui::kit::compact_metrics.folder_button_gap : 0);
+            return summed;
+        }
+        if (shown.kind == kit::RowKind::buttons || shown.kind == kit::RowKind::value_and_button)
+            return shown.control_width > 0 ? shown.control_width
+                                           : oa::ui::kit::compact_metrics.button_row_width;
+        return int32_t{0};
+    }();
+    if (on_line > 0) {
+        const int32_t with_control = label_width + label_gap + on_line;
+        if (shown.control_below) {
+            if (!shown.lock.empty() && label_width + lock_span() > available_width)
+                shown.lock_below = true;
+        } else if (with_control > available_width) {
+            shown.control_below = true;
+            if (!shown.lock.empty() && label_width + lock_span() > available_width)
+                shown.lock_below = true;
+        } else if (!shown.lock.empty() && with_control + lock_span() > available_width) {
+            shown.lock_below = true;
+        }
+    }
 }
 
 kit::RowView row_view(
