@@ -289,10 +289,10 @@ void wrap_hints(kit::RowView& shown, int32_t width, const TextWidth& measure, bo
 /// measures it wider than the class's box, and keeps it inside the section.
 ///
 /// @param[in,out] shown the row
-/// @param content_width the section's width
+/// @param available_width the section's width
 /// @param measure a text's width in the small font
-void fit_control(kit::RowView& shown, int32_t content_width, const TextWidth& measure) {
-    if (estimated_measure(measure) || shown.captions.empty() || content_width <= 0)
+void fit_control(kit::RowView& shown, int32_t available_width, const TextWidth& measure) {
+    if (estimated_measure(measure) || shown.captions.empty() || available_width <= 0)
         return;
     if (shown.kind != kit::RowKind::levels && shown.kind != kit::RowKind::choice)
         return;
@@ -302,12 +302,12 @@ void fit_control(kit::RowView& shown, int32_t content_width, const TextWidth& me
     if (shown.kind == kit::RowKind::levels) {
         const int32_t count = std::max(shown.count, int32_t{1});
         const int32_t segment = widest + 8;
-        const int32_t cap = std::max(shown.control_width, (content_width - 48) / count);
+        const int32_t cap = std::max(shown.control_width, (available_width - 48) / count);
         shown.control_width = std::min(std::max(shown.control_width, segment), cap);
         return;
     }
     shown.control_width =
-        std::min(std::max(shown.control_width, widest + 16), std::max(content_width, int32_t{1}));
+        std::min(std::max(shown.control_width, widest + 16), std::max(available_width, int32_t{1}));
 }
 
 /// Widens a switch, a row of buttons or SHOW AGAIN to the caption in the
@@ -316,13 +316,13 @@ void fit_control(kit::RowView& shown, int32_t content_width, const TextWidth& me
 /// tests pin.
 ///
 /// @param[in,out] shown the row
-/// @param content_width the section's width
+/// @param available_width the section's width
 /// @param small a text's width in the small font
 /// @param regular a text's width in the regular font; null keeps the label's line
 void fit_measured(
-    kit::RowView& shown, int32_t content_width, const TextWidth& small, const TextWidth* regular
+    kit::RowView& shown, int32_t available_width, const TextWidth& small, const TextWidth* regular
 ) {
-    if (estimated_measure(small) || content_width <= 0)
+    if (estimated_measure(small) || available_width <= 0)
         return;
     if (shown.kind == kit::RowKind::toggle && !shown.captions.empty()) {
         int32_t half = 0;
@@ -364,7 +364,7 @@ void fit_measured(
             widest + oa::ui::kit::compact_metrics.choice_item_text_inset + menu_margin;
         shown.control_width = std::min(
             std::max(shown.control_width, std::max(field, menu)),
-            std::max(content_width, int32_t{1})
+            std::max(available_width, int32_t{1})
         );
     }
     if (shown.kind == kit::RowKind::slider && !shown.value.empty()) {
@@ -382,7 +382,7 @@ void fit_measured(
                                    : oa::ui::kit::compact_metrics.button_row_width;
         const int32_t side =
             (label_w > 0 ? label_w + label_gap : 0) + value_width + label_gap + button;
-        if (side > content_width)
+        if (side > available_width)
             shown.control_below = true;
     }
     if (shown.label.empty())
@@ -432,9 +432,9 @@ void fit_measured(
         // Beside the label. A caption that does not fit there takes the line
         // under the label, as wide as the caption. The lock stands on that
         // line too, so the caption stays inside what the section leaves it.
-        const int32_t room = content_width - label_width - label_gap - beside;
+        const int32_t room = available_width - label_width - label_gap - beside;
         const int32_t segment = (room - 2) / shown.count;
-        const int32_t full = std::max((content_width - beside - 2) / shown.count, int32_t{1});
+        const int32_t full = std::max((available_width - beside - 2) / shown.count, int32_t{1});
         if (segment < least) {
             shown.control_below = true;
             shown.control_width = std::min(std::max(least, shown.control_width), full);
@@ -445,8 +445,8 @@ void fit_measured(
     // A label wider than the section still takes the whole line, rather than
     // the sliver beside its control. A lock on a slider's or a drop-down's
     // label line is counted here too: that control stands on a line of its own.
-    if (label_width > content_width || label_width + lock_span() > content_width ||
-        reserved() > content_width)
+    if (label_width > available_width || label_width + lock_span() > available_width ||
+        reserved() > available_width)
         shown.control_below = true;
 }
 
@@ -456,7 +456,7 @@ kit::RowView row_view(
     Lock lock,
     bool status,
     const TextWidth& small_width,
-    int32_t content_width,
+    int32_t available_width,
     const TextWidth* regular_width
 ) {
     kit::RowView shown =
@@ -472,8 +472,9 @@ kit::RowView row_view(
         if (line == 0 && hint_is_path(setting)) {
             const std::string path = row_hint(dialog, setting, 0).text;
             shown.hints[line] =
-                path.empty() ? std::string()
-                             : std::string(shown_text(path_tail(path, content_width, small_width)));
+                path.empty()
+                    ? std::string()
+                    : std::string(shown_text(path_tail(path, available_width, small_width)));
             continue;
         }
         shown.hints[line] = std::string(shown_text(shown.hints[line]));
@@ -483,10 +484,10 @@ kit::RowView row_view(
     const int32_t hint_room = estimated_measure(small_width)
                                   ? static_cast<int32_t>(sizes_of(dialog).hint_line_characters) *
                                         kit::estimated_character_width
-                                  : content_width;
+                                  : available_width;
     wrap_hints(shown, hint_room, small_width, hint_is_path(setting));
-    fit_control(shown, content_width, small_width);
-    fit_measured(shown, content_width, small_width, regular_width);
+    fit_control(shown, available_width, small_width);
+    fit_measured(shown, available_width, small_width, regular_width);
     return shown;
 }
 
