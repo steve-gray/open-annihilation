@@ -1261,7 +1261,9 @@ void Runtime::present_front_end() {
     // The standard tier's scale mode is found before the frame begins: the
     // first look at the pixel-art mode draws into a target of its own.
     const SDL_ScaleMode standard_mode = standard_frame_scale_mode(output_texture_w_);
-    if (!SDL_RenderClear(sdl_.renderer))
+    // The bars beside the picture are black, whatever colour the renderer
+    // last drew with (the launch's quiet frame leaves its backdrop colour).
+    if (!SDL_SetRenderDrawColor(sdl_.renderer, 0, 0, 0, 255) || !SDL_RenderClear(sdl_.renderer))
         throw_present_error("SDL render");
     // The front end's picture goes through the card's filter where it is one
     // texture; tiles beyond the renderer's limit are drawn as before.
