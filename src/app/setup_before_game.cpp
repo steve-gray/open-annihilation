@@ -123,6 +123,8 @@ struct CopyJob {
         false
     }; ///< the copy's thread checked it; the window's thread has not applied it
     ContentCheck pending_check{}; ///< that check; empty until needs_check
+    /// Bundle ids the copy reported. The start-up check reuses only these.
+    std::vector<std::string> copied_bundle_ids{};
 };
 
 CopyJob& copy_job() {
@@ -556,6 +558,15 @@ void note_progress(CopyJob& job, const CopyProgress& progress) {
     job.bytes_total = progress.bytes_total;
     job.files_done = progress.files_done;
     job.files_total = progress.files_total;
+    if (!progress.bundle_id.empty()) {
+        bool seen = false;
+        for (const std::string& id : job.copied_bundle_ids) {
+            if (id == progress.bundle_id)
+                seen = true;
+        }
+        if (!seen)
+            job.copied_bundle_ids.emplace_back(progress.bundle_id);
+    }
     view.running = true;
     int32_t current = -1;
     const auto rows = static_cast<int32_t>(job.bundle_ids.size());
@@ -1438,6 +1449,10 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
     const bool fixture = chosen->kind == SourceKind::fixture;
     job.needs_check = false;
     job.pending_check = {};
+    job.copied_bundle_ids.clear();
+    // A copy that does not finish must not leave an earlier result for the
+    // start-up check. A finished copy replaces this before the menu opens.
+    keep_this_run_copy_check({});
     job.bytes_done = 0;
     job.bytes_total = 0;
     job.files_done = 0;
@@ -1514,6 +1529,19 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
             held.view.checked = false;
             held.view.verdict = std::move(failure);
         } else if (!stopped) {
+            ContentCheck for_start;
+            for (const ContentBundleCheck& bundle : check.bundles) {
+                bool copied = false;
+                for (const std::string& id : held.copied_bundle_ids) {
+                    if (id == bundle.id)
+                        copied = true;
+                }
+                if (copied)
+                    for_start.bundles.push_back(bundle);
+            }
+            // Only bundles this copy reported. One already in the folder, and
+            // not part of this copy, is checked again when the menu opens.
+            keep_this_run_copy_check(std::move(for_start));
             held.pending_check = std::move(check);
             held.needs_check = true;
         }
