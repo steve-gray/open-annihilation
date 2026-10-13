@@ -246,12 +246,13 @@ void text_is_drawn_in_the_modern_fonts() {
 
     // A text too wide for its box keeps its size and is recorded. The wide
     // box above drew the same words at this scale; the narrow box draws them
-    // no smaller.
+    // no smaller. Left aligned, so the run starts where the wide one did and
+    // the ink that fits on the canvas is the whole text.
     kit::begin_text_fit_frame();
     kit::set_text_fit_screen("smooth");
     Smooth narrow(900, 80, kOneAndAHalf, fonts.get());
     const kit::Rect tight{10, 10, 190, 16};
-    kit::box_text(narrow.canvas, kit::FontRole::regular, words, tight, kit::Align::centre, kInk);
+    kit::box_text(narrow.canvas, kit::FontRole::regular, words, tight, kit::Align::left, kInk);
     const paint::Box fitted = inked(narrow.pixels);
     OA_CHECK(fitted.width == widths[1]);
     OA_CHECK(!kit::text_fit_records().empty());

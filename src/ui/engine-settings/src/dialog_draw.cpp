@@ -715,6 +715,7 @@ void add_section(Building& building, const Dialog& dialog, const layout::Scrolle
     // cuts shows the part inside it, its text and its focus outline
     // included. Developer's rows stay at its top while its list scrolls.
     kit::PlacedRows placed;
+    const auto regular_width = width_in(building.fonts, DialogFont::regular);
     static_cast<void>(layout::place_section(
         dialog,
         dialog.page,
@@ -722,7 +723,8 @@ void add_section(Building& building, const Dialog& dialog, const layout::Scrolle
         dialog.section_hooks,
         width_in(building.fonts, DialogFont::small),
         &placed,
-        &sized
+        &sized,
+        building.fonts != nullptr ? &regular_width : nullptr
     ));
     kit::scroll(placed, layout::developer_page(dialog) ? 0 : open.scroll);
     kit::RowsState state;
@@ -819,9 +821,9 @@ void add_footer(Building& building, const Dialog& dialog) {
     }};
     for (const FooterButton& footer : buttons) {
         const layout::Sizes& sized = dialog_sizes(building, dialog);
-        const SourceRect rect = footer.control == restore_control
-                                    ? sized.restore_button
-                                    : layout::footer_button(footer.control, dialog.size_class);
+        const SourceRect rect = footer.control == restore_control  ? sized.restore_button
+                                : footer.control == cancel_control ? sized.cancel_button
+                                                                   : sized.ok_button;
         const bool held = dialog.pressed == footer.control && dialog.hovered == footer.control;
         const bool hovered = dialog.hovered == footer.control;
         const std::string caption(layout::shown_text(footer.caption));
@@ -927,15 +929,26 @@ kit::DisplayList dialog_list(const Dialog& dialog, const DialogFonts* fonts) {
     const Sizes& sized = building.fitted;
     const SourceRect whole{0, 0, sized.dialog_width, sized.dialog_height};
     fill(building.list, whole, kit::colour::panel, {});
+    kit::HeaderLook header = dialog_header(dialog);
+    if (fonts != nullptr) {
+        const int32_t tracked =
+            kit::tracked_width(*fonts, kit::FontRole::regular, header.second, header.tracking);
+        if (tracked > header.second_width)
+            header.second_width = tracked;
+    }
     item(building.list, kit::Role::header, {0, 0, sized.dialog_width, header_rule_row + 1}, {})
-        .look = dialog_header(dialog);
+        .look = std::move(header);
     add_header_close(building, dialog);
     if (registered_nav(dialog))
         add_registered_nav(building, dialog);
     else
         add_nav(building, dialog);
-    const ScrolledRows open =
-        open_rows(dialog, fonts != nullptr ? &small : nullptr, &building.fitted);
+    const ScrolledRows open = open_rows(
+        dialog,
+        fonts != nullptr ? &small : nullptr,
+        &building.fitted,
+        fonts != nullptr ? &regular : nullptr
+    );
     add_section(building, dialog, open);
     item(
         building.list,

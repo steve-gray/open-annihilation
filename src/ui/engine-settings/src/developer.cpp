@@ -947,8 +947,10 @@ geometry::ListRow& place_toggle(
     int32_t left,
     std::string text,
     int32_t top,
-    int32_t& control
+    int32_t& control,
+    int32_t switch_columns
 ) {
+    const int32_t columns = switch_columns > 0 ? switch_columns : geometry::switch_width;
     geometry::ListRow& row = list.rows.emplace_back();
     row.kind = geometry::ListRowKind::toggle;
     row.control = control++;
@@ -956,10 +958,7 @@ geometry::ListRow& place_toggle(
     row.height = geometry::list_toggle_height;
     row.text = std::move(text);
     row.control_area = {
-        sized.content_right - geometry::switch_width,
-        top + 2,
-        geometry::switch_width,
-        geometry::label_line_height
+        sized.content_right - columns, top + 2, columns, geometry::label_line_height
     };
     row.label = {
         left, top + 2, row.control_area.x - geometry::label_gap - left, geometry::label_line_height
@@ -1018,7 +1017,8 @@ void place_hack(
     std::size_t hack,
     geometry::List& list,
     int32_t& top,
-    int32_t& control
+    int32_t& control,
+    int32_t switch_columns
 ) {
     using geometry::ListRow;
     using geometry::ListRowKind;
@@ -1041,11 +1041,9 @@ void place_hack(
             geometry::arrow_side,
             geometry::arrow_side
         };
+        const int32_t columns = switch_columns > 0 ? switch_columns : geometry::switch_width;
         header.toggle = {
-            sized.content_right - geometry::switch_width,
-            top + 2,
-            geometry::switch_width,
-            geometry::label_line_height
+            sized.content_right - columns, top + 2, columns, geometry::label_line_height
         };
         const int32_t left = sized.content_left + geometry::hack_text_offset;
         header.label = {
@@ -1120,8 +1118,9 @@ void place_hack(
         const Value& value = state.values[index];
         const ValueType type = parameter.value.type;
         if (type == ValueType::boolean) {
-            ListRow& row =
-                place_toggle(sized, list, left, std::string(parameter.name), top, control);
+            ListRow& row = place_toggle(
+                sized, list, left, std::string(parameter.name), top, control, switch_columns
+            );
             own(row, number, geometry::whole_parameter);
             row.on = value.kind == ValueKind::boolean && value.boolean;
             top += row.height;
@@ -1142,8 +1141,9 @@ void place_hack(
         if (type == ValueType::enumeration_set) {
             const auto words = registry::enum_values_of(parameter.value);
             for (std::size_t word = 0; word < words.size(); ++word) {
-                ListRow& row =
-                    place_toggle(sized, list, item_left, std::string(words[word]), top, control);
+                ListRow& row = place_toggle(
+                    sized, list, item_left, std::string(words[word]), top, control, switch_columns
+                );
                 own(row, number, static_cast<int32_t>(word));
                 row.on =
                     std::any_of(value.items.begin(), value.items.end(), [&](const Value& item) {
@@ -1215,7 +1215,9 @@ bool developer_page(const Dialog& dialog) noexcept {
     return dialog.kind == DialogKind::engine && dialog.page == Page::developer && !own_section;
 }
 
-List place_list(const Dialog& dialog, int32_t scroll) {
+List place_list(
+    const Dialog& dialog, int32_t scroll, int32_t switch_columns, const TextWidth* small_width
+) {
     List list{};
     const Sizes& sized = sizes_of(dialog);
     const std::vector<HackState> shown = shown_hacks(dialog);
@@ -1243,19 +1245,25 @@ List place_list(const Dialog& dialog, int32_t scroll) {
             arrow_side,
             arrow_side
         };
-        header.label = {
-            sized.content_left + area_text_offset,
-            top + 2,
-            sized.content_width - area_text_offset - area_count_width - label_gap,
-            label_line_height
-        };
-        header.value = {
-            sized.content_right - area_count_width, top + 2, area_count_width, label_line_height
-        };
         header.shown = geometry::filled(
             "{on} of {total} on",
             {{"on", std::to_string(on)}, {"total", std::to_string(group.hacks.size())}}
         );
+        // The class's count box stays for the English line the tests pin.
+        // A translation wider than that box takes the width it measures.
+        int32_t count_width = area_count_width;
+        if (small_width != nullptr) {
+            const int32_t measured = (*small_width)(header.shown);
+            if (measured > count_width)
+                count_width = measured;
+        }
+        header.label = {
+            sized.content_left + area_text_offset,
+            top + 2,
+            std::max(sized.content_width - area_text_offset - count_width - label_gap, int32_t{0}),
+            label_line_height
+        };
+        header.value = {sized.content_right - count_width, top + 2, count_width, label_line_height};
         header.control_area = {sized.content_left, top, sized.content_width, list_header_height};
         header.open = is_open(dialog.developer.areas_open, area);
         top += header.height;
@@ -1264,7 +1272,7 @@ List place_list(const Dialog& dialog, int32_t scroll) {
         for (const std::size_t hack : shown_hack_order(group)) {
             if (dialog.developer.active_only && !shown[hack].on)
                 continue;
-            place_hack(dialog, shown, area, hack, list, top, control);
+            place_hack(dialog, shown, area, hack, list, top, control, switch_columns);
         }
     }
     list.bottom = top;

@@ -30,6 +30,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -200,6 +201,13 @@ void Runtime::check_text_fit() {
             line += " / ";
             line += noted.text;
             line += noted.wider ? " (wider than its box)" : " (across other text)";
+            {
+                // G24 diagnosis: every record, including those past the report's cap.
+                static std::ofstream fit_log("/tmp/G24-text-fit-all.txt", std::ios::app);
+                if (fit_log)
+                    fit_log << line << " tw=" << noted.text_width << " bw=" << noted.box_width
+                            << '\n';
+            }
             bool seen = false;
             for (const FitFailure& earlier : failures) {
                 if (earlier.line == line)
@@ -426,12 +434,34 @@ void Runtime::check_text_fit() {
             auto context = screen_context();
             const std::string startup =
                 std::string(oa::data::languages::interface_text(kStartupNotice));
-            require(
-                dialogs::open_notice(&context, startup, {}, nullptr, nullptr),
-                "a startup notice did not open"
-            );
-            paint("startup-notice");
-            dialogs::reset_dialogs();
+            // The game's own notice, or the message box it uses when that
+            // window cannot be drawn. Either one is the sentence the main
+            // menu shows for a game with no skirmish maps.
+            if (!dialogs::open_notice(&context, startup, {}, nullptr, nullptr))
+                show_frontend_message(
+                    startup, 0x140, entry::message_show_ok, entry::message_fit_width
+                );
+            const bool startup_open = dialogs::dialog_kind() == dialogs::DialogKind::notice ||
+                                      dialogs::dialog_kind() == dialogs::DialogKind::message_box;
+            if (!startup_open) {
+                std::string line = "startup-notice / ";
+                line += language;
+                line += " / ";
+                line += std::to_string(width);
+                line += 'x';
+                line += std::to_string(height);
+                line += " / expected \"";
+                line += startup;
+                line += "\" but the notice window did not open (no dialog art, or its layout did ";
+                line += "not load) and the message box did not open either";
+                if (failures.size() >= kMostFailures)
+                    ++extra_failures;
+                else
+                    failures.push_back(FitFailure{std::move(line)});
+            } else {
+                paint("startup-notice");
+                dialogs::reset_dialogs();
+            }
 
             std::error_code here_error;
             const fs::path here = fs::current_path(here_error);

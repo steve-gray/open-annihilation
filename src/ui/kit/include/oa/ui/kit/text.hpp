@@ -357,7 +357,8 @@ void text_fit_begin_paint();
 
 /// Notes a text drawn in a box. A text wider than the box, or whose ink
 /// crosses another text of this paint, is recorded. Empty text is not.
-/// Release builds record nothing.
+/// Ink outside a clip is not drawn, so it crosses nothing; a clip with a
+/// negative width hides every ink. Release builds record nothing.
 ///
 /// @param text the text drawn
 /// @param text_width how wide it is, in the box's units
@@ -366,6 +367,10 @@ void text_fit_begin_paint();
 /// @param box_width the box's width
 /// @param box_height the box's height
 /// @param ink_x the ink's left, after alignment
+/// @param clip_x the clip's left; ignored when the clip has no area
+/// @param clip_y the clip's top
+/// @param clip_width the clip's width; 0 leaves the ink whole, and less than 0 hides it
+/// @param clip_height the clip's height
 void note_text_fit(
     std::string_view text,
     int32_t text_width,
@@ -373,8 +378,21 @@ void note_text_fit(
     int32_t box_y,
     int32_t box_width,
     int32_t box_height,
-    int32_t ink_x
+    int32_t ink_x,
+    int32_t clip_x = 0,
+    int32_t clip_y = 0,
+    int32_t clip_width = 0,
+    int32_t clip_height = 0
 );
+
+/// Forgets the ink an opaque fill covers. Text drawn over that fill does not
+/// count as crossing text the fill has hidden. Release builds record nothing.
+///
+/// @param x the fill's left, in the same units as the ink
+/// @param y the fill's top
+/// @param width the fill's width
+/// @param height the fill's height
+void cover_text_fit(int32_t x, int32_t y, int32_t width, int32_t height);
 
 /// The records since begin_text_fit_frame. Empty in a release build.
 ///

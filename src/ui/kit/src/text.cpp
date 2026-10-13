@@ -357,10 +357,42 @@ void draw_boxed_text(
         pen = box.x + (box.width - width) / 2;
     else if (align == Align::right)
         pen = box.x + box.width - width;
-    note_text_fit(shown, width, box.x, box.y, box.width, box.height, pen);
-    // A game font's capitals start one row under the pen row.
+    // A game font's capitals start one row under the pen row. The ink is that
+    // band, not the whole line box: a title's box and the line under it share
+    // two rows, and their glyphs meet at the edge.
     const int32_t capital_rows = capitals(fonts, role);
     const int32_t pen_row = box.y + (box.height - capital_rows) / 2 - 1;
+    int32_t ink_y = box.y;
+    int32_t ink_height = box.height;
+    if (capital_rows > 0) {
+        ink_y = pen_row + 1;
+        ink_height = capital_rows;
+    }
+    // A canvas moved with placed_at draws in its own points. The record is in
+    // the root canvas's points, so texts on different canvases can be compared.
+    const int32_t origin_x = placement.scale > 0 ? placement.x / placement.scale : 0;
+    const int32_t origin_y = placement.scale > 0 ? placement.y / placement.scale : 0;
+    const int32_t note_x = box.x + origin_x;
+    const int32_t note_y = ink_y + origin_y;
+    const int32_t note_pen = pen + origin_x;
+    if (placement.scale == 0)
+        note_text_fit(shown, width, note_x, note_y, box.width, ink_height, note_pen, 0, 0, -1, 0);
+    else if (placement.clip.width > 0 && placement.clip.height > 0)
+        note_text_fit(
+            shown,
+            width,
+            note_x,
+            note_y,
+            box.width,
+            ink_height,
+            note_pen,
+            placement.clip.x + origin_x,
+            placement.clip.y + origin_y,
+            placement.clip.width,
+            placement.clip.height
+        );
+    else
+        note_text_fit(shown, width, note_x, note_y, box.width, ink_height, note_pen);
     if (tracking == 0) {
         draw_text(target, placement, fonts, role, shown, pen, pen_row, colour);
         return;
@@ -429,6 +461,12 @@ bool ink_crosses(const FitInk& left, const FitInk& right) noexcept {
            left.y < right.y + right.height && right.y < left.y + left.height;
 }
 
+/// Keeps a piece of ink that still has area.
+void keep_ink(std::vector<FitInk>& kept, int32_t x, int32_t y, int32_t width, int32_t height) {
+    if (width > 0 && height > 0)
+        kept.push_back(FitInk{x, y, width, height});
+}
+
 } // namespace
 
 void set_text_fit_screen(std::string_view screen) {
@@ -452,14 +490,30 @@ void note_text_fit(
     int32_t box_y,
     int32_t box_width,
     int32_t box_height,
-    int32_t ink_x
+    int32_t ink_x,
+    int32_t clip_x,
+    int32_t clip_y,
+    int32_t clip_width,
+    int32_t clip_height
 ) {
     if (text.empty())
         return;
     FitState& state = fit_state();
-    const FitInk ink{
-        ink_x, box_y, std::max(text_width, int32_t{0}), std::max(box_height, int32_t{0})
-    };
+    FitInk ink{ink_x, box_y, std::max(text_width, int32_t{0}), std::max(box_height, int32_t{0})};
+    // A negative clip hides the ink. A positive one keeps the part inside it.
+    if (clip_width < 0 || clip_height < 0) {
+        ink.width = 0;
+        ink.height = 0;
+    } else if (clip_width > 0 && clip_height > 0 && ink.width > 0 && ink.height > 0) {
+        const int32_t left = std::max(ink.x, clip_x);
+        const int32_t top = std::max(ink.y, clip_y);
+        const int32_t right = std::min(ink.x + ink.width, clip_x + clip_width);
+        const int32_t bottom = std::min(ink.y + ink.height, clip_y + clip_height);
+        ink.x = left;
+        ink.y = top;
+        ink.width = std::max(right - left, int32_t{0});
+        ink.height = std::max(bottom - top, int32_t{0});
+    }
     bool across = false;
     if (ink.width > 0 && ink.height > 0) {
         for (const FitInk& earlier : state.ink) {
@@ -483,6 +537,32 @@ void note_text_fit(
     state.records.push_back(std::move(record));
 }
 
+void cover_text_fit(int32_t x, int32_t y, int32_t width, int32_t height) {
+    if (width <= 0 || height <= 0)
+        return;
+    const int32_t cover_right = x + width;
+    const int32_t cover_bottom = y + height;
+    FitState& state = fit_state();
+    std::vector<FitInk> kept;
+    kept.reserve(state.ink.size());
+    for (const FitInk& ink : state.ink) {
+        const int32_t ink_right = ink.x + ink.width;
+        const int32_t ink_bottom = ink.y + ink.height;
+        if (ink.x >= cover_right || x >= ink_right || ink.y >= cover_bottom || y >= ink_bottom) {
+            kept.push_back(ink);
+            continue;
+        }
+        keep_ink(kept, ink.x, ink.y, ink.width, y - ink.y);
+        keep_ink(kept, ink.x, cover_bottom, ink.width, ink_bottom - cover_bottom);
+        const int32_t band_top = std::max(ink.y, y);
+        const int32_t band_bottom = std::min(ink_bottom, cover_bottom);
+        const int32_t band_height = band_bottom - band_top;
+        keep_ink(kept, ink.x, band_top, x - ink.x, band_height);
+        keep_ink(kept, cover_right, band_top, ink_right - cover_right, band_height);
+    }
+    state.ink = std::move(kept);
+}
+
 const std::vector<TextFitRecord>& text_fit_records() {
     return fit_state().records;
 }
@@ -498,7 +578,22 @@ void begin_text_fit_frame() {
 void text_fit_begin_paint() {
 }
 
-void note_text_fit(std::string_view, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) {
+void note_text_fit(
+    std::string_view,
+    int32_t,
+    int32_t,
+    int32_t,
+    int32_t,
+    int32_t,
+    int32_t,
+    int32_t,
+    int32_t,
+    int32_t,
+    int32_t
+) {
+}
+
+void cover_text_fit(int32_t, int32_t, int32_t, int32_t) {
 }
 
 const std::vector<TextFitRecord>& text_fit_records() {

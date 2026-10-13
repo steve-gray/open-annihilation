@@ -200,11 +200,37 @@ void smooth_text(
         pen = pixels.x + pixels.width - width;
     const int32_t capitals_tall = capital_rows(fonts, face);
     const int32_t baseline = pixels.y + (pixels.height - capitals_tall) / 2 + capitals_tall;
+    // Capitals only. The line box is taller than the glyphs, and two boxes
+    // that share that padding are not two texts crossing.
+    int32_t ink_y = pixels.y;
+    int32_t ink_height = pixels.height;
+    if (capitals_tall > 0) {
+        ink_y = baseline - capitals_tall;
+        ink_height = capitals_tall;
+    }
+    // The face stays at its size. A line wider than its box is recorded, not
+    // shrunk. Ink the clip hides crosses nothing.
+    if (canvas.smooth.clip && canvas.smooth.clip->empty())
+        note_text_fit(text, width, pixels.x, ink_y, pixels.width, ink_height, pen, 0, 0, -1, 0);
+    else if (canvas.smooth.clip)
+        note_text_fit(
+            text,
+            width,
+            pixels.x,
+            ink_y,
+            pixels.width,
+            ink_height,
+            pen,
+            static_cast<int32_t>(canvas.smooth.clip->x),
+            static_cast<int32_t>(canvas.smooth.clip->y),
+            static_cast<int32_t>(canvas.smooth.clip->width),
+            static_cast<int32_t>(canvas.smooth.clip->height)
+        );
+    else
+        note_text_fit(text, width, pixels.x, ink_y, pixels.width, ink_height, pen);
     paint::Painter* painter = painter_of(canvas);
     if (painter == nullptr)
         return;
-    // The face stays at its size. A line wider than its box is recorded, not shrunk.
-    note_text_fit(text, width, pixels.x, pixels.y, pixels.width, pixels.height, pen);
     if (spacing == 0) {
         paint::paint_line(
             *painter,
@@ -282,12 +308,35 @@ Canvas placed_at(const Canvas& canvas, Point origin) {
 
 void fill_rect(const Canvas& canvas, const Rect& rect, Colour ink) {
     if (is_smooth(canvas)) {
-        if (paint::Painter* painter = painter_of(canvas))
-            painter->fill_rect(pixels_of(canvas, rect), rgba_of(ink));
+        paint::Painter* painter = painter_of(canvas);
+        if (painter == nullptr)
+            return;
+        paint::Box pixels = pixels_of(canvas, rect);
+        if (canvas.smooth.clip)
+            pixels = paint::intersect(pixels, *canvas.smooth.clip);
+        painter->fill_rect(pixels, rgba_of(ink));
+        // A translucent fill leaves the text under it showing.
+        if (ink.a == 255)
+            cover_text_fit(pixels.x, pixels.y, pixels.width, pixels.height);
         return;
     }
-    if (canvas.surface != nullptr)
-        renderer::fill_source_rect(*canvas.surface, canvas.placement, rect, rgb(ink));
+    if (canvas.surface == nullptr || canvas.placement.scale == 0)
+        return;
+    renderer::fill_source_rect(*canvas.surface, canvas.placement, rect, rgb(ink));
+    // The crisp painter fills opaquely. Only the part inside the clip shows,
+    // and it covers the text under it.
+    Rect covered = rect;
+    const Rect& clip = canvas.placement.clip;
+    if (clip.width > 0 && clip.height > 0) {
+        const int32_t left = std::max(rect.x, clip.x);
+        const int32_t top = std::max(rect.y, clip.y);
+        const int32_t right = std::min(rect.x + rect.width, clip.x + clip.width);
+        const int32_t bottom = std::min(rect.y + rect.height, clip.y + clip.height);
+        covered = {
+            left, top, std::max(right - left, int32_t{0}), std::max(bottom - top, int32_t{0})
+        };
+    }
+    cover_text_fit(covered.x, covered.y, covered.width, covered.height);
 }
 
 void blend_rect(const Canvas& canvas, const Rect& rect, Colour ink, uint32_t opacity) {

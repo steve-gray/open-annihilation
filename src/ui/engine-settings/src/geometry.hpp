@@ -1055,7 +1055,8 @@ using TextWidth = std::function<int32_t(std::string_view)>;
     Lock lock,
     bool status,
     const TextWidth& small_width,
-    int32_t content_width
+    int32_t content_width,
+    const TextWidth* regular_width = nullptr
 );
 
 /// Places a section's rows at its top, through the kit's placement of their
@@ -1080,7 +1081,8 @@ using TextWidth = std::function<int32_t(std::string_view)>;
     const SectionHooks* section,
     const TextWidth& small_width,
     oa::ui::kit::PlacedRows* placed = nullptr,
-    const Sizes* sizes = nullptr
+    const Sizes* sizes = nullptr,
+    const TextWidth* regular_width = nullptr
 );
 
 /// Places the rows of a section; Developer's own, over its list, with
@@ -1156,7 +1158,10 @@ fitted_sizes(const Dialog& dialog, const TextWidth* regular, const TextWidth* sm
 /// @param sizes the sizes the rows are placed in; null for the class's own
 /// @return its rows, offset, limit and content height
 [[nodiscard]] ScrolledRows open_rows(
-    const Dialog& dialog, const TextWidth* small_width = nullptr, const Sizes* sizes = nullptr
+    const Dialog& dialog,
+    const TextWidth* small_width = nullptr,
+    const Sizes* sizes = nullptr,
+    const TextWidth* regular_width = nullptr
 );
 
 /// Tells whether a row of Developer's list takes a press and the focus:
@@ -1208,7 +1213,12 @@ inline constexpr int32_t first_menu_item_control = no_control - 1;
 /// @param dialog the dialog
 /// @param scroll the rows the list is scrolled by from its top; not clamped
 /// @return the list
-[[nodiscard]] List place_list(const Dialog& dialog, int32_t scroll = 0);
+[[nodiscard]] List place_list(
+    const Dialog& dialog,
+    int32_t scroll = 0,
+    int32_t switch_columns = 0,
+    const TextWidth* small_width = nullptr
+);
 
 /// Returns where Developer's list scrolls: its size class's
 /// (Sizes::developer_scroll), whose top is the row under the class's
@@ -1221,7 +1231,10 @@ inline constexpr int32_t first_menu_item_control = no_control - 1;
 /// @param dialog the dialog, on Developer
 /// @return the view, the well, the margin and the page step
 [[nodiscard]] ScrollArea developer_list_scroll(
-    const Dialog& dialog, const TextWidth* small_width = nullptr, const Sizes* sizes = nullptr
+    const Dialog& dialog,
+    const TextWidth* small_width = nullptr,
+    const Sizes* sizes = nullptr,
+    const TextWidth* regular_width = nullptr
 );
 
 /// Moves a placed list up, every part of every row with it.

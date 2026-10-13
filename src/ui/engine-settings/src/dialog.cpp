@@ -310,13 +310,102 @@ void fit_control(kit::RowView& shown, int32_t content_width, const TextWidth& me
         std::min(std::max(shown.control_width, widest + 16), std::max(content_width, int32_t{1}));
 }
 
+/// Widens a switch, a row of buttons or SHOW AGAIN to the caption in the
+/// small font, and gives a label that does not fit beside them the whole
+/// line. An estimated measure leaves the class's boxes, which the layout
+/// tests pin.
+///
+/// @param[in,out] shown the row
+/// @param content_width the section's width
+/// @param small a text's width in the small font
+/// @param regular a text's width in the regular font; null keeps the label's line
+void fit_measured(
+    kit::RowView& shown, int32_t content_width, const TextWidth& small, const TextWidth* regular
+) {
+    if (estimated_measure(small) || content_width <= 0)
+        return;
+    if (shown.kind == kit::RowKind::toggle && !shown.captions.empty()) {
+        int32_t half = 0;
+        for (const std::string& caption : shown.captions)
+            half = std::max(half, small(caption));
+        shown.control_width = std::max(shown.control_width, kit::switch_width_for(half));
+    }
+    if (shown.kind == kit::RowKind::buttons && !shown.buttons.empty()) {
+        shown.button_widths.clear();
+        for (std::size_t at = 0; at < shown.buttons.size(); ++at) {
+            const int32_t metric = at < folder_button_widths.size()
+                                       ? folder_button_widths[at]
+                                       : oa::ui::kit::compact_metrics.button_width;
+            shown.button_widths.push_back(std::max(metric, small(shown.buttons[at]) + 8));
+        }
+    }
+    if (shown.kind == kit::RowKind::value_and_button && !shown.buttons.empty()) {
+        const int32_t wanted = small(shown.buttons.front()) + 8;
+        if (wanted > shown.control_width)
+            shown.control_width = wanted;
+    }
+    if (!shown.lock.empty()) {
+        const int32_t need = small(shown.lock) + padlock_width + padlock_gap;
+        shown.lock_columns = std::max(need, int32_t{1});
+    }
+    if (regular == nullptr || estimated_measure(*regular) || shown.label.empty())
+        return;
+    const int32_t label_width = (*regular)(shown.label);
+    if (label_width <= 0 || label_width > content_width)
+        return;
+    auto reserved = [&]() {
+        const int32_t control = [&]() {
+            if (shown.kind == kit::RowKind::toggle)
+                return std::max(oa::ui::kit::compact_metrics.switch_width, shown.control_width);
+            if (shown.kind == kit::RowKind::levels)
+                return shown.count * shown.control_width + 2;
+            if (shown.kind == kit::RowKind::buttons && !shown.button_widths.empty()) {
+                int32_t width = 0;
+                for (std::size_t at = 0; at < shown.button_widths.size(); ++at)
+                    width += shown.button_widths[at] +
+                             (at > 0 ? oa::ui::kit::compact_metrics.folder_button_gap : 0);
+                return width;
+            }
+            if (shown.kind == kit::RowKind::buttons || shown.kind == kit::RowKind::value_and_button)
+                return shown.control_width > 0 ? shown.control_width
+                                               : oa::ui::kit::compact_metrics.button_row_width;
+            return int32_t{0};
+        }();
+        if (control <= 0)
+            return int32_t{0};
+        int32_t width = label_width + label_gap + control;
+        if (!shown.lock.empty() && !shown.hint_is_status)
+            width += (shown.lock_columns > 0 ? shown.lock_columns
+                                             : oa::ui::kit::compact_metrics.lock_width) +
+                     label_gap;
+        return width;
+    };
+    if (shown.kind == kit::RowKind::levels && shown.count > 0) {
+        const int32_t lock_width =
+            shown.lock.empty() ? 0
+                               : (shown.lock_columns > 0 ? shown.lock_columns
+                                                         : oa::ui::kit::compact_metrics.lock_width);
+        const int32_t beside = lock_width > 0 ? lock_width + label_gap : 0;
+        const int32_t room = content_width - label_width - label_gap - beside;
+        const int32_t segment = (room - 2) / shown.count;
+        int32_t least = 1;
+        for (const std::string& caption : shown.captions)
+            least = std::max(least, small(caption) + 8);
+        if (segment >= least && segment < shown.control_width)
+            shown.control_width = segment;
+    }
+    if (reserved() > content_width)
+        shown.control_below = true;
+}
+
 kit::RowView row_view(
     const Dialog& dialog,
     Setting setting,
     Lock lock,
     bool status,
     const TextWidth& small_width,
-    int32_t content_width
+    int32_t content_width,
+    const TextWidth* regular_width
 ) {
     kit::RowView shown =
         kit::view_of(row_spec(setting), reading(dialog.chosen, dialog), &shown_text);
@@ -345,6 +434,7 @@ kit::RowView row_view(
                                   : content_width;
     wrap_hints(shown, hint_room, small_width, hint_is_path(setting));
     fit_control(shown, content_width, small_width);
+    fit_measured(shown, content_width, small_width, regular_width);
     return shown;
 }
 
@@ -357,7 +447,8 @@ Rows place_section(
     const SectionHooks* section,
     const TextWidth& small_width,
     kit::PlacedRows* placed,
-    const Sizes* sizes
+    const Sizes* sizes,
+    const TextWidth* regular_width
 ) {
     const Sizes& sized_here = sizes != nullptr ? *sizes : sizes_of(dialog);
     if (page == Page::downloads)
@@ -376,7 +467,8 @@ Rows place_section(
             row_locks.back(),
             statuses.back(),
             small_width,
-            sized_here.content_width
+            sized_here.content_width,
+            regular_width
         ));
     }
     // Developer's own rows lie closer, over its list; while the dialog's
@@ -642,7 +734,9 @@ Sizes fitted_sizes(const Dialog& dialog, const TextWidth* regular, const TextWid
     }
     const int32_t text_room = sized.list_item_width - list_text_offset - list_text_margin;
     if (widest > text_room) {
-        const int32_t least_content = 200;
+        // The open section keeps room for a description. A section name that
+        // still does not fit the list takes a shorter word.
+        const int32_t least_content = 270;
         const int32_t spare = std::max(sized.content_width - least_content, int32_t{0});
         grow_list(sized, std::min(widest - text_room, spare));
     }
@@ -654,22 +748,65 @@ Sizes fitted_sizes(const Dialog& dialog, const TextWidth* regular, const TextWid
         (*small)(std::string(shown_text(restore_profile_text))),
         sized.content_right
     );
+    // Cancel grows to the left, short of Restore, so a longer word is whole.
+    const int32_t cancel_width = (*small)(std::string(shown_text(cancel_text))) + 8;
+    if (cancel_width > sized.cancel_button.width) {
+        const int32_t grow = cancel_width - sized.cancel_button.width;
+        const int32_t stop = sized.restore_button.x + sized.restore_button.width +
+                             oa::ui::kit::compact_metrics.button_gap;
+        const int32_t room = std::max(sized.cancel_button.x - stop, int32_t{0});
+        const int32_t take = std::min(grow, room);
+        sized.cancel_button.x -= take;
+        sized.cancel_button.width += take;
+    }
+    const int32_t half = std::max(
+        (*small)(std::string(shown_text(off_text))), (*small)(std::string(shown_text(on_text)))
+    );
+    const int32_t switch_columns = oa::ui::kit::switch_width_for(half);
+    if (switch_columns > sized.active_only_switch.width) {
+        const int32_t grow = switch_columns - sized.active_only_switch.width;
+        sized.active_only_switch.width = switch_columns;
+        sized.active_only_switch.x -= grow;
+        sized.active_only_label.width = std::max(sized.active_only_label.width - grow, int32_t{0});
+    }
     return sized;
 }
 
-ScrolledRows open_rows(const Dialog& dialog, const TextWidth* small_width, const Sizes* sizes) {
+ScrolledRows open_rows(
+    const Dialog& dialog,
+    const TextWidth* small_width,
+    const Sizes* sizes,
+    const TextWidth* regular_width
+) {
     const Sizes& sized = sizes != nullptr ? *sizes : sizes_of(dialog);
     const TextWidth& measure = small_width != nullptr ? *small_width : estimated_width;
     ScrolledRows open{};
     open.area = sized.section_scroll;
     open.rows = place_section(
-        dialog, dialog.page, shown_locks(dialog), dialog.section_hooks, measure, nullptr, &sized
+        dialog,
+        dialog.page,
+        shown_locks(dialog),
+        dialog.section_hooks,
+        measure,
+        nullptr,
+        &sized,
+        regular_width
     );
     if (developer_page(dialog)) {
         // Developer's rows stay at its top; its list scrolls under them in a
         // view of its own, with the end gap under its last row.
-        open.area = developer_list_scroll(dialog, small_width, &sized);
-        open.list = place_list(dialog, 0);
+        open.area = developer_list_scroll(dialog, small_width, &sized, regular_width);
+        int32_t switch_columns = 0;
+        if (small_width != nullptr && !estimated_measure(*small_width)) {
+            const int32_t half = std::max(
+                (*small_width)(std::string(shown_text(off_text))),
+                (*small_width)(std::string(shown_text(on_text)))
+            );
+            switch_columns = oa::ui::kit::switch_width_for(half);
+        }
+        const TextWidth* measured_small =
+            small_width != nullptr && !estimated_measure(*small_width) ? small_width : nullptr;
+        open.list = place_list(dialog, 0, switch_columns, measured_small);
         open.content_height = open.list.bottom + end_gap - open.area.view.y;
         open.limit = std::max(open.content_height - open.area.view.height, int32_t{0});
         open.scroll = std::clamp(dialog.scroll[scroll_index(dialog.page)], int32_t{0}, open.limit);
@@ -706,13 +843,24 @@ ScrolledRows open_rows(const Dialog& dialog, const TextWidth* small_width, const
     return open;
 }
 
-ScrollArea
-developer_list_scroll(const Dialog& dialog, const TextWidth* small_width, const Sizes* sizes) {
+ScrollArea developer_list_scroll(
+    const Dialog& dialog,
+    const TextWidth* small_width,
+    const Sizes* sizes,
+    const TextWidth* regular_width
+) {
     const Sizes& sized = sizes != nullptr ? *sizes : sizes_of(dialog);
     const TextWidth& measure = small_width != nullptr ? *small_width : estimated_width;
     ScrollArea area = sized.developer_scroll;
     const Rows rows = place_section(
-        dialog, Page::developer, shown_locks(dialog), dialog.section_hooks, measure, nullptr, &sized
+        dialog,
+        Page::developer,
+        shown_locks(dialog),
+        dialog.section_hooks,
+        measure,
+        nullptr,
+        &sized,
+        regular_width
     );
     const int32_t lower = std::clamp(
         rows.bottom - sized.developer_list_rule, int32_t{0}, sized.developer_view.height
@@ -2426,14 +2574,28 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         layout::heading_tracking
     );
     const int32_t suffix_left = title_left + layout::title_width + layout::header_gap;
+    int32_t suffix_width = layout::title_suffix_width;
+    if (fonts != nullptr) {
+        const int32_t tracked = dialog_text_width(
+            *fonts, DialogFont::regular, layout::shown_text(layout::title_suffix_text)
+        );
+        // Tracking adds a column after every character but the last.
+        const int32_t gaps = std::max(
+            static_cast<int32_t>(
+                oa::ui::kit::character_count(layout::shown_text(layout::title_suffix_text))
+            ) - 1,
+            int32_t{0}
+        );
+        suffix_width = std::max(suffix_width, tracked + gaps * layout::heading_tracking);
+    }
     text_part(
-        {suffix_left, layout::header_top, layout::title_suffix_width, layout::header_height},
+        {suffix_left, layout::header_top, suffix_width, layout::header_height},
         layout::title_suffix_text,
         DialogFont::regular,
         layout::heading_tracking
     );
     control_part(layout::header_close_button(sized), close_x_control);
-    const int32_t shared_left = suffix_left + layout::title_suffix_width + layout::header_gap;
+    const int32_t shared_left = suffix_left + suffix_width + layout::header_gap;
     // The version keeps a fixed box beside the close mark. While the shared
     // game's note is up, the version gives way and the note takes that box,
     // so the note is not cut against the mark.
@@ -2506,8 +2668,12 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         );
     // The rows: only the parts wholly in the view are listed, so that each
     // listed control is pressed where it is drawn and each text is whole.
-    const layout::ScrolledRows open =
-        layout::open_rows(dialog, fonts != nullptr ? &small_text_width : nullptr, &sized);
+    const layout::ScrolledRows open = layout::open_rows(
+        dialog,
+        fonts != nullptr ? &small_text_width : nullptr,
+        &sized,
+        fonts != nullptr ? &text_width : nullptr
+    );
     const auto row_part = [&parts, &sized](LayoutPart part) {
         if (wholly_in(part.rect, sized.view))
             parts.push_back(std::move(part));
@@ -2528,7 +2694,8 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         dialog.section_hooks,
         small_text_width,
         &placed,
-        &sized
+        &sized,
+        fonts != nullptr ? &text_width : nullptr
     ));
     oa::ui::kit::scroll(placed, layout::developer_page(dialog) ? 0 : open.scroll);
     const layout::SettingsModel model = layout::reading(dialog.chosen, dialog);
@@ -2660,9 +2827,9 @@ std::vector<LayoutPart> dialog_layout(const Dialog& dialog, const DialogFonts* f
         {ok_control, layout::ok_text},
     }};
     for (const auto& [control, caption] : buttons) {
-        const layout::SourceRect rect = control == restore_control
-                                            ? sized.restore_button
-                                            : layout::footer_button(control, dialog.size_class);
+        const layout::SourceRect rect = control == restore_control  ? sized.restore_button
+                                        : control == cancel_control ? sized.cancel_button
+                                                                    : sized.ok_button;
         parts.push_back(
             LayoutPart{
                 rect,
