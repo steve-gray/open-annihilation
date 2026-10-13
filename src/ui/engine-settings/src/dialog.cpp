@@ -6,6 +6,7 @@
 
 #include "oa/ui/engine_settings/dialog.hpp"
 
+#include "content_page.hpp"
 #include "developer.hpp"
 #include "downloads_page.hpp"
 #include "geometry.hpp"
@@ -45,7 +46,7 @@ struct EnginePageList {
 
 /// Returns the engine's sections a dialog lists, in the list's order: the
 /// five that every dialog lists, then Touch, Controller and Game files where
-/// each is listed, then Downloads, then System, then Developer.
+/// each is listed, then Downloads, then Game Content, then System, then Developer.
 ///
 /// @param touch the dialog lists Touch
 /// @param controller the dialog lists Controller
@@ -68,6 +69,7 @@ constexpr EnginePageList engine_page_list(bool touch, bool controller, bool game
     if (game_files)
         add(Page::game_files);
     add(Page::downloads);
+    add(Page::game_content);
     add(Page::system);
     add(Page::developer);
     return list;
@@ -95,7 +97,7 @@ constexpr std::array<EnginePageList, 8> kEnginePageLists{
     engine_page_list(false, true, true),
     engine_page_list(true, true, true),
 };
-static_assert(kEnginePageLists.front().count == 8, "eight sections without the optional three");
+static_assert(kEnginePageLists.front().count == 9, "nine sections without the optional three");
 static_assert(
     kEnginePageLists.back().count == most_listed_pages,
     "the longest list holds the most sections a dialog lists"
@@ -104,22 +106,23 @@ static_assert(
 constexpr std::array<Page, 1> kLanguageTextPages{Page::language};
 
 /// Tells whether the sections before Downloads keep their places in the list
-/// with Touch and Controller, and every engine list ends Downloads, System,
-/// Developer.
+/// with Touch and Controller, and every engine list ends Downloads, Game
+/// Content, System, Developer.
 ///
 /// @return true when those numbers hold
 constexpr bool entries_follow_the_list() noexcept {
     const EnginePageList& list = kEnginePageLists[engine_page_list_index(true, true, false)];
-    if (list.count < 3)
+    if (list.count < 4)
         return false;
-    for (std::size_t index = 0; index + 3 < list.count; ++index)
+    for (std::size_t index = 0; index + 4 < list.count; ++index)
         if (page_control(list.pages[index]) != static_cast<int32_t>(index))
             return false;
-    if (page_control(Page::downloads) != 9 || page_control(Page::system) != 10 ||
-        page_control(Page::developer) != 7)
+    if (page_control(Page::downloads) != 9 || page_control(Page::game_content) != 11 ||
+        page_control(Page::system) != 10 || page_control(Page::developer) != 7)
         return false;
     for (const EnginePageList& listed : kEnginePageLists) {
-        if (listed.count < 3 || listed.pages[listed.count - 3] != Page::downloads ||
+        if (listed.count < 4 || listed.pages[listed.count - 4] != Page::downloads ||
+            listed.pages[listed.count - 3] != Page::game_content ||
             listed.pages[listed.count - 2] != Page::system ||
             listed.pages[listed.count - 1] != Page::developer)
             return false;
@@ -129,7 +132,8 @@ constexpr bool entries_follow_the_list() noexcept {
 
 static_assert(
     entries_follow_the_list(),
-    "entries before Downloads keep their places, and Downloads, System, Developer end every list"
+    "entries before Downloads keep their places, and Downloads, Game Content, System, Developer "
+    "end every list"
 );
 static_assert(
     page_control(Page::game_files) == page_control(Page::developer) + 1,
@@ -278,6 +282,8 @@ Rows place_section(
 ) {
     if (page == Page::downloads)
         return downloads::place(dialog, locks, small_width, placed);
+    if (page == Page::game_content)
+        return content::place(dialog, locks, small_width, placed);
     const auto settings = section_settings(page, section, row_context(dialog));
     std::vector<kit::RowView> views;
     std::vector<Lock> row_locks;
@@ -1465,6 +1471,8 @@ DialogAction activate(Dialog& dialog, const layout::ScrolledRows& open, int32_t 
     const layout::Row* row = row_of(open.rows, control);
     if (row == nullptr || row->lock != Lock::none)
         return DialogAction::none;
+    if (row->content >= 0)
+        return content::take(dialog, *row);
     if (row->downloads >= 0) {
         const EngineSettings before = dialog.chosen;
         const kit::RowResult result = downloads::activate(dialog, *row);
@@ -1822,14 +1830,16 @@ DialogAction dialog_pointer_down(Dialog& dialog, int32_t x, int32_t y) {
         return developer::drag_to(dialog, *row, x);
     }
     const layout::Row* row = row_of(open.rows, control);
-    if (row != nullptr && row->downloads < 0 &&
+    // Game Content's rows are not settings. An unset setting is the
+    // pathfinding slider, so a press on Check again must not drag it.
+    if (row != nullptr && row->content < 0 && row->downloads < 0 &&
         layout::kind_of(row->setting) == kit::RowKind::slider) {
         dialog.dragging = true;
         const DialogAction action = drag_to(dialog, *row, x);
         return action;
     }
     // A press on Your files holds the button under it.
-    if (row != nullptr && row->downloads < 0 &&
+    if (row != nullptr && row->content < 0 && row->downloads < 0 &&
         layout::kind_of(row->setting) == kit::RowKind::buttons)
         dialog.folder_hovered = layout::folder_button_at(row->control_area, x, y);
     return DialogAction::redraw;
@@ -1892,6 +1902,8 @@ DialogAction dialog_pointer_up(Dialog& dialog, int32_t x, int32_t y) {
     const layout::Row* row = row_of(open.rows, control);
     if (row == nullptr)
         return activate(dialog, open, control);
+    if (row->content >= 0)
+        return content::take(dialog, *row);
     if (row->downloads >= 0) {
         const EngineSettings before = dialog.chosen;
         const kit::RowResult result = downloads::release(dialog, *row, x, y);
@@ -1986,6 +1998,8 @@ DialogAction dialog_key(Dialog& dialog, DialogKey key) {
             return or_shown(*stepped);
     }
     const layout::Row* row = row_of(rows, dialog.focused);
+    if (row != nullptr && row->content >= 0)
+        return shown;
     if (row != nullptr && row->downloads >= 0) {
         if (row->lock != Lock::none)
             return shown;

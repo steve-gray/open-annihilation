@@ -33,6 +33,7 @@ before Downloads joined it.
 - [Controller](#controller)
 - [Game files](#game-files)
 - [Downloads](#downloads)
+- [Game Content](#game-content)
 - [System](#system)
 - [Developer](#developer)
 - [For one run: the command line](#for-one-run-the-command-line)
@@ -61,8 +62,8 @@ multiplayer game keeps running, and the dialog's header says so in amber:
 The column on the left lists the sections: Controls, Engine Limits,
 Language & Text, Graphics and User Interface, then Touch while the game
 has touch controls, Controller once a gamepad has been used, and Game
-files in the main menu on an iPhone or an iPad, then Downloads, then
-System, and Developer at its foot under a divider. A
+files in the main menu on an iPhone or an iPad, then Downloads, Game
+Content, then System, and Developer at its foot under a divider. A
 section taller than the dialog, such as Graphics, scrolls with the mouse
 wheel, its scroll bar, Page Up, Page Down, Home and End.
 
@@ -627,6 +628,20 @@ download sends and records.
 
 During a game RESET and EMPTY are locked ("Locked during a game."). The
 check and the install-ID switch can still change.
+
+## Game Content
+
+Game Content lists each base game and expansion, its size, and what the
+last check said. A bundle that is not in the copy says "not added". A
+bundle whose files differ is marked.
+
+OA plays from its own copy in Documents › Open Annihilation. The
+installation is not used or changed.
+
+- **Check again** reads the copy and updates each row. The dialog stays open.
+- **Copy again from…** asks for a folder or an installer and copies from
+  it into the same folders. The dialog stays open.
+- **Open folder** opens the games folder in the system's file manager.
 
 ## System
 

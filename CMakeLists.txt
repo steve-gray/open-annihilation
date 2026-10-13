@@ -1039,6 +1039,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_view_rules.cpp src/app/runtime_game_text.cpp src/app/runtime_language.cpp
   src/app/runtime_language_notice.cpp
   src/app/runtime_first_run.cpp
+  src/app/setup_before_game.cpp
   src/app/language_packs.cpp
   src/app/runtime_picture_captions.cpp
   src/app/runtime_renderer.cpp

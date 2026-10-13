@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The first-run setup: whether it shows, and the three steps a player walks
-// (language, online features, the OA buttons). The host fills the model and
-// applies what the player asks. This module reads no preference, clock or
-// network.
+// The first-run setup: whether it shows, and the steps a player walks.
+// A player who already has the game walks the welcome (language, online
+// features, the OA buttons). A player who does not walks the setup: language,
+// the game, copying, then those two. The host fills the model and applies
+// what the player asks. This module reads no preference, clock or network.
 
 #pragma once
 
@@ -69,22 +70,46 @@ struct GateFacts {
 
 /// One step of the setup.
 enum class Step : uint8_t {
-    language, ///< welcome and the language carousel
+    language, ///< the language carousel
+    game,     ///< where the game is, or locate another
+    copying,  ///< the copy and its check
     online,   ///< online features
     buttons,  ///< the OA buttons over the main menu
 };
 
-/// The word a stage line and a log use for a step: language, online or buttons.
+/// Which walk the step line counts. The welcome is what a player who already
+/// has the game sees, and what SHOW AGAIN runs. The setup is the five steps
+/// a player walks the first time the game is copied.
+enum class Walk : uint8_t {
+    welcome, ///< language, online features, the OA buttons
+    setup,   ///< language, the game, copying, online features, the OA buttons
+};
+
+/// Where a step sits on its walk's step line, and the catalogue word of its name.
+struct StepPlace {
+    int32_t index{1};        ///< from 1
+    int32_t count{3};        ///< how many steps the walk has
+    std::string_view name{}; ///< the catalogue word, such as "WELCOME"
+};
+
+/// The word a stage line and a log use for a step.
 ///
 /// @param step the step
-/// @return the word
+/// @return language, game, copying, online or buttons
 [[nodiscard]] std::string_view step_token(Step step) noexcept;
 
 /// Reads a stage line's step word.
 ///
-/// @param token language, online or buttons
+/// @param token language, game, copying, online or buttons
 /// @return the step; nothing for any other word
 [[nodiscard]] std::optional<Step> step_named(std::string_view token) noexcept;
+
+/// Where a step sits on a walk. A welcome never counts the game steps.
+///
+/// @param step the step
+/// @param walk which walk
+/// @return the place and the step's catalogue name
+[[nodiscard]] StepPlace step_place(Step step, Walk walk) noexcept;
 
 /// Where a language card's language comes from.
 enum class CardKind : uint8_t {
@@ -125,10 +150,73 @@ struct Card {
     std::string failure{};             ///< why a download failed, already looked up
 };
 
-/// What the three steps show. The host keeps it current.
+/// Which kind of place a source row names.
+enum class SourceMark : uint8_t {
+    folder,  ///< a folder of game files
+    gog,     ///< a GOG installer
+    package, ///< a package
+    demo,    ///< the demo installer
+    disc,    ///< a disk image
+};
+
+/// One bundle a source holds or lacks, drawn as a pill.
+struct SourceChip {
+    std::string name{}; ///< the bundle's name, already the words to show
+    bool held{true};    ///< the source holds it
+};
+
+/// One place the game can be copied from. The host fills it.
+struct GameSource {
+    std::string token{};                 ///< the host's name for this place
+    std::string title{};                 ///< the row's title
+    std::string detail{};                ///< the line under the title
+    SourceMark mark{SourceMark::folder}; ///< the badge
+    std::string status{};                ///< a short line such as a match, or empty
+    std::string footnote{};              ///< the size and the free space, or how the source is read
+    std::vector<SourceChip> chips{};     ///< what the source holds
+};
+
+/// How far one bundle of a copy has got.
+enum class CopyPhase : uint8_t {
+    waiting, ///< not started
+    copying, ///< bytes are moving
+    done,    ///< copied, and the check matches
+    differ,  ///< copied, and the check differs
+};
+
+/// One bundle on the copying step.
+struct CopyBundle {
+    std::string name{};                  ///< the bundle's name
+    std::string file{};                  ///< the file being copied, or empty
+    std::string amount{};                ///< how much, as the player reads it
+    int32_t done{};                      ///< the bar's filled part
+    int32_t whole{1};                    ///< the bar's whole
+    CopyPhase phase{CopyPhase::waiting}; ///< where this bundle is
+};
+
+/// The copying step's progress. The host keeps it current.
+struct CopyView {
+    std::string from{};                ///< where the bytes are read from
+    std::string overall{};             ///< how far the whole copy has got
+    std::string remaining{};           ///< about how long is left, or empty
+    int32_t done{};                    ///< the overall bar's filled part
+    int32_t whole{1};                  ///< the overall bar's whole
+    std::vector<CopyBundle> bundles{}; ///< one row a bundle
+    bool running{};                    ///< a copy is under way
+    bool paused{};                     ///< the copy is paused
+    bool checked{};                    ///< the copy has finished and been checked
+    std::string verdict{};             ///< what the check said, when it has
+};
+
+/// What the steps show. The host keeps it current.
 struct Model {
     Step step{Step::language};                    ///< the step on screen
+    Walk walk{Walk::welcome};                     ///< which step line this walk uses
     std::vector<Card> cards{};                    ///< the carousel, built-in languages then packs
+    int32_t source{-1};                           ///< the chosen source; -1 is none
+    std::vector<GameSource> sources{};            ///< the places the game step lists
+    CopyView copy{};                              ///< the copying step
+    bool controller{};                            ///< a controller is connected, so the hint shows
     bool online_on{true};                         ///< Turn on online features is chosen
     CatalogueNote catalogue{CatalogueNote::none}; ///< why packs stay offline
     kit::Rect library_button{};                   ///< the Library button, in the screen's points
@@ -163,6 +251,10 @@ enum class Ask : uint8_t {
     retry_download,  ///< Retry
     choose_on,       ///< Turn on online features
     choose_off,      ///< Not now
+    locate,          ///< Locate another…
+    pause_copy,      ///< Pause, or continue a paused copy
+    cancel_copy,     ///< Cancel the copy and return to the game step
+    quit,            ///< Quit, leaving the game uncopied
 };
 
 /// What a key, a pointer or a tick did.
@@ -212,8 +304,12 @@ inline constexpr kit::ControlId on_id = 8;
 inline constexpr kit::ControlId off_id = 9;
 /// Start playing.
 inline constexpr kit::ControlId start_id = 10;
+/// Locate another…
+inline constexpr kit::ControlId locate_id = 11;
 /// The first language card. Card n is card_id + n.
 inline constexpr kit::ControlId card_id = 20;
+/// The first source row. Source n is source_id + n.
+inline constexpr kit::ControlId source_id = 40;
 
 /// Tells whether a download is running, so Next stays disabled.
 ///
@@ -272,8 +368,9 @@ enum class PointerKind : uint8_t {
     uint8_t clicks = 1
 );
 
-/// Takes a key. Escape does nothing on the language step and goes back on the
-/// online step. On the buttons step Escape and Enter finish the walk.
+/// Takes a key. Escape does nothing on the language step, goes back on the
+/// game step and the online step, and cancels a copy that is still running.
+/// On the buttons step Escape and Enter finish the walk.
 ///
 /// @param[in,out] session the session
 /// @param scene the layout

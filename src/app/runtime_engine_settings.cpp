@@ -22,7 +22,10 @@
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/service.hpp"
 #include "oa/app/content/settings.hpp"
+#include "oa/app/content_copy.hpp"
+#include "oa/app/setup_before_game.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/ui/first_run/first_run.hpp"
 #include "oa/netgame/presence.hpp"
 #include "oa/app/view_rules.hpp"
 #include "oa/data/registry/descriptor.hpp"
@@ -206,6 +209,74 @@ void tell_install_switches(
         return content::CheckForUpdates::never;
     }
     return content::CheckForUpdates::automatically;
+}
+
+/// Fills Game Content from the managed copy. An empty folder lists every
+/// bundle as not added.
+///
+/// @param[in,out] dialog the dialog
+/// @param user_folder the player's folder
+void fill_game_content(settings::Dialog& dialog, const fs::path& user_folder) {
+    const auto table = oa::data::content_bundles::bundles();
+    const ContentCheck check =
+        user_folder.empty() ? ContentCheck{} : check_managed_content(user_folder, table);
+    dialog.game_content.clear();
+    dialog.game_content.reserve(table.size());
+    for (const auto& bundle : table) {
+        settings::GameContentRow row;
+        row.id = std::string(bundle.id);
+        row.name = std::string(bundle.english_name);
+        uint64_t bytes = 0;
+        for (const auto& file : bundle.files)
+            bytes += file.size;
+        row.size = settings::download_size_text(bytes);
+        const ContentBundleCheck* found = nullptr;
+        for (const ContentBundleCheck& checked : check.bundles) {
+            if (checked.id == bundle.id) {
+                found = &checked;
+                break;
+            }
+        }
+        if (found == nullptr) {
+            row.check = std::string(oa::data::languages::interface_text("not added"));
+            row.warn = false;
+        } else {
+            row.check = content_bundle_line(*found);
+            row.warn = found->files_differ > 0;
+        }
+        dialog.game_content.push_back(std::move(row));
+    }
+}
+
+/// Asks for a place and copies it into the managed folders, on this thread.
+/// The window does not redraw until the copy finishes. A copy still running
+/// after a long wait is stopped.
+///
+/// @param[in,out] dialog the dialog, filled again when the copy ends
+/// @param window the window the picker is attached to
+/// @param user_folder the player's folder
+void copy_game_content_again(
+    settings::Dialog& dialog, SDL_Window* window, const fs::path& user_folder
+) {
+    oa::ui::first_run::Model model;
+    if (!setup_locate_source(window, user_folder, model)) {
+        setup_release_located();
+        return;
+    }
+    if (!setup_begin_copy(user_folder, model)) {
+        setup_release_located();
+        return;
+    }
+    oa::ui::first_run::CopyView view;
+    for (int guard = 0; guard < 200000; ++guard) {
+        static_cast<void>(setup_pull_copy(view));
+        if (!view.running)
+            break;
+        SDL_Delay(50);
+    }
+    setup_stop_join();
+    setup_release_located();
+    fill_game_content(dialog, user_folder);
 }
 
 } // namespace
@@ -1238,6 +1309,7 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
             dialog, preference_values_, content_service(), downloads, content_downloads_folder()
         );
     }
+    fill_game_content(dialog, user_folder_);
     // Your files shows the player's own folder.
     dialog.user_folder = path_to_utf8(user_folder_);
     // The languages whose packs turn Unicode chat on.
@@ -1623,6 +1695,18 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // under it; Escape and its CLOSE come back to Developer.
         oa_layer().open_gallery();
         return false;
+    case settings::DialogAction::check_content:
+        fill_game_content(*dialog, user_folder_);
+        return false;
+    case settings::DialogAction::copy_content_again:
+        copy_game_content_again(*dialog, sdl_.window, user_folder_);
+        return false;
+    case settings::DialogAction::open_content_folder: {
+        const fs::path folder = user_folder_ / std::string(managed_games_folder);
+        const FolderOpening opening = open_player_folder(folder);
+        std::ignore = settings::set_folder_notice(*dialog, opening.opened ? "" : opening.reason);
+        return false;
+    }
     case settings::DialogAction::reset_install_id: {
         // A new ID is stored at once. Cancel does not put the old one back.
         // Nothing is made when the generator cannot be read, and the dialog

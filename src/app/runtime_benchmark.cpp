@@ -646,7 +646,9 @@ void Runtime::run_stage_lines(std::span<const StageLine> lines) {
             // One step of the first-run setup, over whatever is showing.
             std::string token;
             if (!(line >> token) || !open_staged_first_run(token))
-                throw std::runtime_error(where + ": first-run takes language, online or buttons");
+                throw std::runtime_error(
+                    where + ": first-run takes language, game, copying, online or buttons"
+                );
             std::printf("stage: first-run %s\n", token.c_str());
         } else if (action == "pointer") {
             // The pointer moved to a point of the window, whose unit the

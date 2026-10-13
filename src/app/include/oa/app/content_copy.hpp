@@ -760,8 +760,8 @@ struct ContentNoticeCopy {
 
 /// The list of files that differ, one line for each, under its bundle's name.
 ///
-/// Settings' Game Content page replaces this list. Until then, DETAILS on
-/// the content notice shows it.
+/// Game Content lists each bundle. DETAILS on the content notice still
+/// shows the files that differ.
 ///
 /// @param check the start's check
 /// @return the list

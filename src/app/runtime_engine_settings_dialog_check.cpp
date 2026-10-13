@@ -243,6 +243,8 @@ std::string_view page_slug(settings::Page page) {
         return "downloads";
     case settings::Page::system:
         return "system";
+    case settings::Page::game_content:
+        return "game-content";
     case settings::Page::mod_keys:
     case settings::Page::mod_patrol:
     case settings::Page::mod_guard:

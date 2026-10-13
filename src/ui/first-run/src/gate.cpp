@@ -53,6 +53,10 @@ std::string_view step_token(Step step) noexcept {
     switch (step) {
     case Step::language:
         return "language";
+    case Step::game:
+        return "game";
+    case Step::copying:
+        return "copying";
     case Step::online:
         return "online";
     case Step::buttons:
@@ -64,11 +68,43 @@ std::string_view step_token(Step step) noexcept {
 std::optional<Step> step_named(std::string_view token) noexcept {
     if (token == "language")
         return Step::language;
+    if (token == "game")
+        return Step::game;
+    if (token == "copying")
+        return Step::copying;
     if (token == "online")
         return Step::online;
     if (token == "buttons")
         return Step::buttons;
     return std::nullopt;
+}
+
+StepPlace step_place(Step step, Walk walk) noexcept {
+    if (walk == Walk::welcome) {
+        switch (step) {
+        case Step::online:
+            return {2, 3, "ONLINE"};
+        case Step::buttons:
+            return {3, 3, "THE MAIN MENU"};
+        case Step::language:
+        case Step::game:
+        case Step::copying:
+            return {1, 3, "WELCOME"};
+        }
+    }
+    switch (step) {
+    case Step::language:
+        return {1, 5, "LANGUAGE"};
+    case Step::game:
+        return {2, 5, "THE GAME"};
+    case Step::copying:
+        return {3, 5, "COPYING"};
+    case Step::online:
+        return {4, 5, "ONLINE"};
+    case Step::buttons:
+        return {5, 5, "THE MAIN MENU"};
+    }
+    return {1, 3, "WELCOME"};
 }
 
 bool download_busy(const Model& model) noexcept {

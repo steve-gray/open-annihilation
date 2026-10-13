@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// --check-first-run: walks the welcome setup over the main menu. It switches
+// --check-first-run: walks the five-step setup over the main menu. It switches
 // to Deutsch, downloads a language pack from the check's own registry
-// (missing, then Retry), skips, and applies both online choices. The pack
-// cannot be signed as Core Prime, so the registry is the made-up one Ridge
-// and the setup reads it only while this check runs. No game file is
-// committed: the check serves the pack from its own server.
+// (missing, then Retry), skips, and shows again. The second walk stays in
+// Deutsch, copies a small fixture install into the player's folder, checks
+// it, then applies both online choices. The pack cannot be signed as Core
+// Prime, so the registry is the made-up one Ridge and the setup reads it
+// only while this check runs. The named game folder is not copied.
 
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
@@ -19,6 +20,7 @@
 #include "oa/base/sha256.hpp"
 #include "oa/base/signing/ed25519.hpp"
 #include "oa/data/catalogue/check.hpp"
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/data/registry/descriptor.hpp"
 #include "oa/data/registry/player_registries.hpp"
 #include "oa/data/registry/trust.hpp"
@@ -278,6 +280,19 @@ void Runtime::check_first_run() {
                 return control;
         return std::nullopt;
     };
+    const auto shows_words = [&](std::string_view words) {
+        LayerScreen* screen = setup();
+        if (screen == nullptr)
+            return false;
+        const kit::DisplayList display = screen->display_list();
+        for (const kit::Item& item : display.items)
+            if (item.text.find(words) != std::string::npos)
+                return true;
+        for (const kit::Control& control : display.controls)
+            if (control.text.find(words) != std::string::npos)
+                return true;
+        return false;
+    };
     const auto click = [&](std::string_view name) {
         const std::optional<kit::Control> control = control_named(name);
         require(
@@ -518,8 +533,33 @@ void Runtime::check_first_run() {
             pump();
         }
     }
+    pick_card("first-run.language.card.de");
+    require(
+        settings::language_notice_same_tag(shown_language().tag, "de"),
+        "Deutsch was not chosen for the game steps"
+    );
+    require(
+        std::string(oa::data::languages::interface_text("Where is Total Annihilation?")) ==
+            "Wo ist Total Annihilation?",
+        "the game step's title is not German"
+    );
     click("first-run.language.next");
+    require(control_named("first-run.game.next").has_value(), "the game step did not show");
+    require(shows_words("OA kopiert das Spiel einmal"), "the game step is not in German");
+    click("first-run.game.next");
+    require(control_named("first-run.copying.next").has_value(), "the copying step did not show");
+    require(shows_words("Wenn OA anhält"), "the copying step is not in German");
+    {
+        const auto deadline = std::chrono::steady_clock::now() + kWait;
+        while (!shows_words("Alle Dateien stimmen überein")) {
+            require(!deadline_passed(deadline), "the copy was not checked");
+            pump();
+        }
+    }
+    std::cout << "first-run check: the game was copied and checked" << std::endl;
+    click("first-run.copying.next");
     require(control_named("first-run.online.not-now").has_value(), "the online step did not show");
+    require(shows_words("Nicht jetzt"), "Not now is not in German");
     click("first-run.online.not-now");
     click("first-run.online.next");
     require(

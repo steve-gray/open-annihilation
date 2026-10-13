@@ -1,28 +1,41 @@
 # The welcome setup
 
-The first time the main menu is reached, after the game files are found,
-Open Annihilation walks through three steps: the language, online features,
-and the two buttons it adds to that menu. A player coming from 0.7 sees it
-once. **Skip setup** at any step, or **Start playing** at the end, writes
-`open-annihilation.first-run` as `done`, and the walk does not return.
-Closing the game in the middle does not write that, so the next start
-shows it again.
+A start that does not already have the game copied, and that did not name
+a folder, walks five steps before the menu: the language, where the game
+is, the copy and its check, online features, and the two buttons. The
+first three are drawn in Open Annihilation's own window, with its bundled
+fonts, and the language chosen at the first step is the language the later
+steps speak. A player who already has the game copied, or who named a
+folder with `--game-dir`, sees only the welcome: the language, online
+features, and the two buttons, over the main menu, as 1 of 3, 2 of 3 and
+3 of 3.
 
-It stays hidden in a headless check, a benchmark, a stage run, a run
-driven with `--fark`, an unattended run, and a run that names
+**Skip setup** on the language step, or **Start playing** at the end,
+writes `open-annihilation.first-run` as `done`, and the walk does not
+return. **Quit** on the game step leaves without writing that and without
+copying. Closing the window does the same. Closing in the middle of the
+welcome does not write `done`, so the next start shows it again.
+
+The welcome stays hidden in a headless check, a benchmark, a stage run, a
+run driven with `--fark`, an unattended run, and a run that names
 `--preferences-file`. `--first-run` shows it anyway, including after it is
-done. While it is up, or about to be, the question about a missing
-language stays closed, and a language chosen here is not asked about
-afterwards.
+done. The five-step walk is not shown to a player who already has the
+game, and it is not shown when `--game-dir` names a folder. While the
+welcome is up, or about to be, the question about a missing language stays
+closed, and a language chosen here is not asked about afterwards.
 
-This is not the [Game files](game-files.md) screen, which brings a copy of
-the game onto a phone.
+On a phone, the [Game files](game-files.md) screen still brings the files
+in. That import is written into the same managed folders, and the staged
+folder is removed once the copy finishes, so the game is not kept twice.
 
 ## Welcome
 
 ![Welcome: the title Welcome to Open Annihilation, Choose your language, and a carousel of languages with English in front, Next at the bottom and Skip setup above.](images/first-run/welcome.png)
 
-The page word is Welcome, the step is WELCOME, and the count is 1 of 3.
+On the welcome walk the page word is Welcome, the step is WELCOME, and the
+count is 1 of 3. On the five-step walk the page word is Setup, the step is
+LANGUAGE, and the count is 1 of 5. The footer is **Quit**, **Back** and
+**Next**. **Quit** leaves before anything is copied.
 The title is "Welcome to Open Annihilation" and the line under it is
 "Choose your language."
 
@@ -63,6 +76,36 @@ When downloads are off, or the catalogue cannot be read, the packs stay on
 the carousel as **Offline** and a line under them says why: "Downloads are
 off, so language packs stay offline" or "The catalogue could not be read,
 so language packs stay offline." The built-in languages still switch.
+
+## The game
+
+![The game: Where is Total Annihilation?, one source row, Locate another, and Copy the game.](images/first-run/game.png)
+
+This step is only on the five-step walk. The page word is Setup, the step
+is THE GAME, and the count is 2 of 5. The title is "Where is Total
+Annihilation?". Each row is a place that was found: an install, a GOG
+installer, or the demo installer, with what that place holds. **Locate
+another…** asks for a folder. **Copy the game** is available once a row is
+chosen. **Back** returns to the language. **Quit** leaves.
+
+The line under the rows says the copy goes to Documents › Open
+Annihilation › games and expansions, and that the installation is left as
+it is.
+
+## Copying
+
+![Copying: the overall bar, one bundle, and Pause.](images/first-run/copying.png)
+
+![The same step after the check: All files match, and Continue.](images/first-run/check.png)
+
+The page word is Setup, the step is COPYING, and the count is 3 of 5. The
+title is "Copying Total Annihilation". The overall bar and one row for
+each bundle show how far the copy has got. A line says "If OA stops, the
+copy carries on from here next time." **Pause** holds the copy, and
+**Continue** lets it go on. **Cancel** returns to the game step.
+
+When the copy has been checked, the rows say what the check found, and
+**Continue** goes on to online features. **Cancel** is not available then.
 
 ## Online features
 
@@ -105,10 +148,12 @@ except a spotlight around both buttons. Two coach marks name them:
 2. **Settings.** "Open Annihilation's own settings: controls, graphics, the
    interface's size, downloads and your files."
 
-The panel says "THE MAIN MENU · 3 OF 3" and "Two buttons for everything
-Open Annihilation adds", then: "The Library is where you get mods, map
-packs and languages. Settings is where you change how Open Annihilation
-looks and plays. Everything else on this menu is the game's own."
+On the welcome walk the panel says "THE MAIN MENU · 3 OF 3". On the
+five-step walk, after a copy on this start, it says "THE MAIN MENU · 5 OF
+5". Either way it says "Two buttons for everything Open Annihilation
+adds", then: "The Library is where you get mods, map packs and languages.
+Settings is where you change how Open Annihilation looks and plays.
+Everything else on this menu is the game's own."
 **Back** returns to online features. **Start playing** finishes the walk.
 This step has no **Skip setup**. Escape and Enter do what **Start playing**
 does.
@@ -134,20 +179,23 @@ leaves the preference. During a game the row is locked, and it says
 ## For a run that is driven
 
 `--first-run` shows the walk even when it is already done, and even in a
-run that would otherwise hide it. A stage file's line `first-run language`,
+run that would otherwise hide it. A stage file's line `first-run language`, `first-run game`, `first-run copying`,
 `first-run online` or `first-run buttons` opens that step for a picture. A
 stage file without one of those lines does not show the walk.
 
-The log says `first-run: showing step language` (or `online`, or
-`buttons`) when the step opens, and `first-run: not showing:` with one of
-`done`, `headless check`, `preferences file`, `benchmark`, `stage`,
-`fark` or `unattended` when it stays hidden.
+The log says `first-run: showing step language` (or `game`, `copying`,
+`online`, or `buttons`) when the step opens, and `first-run: not showing:`
+with one of `done`, `headless check`, `preferences file`, `benchmark`,
+`stage`, `fark` or `unattended` when it stays hidden.
 
 A program that presses the controls finds them as `oa.first-run.` and the
-step (`language`, `online` or `buttons`) and the control. The language
-cards are `oa.first-run.language.card.` and the tag in lower case, with
-anything else a hyphen (`de`, `en-xa`). The rest are `skip`, `back`,
-`next`, `previous`, `next-card`, `cancel` and `retry` on the language
-step; `skip`, `back`, `next`, `on` and `not-now` on the online step; and
-`back` and `start` on the buttons. [automation.md](automation.md#the-welcome-setup)
+step (`language`, `game`, `copying`, `online` or `buttons`) and the
+control. The language cards are `oa.first-run.language.card.` and the tag
+in lower case, with anything else a hyphen (`de`, `en-xa`). The rest are
+`skip`, `back`, `next`, `previous`, `next-card`, `cancel` and `retry` on
+the language step; `skip` (Quit), `back`, `next` (Copy the game), `locate`
+and `source.<index>` on the game step; `skip` (Cancel) and `next` (Pause,
+or Continue once the check has finished) on the copying step; `skip`,
+`back`, `next`, `on` and `not-now` on the online step; and `back` and
+`start` on the buttons. [automation.md](automation.md#the-welcome-setup)
 lists them with the other screens.
