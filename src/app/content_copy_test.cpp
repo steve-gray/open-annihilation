@@ -803,6 +803,7 @@ void test_sibling_and_absent(const fs::path& scratch) {
     OA_CHECK(oa::app::content_tracks_line(17, 18) == "17 of 18 tracks");
 
     place_file(music_dir / "9.mp3", "TRACK-SHARED");
+    bump_time(music_dir / "9.mp3", 30);
     const oa::app::ContentCheck damaged = oa::app::check_managed_content(user, table);
     OA_CHECK(oa::app::content_notice_due(damaged));
     const oa::app::ContentBundleCheck* broken = bundle_named(damaged, "music");
