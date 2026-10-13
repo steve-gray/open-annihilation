@@ -4980,7 +4980,7 @@ void the_kit_gallery_row_moves_only_developers_list() {
         {Page::controller, 0x64b3e4bf52e43679},
         {Page::game_files, 0x405310d8fb1d4566},
         {Page::downloads, 0xd624c36706853e0f},
-        {Page::game_content, 0x2854530ae6dbef1f},
+        {Page::game_content, 0xca5b59b5ad5d7527},
     }};
     for (const auto& [page, before] : kBefore) {
         const settings::Dialog other = opened_with_controller(page, true, true, true);

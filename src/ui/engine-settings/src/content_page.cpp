@@ -63,11 +63,9 @@ geometry::Rows place(
     kit::RowView lead;
     lead.kind = kit::RowKind::text;
     lead.id = "plays-from";
-    if (!lines.empty()) {
-        lead.label = std::move(lines.front());
-        for (std::size_t line = 1; line < lines.size(); ++line)
-            lead.hints.push_back(std::move(lines[line]));
-    }
+    // Every line is drawn in the hint's font, which the lines were broken for.
+    for (std::string& line : lines)
+        lead.hints.push_back(std::move(line));
     views.push_back(std::move(lead));
 
     for (std::size_t index = 0; index < dialog.game_content.size(); ++index) {
