@@ -3,7 +3,8 @@
 
 // --check-first-run: walks the five-step setup over the main menu. It switches
 // to Deutsch, downloads a language pack from the check's own registry
-// (missing, then Retry), skips, and shows again. The second walk stays in
+// (missing, then Retry), quits, and shows again because the welcome was not
+// recorded. The second walk stays in
 // Deutsch, copies a small fixture install into the player's folder, checks
 // it, then applies both online choices. The pack cannot be signed as Core
 // Prime, so the registry is the made-up one Ridge and the setup reads it
@@ -522,13 +523,20 @@ void Runtime::check_first_run() {
     }
     std::cout << "first-run check: language " << kTag << std::endl;
 
+    {
+        const std::optional<kit::Control> leaving = control_named("first-run.language.skip");
+        require(
+            leaving.has_value() && leaving->text == "Quit",
+            "a first start's left button does not say Quit"
+        );
+    }
     click("first-run.language.skip");
-    require(setup() == nullptr, "Skip setup left the setup showing");
+    require(setup() == nullptr, "Quit left the setup showing");
     require(
-        preference(first_run::preference_key) == first_run::preference_done,
-        "Skip setup did not record done"
+        preference(first_run::preference_key) != first_run::preference_done,
+        "Quit recorded the welcome as done"
     );
-    std::cout << "first-run check: skipped, preference done" << std::endl;
+    std::cout << "first-run check: quit, preference not done" << std::endl;
 
     {
         const auto deadline = std::chrono::steady_clock::now() + kWait;
@@ -550,9 +558,11 @@ void Runtime::check_first_run() {
     click("first-run.language.next");
     require(control_named("first-run.game.next").has_value(), "the game step did not show");
     require(shows_words("OA kopiert das Spiel einmal"), "the game step is not in German");
+    require(shows_words("Beenden"), "the game step's left button is not Quit");
     click("first-run.game.next");
     require(control_named("first-run.copying.next").has_value(), "the copying step did not show");
     require(shows_words("Wenn OA anhält"), "the copying step is not in German");
+    require(shows_words("Beenden"), "the copying step's left button is not Quit");
     {
         const auto deadline = std::chrono::steady_clock::now() + kWait;
         while (!shows_words("Alle Dateien stimmen überein")) {

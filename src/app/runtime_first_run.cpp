@@ -505,6 +505,12 @@ class FirstRunScreen final : public LayerScreen {
             session_.model.walk = first_run::Walk::setup;
         else
             session_.model.walk = setup_menu_walk();
+        // The welcome, including Show again, has a menu to return to, so the
+        // left button is Skip. A five-step walk keeps the word the pre-game
+        // window chose, or Quit when this is the first start.
+        session_.model.leave = session_.model.walk == first_run::Walk::welcome
+                                   ? first_run::Leave::skip
+                                   : setup_menu_leave();
     }
 
     /// Takes a previewed language's fonts off both stacks, so a setup
@@ -783,7 +789,7 @@ class FirstRunScreen final : public LayerScreen {
     /// @return the revision
     [[nodiscard]] uint64_t revision() const override { return revision_; }
 
-    /// Leaving without Finish or Skip setup writes nothing, so the setup returns.
+    /// Leaving without Finish or Skip writes nothing, so the setup returns.
     void close(bool /*by_key*/) override {
         runtime_.first_run_run_.opened_logged = false;
         runtime_.first_run_run_.opened_step = -1;
@@ -974,11 +980,26 @@ class FirstRunScreen final : public LayerScreen {
     LayerAnswer apply(const first_run::Outcome& outcome) {
         if (outcome.pass)
             return LayerAnswer::pass;
+        const auto stop_menu_copy = [this] {
+            if (session_.model.step != first_run::Step::copying)
+                return;
+            if (!session_.model.copy.running && !session_.model.copy.paused)
+                return;
+            setup_request_cancel();
+            setup_stop_join();
+            if (copy_woke_screen_) {
+                SDL_EnableScreenSaver();
+                copy_woke_screen_ = false;
+            }
+            session_.model.copy.running = false;
+            session_.model.copy.paused = false;
+        };
         bool leave = false;
         switch (outcome.ask) {
         case first_run::Ask::none:
             break;
         case first_run::Ask::skip:
+            stop_menu_copy();
             FirstRunHost::finish(runtime_);
             leave = true;
             break;
@@ -1080,6 +1101,7 @@ class FirstRunScreen final : public LayerScreen {
             session_.focus_ready = false;
             break;
         case first_run::Ask::quit:
+            stop_menu_copy();
             leave = true;
             break;
         }

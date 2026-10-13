@@ -50,7 +50,7 @@ inline constexpr std::string_view interface_words[] = {
     "Previous",
     "Retry",
     "Settings",
-    "Skip setup",
+    "Skip",
     "Start playing",
     "THE MAIN MENU",
     "The Library is where you get mods, map packs and languages. Settings is where you change how "

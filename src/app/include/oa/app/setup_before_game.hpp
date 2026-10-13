@@ -29,7 +29,7 @@ struct SetupDisplay {
 /// How the pre-game setup ended.
 enum class SetupBefore : uint8_t {
     not_run, ///< this start does not show the game steps
-    skipped, ///< Skip setup: the silent copy may still run
+    skipped, ///< Skip: the silent copy may still run
     copied,  ///< the copy finished on the copying step
     quit,    ///< the player left before the game was copied
 };
@@ -73,6 +73,14 @@ void setup_welcome_again() noexcept;
 ///
 /// @return setup when the five-step walk continues; welcome otherwise
 [[nodiscard]] oa::ui::first_run::Walk setup_menu_walk() noexcept;
+
+/// The left button the menu's continuation of this walk shows.
+///
+/// A first start that copied here keeps Quit. A re-run keeps Skip. When this
+/// window did not run, the five-step walk says Quit.
+///
+/// @return the word for every step of that continuation
+[[nodiscard]] oa::ui::first_run::Leave setup_menu_leave() noexcept;
 
 /// Reports whether this start already copied on the copying step.
 ///

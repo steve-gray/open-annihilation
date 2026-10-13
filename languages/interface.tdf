@@ -7658,6 +7658,14 @@
 	it=Salta la configurazione;
 	}
 
+[Skip]
+	{
+	de=Überspringen;
+	fr=Passer;
+	es=Omitir;
+	it=Salta;
+	}
+
 [Skirmish · No Mod]
 	{
 	de=Gefecht · Kein Mod;

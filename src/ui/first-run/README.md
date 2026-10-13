@@ -4,7 +4,7 @@ The welcome a player sees at the first main menu: a language, what online featur
 
 ## Entry points
 
-`decide` says whether the setup shows. `lay_out`, `key`, `pointer` and `draw` are one step. `place_coaches` keeps the two coach marks off the OA buttons. The preference key is `open-annihilation.first-run`, and `done` means the player finished it or skipped it.
+`decide` says whether the setup shows. `lay_out`, `key`, `pointer` and `draw` are one step. `place_coaches` keeps the two coach marks off the OA buttons. The preference key is `open-annihilation.first-run`, and `done` means the player finished it or pressed Skip.
 
 ## State
 
@@ -18,6 +18,7 @@ A `Session` holds the `Model` (the step, the language cards, the online-features
 - The coach marks never cover either OA button. A short side flips the card.
 - The picture well draws the Library's Active tab from a fixed Ridge sample. No picture file is shipped.
 - Every word the player reads is in `interface_words.hpp`.
+- The left footer button says **Quit** or **Skip** for the whole walk, whichever the host set on the model. It does not change from step to step. Copying does not relabel it Cancel. Escape on that step still returns to the game step.
 - On the language step, a built-in or installed language in the middle shows that step's words in itself. A pack that is not installed yet leaves them in the language in use, and nothing is downloaded to preview it. The other steps stay in the language in use until the player chooses.
 
 ## Tests
