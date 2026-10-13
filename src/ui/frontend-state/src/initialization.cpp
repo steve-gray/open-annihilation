@@ -7,6 +7,7 @@
 #include <bit>
 #include <cstring>
 #include <stdexcept>
+#include <utility>
 
 namespace oa::ui::frontend_state::initialization {
 void reset_player_slots(State& state, PlayerStorage& storage, bool keep_chat_positions) {
@@ -423,6 +424,21 @@ void load_preferences(
         slot.metal = amount("Metal");
         slot.energy = amount("Energy");
     }
+    // One Player row. The last row that reads Player is the one a skirmish
+    // starts as; each earlier Player row reads Computer. One Player, or none,
+    // is left as stored.
+    int32_t local_row = -1;
+    for (int32_t row = 0; row < settings.slot_count; ++row)
+        if (settings.slots[static_cast<std::size_t>(row)].controller ==
+            game_entry::controller::human)
+            local_row = row;
+    if (local_row >= 0) {
+        for (int32_t row = 0; row < local_row; ++row) {
+            auto& earlier = settings.slots[static_cast<std::size_t>(row)];
+            if (earlier.controller == game_entry::controller::human)
+                earlier.controller = game_entry::controller::computer;
+        }
+    }
     state.play_intro_movie = std::bit_cast<int32_t>(number("PlayMovie", 1));
     const auto depth = number("DisplaymodeDepth", 0);
     set_flag(
@@ -445,6 +461,22 @@ void write_all_missions(const Preferences& p, PreferencesHost& h) {
 
 void write_skirmish_player_count(const game_entry::SkirmishSettings& s, PreferencesHost& h) {
     h.write_number(general_section, "NumSkirmishPlayers", std::bit_cast<uint32_t>(s.slot_count));
+}
+
+void remember_player_skirmish_settings(
+    const game_entry::SkirmishSettings& live, std::optional<game_entry::SkirmishSettings>& kept
+) {
+    if (!kept)
+        kept = live;
+}
+
+void restore_player_skirmish_settings(
+    game_entry::SkirmishSettings& live, std::optional<game_entry::SkirmishSettings>& kept
+) {
+    if (!kept)
+        return;
+    live = std::move(*kept);
+    kept.reset();
 }
 
 void save_preferences(

@@ -1595,6 +1595,10 @@ bool Runtime::load_saved_campaign(
         start_campaign_mission();
     }
     if (!match_ || !campaign_mission_ || screen_ != Screen::match) {
+        // No match was built, so the kept skirmish setup is dropped and the
+        // player's slots are current again.
+        if (!match_)
+            release_player_skirmish_settings();
         status_ = "Saved campaign start failed: " + status_;
         return false;
     }
