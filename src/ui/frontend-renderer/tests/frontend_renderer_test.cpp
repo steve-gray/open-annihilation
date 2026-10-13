@@ -227,8 +227,8 @@ void test_hold_button_takes_default_art() {
     const auto add_group = [&](int width, int height, uint8_t normal, uint8_t pressed) {
         for (int frame_index = 0; frame_index < 4; ++frame_index) {
             oa::formats::gaf::Frame frame;
-            frame.width = width;
-            frame.height = height;
+            frame.width = static_cast<uint16_t>(width);
+            frame.height = static_cast<uint16_t>(height);
             const uint8_t value = frame_index == 1 ? pressed : normal;
             frame.pixels.assign(static_cast<std::size_t>(width * height), value);
             frame.coverage.assign(frame.pixels.size(), 1);
