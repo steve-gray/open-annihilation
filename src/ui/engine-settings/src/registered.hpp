@@ -66,8 +66,10 @@ struct NavLayout {
 /// pages in registration order.
 ///
 /// @param dialog the dialog
+/// @param sizes the dialog's sizes; null uses the class's own
 /// @return the pieces, the viewport and the scroll limit
-[[nodiscard]] NavLayout layout_registered_nav(const Dialog& dialog);
+[[nodiscard]] NavLayout
+layout_registered_nav(const Dialog& dialog, const geometry::Sizes* sizes = nullptr);
 
 /// Scrolls the section list the least that shows the focused entry whole.
 ///
@@ -94,8 +96,10 @@ struct RegisteredContent {
 /// Places the open registered page's rows from their specs.
 ///
 /// @param dialog the dialog
+/// @param sizes the dialog's sizes; null uses the class's own
 /// @return the rows; empty when the open page is not a registered one
-[[nodiscard]] RegisteredContent registered_content(const Dialog& dialog);
+[[nodiscard]] RegisteredContent
+registered_content(const Dialog& dialog, const geometry::Sizes* sizes = nullptr);
 
 /// Returns the open registered page's heading, as it was registered.
 ///
@@ -107,13 +111,19 @@ struct RegisteredContent {
 ///
 /// @param dialog the dialog
 /// @param[in,out] parts the parts
-void append_registered_nav(const Dialog& dialog, std::vector<LayoutPart>& parts);
+/// @param sizes the dialog's sizes; null uses the class's own
+void append_registered_nav(
+    const Dialog& dialog, std::vector<LayoutPart>& parts, const geometry::Sizes* sizes = nullptr
+);
 
 /// Appends the open registered page's row parts that lie wholly in its view.
 ///
 /// @param dialog the dialog
 /// @param[in,out] parts the parts
-void append_registered_content(const Dialog& dialog, std::vector<LayoutPart>& parts);
+/// @param sizes the dialog's sizes; null uses the class's own
+void append_registered_content(
+    const Dialog& dialog, std::vector<LayoutPart>& parts, const geometry::Sizes* sizes = nullptr
+);
 
 /// Presses a registered row with Space, or shows the registered page a nav
 /// entry names. Other controls are left to the dialog.

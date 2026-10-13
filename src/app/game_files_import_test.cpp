@@ -11,6 +11,7 @@
 // With --data: a subset of the installed game OA_GAME_DIR names copied,
 // checked and committed, and the demo route over the installer
 // OA_DEMO_INSTALLER names (each skipped without its variable).
+#include "oa/app/content_copy.hpp"
 #include "oa/app/game_files_import.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/formats/hpi.hpp"
@@ -653,7 +654,8 @@ void space_arithmetic(const fs::path& scratch) {
     OA_CHECK(
         need.copy_bytes == 0 && need.need_bytes == demo_1997.archive_size + space_margin_bytes
     );
-    const auto archive = paths.data_folder / "games" / "totala-demo" / "TADemo.hpi";
+    const auto archive = paths.data_folder / std::string(oa::app::managed_games_folder) /
+                         "totala-demo" / "TADemo.hpi";
     fs::create_directories(archive.parent_path());
     {
         std::ofstream out(archive, std::ios::binary);
@@ -1521,7 +1523,11 @@ void installed_summary(const fs::path& scratch) {
     write_sized(paths.documents / "Total Annihilation (old) 2" / "b", 5);
     write_sized(paths.documents / "Total Annihilation (old) 02" / "c", 1);
     write_sized(paths.documents / "Total Annihilation (older)" / "d", 1);
-    write_sized(paths.data_folder / "games" / "totala-demo" / "TADemo.hpi", 40);
+    write_sized(
+        paths.data_folder / std::string(oa::app::managed_games_folder) / "totala-demo" /
+            "TADemo.hpi",
+        40
+    );
     const auto summary = summarize_installed(hooks, paths);
     OA_CHECK(summary.present && !summary.demo);
     const auto part = [&](Part which) -> const PartSummary& {

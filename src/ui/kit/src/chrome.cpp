@@ -203,13 +203,12 @@ void add_nav(
         item.state.hovered = entry.hovered;
         item.state.focused = entry.focused;
         item.state.selected = entry.selected;
-        if (index == 0) {
+        // The first item draws the whole list. A later item keeps its control,
+        // and an empty look, so its caption is not drawn again over the first.
+        if (index == 0)
             item.look = look;
-        } else {
-            NavLook one;
-            one.entries.push_back(entry);
-            item.look = std::move(one);
-        }
+        else
+            item.look = NavLook{};
         list.items.push_back(std::move(item));
 
         Control control;

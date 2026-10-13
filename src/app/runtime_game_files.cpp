@@ -165,10 +165,10 @@ void Runtime::open_game_files_manage() {
     request.renderer = sdl_.renderer;
     request.entry = GameFilesEntry::manage;
     request.paths = *paths;
-    // The check of the game folder plays the mod the game plays: the mod
-    // folder comes first among the game's folders when one is layered.
-    if (options_.game_folders.size() > 1)
-        request.mod.folder = options_.game_folders.front();
+    // The check of the game folder plays the mod the game plays. An
+    // expansion bundle is not that folder.
+    if (!options_.layered_mod_folder.empty())
+        request.mod.folder = options_.layered_mod_folder;
     request.mod.profile_file = options_.mod_file;
     request.mod.accept_unimplemented_hacks = options_.accept_unimplemented_hacks;
     request.mod.preferences = &preference_values_;

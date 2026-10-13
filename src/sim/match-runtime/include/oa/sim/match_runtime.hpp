@@ -2891,6 +2891,7 @@ class Match final : private SpawnSubsystems, private UnitValueHost {
     friend class TickHost;
     friend class WeaponTickHost;
     friend class TargetHost;
+    friend class MatchTickAccess;
 
     /// Places the map's features on the canonical plots, from the loader's
     /// resolved plots in row-major order (markers first, then FeatureDefs),
@@ -3032,17 +3033,24 @@ class Match final : private SpawnSubsystems, private UnitValueHost {
     /// @param target Unit it loses.
     void lose_target(RuntimeOrder& entry, const sim::simulation_state::Unit& target);
     /// Links an order into its target's list of observing orders, as the
-    /// head. The order is its own listener.
+    /// head, after taking it off the list it is already on. The order is on
+    /// a unit's list exactly when that unit is its target. The order is its
+    /// own listener.
     ///
     /// @param[in,out] entry Order to link.
     /// @param target Target unit; a missing or typeless one (Unit.type_index
-    ///     zero) leaves the order without a target.
+    ///     zero) leaves the order on no list.
     void link_target_observer(RuntimeOrder& entry, sim::simulation_state::Unit* target);
     /// Takes an order out of its target's list of observing orders, leaving
     /// it without a target.
     ///
     /// @param[in,out] entry Order to unlink.
     void unlink_target_observer(RuntimeOrder& entry);
+    /// Checks, in a build that keeps assertions, that an order is on a unit's
+    /// observer list exactly when that unit is the order's target.
+    ///
+    /// @param entry Order to check.
+    void check_target_observer(const RuntimeOrder& entry) const noexcept;
     std::vector<std::unique_ptr<RuntimeOrder>> orders_;
     SelectionState selection_;
     WindState wind_;

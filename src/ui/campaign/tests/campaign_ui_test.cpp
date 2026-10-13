@@ -11,12 +11,18 @@
 #include "oa/test/game_assets.hpp"
 #include "oa/base/text.hpp"
 
+#include "oa/formats/hpi.hpp"
+
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -314,6 +320,110 @@ void new_game_tests() {
     delete setup;
 }
 
+// Two archives offer one campaign file, and each offers campaigns of its own.
+// The shared file is listed once, in the top layer's spelling, and that
+// layer's mission file is the one loaded. A different file is listed even
+// when its mission title matches.
+void layered_campaign_list_tests() {
+    namespace fs = std::filesystem;
+
+    struct Scratch {
+        fs::path path;
+
+        Scratch() {
+            const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+            path = fs::temp_directory_path() / ("oa-campaign-layers-" + std::to_string(stamp));
+            fs::create_directories(path);
+        }
+
+        ~Scratch() {
+            std::error_code ignored;
+            fs::remove_all(path, ignored);
+        }
+
+        Scratch(const Scratch&) = delete;
+        Scratch& operator=(const Scratch&) = delete;
+    } scratch;
+
+    const auto tdf = [](std::string_view side, std::string_view title, std::string_view mission) {
+        const std::string text = std::string("[HEADER]\n{\ncampaignside=") + std::string(side) +
+                                 ";\n}\n[MISSION0]\n{\nmissionname=" + std::string(title) +
+                                 ";\nmissionfile=" + std::string(mission) + ";\n}\n";
+        return std::vector<uint8_t>(text.begin(), text.end());
+    };
+    const auto write_archive = [&](const char* name, const std::vector<oa::HpiWriteFile>& files) {
+        const auto bytes = oa::write_hpi(files);
+        std::ofstream stream(scratch.path / name, std::ios::binary | std::ios::trunc);
+        stream.write(
+            reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size())
+        );
+        expect(static_cast<bool>(stream), "layered: archive written");
+    };
+    write_archive(
+        "top.hpi",
+        {{"camps/Arm Campaign.tdf", tdf("ARM", "Shared Title", "TOP.ota")},
+         {"camps/Second Campaign.tdf", tdf("ARM", "Second", "SECOND.ota")}}
+    );
+    write_archive(
+        "bottom.hpi",
+        {{"camps/ARM CAMPAIGN.tdf", tdf("ARM", "Shared Title", "BOT.ota")},
+         {"camps/Arm Campaign - Core Contingency.tdf", tdf("ARM", "Contingency", "CC.ota")},
+         {"camps/Ridge Campaign.tdf", tdf("ARM", "Shared Title", "RIDGE.ota")},
+         {"camps/Core Campaign.tdf", tdf("CORE", "Core", "CORE.ota")},
+         {"camps/CORE CAMPAIGN.tdf", tdf("CORE", "Core", "CORE-LOWER.ota")}}
+    );
+
+    oa::AssetStore store(scratch.path);
+    store.mount(scratch.path / "top.hpi");
+    store.mount(scratch.path / "bottom.hpi");
+    const auto files = oa::data::campaign::campaign_asset_files(store);
+
+    const auto listed = [&](const char* side) {
+        char packed[4096];
+        const int32_t count =
+            oa::data::campaign::campaign_load_names(&files, side, packed, sizeof(packed));
+        std::vector<std::string> names;
+        for (const char* cursor = packed; *cursor != '\0'; cursor += std::strlen(cursor) + 1)
+            names.emplace_back(cursor);
+        expect(static_cast<int32_t>(names.size()) == count, "layered: name count matches");
+        return names;
+    };
+    const auto arm = listed("ARM");
+    const auto count_named = [](const std::vector<std::string>& names, const char* wanted) {
+        return std::count(names.begin(), names.end(), wanted);
+    };
+    expect(arm.size() == 4, "layered: four Arm campaigns");
+    expect(count_named(arm, "Arm Campaign") == 1, "layered: the shared file is listed once");
+    expect(count_named(arm, "ARM CAMPAIGN") == 0, "layered: the top layer's spelling is kept");
+    expect(
+        count_named(arm, "Arm Campaign - Core Contingency") == 1,
+        "layered: a different campaign stays"
+    );
+    expect(count_named(arm, "Ridge Campaign") == 1, "layered: a matching title stays");
+    expect(count_named(arm, "Second Campaign") == 1, "layered: the top layer's own campaign stays");
+    expect(count_named(arm, "Core Campaign") == 0, "layered: the other side stays off the list");
+
+    const auto core = listed("CORE");
+    expect(core.size() == 1 && core[0] == "Core Campaign", "layered: Core's shared file once");
+
+    auto* campaign = new oa::data::campaign::CampaignFile;
+    oa::data::campaign::campaign_file_init(campaign);
+    campaign->kind = oa::data::campaign::SessionKind::campaign;
+    const oa::data::campaign::CampaignEnv env{&files, nullptr, 0, 0};
+    expect(
+        oa::data::campaign::campaign_load_file(campaign, &env, "Arm Campaign"),
+        "layered: the shared campaign loads"
+    );
+    char mission[128];
+    expect(
+        oa::data::campaign::campaign_mission_file(campaign, 0, mission, sizeof(mission)) &&
+            std::strcmp(mission, "TOP.ota") == 0,
+        "layered: the top layer's mission file wins"
+    );
+    oa::data::campaign::campaign_file_free(campaign);
+    delete campaign;
+}
+
 // ---- installed data: briefing panel over the installed campaigns ----
 
 int32_t fixed_random(void*) {
@@ -556,6 +666,7 @@ int main(int argc, char** argv) {
         chinese_row_tests();
         single_player_tests();
         new_game_tests();
+        layered_campaign_list_tests();
         solar_system_tests();
     }
     if (failures != 0) {
