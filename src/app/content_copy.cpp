@@ -1416,7 +1416,18 @@ CopyResult copy_content(ContentSource& source, const CopyRequest& request) {
 
         CopyProgress progress;
         progress.bytes_total = described.bytes_to_copy;
-        progress.files_total = narrow_count(planned.size());
+        uint32_t table_files = 0;
+        for (const bundles::Bundle& bundle : request.bundles) {
+            const uint32_t count = narrow_count(bundle.files.size());
+            if (table_files > std::numeric_limits<uint32_t>::max() - count)
+                table_files = std::numeric_limits<uint32_t>::max();
+            else
+                table_files += count;
+        }
+        const uint32_t taken = narrow_count(planned.size());
+        const uint32_t not_taken = table_files >= taken ? table_files - taken : 0;
+        // The overall count is the files this copy takes, not every table file.
+        progress.files_total = copy_file_count(taken, table_files, not_taken).total;
         uint64_t done_bytes = 0;
         bool told = false;
         loaded_id.clear();

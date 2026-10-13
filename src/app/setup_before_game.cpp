@@ -3,9 +3,10 @@
 
 // Steps 1 to 3 before the game is mounted. The window is the game's own
 // window, drawn with the bundled fonts, so a language's name in itself can
-// be read before any archive is open. The copy runs on a side thread; this
-// thread only pumps the window and reads the progress. A player who already
-// has the game, or who named --game-dir, does not see these steps.
+// be read before any archive is open. The copy runs on a side thread, and so
+// does the scan of installers already on this machine; this thread only
+// pumps the window and reads the progress. A player who already has the
+// game, or who named --game-dir, does not see these steps.
 
 #include "oa/app/setup_before_game.hpp"
 
@@ -24,6 +25,7 @@
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/platform/files.hpp"
 #include "oa/platform/game_installs.hpp"
+#include "oa/platform/log_files.hpp"
 #include "oa/platform/locale.hpp"
 #include "oa/platform/preferences.hpp"
 #include "oa/platform/system.hpp"
@@ -45,6 +47,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -293,9 +296,12 @@ std::string bundle_name(std::span<const bundles::Bundle> table, std::string_view
     return std::string(id);
 }
 
-/// Fills a row from a description. A place with no matched file is not listed.
+/// Fills a row from a description. A place with no matched file is not listed,
+/// and a bundle the place lacks is not a chip. The check's install uses this.
+/// The machine's list is gathered and ranked by fill_sources.
 ///
 /// @param[in,out] model the game step
+/// @param[in,out] memory the places already listed, so a scan can keep its own
 /// @param path the place
 /// @param kind which reader
 /// @param mark the badge
@@ -305,6 +311,7 @@ std::string bundle_name(std::span<const bundles::Bundle> table, std::string_view
 /// @return true when the row was added
 bool add_described(
     first_run::Model& model,
+    std::vector<Remembered>& memory,
     const fs::path& path,
     SourceKind kind,
     first_run::SourceMark mark,
@@ -315,7 +322,7 @@ bool add_described(
     if (described.bundles.empty() || static_cast<int32_t>(model.sources.size()) >= kMostSources)
         return false;
     const std::string token = path_to_utf8(path);
-    for (const Remembered& held : remembered_sources()) {
+    for (const Remembered& held : memory) {
         if (held.token == token)
             return false;
     }
@@ -332,7 +339,7 @@ bool add_described(
         chip.held = true;
         row.chips.push_back(std::move(chip));
     }
-    remembered_sources().push_back(Remembered{token, kind, path});
+    memory.push_back(Remembered{token, kind, path});
     model.sources.push_back(std::move(row));
     return true;
 }
@@ -592,11 +599,20 @@ void gather_path(
 
 /// Appends gathered places, fullest first, up to the step's limit.
 ///
+/// `found` is this function's own list. The match is taken from it, and copied out, before
+/// the function returns.
+///
 /// @param[in,out] model the game step
+/// @param[in,out] memory the places already listed; the scan keeps its own
 /// @param found the places
 /// @param select_best true to select the fullest of the places appended
 /// @return true when a place was appended
-bool append_ranked(first_run::Model& model, std::vector<HeldSource> found, bool select_best) {
+bool append_ranked(
+    first_run::Model& model,
+    std::vector<Remembered>& memory,
+    std::vector<HeldSource> found,
+    bool select_best
+) {
     std::vector<installs::SetupSource> facts;
     facts.reserve(found.size());
     for (const HeldSource& held : found)
@@ -618,7 +634,7 @@ bool append_ranked(first_run::Model& model, std::vector<HeldSource> found, bool 
         if (match == nullptr)
             continue;
         bool seen = false;
-        for (const Remembered& remembered : remembered_sources()) {
+        for (const Remembered& remembered : memory) {
             if (remembered.token == match->remembered.token)
                 seen = true;
         }
@@ -626,7 +642,7 @@ bool append_ranked(first_run::Model& model, std::vector<HeldSource> found, bool 
             continue;
         if (first_added < 0)
             first_added = static_cast<int32_t>(model.sources.size());
-        remembered_sources().push_back(match->remembered);
+        memory.push_back(match->remembered);
         model.sources.push_back(match->row);
         appended = true;
     }
@@ -640,6 +656,7 @@ bool append_ranked(first_run::Model& model, std::vector<HeldSource> found, bool 
 /// selected.
 ///
 /// @param[in,out] model the game step
+/// @param[in,out] memory the places already listed, so a scan can keep its own
 /// @param folder the folder
 /// @param user_folder the player's folder
 /// @param detail unused; the row says the shortened path
@@ -647,6 +664,7 @@ bool append_ranked(first_run::Model& model, std::vector<HeldSource> found, bool 
 /// @param kind unused; a chosen folder is read as a folder
 void add_folder_source(
     first_run::Model& model,
+    std::vector<Remembered>& memory,
     const fs::path& folder,
     const fs::path& user_folder,
     std::string detail,
@@ -658,36 +676,47 @@ void add_folder_source(
     std::ignore = kind;
     std::vector<HeldSource> found;
     gather_path(found, folder, user_folder, {}, installs::home_folder());
-    std::ignore = append_ranked(model, std::move(found), true);
+    std::ignore = append_ranked(model, memory, std::move(found), true);
 }
 
 /// Lists an installer the player just chose, and selects it.
 ///
 /// @param[in,out] model the game step
+/// @param[in,out] memory the places already listed, so a scan can keep its own
 /// @param file the installer
 /// @param user_folder the player's folder
 void add_installer_source(
-    first_run::Model& model, const fs::path& file, const fs::path& user_folder
+    first_run::Model& model,
+    std::vector<Remembered>& memory,
+    const fs::path& file,
+    const fs::path& user_folder
 ) {
     std::vector<HeldSource> found;
     gather_installer(found, file, user_folder, installs::home_folder());
-    std::ignore = append_ranked(model, std::move(found), true);
+    std::ignore = append_ranked(model, memory, std::move(found), true);
 }
 
 /// Lists the places this machine already has, fullest first, and selects that one.
 ///
 /// A folder that is not a game installation is not a row. Installer files found directly
 /// inside it are. At most kMostSources rows are kept, after the rank, so the fullest stay.
+/// The scan calls this on its own thread and passes its own list; nothing here touches the
+/// list the game step is drawing.
 ///
 /// @param[in,out] model the game step
 /// @param user_folder the player's folder
 /// @param found_install a folder already found; empty when there is none
+/// @param held the scan's own list; null uses the list the game step keeps
 void fill_sources(
-    first_run::Model& model, const fs::path& user_folder, const fs::path& found_install
+    first_run::Model& model,
+    const fs::path& user_folder,
+    const fs::path& found_install,
+    std::vector<Remembered>* held
 ) {
+    std::vector<Remembered>& memory = held != nullptr ? *held : remembered_sources();
     model.sources.clear();
     model.source = -1;
-    remembered_sources().clear();
+    memory.clear();
     const fs::path home = installs::home_folder();
     std::vector<HeldSource> found;
     if (!found_install.empty())
@@ -713,9 +742,77 @@ void fill_sources(
     }
     for (const fs::path& folder : downloads)
         gather_path(found, folder, user_folder, {}, home);
-    std::ignore = append_ranked(model, std::move(found), false);
+    std::ignore = append_ranked(model, memory, std::move(found), false);
     if (!model.sources.empty())
         model.source = 0;
+}
+
+/// The installer scan, off the thread that draws the window.
+///
+/// The rows land in `model` and `remembered` and are copied onto the setup
+/// only after `done`. The check's window replaces that list with its own
+/// install, so it does not run this scan.
+struct SourceScan {
+    ~SourceScan() { finish(); }
+
+    /// Joins the scan and records how long it took. A second call does nothing.
+    void finish() {
+        if (!started || applied)
+            return;
+        if (worker.joinable())
+            worker.join();
+        applied = true;
+        oa::platform::log_files::note_timing_span("sources", began_ms);
+    }
+
+    std::thread worker{};
+    std::atomic<bool> done{false};
+    first_run::Model model{};
+    std::vector<Remembered> remembered{};
+    std::exception_ptr failure{};
+    uint32_t began_ms = 0;
+    bool started = false;
+    bool applied = false;
+};
+
+/// Starts the scan. The caller keeps `scan` until the setup returns.
+void start_source_scan(
+    SourceScan& scan, const fs::path& user_folder, const fs::path& found_install
+) {
+    scan.began_ms = oa::platform::tick_ms();
+    scan.started = true;
+    scan.worker = std::thread([&scan, user_folder, found_install] {
+        try {
+            fill_sources(scan.model, user_folder, found_install, &scan.remembered);
+        } catch (...) {
+            scan.failure = std::current_exception();
+        }
+        scan.done.store(true);
+    });
+}
+
+/// Copies a finished scan onto the game step. False when it is still running.
+bool take_source_scan(SourceScan& scan, first_run::Model& model) {
+    if (!scan.started || scan.applied || !scan.done.load())
+        return false;
+    scan.finish();
+    if (scan.failure)
+        std::rethrow_exception(scan.failure);
+    model.sources = std::move(scan.model.sources);
+    model.source = scan.model.source;
+    remembered_sources() = std::move(scan.remembered);
+    return true;
+}
+
+/// Scans still running when the setup ends. They finish after the menu is up,
+/// and are joined when the process leaves, so Skip does not wait for them.
+struct ScanKeeper {
+    std::vector<std::unique_ptr<SourceScan>> held{};
+};
+
+ScanKeeper& scan_keeper() {
+    static ScanKeeper keeper;
+    return keeper;
 }
 
 /// The languages the step can offer before a pack is downloaded.
@@ -831,6 +928,7 @@ void note_progress(CopyJob& job, const CopyProgress& progress) {
                 continue;
             earlier.phase = first_run::CopyPhase::done;
             earlier.done = earlier.whole;
+            earlier.file.clear();
         }
         first_run::CopyBundle& row = view.bundles[static_cast<std::size_t>(current)];
         row.phase = first_run::CopyPhase::copying;
@@ -862,11 +960,23 @@ bool on_copy_check(uint32_t done, uint32_t total, void* context) {
     return !job->stop.load();
 }
 
-/// One bundle row for each bundle the table names that the copy may write.
-void prime_bundles(CopyJob& job, std::span<const bundles::Bundle> table) {
+/// One row for each bundle this source holds. A bundle with no matched file
+/// is left off, so the list does not show a bar for it.
+void prime_bundles(
+    CopyJob& job,
+    std::span<const bundles::Bundle> table,
+    std::span<const first_run::SourceChip> chips
+) {
     job.view.bundles.clear();
     job.bundle_ids.clear();
     for (const bundles::Bundle& bundle : table) {
+        bool held = false;
+        for (const first_run::SourceChip& chip : chips) {
+            if (chip.held && chip.name == bundle.english_name)
+                held = true;
+        }
+        if (!held)
+            continue;
         first_run::CopyBundle row;
         row.name = std::string(bundle.english_name);
         row.whole = 1000;
@@ -876,15 +986,30 @@ void prime_bundles(CopyJob& job, std::span<const bundles::Bundle> table) {
     }
 }
 
-/// Marks every row from the check and sets the verdict.
+/// Adds two counts, stopping at the greatest uint32_t.
+uint32_t add_count(uint32_t left, uint32_t right) noexcept {
+    constexpr uint32_t kLimit = 0xffffffffu;
+    if (left > kLimit - right)
+        return kLimit;
+    return left + right;
+}
+
+/// Marks every listed row from the check and sets the verdict.
+///
+/// The overall count is the files those rows take. A file the source does
+/// not hold is not one of them. A music bundle that only lacks a track is a
+/// note, not a difference.
 void apply_check(first_run::CopyView& view, const ContentCheck& check, bool finished) {
     uint32_t differ = 0;
+    uint32_t taken = 0;
+    uint32_t done_files = 0;
+    CopyJob& job = copy_job();
     const auto rows = static_cast<int32_t>(view.bundles.size());
     for (int32_t index = 0; index < rows; ++index) {
         first_run::CopyBundle& row = view.bundles[static_cast<std::size_t>(index)];
         const ContentBundleCheck* found = nullptr;
-        const std::string id = index < static_cast<int32_t>(copy_job().bundle_ids.size())
-                                   ? copy_job().bundle_ids[static_cast<std::size_t>(index)]
+        const std::string id = index < static_cast<int32_t>(job.bundle_ids.size())
+                                   ? job.bundle_ids[static_cast<std::size_t>(index)]
                                    : std::string{};
         for (const ContentBundleCheck& bundle : check.bundles) {
             if (bundle.id == id || bundle.english_name == row.name)
@@ -893,6 +1018,17 @@ void apply_check(first_run::CopyView& view, const ContentCheck& check, bool fini
         if (found == nullptr)
             continue;
         row.amount = content_bundle_line(*found);
+        row.note = found->id == "music" && found->files_not_in_source > 0 &&
+                   found->files_differ == 0 && found->files_not_in_source <= found->file_count;
+        const uint32_t absent = found->files_not_in_source > found->file_count
+                                    ? found->file_count
+                                    : found->files_not_in_source;
+        const uint32_t row_taken = found->file_count - absent;
+        const uint32_t row_differ =
+            found->files_differ > row_taken ? row_taken : found->files_differ;
+        taken = add_count(taken, row_taken);
+        done_files = add_count(done_files, row_taken - row_differ);
+        row.file.clear();
         if (found->files_differ == 0) {
             row.phase = first_run::CopyPhase::done;
             row.done = row.whole;
@@ -912,7 +1048,20 @@ void apply_check(first_run::CopyView& view, const ContentCheck& check, bool fini
     }
     view.verdict = content_match_line(differ);
     view.checked = true;
-    view.done = view.whole;
+    if (taken > 0) {
+        const CopyFileCount tally = copy_file_count(done_files, taken, 0);
+        job.files_done = tally.done;
+        job.files_total = tally.total;
+        if (differ == 0 || view.whole <= 0)
+            view.done = view.whole;
+        else
+            view.done = static_cast<int32_t>(
+                (static_cast<uint64_t>(tally.done) * static_cast<uint64_t>(view.whole)) /
+                tally.total
+            );
+    } else {
+        view.done = view.whole;
+    }
 }
 
 /// Opens the chosen place.
@@ -1454,6 +1603,8 @@ SetupBefore run_setup_before_game(
         return SetupBefore::not_run;
     if (managed_base_present(user, bundles::bundles()))
         return SetupBefore::not_run;
+    // The setup draws this window from here. A launch pump must not clear it.
+    release_launch_window();
 
     const std::string language = stored_language(options);
     apply_early_language(language);
@@ -1476,19 +1627,74 @@ SetupBefore run_setup_before_game(
             session.carousel.selected = index;
     }
     first_run::bind(session);
-    if (session.model.step == first_run::Step::game) {
-        fill_sources(session.model, user, found_install);
-        if (options.check_setup_window)
+
+    // The step on screen, and whether its first frame has been presented.
+    struct SetupStepTiming {
+        std::string_view token;
+        uint32_t began_ms = 0;
+        bool framed = false;
+    };
+
+    SetupStepTiming step_timing;
+    const auto note_setup_step = [&] {
+        const std::string_view token = first_run::step_token(session.model.step);
+        if (token == step_timing.token)
+            return;
+        step_timing.token = token;
+        step_timing.began_ms = oa::platform::tick_ms();
+        step_timing.framed = false;
+        std::string phase = "screen setup ";
+        phase.append(token);
+        phase.append(" begin");
+        oa::platform::log_files::note_timing(phase);
+    };
+    const auto note_setup_frame = [&] {
+        if (step_timing.framed || step_timing.token.empty())
+            return;
+        std::string phase = "screen setup ";
+        phase.append(step_timing.token);
+        phase.append(" first frame");
+        oa::platform::log_files::note_timing_span(phase, step_timing.began_ms);
+        step_timing.framed = true;
+    };
+    note_setup_step();
+    // The check's list is its own small install. A player's list is read
+    // while the language step is on screen, and the game step draws at once.
+    auto owned_scan = std::make_unique<SourceScan>();
+    SourceScan& sources = *owned_scan;
+
+    // A scan that is still reading when this function returns keeps running.
+    // Joining it here would hold the menu behind the installer scan.
+    struct ParkScan {
+        std::unique_ptr<SourceScan>& owned;
+
+        ~ParkScan() {
+            if (!owned)
+                return;
+            if (owned->started && !owned->applied && !owned->done.load()) {
+                scan_keeper().held.push_back(std::move(owned));
+                return;
+            }
+            owned->finish();
+        }
+    } park_scan{owned_scan};
+
+    if (options.check_setup_window) {
+        if (session.model.step == first_run::Step::game)
             setup_install_check_source(user, session.model);
+    } else {
+        start_source_scan(sources, user, found_install);
     }
 
     std::unique_ptr<text_font::FontStack> fonts;
+    const uint32_t fonts_began = oa::platform::tick_ms();
     try {
         fonts = text_font::FontStack::open(text_font::bundled_font_directory());
     } catch (const std::exception& error) {
         std::cerr << "open-annihilation: the setup's fonts could not be opened: " << error.what()
                   << '\n';
     }
+    oa::platform::log_files::note_timing_span("fonts", fonts_began);
     RenderState render_state(display.renderer);
     WindowFrame frame(display.renderer, "the setup");
     oa::ui::game_files::Viewport viewport;
@@ -1536,8 +1742,23 @@ SetupBefore run_setup_before_game(
         canvas.smooth.origin = {room.area.x, room.area.y};
         canvas.icon = app_icon;
         first_run::draw(canvas, scene, session);
+        // The game step is up while the installer scan finishes. After a
+        // moment a bar shows that the list is still being read. No new words.
+        if (sources.started && !sources.applied && session.model.step == first_run::Step::game &&
+            oa::platform::tick_ms() - step_timing.began_ms > 200) {
+            const int32_t bar_width = std::max(pixels.width / 5, 40);
+            const int32_t travel = std::max(pixels.width - bar_width, 1);
+            const uint32_t now_ms = oa::platform::tick_ms();
+            const int32_t bar_x =
+                static_cast<int32_t>((now_ms / 16U) % static_cast<uint32_t>(travel));
+            painter.fill_rect(
+                {bar_x, std::max(pixels.height - 36, 0), bar_width, 8},
+                paint::Rgba{0xc8, 0xc2, 0xb0, 255}
+            );
+        }
         static_cast<void>(frame.show(pixels, render_state, display.host));
         dirty = false;
+        note_setup_frame();
     };
 
     const auto handle = [&](const first_run::Outcome& outcome) {
@@ -1562,21 +1783,32 @@ SetupBefore run_setup_before_game(
         case first_run::Ask::back:
             if (session.model.step == first_run::Step::game)
                 session.model.step = first_run::Step::language;
-            else if (session.model.step == first_run::Step::online)
+            else if (session.model.step == first_run::Step::online) {
                 session.model.step = first_run::Step::copying;
+                first_run::reset_copy_continue(session);
+            }
             session.focus_ready = false;
             break;
         case first_run::Ask::advance:
             if (session.model.step == first_run::Step::language) {
                 apply_selected_language(session, options);
-                fill_sources(session.model, user, found_install);
+                session.model.step = first_run::Step::game;
+                note_setup_step();
+                // The check's install replaces the machine's list. A player's
+                // list is already being read, and is shown when it is ready.
                 if (options.check_setup_window)
                     setup_install_check_source(user, session.model);
-                session.model.step = first_run::Step::game;
+                else
+                    std::ignore = take_source_scan(sources, session.model);
                 session.focus_ready = false;
             } else if (session.model.step == first_run::Step::game) {
+                std::ignore = take_source_scan(sources, session.model);
+                if (sources.started && !sources.applied)
+                    break;
                 if (setup_begin_copy(user, session.model)) {
                     session.model.step = first_run::Step::copying;
+                    first_run::reset_copy_continue(session);
+                    session.copy_continue_armed = true;
                     session.focus_ready = false;
                     if (!awake) {
                         SDL_DisableScreenSaver();
@@ -1596,6 +1828,9 @@ SetupBefore run_setup_before_game(
             apply_selected_language(session, options);
             break;
         case first_run::Ask::locate:
+            std::ignore = take_source_scan(sources, session.model);
+            if (sources.started && !sources.applied)
+                break;
             if (setup_locate_source(display.window, user, session.model))
                 session.focus_ready = false;
             break;
@@ -1609,6 +1844,7 @@ SetupBefore run_setup_before_game(
             session.model.copy.running = false;
             session.model.copy.paused = false;
             session.model.step = first_run::Step::game;
+            first_run::reset_copy_continue(session);
             session.focus_ready = false;
             if (awake) {
                 SDL_EnableScreenSaver();
@@ -1621,6 +1857,7 @@ SetupBefore run_setup_before_game(
         case first_run::Ask::choose_off:
             break;
         }
+        note_setup_step();
         dirty = true;
     };
 
@@ -1638,6 +1875,7 @@ SetupBefore run_setup_before_game(
             room = fitted;
             dirty = true;
         }
+        const int32_t continue_before = session.copy_continue_ms;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
@@ -1653,6 +1891,8 @@ SetupBefore run_setup_before_game(
                 continue;
             }
             if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+                if (first_run::stop_copy_continue(session))
+                    dirty = true;
                 kit::Key pressed = kit::Key::info;
                 bool mapped = true;
                 switch (event.gbutton.button) {
@@ -1724,6 +1964,20 @@ SetupBefore run_setup_before_game(
             dt = static_cast<uint32_t>(std::min<uint64_t>(now - last_ticks, 1000ULL));
         last_ticks = now;
         first_run::tick(session, dt);
+        if (take_source_scan(sources, session.model))
+            dirty = true;
+        if (sources.started && !sources.applied && session.model.step == first_run::Step::game &&
+            oa::platform::tick_ms() - step_timing.began_ms > 200)
+            dirty = true;
+        if (session.copy_continue_ms != continue_before)
+            dirty = true;
+        if (session.model.step == first_run::Step::copying && session.copy_continue_ms == 0) {
+            session.copy_continue_ms = -1;
+            session.copy_continue_stopped = true;
+            first_run::Outcome advance;
+            advance.ask = first_run::Ask::advance;
+            handle(advance);
+        }
         if (dirty) {
             scene = relayout(room);
             present();
@@ -1796,6 +2050,7 @@ void setup_install_check_source(const fs::path& user_folder, first_run::Model& m
     }
     add_described(
         model,
+        remembered_sources(),
         folder,
         SourceKind::fixture,
         first_run::SourceMark::folder,
@@ -1846,7 +2101,8 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
     job.files_total = 0;
     const std::span<const bundles::Bundle> table =
         fixture ? copy_check_bundles() : bundles::bundles();
-    prime_bundles(job, table);
+    const first_run::GameSource& chosen_row = model.sources[static_cast<std::size_t>(model.source)];
+    prime_bundles(job, table, chosen_row.chips);
     const Remembered copy = *chosen;
     job.worker = std::thread([copy, user_folder] {
         CopyJob& held = copy_job();
@@ -1892,6 +2148,8 @@ bool setup_begin_copy(const fs::path& user_folder, const first_run::Model& model
             held.view.bytes_landed = true;
             held.view.hashing = true;
             held.view.running = true;
+            for (first_run::CopyBundle& row : held.view.bundles)
+                row.file.clear();
             held.view.check_done = 0;
             held.view.check_total = 0;
             held.changed = true;
@@ -2033,14 +2291,19 @@ bool setup_locate_source(SDL_Window* window, const fs::path& user_folder, first_
         std::error_code failure;
         if (fs::is_directory(folder, failure) && !failure)
             add_folder_source(
-                model, folder, user_folder, {}, bundles::bundles(), SourceKind::folder
+                model,
+                remembered_sources(),
+                folder,
+                user_folder,
+                {},
+                bundles::bundles(),
+                SourceKind::folder
             );
         else
-            add_installer_source(model, folder, user_folder);
-        if (model.sources.size() != before) {
-            model.source = static_cast<int32_t>(model.sources.size()) - 1;
+            add_installer_source(model, remembered_sources(), folder, user_folder);
+        // add_folder_source and add_installer_source select the fullest new row.
+        if (model.sources.size() != before)
             added = true;
-        }
     }
     return added;
 }

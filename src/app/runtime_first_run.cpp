@@ -692,13 +692,23 @@ class FirstRunScreen final : public LayerScreen {
             phase = first_run::PointerKind::move;
             break;
         case ScreenInputKind::pointer_down:
-            if (button != SDL_BUTTON_LEFT)
+            if (button != SDL_BUTTON_LEFT) {
+                if (first_run::stop_copy_continue(session_)) {
+                    relayout();
+                    return LayerAnswer::redraw;
+                }
                 return LayerAnswer::none;
+            }
             phase = first_run::PointerKind::down;
             break;
         case ScreenInputKind::pointer_up:
-            if (button != SDL_BUTTON_LEFT)
+            if (button != SDL_BUTTON_LEFT) {
+                if (first_run::stop_copy_continue(session_)) {
+                    relayout();
+                    return LayerAnswer::redraw;
+                }
                 return LayerAnswer::none;
+            }
             phase = first_run::PointerKind::up;
             break;
         default:
@@ -763,8 +773,18 @@ class FirstRunScreen final : public LayerScreen {
         }
         last_ticks_ = now;
         const uint32_t elapsed_before = session_.carousel.elapsed_ms;
+        const int32_t continue_before = session_.copy_continue_ms;
         first_run::tick(session_, dt_ms);
+        if (session_.model.step == first_run::Step::copying && session_.copy_continue_ms == 0) {
+            session_.copy_continue_ms = -1;
+            session_.copy_continue_stopped = true;
+            first_run::Outcome advance;
+            advance.ask = first_run::Ask::advance;
+            return apply(advance);
+        }
         const bool slid = session_.carousel.elapsed_ms != elapsed_before;
+        const int32_t continue_now = session_.copy_continue_ms;
+        const bool continue_moved = continue_now != continue_before;
         const bool moved = runtime_.oa_layer_ != nullptr && refill(runtime_.oa_layer().view());
         const bool pulse = session_.model.step == first_run::Step::buttons && dt_ms > 0;
         bool copy_moved = false;
@@ -780,7 +800,7 @@ class FirstRunScreen final : public LayerScreen {
         const bool controller_moved = controller != session_.model.controller;
         session_.model.controller = controller;
         const uint64_t before = revision_;
-        if (moved || slid || pulse || copy_moved || controller_moved)
+        if (moved || slid || pulse || copy_moved || controller_moved || continue_moved)
             relayout();
         return revision_ == before ? LayerAnswer::none : LayerAnswer::redraw;
     }
@@ -1015,6 +1035,7 @@ class FirstRunScreen final : public LayerScreen {
                     session_.model.copy.running = false;
                     session_.model.copy.paused = false;
                     session_.model.step = first_run::Step::copying;
+                    first_run::reset_copy_continue(session_);
                 } else {
                     session_.model.step = first_run::Step::language;
                 }
@@ -1046,6 +1067,8 @@ class FirstRunScreen final : public LayerScreen {
             } else if (session_.model.step == first_run::Step::game) {
                 if (setup_begin_copy(runtime_.user_folder(), session_.model)) {
                     session_.model.step = first_run::Step::copying;
+                    first_run::reset_copy_continue(session_);
+                    session_.copy_continue_armed = true;
                     session_.focus_ready = false;
                     if (!copy_woke_screen_) {
                         SDL_DisableScreenSaver();
@@ -1099,6 +1122,7 @@ class FirstRunScreen final : public LayerScreen {
             session_.model.copy.running = false;
             session_.model.copy.paused = false;
             session_.model.step = first_run::Step::game;
+            first_run::reset_copy_continue(session_);
             session_.focus_ready = false;
             break;
         case first_run::Ask::quit:

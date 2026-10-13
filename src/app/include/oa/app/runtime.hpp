@@ -8903,6 +8903,21 @@ class Runtime final : public menu::Host,
     /// @param match_layers the cursor goes over the match's layers
     void present_software_cursor(bool match_layers);
 
+    /// Logs the start of a screen change. The next presented frame of that
+    /// name logs the change's first frame.
+    ///
+    /// @param name the screen's name, as the timing line prints it
+    void begin_screen_change(std::string_view name);
+
+    /// Logs the first frame of the screen change begun with `name`, once.
+    ///
+    /// @param name the screen's name
+    void finish_screen_change(std::string_view name);
+
+    /// Logs the window's first presented frame once, and the first frame of
+    /// the screen change that this frame shows.
+    void note_shown_frame();
+
     /// Composes the current screen and presents it.
     ///
     /// First makes the renderer again when a failure asked for it, and the

@@ -424,7 +424,8 @@ struct CopyProgress {
     uint64_t bytes_total{};
     /// Files finished, counting a file already copied.
     uint32_t files_done{};
-    /// Matched files.
+    /// Files this copy takes from this source. A file the source does not hold
+    /// is not counted. A finished copy has `files_done` equal to this.
     uint32_t files_total{};
     /// The bundle being copied.
     std::string_view bundle_id;
@@ -433,6 +434,47 @@ struct CopyProgress {
     /// True when this call is the file's last.
     bool file_finished{};
 };
+
+/// Files the copying step's overall count uses.
+///
+/// `total` is the files this copy takes from this source. A file the source
+/// does not hold is not one of them. `done` is how many of those are finished.
+/// A finished copy of every file it takes has `done == total` and reads 100%.
+struct CopyFileCount {
+    uint32_t done{};  ///< files finished
+    uint32_t total{}; ///< files this copy takes
+};
+
+/// Counts the files a copy shows.
+///
+/// `finished` is how many taken files are done. `table_files` is every file
+/// the table names. `not_taken` is files this copy does not take, because the
+/// source does not hold them.
+///
+/// @param finished files already finished
+/// @param table_files files the table names
+/// @param not_taken files the source does not hold
+/// @return the count the overall line uses
+[[nodiscard]] constexpr CopyFileCount
+copy_file_count(uint32_t finished, uint32_t table_files, uint32_t not_taken) noexcept {
+    const uint32_t absent = not_taken > table_files ? table_files : not_taken;
+    const uint32_t total = table_files - absent;
+    const uint32_t done = finished > total ? total : finished;
+    return {done, total};
+}
+
+/// The percent a copy's overall line shows, from 0 to 100.
+///
+/// A count with nothing to take reads 0. A finished copy of every file it
+/// takes reads 100.
+///
+/// @param count the files this copy takes, and how many are finished
+/// @return the percent
+[[nodiscard]] constexpr uint32_t copy_file_percent(CopyFileCount count) noexcept {
+    if (count.total == 0)
+        return 0;
+    return static_cast<uint32_t>((static_cast<uint64_t>(count.done) * 100) / count.total);
+}
 
 /// Called as a copy moves on. May set the request's stop flag.
 using CopyProgressFn = void (*)(void* context, const CopyProgress& progress);

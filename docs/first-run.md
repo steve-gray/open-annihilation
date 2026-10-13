@@ -111,20 +111,32 @@ Annihilation, and that the installation is left as it is.
 
 ## Copying
 
-![Copying: the overall bar, one bundle, and Pause.](images/first-run/copying.png)
+![Copying: the overall bar, the bundles this source holds, and Pause.](images/first-run/copying.png)
 
-![The same step after the check: All files match, and Continue.](images/first-run/check.png)
+![The same step after the check: 100 percent, All files match with the overall bar, a tracks note, and Continue counting down.](images/first-run/check.png)
 
 The page word is Setup, the step is COPYING, and the count is 3 of 5. The
-title is "Copying Total Annihilation". The overall bar and one row for
-each bundle show how far the copy has got. Two centred lines say "If OA
-stops, the copy carries on from here next time." and "To Documents › Open
-Annihilation › Games and Expansions". **Pause** holds the copy, and
-**Continue** lets it go on. The left button is still the walk's **Quit**
-or **Skip**: it stops the copy and leaves. Escape returns to the game step.
+title is "Copying Total Annihilation". Under it, a line says where the
+bytes are read from. The overall count is the files this copy takes from
+this source. A file the source does not hold is not in that count, so a
+finished copy reads 100%. The bundles the source holds sit in a panel
+under the bar. A bundle the source does not hold is not listed. While a
+file is being copied its name is on the row; once that bundle is complete
+the name goes. A track the music bundle never held is a note, such as
+"17 of 18 tracks", and is not a failure.
 
-When the copy has been checked, the rows say what the check found, and
-**Continue** goes on to online features. **Quit** or **Skip** is still there.
+Two centred lines say "If OA stops, the copy carries on from here next
+time." and "To Documents › Open Annihilation › Games and Expansions".
+**Pause** holds the copy, and **Continue** lets it go on. The left button
+is still the walk's **Quit** or **Skip**: it stops the copy and leaves.
+Escape returns to the game step.
+
+When the copy and the check finish with every taken file matching,
+**Continue** shows a countdown of about three seconds, then goes on to
+online features. A key, a pointer press, the wheel or a gamepad stops the
+countdown. Moving the pointer does not. When the check finds a difference,
+the rows say so and **Continue** waits for a press. **Quit** or **Skip**
+is still there.
 
 ## Online features
 
