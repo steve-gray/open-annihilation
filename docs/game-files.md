@@ -156,9 +156,13 @@ there, or it stops with a message. `--check-content-copy PATH` checks that
 copy against a small fixture, using PATH as the Documents folder, and does
 nothing else. `--check-installer FILE` reads a recognised Windows installer,
 macOS installer or disk image for older Macs, lists the bundles it holds and
-every file's SHA-256, and copies nothing. Mounting the composed folder is
-separate: the game still
-plays from the installation folder.
+every file's SHA-256, and copies nothing. A start that was not given
+`--game-dir` then plays that managed copy. The folders, highest first, are
+the mod folder when a mod is playing, then each expansion that is on, then
+the base game. An expansion's folder is the expansion, not the mod.
+`--game-dir` and `--archive` keep the scan of the named folder. A bundle
+the setup has just checked is not read again on that same start. The next
+start checks it as usual.
 
 ### The check
 
