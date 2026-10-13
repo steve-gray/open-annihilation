@@ -1651,8 +1651,16 @@ void check_map_list_words() {
     expect(texts[1] == "Comet Catcher", "a base map keeps its file name");
     expect(texts[2] == "A Plethora of Ponds", "a pack map shows its index title");
     expect(texts[3] == "Isle of Ashes", "a pack map with no index name shows the map file's title");
-    expect(texts[4] == "bare@archipelago", "a pack map with no title shows its name");
+    expect(texts[4] == "bare", "a pack map with no title shows its own name");
     expect(texts[5] == "Ridge Pond  for ridge", "a greyed row shows why");
+    for (std::size_t index = 0; index < texts.size(); ++index) {
+        if (!rows[index].pack)
+            continue;
+        expect(
+            texts[index].find('@') == std::string::npos,
+            ("a pack map's shown name has no '@': " + texts[index]).c_str()
+        );
+    }
     const int32_t by_words = mp::map_list_row(texts, keys, texts[0]);
     const int32_t by_name = mp::map_list_row(texts, keys, keys[0]);
     expect(
