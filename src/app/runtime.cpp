@@ -182,6 +182,10 @@ Runtime::Runtime(
     // it, before the frontend's preferences read the Image Output Directory
     // that defaults to it.
     start_user_folder();
+    // Which copied files differ, for the main menu's notice and for the
+    // Library and Settings. A named --game-dir still fills it; the notice
+    // stays closed then.
+    content_check_ = check_managed_content(user_folder_, {});
     // Stored after the one-time legacy import, which runs only while no
     // preferences file exists. An unwritable preferences file only costs the
     // next start the dialog.
@@ -837,6 +841,8 @@ void Runtime::idle_tick() {
     // After the catalogue, so a size that arrived this frame is on the cards,
     // and before the language notice, which stays closed while this shows.
     tell_first_run();
+    // Content that differs is told with the language notice, and queues first.
+    tell_content_difference();
     tell_missing_language();
     tell_mod_installs();
     // An .oareg file the game was opened with opens the Add registry window
