@@ -504,8 +504,10 @@ void Runtime::select_squad(int squad, bool add) {
         &unit_table_.tables.categories, selection::category_squad_key_skip
     );
     const selection::TypeMask no_skip{};
-    selection::Hooks hooks{};
-    hooks.context = this;
+    // The shared hooks centre the view and stop tracking when the squad is
+    // already the selection. The command reset stays the one a squad key has
+    // always used: it does not also drop a building waiting to be placed.
+    selection::Hooks hooks = selection_hooks();
     hooks.reset_command = [](void* context) {
         static_cast<Runtime*>(context)->reset_match_command();
     };
@@ -534,17 +536,6 @@ void Runtime::select_squad(int squad, bool add) {
     selected_match_unit_ = first;
     apply_match_hud_for_selection();
     status_ = "Squad " + std::to_string(squad) + " (" + std::to_string(count) + ")";
-    if (squad_double_tap_ == squad) {
-        const auto& slot = match_->world().slots[first];
-        if (slot.unit != nullptr) {
-            match_camera_x_ =
-                static_cast<int32_t>(slot.unit->position[0] >> 16) - visible_map_width() / 2;
-            match_camera_z_ =
-                static_cast<int32_t>(slot.unit->position[2] >> 16) - visible_map_height() / 2;
-        }
-        squad_double_tap_ = 0;
-    } else
-        squad_double_tap_ = squad;
 }
 
 void Runtime::select_units_matching(

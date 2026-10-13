@@ -4,11 +4,14 @@
 #include "test_support.hpp"
 
 #include "oa/data/languages/translation.hpp"
+#include "oa/platform/display_modes.hpp"
 #include "oa/ui/gui_layout/gui_gadget.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace oa::ui::frontend::test {
 namespace {
@@ -257,7 +260,7 @@ OA_GAME_DATA_TEST(visuals_flags_and_display_modes) {
     OA_CHECK(context.display_modes.count == 3);
     const auto* video = panel_control(panel, "VIDSLDR");
     OA_CHECK(video != nullptr && video->slider.maximum == 2);
-    OA_CHECK(text_of(panel, "VIDVAL") == "800 X 600");
+    OA_CHECK(text_of(panel, "VIDVAL") == "800 x 600");
     const auto* gamma = panel_control(panel, "GAMMA");
     OA_CHECK(gamma != nullptr && gamma->slider.maximum == 0x14);
 
@@ -266,7 +269,7 @@ OA_GAME_DATA_TEST(visuals_flags_and_display_modes) {
     slider->slider.knob = static_cast<int16_t>(slider->slider.range - 1);
     options_on_video_mode_slider(panel, context);
     OA_CHECK(preferences.display_width == 1024 && preferences.display_height == 768);
-    OA_CHECK(text_of(panel, "VIDVAL") == "1024 X 768");
+    OA_CHECK(text_of(panel, "VIDVAL") == "1024 x 768");
 
     panel_set_stage(panel, "BSHADOWS", 1);
     select(panel, "BSHADOWS");
@@ -346,24 +349,91 @@ OA_GAME_DATA_TEST(visuals_offer_tall_modes_only) {
     OA_CHECK(context.display_modes.count == 2);
     const auto* video = panel_control(panel, "VIDSLDR");
     OA_CHECK(video != nullptr && video->slider.maximum == 1);
-    OA_CHECK(text_of(panel, "VIDVAL") == "1024 X 768");
+    OA_CHECK(text_of(panel, "VIDVAL") == "1024 x 768");
 }
 
-OA_GAME_DATA_TEST(visuals_in_game_hides_mode_controls) {
+// VISUALS.GUI draws the screen-size control, so a match lists the sizes
+// there too, in the same words, rather than hiding the control.
+OA_GAME_DATA_TEST(visuals_in_game_lists_the_screen_sizes) {
     Panel panel;
     if (!options_panel(panel, "visuals.gui"))
         return;
     prefs::Preferences preferences{};
+    preferences.display_width = 800;
+    preferences.display_height = 600;
     Recorder recorder;
+    recorder.modes = {{1024, 768, 0}, {800, 600, 0}, {640, 480, 0}};
     auto context = make_context(preferences, recorder);
     context.in_game = true;
     options_enter_visuals(panel, context, false);
     OA_CHECK(context.realtime_panels);
-    OA_CHECK(panel_control(panel, "VIDSLDR")->active == 0);
-    OA_CHECK(panel_control(panel, "VIDVAL")->active == 0);
+    OA_CHECK(context.display_modes.count == 3);
+    const auto* video = panel_control(panel, "VIDSLDR");
+    OA_CHECK(video != nullptr && video->active == 1 && video->slider.maximum == 2);
+    OA_CHECK(panel_control(panel, "VIDVAL")->active == 1);
+    OA_CHECK(text_of(panel, "VIDVAL") == "800 x 600");
     OA_CHECK(panel_control(panel, "SHADING")->active == 1);
     // The widening belongs to PREFS.GUI's preparation, not to the sub-panel's set-up.
     OA_CHECK(panel_find(panel, "PANEL") == -1);
+}
+
+// The options' Screen Size lists the sizes offered_sizes returns, in that
+// order, in the words the settings' Screen size uses after Desktop. Desktop
+// itself is a stop on the settings only. A 1920x1080 panel at 125% reports
+// a logical desktop of 1536x864; the panel's own pixels fit full screen and
+// not a window.
+OA_GAME_DATA_TEST(visuals_list_the_sizes_the_settings_list) {
+    Panel panel;
+    if (!options_panel(panel, "visuals.gui"))
+        return;
+    namespace dm = oa::platform::display_modes;
+    const auto mode = [](int32_t width, int32_t height, float density = 1.0F) {
+        return dm::ReportedMode{{width, height}, density, 60.0F};
+    };
+    dm::DisplayReport report;
+    report.desktop = mode(1536, 864, 1.25F);
+    report.modes = {
+        mode(1920, 1080),
+        report.desktop,
+        mode(1280, 720),
+        mode(1024, 768),
+        mode(800, 600),
+        mode(640, 480),
+    };
+    const auto is_panel_pixels = [](dm::Size size) { return size == dm::Size{1920, 1080}; };
+    const auto window = dm::offered_sizes(report, dm::Use::window);
+    const auto full = dm::offered_sizes(report, dm::Use::full_screen);
+    OA_CHECK(!window.empty() && std::none_of(window.begin(), window.end(), is_panel_pixels));
+    OA_CHECK(std::any_of(full.begin(), full.end(), is_panel_pixels));
+    if (window.empty() || full.empty())
+        return;
+    const auto check_list = [&](const std::vector<dm::Size>& sizes) {
+        prefs::Preferences preferences{};
+        preferences.display_width = static_cast<uint32_t>(sizes.front().width);
+        preferences.display_height = static_cast<uint32_t>(sizes.front().height);
+        Recorder recorder;
+        for (const dm::Size size : sizes)
+            recorder.modes.push_back({size.width, size.height, 8});
+        auto context = make_context(preferences, recorder);
+        options_enter_visuals(panel, context, false);
+        OA_CHECK(context.display_modes.count == static_cast<int32_t>(sizes.size()));
+        auto* slider = panel_control(panel, "VIDSLDR");
+        if (slider == nullptr) {
+            OA_CHECK(slider != nullptr);
+            return;
+        }
+        for (int32_t index = 0; index < context.display_modes.count; ++index) {
+            slider_set_value(slider->slider, index);
+            OA_CHECK(slider_value(slider->slider) == index);
+            options_on_video_mode_slider(panel, context);
+            const dm::Size size = sizes[static_cast<std::size_t>(index)];
+            OA_CHECK(text_of(panel, "VIDVAL") == dm::listed_size_text(size));
+            OA_CHECK(preferences.display_width == static_cast<uint32_t>(size.width));
+            OA_CHECK(preferences.display_height == static_cast<uint32_t>(size.height));
+        }
+    };
+    check_list(window);
+    check_list(full);
 }
 
 // PREFS.GUI with the tab's in-game sub-panel merged into it, as a tab in a
@@ -529,7 +599,7 @@ OA_GAME_DATA_TEST(visuals_show_custom_for_a_size_no_mode_has) {
     // Moving the knob to the mode it rests on chooses that mode.
     options_on_video_mode_slider(panel, context);
     OA_CHECK(preferences.display_width == 1280 && preferences.display_height == 720);
-    OA_CHECK(text_of(panel, "VIDVAL") == "1280 X 720");
+    OA_CHECK(text_of(panel, "VIDVAL") == "1280 x 720");
     // UNDO puts the entry's size back, and Custom with it.
     select(panel, "UNDO");
     OA_CHECK(options_on_visuals_click(panel, context) == OptionsAction::reload);
@@ -546,7 +616,7 @@ OA_GAME_DATA_TEST(visuals_show_custom_for_a_size_no_mode_has) {
     preferences.display_width = 1920;
     preferences.display_height = 1080;
     options_enter_visuals(panel, context, false);
-    OA_CHECK(text_of(panel, "VIDVAL") == "1920 X 1080");
+    OA_CHECK(text_of(panel, "VIDVAL") == "1920 x 1080");
     OA_CHECK(slider_value(panel_control(panel, "VIDSLDR")->slider) == 3);
     // Custom in the language shown.
     preferences.display_width = 1300;

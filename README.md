@@ -186,6 +186,13 @@ With either:
   game to join when several answer at the address.
 - `--game-password PASSWORD`: with `--host`, the game's password; with
   `--join`, the password sent.
+- `--dplay-guid GUID`: the application GUID this game hosts under and
+  looks for. Without it, the game uses Total Annihilation's own,
+  `{99797420-F5F5-11CF-9827-00A0241496C8}`, so a game stays visible to
+  3.1c and to Open Annihilation started the same way. See
+  [the command line](docs/command-line.md) for the form, and
+  [which games are listed](docs/multiplayer/application-guid.md) for why
+  a launcher's per-mod GUID belongs here.
 
 Each is what you would type in the screens, and the same rules apply: a
 name keeps 16 characters at most, and a password 10. Without them, the

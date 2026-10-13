@@ -214,6 +214,10 @@ std::string size_text(Size size) {
     return std::to_string(size.width) + 'x' + std::to_string(size.height);
 }
 
+std::string listed_size_text(Size size) {
+    return std::to_string(size.width) + " x " + std::to_string(size.height);
+}
+
 std::optional<DisplayReport> report_from_text(std::string_view text) {
     DisplayReport report;
     if (text == "none")

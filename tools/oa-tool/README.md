@@ -13,6 +13,9 @@ empty signed registry and copies one into a folder.
 From a build tree, `build/oa-tool` is the program.
 
 - No arguments prints the command list on standard error and exits 2.
+- `oa-tool --version` prints the game's version line (the same line as
+  `open-annihilation --version`) on standard output and exits 0. It reads
+  no file.
 - `oa-tool help`, `oa-tool --help` and `oa-tool -h` print that list on
   standard output and exit 0.
 - `oa-tool help COMMAND` and `oa-tool COMMAND --help` (or `-h` before any
