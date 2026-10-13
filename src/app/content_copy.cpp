@@ -2063,6 +2063,33 @@ std::string content_match_line(uint32_t files_differ) {
     );
 }
 
+namespace {
+
+std::vector<ContentBundleCheck>& kept_copy_checks() {
+    static std::vector<ContentBundleCheck> kept;
+    return kept;
+}
+
+/// The result this run's copy already produced for `id`, taken so the next
+/// check reads that bundle. Empty when this run did not keep `id`.
+std::optional<ContentBundleCheck> take_kept_copy_check(std::string_view id) {
+    std::vector<ContentBundleCheck>& kept = kept_copy_checks();
+    for (std::size_t index = 0; index < kept.size(); ++index) {
+        if (kept[index].id != id)
+            continue;
+        ContentBundleCheck found = std::move(kept[index]);
+        kept.erase(kept.begin() + static_cast<std::ptrdiff_t>(index));
+        return found;
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+void keep_this_run_copy_check(ContentCheck check) {
+    kept_copy_checks() = std::move(check.bundles);
+}
+
 ContentCheck check_managed_content(
     const fs::path& user_folder,
     std::span<const bundles::Bundle> table,
@@ -2114,6 +2141,18 @@ ContentCheck check_managed_content(
                 return false;
             return true;
         };
+        // This run's copy already checked the bundle. Use that answer and
+        // leave its files unread. The result was taken, so a later start
+        // checks the bundle as usual.
+        if (std::optional<ContentBundleCheck> kept = take_kept_copy_check(bundle.id)) {
+            const uint32_t files = narrow_count(bundle.files.size());
+            for (uint32_t index = 0; index < files; ++index) {
+                if (!considered())
+                    return check;
+            }
+            check.bundles.push_back(std::move(*kept));
+            continue;
+        }
         for (const bundles::ContentFile& file : bundle.files) {
             if (stop != nullptr && stop->load())
                 return check;
