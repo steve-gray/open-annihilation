@@ -3,7 +3,7 @@
 
 // Copying a base game and its expansions into the player's folder
 // (content_copy.hpp). A folder is read as it stands, including a Wineskin
-// drive_c, and an installer can supply the same reads later. Blocks are
+// drive_c, and a Windows installer supplies the same reads. Blocks are
 // shared where the volume can do that; otherwise the bytes are copied. A
 // stopped copy is continued from the bytes already written. The source is
 // only read.
@@ -1764,10 +1764,37 @@ void ensure_managed_copy(const ManagedCopyRequest& request) {
         throw std::runtime_error(std::string(unattended_copy_refusal()));
     if (!request.user_folder_known)
         return;
-    std::error_code failure;
-    if (request.installation.empty() || !fs::is_directory(request.installation, failure))
+    if (request.installation.empty())
         return;
-    FolderContentSource source(request.installation, table);
+    std::error_code failure;
+    if (fs::is_directory(request.installation, failure)) {
+        FolderContentSource source(request.installation, table);
+        CopyRequest copy;
+        copy.user_folder = request.user_folder;
+        copy.bundles = table;
+        copy.news = request.news;
+        const CopyResult result = copy_content(source, copy);
+        if (result.status == CopyStatus::finished)
+            return;
+        if (result.error.empty())
+            throw std::runtime_error("The game could not be copied into Open Annihilation.");
+        throw std::runtime_error(result.error);
+    }
+    if (failure || !fs::is_regular_file(request.installation, failure) || failure)
+        return;
+    const auto raw_size = fs::file_size(request.installation, failure);
+    if (failure)
+        return;
+    const bundles::Installer* installer = bundles::find_installer(narrow_size(raw_size));
+    if (installer == nullptr || installer->kind != bundles::InstallerKind::windows)
+        return;
+    WindowsInstallerSource source(request.installation, table);
+    std::string problem;
+    if (!source.open(&problem)) {
+        throw std::runtime_error(
+            problem.empty() ? std::string("This installer could not be read.") : problem
+        );
+    }
     CopyRequest copy;
     copy.user_folder = request.user_folder;
     copy.bundles = table;

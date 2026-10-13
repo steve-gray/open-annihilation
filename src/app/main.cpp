@@ -1222,6 +1222,8 @@ int main(int argc, char** argv) {
             );
         if (!parsed.check_content_copy.empty())
             return run_content_copy_check(parsed.check_content_copy);
+        if (!parsed.check_installer.empty())
+            return run_installer_check(parsed.check_installer);
         // A game started for play, from a terminal or the desktop, logs to the
         // logs folder. Checks, benchmarks and other scripted runs keep their
         // output where it goes, and so does a run whose output another

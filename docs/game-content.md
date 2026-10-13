@@ -86,7 +86,10 @@ run, by the file's size and its SHA-256: the Windows installer
 package `total_annihilation__commander_pack_en_1_3_15733.pkg`, and the
 disk image for older Macs
 `total_annihilation_commander_pack_2.0.0.10.dmg`. The 1997 demo installer
-is separate from these three, and is recognised where it is today.
+is separate from these three, and is recognised where it is today. An
+attended start reads the Windows installer, when the installation is that
+file, and copies the game out of it. `--check-installer FILE` lists the
+bundles found in one and every file's SHA-256, and does nothing else.
 
 ## For a mod author
 
