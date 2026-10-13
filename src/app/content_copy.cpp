@@ -8,6 +8,7 @@
 // stopped copy is continued from the bytes already written. The source is
 // only read.
 #include "oa/app/content_copy.hpp"
+#include "oa/app/disk_image_source.hpp"
 
 #include "oa/app/game_directory.hpp"
 #include "oa/base/sha256.hpp"
@@ -19,7 +20,6 @@
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
-#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -27,6 +27,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <system_error>
@@ -49,7 +50,7 @@ namespace fs = std::filesystem;
 constexpr int k_search_depth = 8;
 constexpr std::size_t k_visit_limit = 20000;
 constexpr std::size_t k_file_limit = 100000;
-constexpr uint64_t k_record_limit = uint64_t{1024} * 1024;
+
 constexpr int64_t k_check_time = 1600000000;
 
 void set_error(std::string* error, std::string_view text) {
@@ -268,114 +269,6 @@ struct OwnedFile {
 
 [[nodiscard]] bool stopped_now(const std::atomic<bool>* stop) noexcept {
     return stop != nullptr && stop->load();
-}
-
-void append_u64(std::string& text, uint64_t value) {
-    char buffer[20];
-    const auto converted = std::to_chars(buffer, buffer + sizeof buffer, value);
-    text.append(buffer, static_cast<std::size_t>(converted.ptr - buffer));
-}
-
-void append_i64(std::string& text, int64_t value) {
-    if (value < 0) {
-        text.push_back('-');
-        const uint64_t magnitude =
-            value == std::numeric_limits<int64_t>::min()
-                ? static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1
-                : static_cast<uint64_t>(-value);
-        append_u64(text, magnitude);
-        return;
-    }
-    append_u64(text, static_cast<uint64_t>(value));
-}
-
-[[nodiscard]] std::string escape_field(std::string_view text) {
-    std::string escaped;
-    escaped.reserve(text.size());
-    for (char byte : text) {
-        if (byte == '\\')
-            escaped += "\\\\";
-        else if (byte == '\n')
-            escaped += "\\n";
-        else if (byte == '\r')
-            escaped += "\\r";
-        else
-            escaped.push_back(byte);
-    }
-    return escaped;
-}
-
-[[nodiscard]] bool unescape_field(std::string_view text, std::string& decoded) {
-    decoded.clear();
-    for (std::size_t index = 0; index < text.size(); ++index) {
-        if (text[index] != '\\') {
-            decoded.push_back(text[index]);
-            continue;
-        }
-        if (index + 1 >= text.size())
-            return false;
-        const char next = text[++index];
-        if (next == '\\')
-            decoded.push_back('\\');
-        else if (next == 'n')
-            decoded.push_back('\n');
-        else if (next == 'r')
-            decoded.push_back('\r');
-        else
-            return false;
-    }
-    return true;
-}
-
-[[nodiscard]] bool parse_u64(std::string_view text, uint64_t& value) noexcept {
-    if (text.empty())
-        return false;
-    uint64_t parsed = 0;
-    for (char byte : text) {
-        if (byte < '0' || byte > '9')
-            return false;
-        const uint64_t digit = static_cast<uint64_t>(byte - '0');
-        if (parsed > (std::numeric_limits<uint64_t>::max() - digit) / 10)
-            return false;
-        parsed = parsed * 10 + digit;
-    }
-    value = parsed;
-    return true;
-}
-
-[[nodiscard]] bool parse_i64(std::string_view text, int64_t& value) noexcept {
-    if (text.empty())
-        return false;
-    bool negative = false;
-    if (text.front() == '-') {
-        negative = true;
-        text.remove_prefix(1);
-    }
-    uint64_t magnitude = 0;
-    if (!parse_u64(text, magnitude))
-        return false;
-    if (!negative) {
-        if (magnitude > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
-            return false;
-        value = static_cast<int64_t>(magnitude);
-        return true;
-    }
-    const uint64_t limit = static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 1;
-    if (magnitude > limit)
-        return false;
-    if (magnitude == limit)
-        value = std::numeric_limits<int64_t>::min();
-    else
-        value = -static_cast<int64_t>(magnitude);
-    return true;
-}
-
-[[nodiscard]] bool
-take_prefix(std::string_view line, std::string_view prefix, std::string_view& rest) {
-    if (line.size() < prefix.size() || line.substr(0, prefix.size()) != prefix)
-        return false;
-    rest = line.substr(prefix.size());
-    return true;
 }
 
 [[nodiscard]] std::string fold_path_text(std::string text) {
@@ -753,44 +646,6 @@ struct TailRequest {
     if (requested == 0 || requested > content_copy_chunk_bytes)
         return content_copy_chunk_bytes;
     return requested;
-}
-
-[[nodiscard]] bool read_limited(
-    const fs::path& path, std::string& text, uint64_t limit, bool& missing, std::string* error
-) {
-    missing = false;
-    text.clear();
-    OwnedFile input(oa::platform::open_file(path, "rb"));
-    if (input.file == nullptr) {
-        if (errno == ENOENT) {
-            missing = true;
-            return false;
-        }
-        set_error(error, "the record could not be read");
-        return false;
-    }
-    char buffer[4096];
-    while (text.size() <= limit) {
-        const std::size_t read = std::fread(buffer, 1, sizeof buffer, input.file);
-        if (read > 0)
-            text.append(buffer, read);
-        if (read < sizeof buffer)
-            break;
-    }
-    if (std::ferror(input.file) != 0) {
-        set_error(error, "the record could not be read");
-        return false;
-    }
-    if (text.size() > limit) {
-        set_error(error, "the record could not be read");
-        return false;
-    }
-    return true;
-}
-
-void append_line(std::string& text, std::string_view line) {
-    text.append(line);
-    text.push_back('\n');
 }
 
 [[nodiscard]] bool digest_file(
@@ -1336,99 +1191,20 @@ bool FolderContentSource::stream_file(
 }
 
 ContentRecord read_content_record(const fs::path& file, std::string* error) {
-    ContentRecord record;
-    std::string text;
-    bool missing = false;
-    if (!read_limited(file, text, k_record_limit, missing, error)) {
-        if (missing)
-            return record;
-        record.present = true;
-        record.io_error = true;
-        return record;
-    }
-    record.present = true;
-    std::vector<std::string_view> lines;
-    std::size_t start = 0;
-    for (std::size_t index = 0; index <= text.size(); ++index) {
-        if (index != text.size() && text[index] != '\n')
-            continue;
-        std::string_view line = std::string_view(text).substr(start, index - start);
-        if (!line.empty() && line.back() == '\r')
-            line.remove_suffix(1);
-        lines.push_back(line);
-        start = index + 1;
-    }
-    if (!lines.empty() && lines.back().empty())
-        lines.pop_back();
-    if (lines.size() < 3 || lines[0] != "oa-content 1")
-        return record;
-    std::string_view bundle_id;
-    std::string_view source_field;
-    if (!take_prefix(lines[1], "bundle ", bundle_id) || bundle_id.empty())
-        return record;
-    if (!take_prefix(lines[2], "source ", source_field))
-        return record;
-    std::string source;
-    if (!unescape_field(source_field, source))
-        return record;
-    std::vector<ContentRecordFile> files;
-    for (std::size_t index = 3; index < lines.size();) {
-        if (index + 3 >= lines.size())
-            return record;
-        std::string_view copy_name;
-        std::string_view size_text;
-        std::string_view modified_text;
-        std::string_view hash_text;
-        if (!take_prefix(lines[index], "file ", copy_name) || copy_name.empty() ||
-            !take_prefix(lines[index + 1], "size ", size_text) ||
-            !take_prefix(lines[index + 2], "modified ", modified_text) ||
-            !take_prefix(lines[index + 3], "sha256 ", hash_text))
-            return record;
-        ContentRecordFile item;
-        item.copy_name = std::string(copy_name);
-        if (!parse_u64(size_text, item.size) || !parse_i64(modified_text, item.modified))
-            return record;
-        const auto digest = oa::base::sha256::parse_hex(hash_text);
-        if (!digest)
-            return record;
-        item.digest = *digest;
-        files.push_back(std::move(item));
-        index += 4;
-    }
-    record.valid = true;
-    record.bundle_id = std::string(bundle_id);
-    record.source = std::move(source);
-    record.files = std::move(files);
-    return record;
+    return oa::data::content_bundles::read_bundle_folder_record(file.parent_path(), error);
 }
 
 bool write_content_record(const fs::path& file, const ContentRecord& record, std::string* error) {
     if (record.files.empty())
         return true;
-    std::string text;
-    append_line(text, "oa-content 1");
-    append_line(text, "bundle " + record.bundle_id);
-    append_line(text, "source " + escape_field(record.source));
-    for (const ContentRecordFile& item : record.files) {
-        if (item.copy_name.find('\n') != std::string::npos ||
-            item.copy_name.find('\r') != std::string::npos) {
-            set_error(error, "the record could not be written");
-            return false;
-        }
-        append_line(text, "file " + item.copy_name);
-        std::string size_line = "size ";
-        append_u64(size_line, item.size);
-        append_line(text, size_line);
-        std::string time_line = "modified ";
-        append_i64(time_line, item.modified);
-        append_line(text, time_line);
-        const auto hex = oa::base::sha256::to_hex(item.digest);
-        std::string hash_line = "sha256 ";
-        hash_line.append(hex.data(), hex.size());
-        append_line(text, hash_line);
+    const std::optional<std::string> text =
+        oa::data::content_bundles::format_content_record(record);
+    if (!text) {
+        set_error(error, "the record could not be written");
+        return false;
     }
-    const auto* bytes = reinterpret_cast<const uint8_t*>(text.data());
-    return oa::platform::replace_file(file, std::span<const uint8_t>(bytes, text.size()), error);
+    const auto* bytes = reinterpret_cast<const uint8_t*>(text->data());
+    return oa::platform::replace_file(file, std::span<const uint8_t>(bytes, text->size()), error);
 }
 
 fs::path bundle_folder(const fs::path& user_folder, const bundles::Bundle& bundle) {
@@ -1501,6 +1277,9 @@ bool managed_base_present(const fs::path& user_folder, std::span<const bundles::
 }
 
 CopyResult copy_content(ContentSource& source, const CopyRequest& request) {
+    CopyResult together;
+    if (source.copy_together(request, together))
+        return together;
     CopyResult result;
     try {
         SourceDescription described;
@@ -2198,6 +1977,17 @@ check_managed_content(const fs::path& user_folder, std::span<const bundles::Bund
         check.bundles.push_back(std::move(reported));
     }
     return check;
+}
+
+int run_installer_check(const fs::path& file) {
+    std::error_code error;
+    const uintmax_t size = fs::file_size(file, error);
+    const bundles::Installer* known = error ? nullptr : bundles::find_installer(size);
+    if (known != nullptr && known->kind == bundles::InstallerKind::older_mac)
+        return run_older_mac_installer_check(file);
+    if (known != nullptr && known->kind == bundles::InstallerKind::macos)
+        return run_macos_installer_check(file);
+    return run_windows_installer_check(file);
 }
 
 } // namespace oa::app

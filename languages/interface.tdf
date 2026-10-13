@@ -8,6 +8,22 @@
 
 
 
+["{title}" was saved with {name}.]
+	{
+	de="{title}" wurde mit {name} gespeichert.;
+	fr="{title}" a été sauvegardé avec {name}.;
+	es="{title}" se guardó con {name}.;
+	it="{title}" è stato salvato con {name}.;
+	}
+
+["{title}" was saved with {name}, which is off.]
+	{
+	de="{title}" wurde mit {name} gespeichert, und das ist aus.;
+	fr="{title}" a été sauvegardé avec {name}, qui est désactivé.;
+	es="{title}" se guardó con {name}, que está desactivado.;
+	it="{title}" è stato salvato con {name}, che è spento.;
+	}
+
 [,]
 	{
 	de=,;
@@ -2168,6 +2184,38 @@
 	it=Sviluppatore;
 	}
 
+[Different from the host: a file does not match.]
+	{
+	de=Anders als beim Gastgeber: eine Datei stimmt nicht.;
+	fr=Pas comme chez l'hôte : un fichier ne correspond pas.;
+	es=Distinto del anfitrión: un archivo no coincide.;
+	it=Diverso dall'host: un file non corrisponde.;
+	}
+
+[Different from the host: another base game ({name}).]
+	{
+	de=Anders als beim Gastgeber: ein anderes Grundspiel ({name}).;
+	fr=Pas comme chez l'hôte : un autre jeu de base ({name}).;
+	es=Distinto del anfitrión: otro juego base ({name}).;
+	it=Diverso dall'host: un altro gioco di base ({name}).;
+	}
+
+[Different from the host: no {name}.]
+	{
+	de=Anders als beim Gastgeber: kein {name}.;
+	fr=Pas comme chez l'hôte : pas de {name}.;
+	es=Distinto del anfitrión: sin {name}.;
+	it=Diverso dall'host: niente {name}.;
+	}
+
+[Different from the host: {name} is on.]
+	{
+	de=Anders als beim Gastgeber: {name} ist an.;
+	fr=Pas comme chez l'hôte : {name} est activé.;
+	es=Distinto del anfitrión: {name} está activado.;
+	it=Diverso dall'host: {name} è attivo.;
+	}
+
 [Difficulty Names]
 	{
 	de=Schwierigkeitsnamen;
@@ -2544,6 +2592,14 @@
 	it=Ogni parte delle schermate proprie di OA, in ciascuno dei suoi stati, a questa dimensione.;
 	}
 
+[Expansions]
+	{
+	de=Erweiterungen;
+	fr=Extensions;
+	es=Expansiones;
+	it=Espansioni;
+	}
+
 [Expansions, extra maps and mods are added beside what is there; nothing already there is replaced.]
 	{
 	de=Erweiterungen, zusätzliche Karten und Mods kommen neben das Vorhandene. Nichts, das schon da ist, wird ersetzt.;
@@ -2590,6 +2646,14 @@
 	fr=Les explosions éclairent le sol à moitié;
 	es=Las explosiones iluminan el suelo a la mitad;
 	it=Le esplosioni illuminano il terreno a metà;
+	}
+
+[Expansions]
+	{
+	de=Erweiterungen;
+	fr=Extensions;
+	es=Expansiones;
+	it=Espansioni;
 	}
 
 [External Exports]
@@ -2808,12 +2872,28 @@
 	it=Ombra del carattere;
 	}
 
+[For the Total Annihilation demo only]
+	{
+	de=Nur für die Total Annihilation-Demo;
+	fr=Uniquement pour la démo Total Annihilation;
+	es=Solo para la demo de Total Annihilation;
+	it=Solo per la demo di Total Annihilation;
+	}
+
 [For this run only. The setting is kept.]
 	{
 	de=Nur für diesen Lauf. Die Einstellung bleibt.;
 	fr=Pour cette session seulement. Le réglage est conservé.;
 	es=Solo para esta sesión. El ajuste se conserva.;
 	it=Solo per questa sessione. L'impostazione resta.;
+	}
+
+[For {name} only]
+	{
+	de=Nur für {name};
+	fr=Uniquement pour {name};
+	es=Solo para {name};
+	it=Solo per {name};
 	}
 
 [Found game archives]
@@ -3150,6 +3230,14 @@
 	fr=Fond du texte du jeu;
 	es=Fondo del texto del juego;
 	it=Sfondo del testo di gioco;
+	}
+
+[Games]
+	{
+	de=Spiele;
+	fr=Jeux;
+	es=Juegos;
+	it=Giochi;
 	}
 
 [Get]
@@ -5088,6 +5176,38 @@
 	it=Richiede;
 	}
 
+[Needs {names} · on]
+	{
+	de=Braucht {names} · an;
+	fr=Requiert {names} · activés;
+	es=Necesita {names} · activados;
+	it=Richiede {names} · attivi;
+	}
+
+[Needs {names}, which are off]
+	{
+	de=Braucht {names}, die aus sind;
+	fr=Requiert {names}, qui sont éteints;
+	es=Necesita {names}, que están apagados;
+	it=Richiede {names}, che sono spenti;
+	}
+
+[Needs {name} · on]
+	{
+	de=Braucht {name} · an;
+	fr=Requiert {name} · activé;
+	es=Necesita {name} · activado;
+	it=Richiede {name} · attivo;
+	}
+
+[Needs {name}, which is off]
+	{
+	de=Braucht {name}, das aus ist;
+	fr=Requiert {name}, qui est éteint;
+	es=Necesita {name}, que está apagado;
+	it=Richiede {name}, che è spento;
+	}
+
 [Needs Dots]
 	{
 	de=Braucht Punkte;
@@ -5446,6 +5566,14 @@
 	fr=Non installé · {size};
 	es=No instalado · {size};
 	it=Non installato · {size};
+	}
+
+[NOW]
+	{
+	de=JETZT;
+	fr=MAINTENANT;
+	es=AHORA;
+	it=ORA;
 	}
 
 [Not now]
@@ -7648,6 +7776,14 @@
 	it=Limite del ritmo di dono delle strutture;
 	}
 
+[Switching to {name} restarts the game's files, then loads this save.]
+	{
+	de=Der Wechsel zu {name} lädt die Spieldateien neu und dann diesen Spielstand.;
+	fr=Passer à {name} relance les fichiers du jeu, puis charge cette sauvegarde.;
+	es=Cambiar a {name} reinicia los archivos del juego y luego carga esta partida.;
+	it=Passare a {name} riavvia i file del gioco e poi carica questo salvataggio.;
+	}
+
 [Switch to {title} now? The game reloads its data for the new mod and returns to the main menu. Your other settings are kept.]
 	{
 	de=Jetzt zu {title} wechseln? Das Spiel lädt seine Daten für den neuen Mod neu und kehrt zum Hauptmenü zurück. Deine anderen Einstellungen bleiben.;
@@ -7720,6 +7856,14 @@
 	it=TOCCO: {action};
 	}
 
+[THE SAVE]
+	{
+	de=DER SPIELSTAND;
+	fr=LA SAUVEGARDE;
+	es=LA PARTIDA;
+	it=IL SALVATAGGIO;
+	}
+
 [THE MAIN MENU]
 	{
 	de=DAS HAUPTMENÜ;
@@ -7744,12 +7888,36 @@
 	it=RIPROVA;
 	}
 
+[Turn on and load]
+	{
+	de=Einschalten und laden;
+	fr=Activer et charger;
+	es=Activar y cargar;
+	it=Accendi e carica;
+	}
+
+[Turning {name} on restarts the game's files, then loads this save. Your other expansions stay as they are.]
+	{
+	de={name} einzuschalten lädt die Spieldateien neu und dann diesen Spielstand. Deine anderen Erweiterungen bleiben, wie sie sind.;
+	fr=Activer {name} relance les fichiers du jeu, puis charge cette sauvegarde. Tes autres extensions restent comme elles sont.;
+	es=Activar {name} reinicia los archivos del juego y luego carga esta partida. Tus otras expansiones se quedan como están.;
+	it=Accendere {name} riavvia i file del gioco e poi carica questo salvataggio. Le altre espansioni restano come sono.;
+	}
+
 [TURN OFF]
 	{
 	de=AUSSCHALTEN;
 	fr=ÉTEINDRE;
 	es=APAGAR;
 	it=SPEGNI;
+	}
+
+[TURN ON {name}]
+	{
+	de={name} EINSCHALTEN;
+	fr=ACTIVER {name};
+	es=ACTIVAR {name};
+	it=ATTIVA {name};
 	}
 
 [TYPE]
@@ -8152,6 +8320,30 @@
 	it=La cartella {tag} non contiene questa lingua. Sostituirla con {endonym} ({english}) da {file}? Viene tenuta e si può riportare.;
 	}
 
+[The game cannot start until the content matches.]
+	{
+	de=Das Spiel kann erst starten, wenn der Inhalt übereinstimmt.;
+	fr=La partie ne peut pas commencer tant que le contenu ne correspond pas.;
+	es=La partida no puede empezar hasta que el contenido coincida.;
+	it=La partita non può iniziare finché il contenuto non coincide.;
+	}
+
+[The game cannot start until the host turns it on, or {player} turns it off.]
+	{
+	de=Das Spiel kann erst starten, wenn der Gastgeber es einschaltet oder {player} es ausschaltet.;
+	fr=La partie ne peut pas commencer tant que l'hôte ne l'active pas, ou que {player} ne le désactive pas.;
+	es=La partida no puede empezar hasta que el anfitrión lo active, o {player} lo desactive.;
+	it=La partita non può iniziare finché l'host non lo attiva, o {player} non lo disattiva.;
+	}
+
+[The game cannot start until {player} turns it on, or the host turns it off.]
+	{
+	de=Das Spiel kann erst starten, wenn {player} es einschaltet oder der Gastgeber es ausschaltet.;
+	fr=La partie ne peut pas commencer tant que {player} ne l'active pas, ou que l'hôte ne le désactive pas.;
+	es=La partida no puede empezar hasta que {player} lo active, o el anfitrión lo desactive.;
+	it=La partita non può iniziare finché {player} non lo attiva, o l'host non lo disattiva.;
+	}
+
 [The game is shown in {name}. Choose another language in Settings › Language first, then uninstall it.]
 	{
 	de=Das Spiel wird in {name} gezeigt. Wähl zuerst eine andere Sprache unter Einstellungen › Sprache, dann deinstalliere sie.;
@@ -8278,6 +8470,14 @@
 	fr=La minicarte et les commandes au pouce sur le;
 	es=El minimapa y los controles de pulgar en el;
 	it=La minimappa e i controlli del pollice sul;
+	}
+
+[The mod was unloaded because an expansion it needs is off. The game plays with No Mod.]
+	{
+	de=Der Mod wurde entladen, weil eine Erweiterung, die er braucht, aus ist. Das Spiel läuft mit No Mod.;
+	fr=Le mod a été retiré parce qu'une extension dont il a besoin est éteinte. Le jeu se joue avec No Mod.;
+	es=El mod se quitó porque una expansión que necesita está apagada. El juego se juega con No Mod.;
+	it=Il mod è stato tolto perché un'espansione che gli serve è spenta. Il gioco va con No Mod.;
 	}
 
 [The new game files are used from the next start of Open Annihilation. Adding or removing files waits until then.]
@@ -8672,6 +8872,22 @@
 	it=Questo mod non si può usare;
 	}
 
+[This run names its content, so it cannot switch.]
+	{
+	de=Dieser Start nennt seinen Inhalt, darum kann er nicht wechseln.;
+	fr=Cette partie nomme son contenu, donc elle ne peut pas changer.;
+	es=Esta partida nombra su contenido, así que no puede cambiar.;
+	it=Questa partita indica i suoi contenuti, quindi non può cambiare.;
+	}
+
+[This save needs other content]
+	{
+	de=Dieser Spielstand braucht anderen Inhalt;
+	fr=Cette sauvegarde a besoin d'un autre contenu;
+	es=Esta partida guardada necesita otro contenido;
+	it=Questo salvataggio ha bisogno di altri contenuti;
+	}
+
 [This replaces the game files on this {device} ({size}) with the folder you chose. The current folder is kept as Total Annihilation (old) until you remove it. Saved games and settings stay.]
 	{
 	de=Das ersetzt die Spieldateien auf diesem {device} ({size}) durch den Ordner, den du gewählt hast. Der aktuelle Ordner bleibt als Total Annihilation (alt), bis du ihn entfernst. Speicherstände und Einstellungen bleiben.;
@@ -8824,12 +9040,60 @@
 	it=Attiva le funzioni in linea;
 	}
 
+[Turning it on applies when the Library closes, and then PLAY NOW works.]
+	{
+	de=Das Einschalten gilt, wenn die Bibliothek schließt, und dann geht PLAY NOW.;
+	fr=L'activation s'applique quand la bibliothèque se ferme, et ensuite PLAY NOW fonctionne.;
+	es=Activarlo se aplica cuando la Biblioteca se cierra, y entonces PLAY NOW funciona.;
+	it=Attivarlo vale quando la Biblioteca si chiude, e poi PLAY NOW funziona.;
+	}
+
+[Turning it on applies when the Library closes, and then USE NOW works.]
+	{
+	de=Das Einschalten gilt, wenn die Bibliothek schließt, und dann geht USE NOW.;
+	fr=L'activation s'applique quand la bibliothèque se ferme, et ensuite USE NOW fonctionne.;
+	es=Activarlo se aplica cuando la Biblioteca se cierra, y entonces USE NOW funciona.;
+	it=Attivarlo vale quando la Biblioteca si chiude, e poi USE NOW funziona.;
+	}
+
+[Turning it on applies when the Library closes.]
+	{
+	de=Das Einschalten gilt, wenn die Bibliothek schließt.;
+	fr=L'activation s'applique quand la bibliothèque se ferme.;
+	es=Activarlo se aplica cuando la Biblioteca se cierra.;
+	it=Attivarlo vale quando la Biblioteca si chiude.;
+	}
+
 [Turning the controller fine-tunes the pointer.]
 	{
 	de=Drehen des Controllers stimmt den Zeiger fein ab.;
 	fr=Tourner la manette affine le pointeur.;
 	es=Girar el mando afina el puntero.;
 	it=Ruotare il controller regola il puntatore con precisione.;
+	}
+
+[Turning them on applies when the Library closes, and then PLAY NOW works.]
+	{
+	de=Das Einschalten gilt, wenn die Bibliothek schließt, und dann geht PLAY NOW.;
+	fr=Les activer s'applique quand la bibliothèque se ferme, et ensuite PLAY NOW fonctionne.;
+	es=Activarlos se aplica cuando la Biblioteca se cierra, y entonces PLAY NOW funciona.;
+	it=Attivarli vale quando la Biblioteca si chiude, e poi PLAY NOW funziona.;
+	}
+
+[Turning them on applies when the Library closes, and then USE NOW works.]
+	{
+	de=Das Einschalten gilt, wenn die Bibliothek schließt, und dann geht USE NOW.;
+	fr=Les activer s'applique quand la bibliothèque se ferme, et ensuite USE NOW fonctionne.;
+	es=Activarlos se aplica cuando la Biblioteca se cierra, y entonces USE NOW funciona.;
+	it=Attivarli vale quando la Biblioteca si chiude, e poi USE NOW funziona.;
+	}
+
+[Turning them on applies when the Library closes.]
+	{
+	de=Das Einschalten gilt, wenn die Bibliothek schließt.;
+	fr=Les activer s'applique quand la bibliothèque se ferme.;
+	es=Activarlos se aplica cuando la Biblioteca se cierra.;
+	it=Attivarli vale quando la Biblioteca si chiude.;
 	}
 
 [Turns the building being placed.]
@@ -10952,6 +11216,30 @@
 	it=x5: Maiusc per i pulsanti di costruzione, cinque alla volta. Tocca per bloccarlo, tieni premuto per una volta.;
 	}
 
+[{name} is not copied, so this save cannot be loaded with it.]
+	{
+	de={name} ist nicht kopiert, darum lässt sich dieser Spielstand damit nicht laden.;
+	fr={name} n'est pas copié, donc cette sauvegarde ne peut pas se charger avec.;
+	es={name} no está copiado, así que esta partida no se puede cargar con eso.;
+	it={name} non è stato copiato, quindi questo salvataggio non si può caricare con quello.;
+	}
+
+[{row}: {saved} / {now}]
+	{
+	de={row}: {saved} / {now};
+	fr={row}: {saved} / {now};
+	es={row}: {saved} / {now};
+	it={row}: {saved} / {now};
+	}
+
+[{save_heading} / {now_heading}]
+	{
+	de={save_heading} / {now_heading};
+	fr={save_heading} / {now_heading};
+	es={save_heading} / {now_heading};
+	it={save_heading} / {now_heading};
+	}
+
 [{To} changes the game's rules. Saved games from {from} won't load under {to}. {From} is kept, and ROLL BACK brings it back.]
 	{
 	de={To} ändert die Spielregeln. Speicherstände von {from} laden unter {to} nicht. {From} bleibt erhalten, und ZURÜCKROLLEN holt es zurück.;
@@ -11392,6 +11680,30 @@
 	it={language} · integrato;
 	}
 
+[{left} and {right}]
+	{
+	de={left} und {right};
+	fr={left} et {right};
+	es={left} y {right};
+	it={left} e {right};
+	}
+
+[{left} · {right}]
+	{
+	de={left} · {right};
+	fr={left} · {right};
+	es={left} · {right};
+	it={left} · {right};
+	}
+
+[{left}, {right}]
+	{
+	de={left}, {right};
+	fr={left}, {right};
+	es={left}, {right};
+	it={left}, {right};
+	}
+
 [{line} · {count} more]
 	{
 	de={line} · {count} mehr;
@@ -11424,6 +11736,14 @@
 	it={mod} ha bisogno di {name}, quindi viene tolto e il gioco si gioca con Nessun mod.;
 	}
 
+[{mod} was unloaded because {name} is off. The game plays with No Mod.]
+	{
+	de={mod} wurde entladen, weil {name} aus ist. Das Spiel läuft mit No Mod.;
+	fr={mod} a été retiré parce que {name} est éteint. Le jeu se joue avec No Mod.;
+	es={mod} se quitó porque {name} está apagado. El juego se juega con No Mod.;
+	it={mod} è stato tolto perché {name} è spento. Il gioco va con No Mod.;
+	}
+
 [{names} and {count} more]
 	{
 	de={names} und {count} mehr;
@@ -11446,6 +11766,14 @@
 	fr={name} a besoin de {need}.;
 	es={name} necesita {need}.;
 	it={name} ha bisogno di {need}.;
+	}
+
+[{name} off]
+	{
+	de={name} aus;
+	fr={name} éteint;
+	es={name} apagado;
+	it={name} spento;
 	}
 
 [{name} only]
@@ -11542,6 +11870,14 @@
 	fr={name} · {phase};
 	es={name} · {phase};
 	it={name} · {phase};
+	}
+
+[{name} ✓]
+	{
+	de={name} ✓;
+	fr={name} ✓;
+	es={name} ✓;
+	it={name} ✓;
 	}
 
 [{name}'s maps and campaigns leave the lists until you turn it on again. Nothing is deleted.]
@@ -12230,4 +12566,100 @@
 	fr=✓;
 	es=✓;
 	it=✓;
+	}
+
+[The game OA plays. Mods, maps and languages say which base games they work with.]
+	{
+	de=Das Spiel, das OA spielt. Mods, Karten und Sprachen sagen, mit welchen Grundspielen sie gehen.;
+	fr=Le jeu qu'OA joue. Les mods, les cartes et les langues disent avec quels jeux de base ils vont.;
+	es=El juego que OA juega. Los mods, los mapas y los idiomas dicen con qué juegos base funcionan.;
+	it=Il gioco che OA gioca. Le mod, le mappe e le lingue dicono con quali giochi di base funzionano.;
+	}
+
+[Not added]
+	{
+	de=Nicht hinzugefügt;
+	fr=Pas ajouté;
+	es=Sin añadir;
+	it=Non aggiunto;
+	}
+
+[Copied]
+	{
+	de=Kopiert;
+	fr=Copié;
+	es=Copiado;
+	it=Copiato;
+	}
+
+[1997]
+	{
+	de=1997;
+	fr=1997;
+	es=1997;
+	it=1997;
+	}
+
+[Choosing it asks for the demo installer, then copies it. It takes no expansions.]
+	{
+	de=Wenn du es wählst, fragt es nach dem Demo-Installer und kopiert ihn dann. Es nimmt keine Erweiterungen.;
+	fr=Le choisir demande l'installateur de la démo, puis le copie. Il ne prend aucune extension.;
+	es=Elegirlo pide el instalador de la demo y luego lo copia. No admite expansiones.;
+	it=Sceglierlo chiede l'installatore della demo e poi lo copia. Non prende espansioni.;
+	}
+
+[Choosing it asks for the game, then copies it.]
+	{
+	de=Wenn du es wählst, fragt es nach dem Spiel und kopiert es dann.;
+	fr=Le choisir demande le jeu, puis le copie.;
+	es=Elegirlo pide el juego y luego lo copia.;
+	it=Sceglierlo chiede il gioco e poi lo copia.;
+	}
+
+[Copied from {source}]
+	{
+	de=Kopiert von {source};
+	fr=Copié depuis {source};
+	es=Copiado de {source};
+	it=Copiato da {source};
+	}
+
+[Choosing another base game turns on all of its expansions and unloads the mod you are playing ({mod}). The change applies when the Library closes.]
+	{
+	de=Ein anderes Grundspiel wählen schaltet alle seine Erweiterungen ein und entlädt den Mod, den du spielst ({mod}). Die Änderung gilt, wenn die Bibliothek schließt.;
+	fr=Choisir un autre jeu de base allume toutes ses extensions et décharge le mod que tu joues ({mod}). Le changement s'applique à la fermeture de la bibliothèque.;
+	es=Elegir otro juego base enciende todas sus expansiones y descarga el mod que juegas ({mod}). El cambio se aplica cuando se cierra la Biblioteca.;
+	it=Scegliere un altro gioco di base accende tutte le sue espansioni e scarica la mod che giochi ({mod}). Il cambiamento si applica quando la Biblioteca si chiude.;
+	}
+
+[Choosing another base game turns on all of its expansions. The change applies when the Library closes.]
+	{
+	de=Ein anderes Grundspiel wählen schaltet alle seine Erweiterungen ein. Die Änderung gilt, wenn die Bibliothek schließt.;
+	fr=Choisir un autre jeu de base allume toutes ses extensions. Le changement s'applique à la fermeture de la bibliothèque.;
+	es=Elegir otro juego base enciende todas sus expansiones. El cambio se aplica cuando se cierra la Biblioteca.;
+	it=Scegliere un altro gioco di base accende tutte le sue espansioni. Il cambiamento si applica quando la Biblioteca si chiude.;
+	}
+
+[USE THIS GAME]
+	{
+	de=DIESES SPIEL VERWENDEN;
+	fr=UTILISER CE JEU;
+	es=USAR ESTE JUEGO;
+	it=USA QUESTO GIOCO;
+	}
+
+[This base game is used when the Library closes.]
+	{
+	de=Dieses Grundspiel wird verwendet, wenn die Bibliothek schließt.;
+	fr=Ce jeu de base est utilisé à la fermeture de la bibliothèque.;
+	es=Este juego base se usa cuando se cierra la Biblioteca.;
+	it=Questo gioco di base si usa quando la Biblioteca si chiude.;
+	}
+
+[The game could not be copied.]
+	{
+	de=Das Spiel konnte nicht kopiert werden.;
+	fr=Le jeu n'a pas pu être copié.;
+	es=No se pudo copiar el juego.;
+	it=Non è stato possibile copiare il gioco.;
 	}

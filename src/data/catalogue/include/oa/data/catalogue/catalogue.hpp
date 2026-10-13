@@ -108,7 +108,13 @@ struct Package {
     std::vector<std::string> locales;   ///< locale tags this language matches, at most 16
     std::vector<std::string> fallbacks; ///< locale tags it falls back to, at most 8
     std::string needs;                  ///< `game-fonts` or `modern-fonts`; empty when absent
-    std::vector<MapEntry> maps;         ///< a map pack's maps; empty for every other kind
+    /// Base games the package runs with, as `supportedGames` names them.
+    /// Empty when the entry omits the key. An empty list is refused.
+    std::vector<std::string> supported_games;
+    /// Expansions that must be on, as `requiredExpansions` names them.
+    /// Empty when the entry omits the key, and empty when it names none.
+    std::vector<std::string> required_expansions;
+    std::vector<MapEntry> maps; ///< a map pack's maps; empty for every other kind
 };
 
 /// One catalogue that was read. `problems` holds why entries were skipped.

@@ -10,14 +10,15 @@ add_library(oa-ui-frontend-dialogs
   src/cd_check.cpp
   src/help_panel.cpp
   src/notice.cpp
+  src/content_question.cpp
   src/dialog_screens.cpp)
 add_library(oa::ui::frontend_dialogs ALIAS oa-ui-frontend-dialogs)
 target_include_directories(oa-ui-frontend-dialogs PUBLIC include)
 target_compile_features(oa-ui-frontend-dialogs PUBLIC cxx_std_20)
 target_link_libraries(oa-ui-frontend-dialogs
-  PUBLIC oa-ui-frontend-renderer oa-ui-screen-registry oa-ui-gui-layout oa-options
+  PUBLIC oa-ui-frontend-renderer oa-ui-screen-registry oa-ui-gui-layout oa-ui-kit oa-data-saves oa-options
   PRIVATE oa-ui-gui-input oa-ui-gadget-render oa-present oa-formats-hpi oa-formats-tdf oa-formats-fnt oa-formats-gaf
-    oa-ui-decoded oa-data-defs oa-base-text)
+    oa-ui-decoded oa-data-defs oa-data-languages oa-base-text)
 if(BUILD_TESTING)
   # The dialogs over the installed game's store, and drawn from its archives.
   add_executable(oa-frontend-dialogs-test tests/dialogs_test.cpp)
@@ -31,6 +32,9 @@ if(BUILD_TESTING)
   oa_demo_installer_tests(frontend-dialogs-notice)
   set_tests_properties(frontend-dialogs frontend-dialogs-packed frontend-dialogs-notice PROPERTIES
     TIMEOUT 120)
+  add_executable(oa-frontend-content-question-test tests/content_question_test.cpp)
+  target_link_libraries(oa-frontend-content-question-test PRIVATE oa-ui-frontend-dialogs oa-test-support)
+  add_test(NAME frontend-content-question COMMAND oa-frontend-content-question-test)
   add_executable(oa-frontend-dialogs-art-test tests/dialog_art_test.cpp)
   target_include_directories(oa-frontend-dialogs-art-test PRIVATE src)
   target_link_libraries(oa-frontend-dialogs-art-test PRIVATE

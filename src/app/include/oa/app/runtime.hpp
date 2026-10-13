@@ -974,6 +974,22 @@ class Runtime final : public menu::Host,
     /// keep the player's. A setup already kept stays kept.
     void keep_player_skirmish_settings();
 
+    /// The base game, rule-changing expansions and language a presence record
+    /// may name. Bundles are named only for a managed copy whose choice is
+    /// usable. Music is left out. The language is the English name.
+    struct PresenceAnnouncement {
+        bool announce_bundles = false;       ///< the managed copy is mounted and usable
+        std::string base_game;               ///< the base game's id
+        std::vector<std::string> expansions; ///< rule-changing expansions, music left out
+        bool differs_from_known = false;     ///< a chosen bundle's file is not a known hash
+        std::string language;                ///< the shown language's English name
+    };
+
+    /// Reads what a presence record adds for this machine's content and language.
+    ///
+    /// @return the announcement
+    [[nodiscard]] PresenceAnnouncement presence_announcement() const;
+
   private:
 
     /// Runs one pass of the idle loop.
@@ -4877,6 +4893,13 @@ class Runtime final : public menu::Host,
     /// std::runtime_error naming the first step that failed.
     void check_library_map_previews();
 
+    /// Runs --check-library-content. The first run turns Core Contingency off
+    /// and closes the Library. The next requires its maps out of the skirmish
+    /// list, chooses the demo when its installer is named, and closes. The
+    /// last requires the demo mounted. Throws std::runtime_error naming the
+    /// first step that failed. With no installer, the demo half is not run.
+    void check_library_content();
+
     // The map browser on the OA layer (runtime_map_browser.cpp): MORE MAPS…
     // over the skirmish map list and over the host's map list in the battle
     // room opens it.
@@ -5169,6 +5192,16 @@ class Runtime final : public menu::Host,
     ///
     /// @return the choice
     [[nodiscard]] oa::data::content_bundles::ContentChoice content_choice() const;
+
+    /// Reports whether this start plays the managed copy.
+    ///
+    /// True when the game folder was composed as the player's copy. A named
+    /// --game-dir, an archive, and a scripted run that names neither a user
+    /// folder nor a preferences file are false. Presence names the base game
+    /// and expansions only when this is true.
+    ///
+    /// @return true when the managed copy is mounted
+    [[nodiscard]] bool managed_content_mounted() const noexcept;
 
     /// Turns one expansion on or off and stores the choice when it changes.
     ///
@@ -12466,6 +12499,52 @@ class Runtime final : public menu::Host,
     /// @return false when the save cannot be started
     bool load_saved_game(const fs::path& path);
 
+    /// Writes the content note beside a save or a recording.
+    ///
+    /// The save or the recording itself is unchanged, so an older build still
+    /// reads it. The note names the base game and the rule-changing expansions.
+    ///
+    /// @param path the save or the recording
+    void note_content_beside(const fs::path& path) const;
+
+    /// Writes the content note in a film's folder, once for that folder.
+    ///
+    /// @param folder the film's folder
+    void note_film_content(const fs::path& folder);
+
+  public:
+
+    /// Shows the comparison when `path`'s note needs other content.
+    ///
+    /// TURN ON AND LOAD stores the choice and asks for a soft restart, then
+    /// the next start loads the save or plays the recording. CANCEL leaves
+    /// the question. A file with no note, and a note this run already matches,
+    /// show nothing.
+    ///
+    /// @param path the save, the recording or the film folder
+    /// @param title the name the question shows
+    /// @param recording true for a recording, false for a save
+    /// @return true when the question is showing
+    bool offer_content_switch(const fs::path& path, std::string_view title, bool recording);
+
+    /// The sentence the question would show, when the note needs other content.
+    ///
+    /// @param path the save or the recording
+    /// @return the sentence, or empty when nothing is asked
+    [[nodiscard]] std::string content_switch_sentence(const fs::path& path) const;
+
+    /// Takes a save or a recording TURN ON AND LOAD left for this start.
+    void take_pending_content();
+
+    /// The recording this start should play, after take_pending_content.
+    ///
+    /// @return its path, or empty
+    [[nodiscard]] const std::string& pending_demo_path() const noexcept {
+        return pending_demo_path_;
+    }
+
+  private:
+
     /// Reads the Summary fields a load needs from a save file.
     ///
     /// @param path savegame file
@@ -14411,6 +14490,12 @@ class Runtime final : public menu::Host,
     init::MapListState map_list_state_{};
     std::map<uintptr_t, int32_t> map_list_objects_;
     std::map<std::string, std::string> preference_values_;
+    /// The save TURN ON AND LOAD loads once the next start reaches the main menu.
+    std::string pending_save_path_{};
+    /// The recording TURN ON AND LOAD plays on this start.
+    std::string pending_demo_path_{};
+    /// The film folder whose content note this run already wrote.
+    std::string film_content_noted_{};
     /// The missing-language notice for this run (runtime_language_notice.cpp).
     friend class LanguageNoticeHost;
 

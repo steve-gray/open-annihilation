@@ -153,6 +153,7 @@ add_subdirectory(src/data/mission-types)
 add_subdirectory(src/data/limits)
 add_subdirectory(src/data/languages)
 add_subdirectory(src/data/content-bundles)
+add_subdirectory(src/data/saves)
 add_subdirectory(src/data/registry)
 add_subdirectory(src/data/catalogue)
 add_subdirectory(src/data/match-rules)
@@ -207,6 +208,10 @@ add_subdirectory(src/data/pe-icon)
 add_subdirectory(src/formats/zip)
 add_subdirectory(src/formats/lzma)
 add_subdirectory(src/formats/inno-setup)
+add_subdirectory(src/formats/udif)
+add_subdirectory(src/formats/hfsplus)
+add_subdirectory(src/formats/xar)
+add_subdirectory(src/formats/cpio)
 add_subdirectory(src/sim/sprite-animation)
 add_subdirectory(src/formats/tnt)
 add_subdirectory(src/formats/ota)
@@ -328,11 +333,12 @@ target_link_libraries(oa-app-mod-profile PUBLIC oa-app-headers oa-data-mod-profi
 # implements, are content_copy.hpp.
 add_library(oa-app-game-files src/app/game_files_import.cpp src/app/game_files_scan.cpp
   src/app/game_files_run.cpp src/app/game_files_state.cpp src/app/content_copy.cpp
-  src/app/windows_installer.cpp)
+  src/app/windows_installer.cpp src/app/disk_image_source.cpp src/app/macos_installer.cpp)
 add_library(oa::app::game_files ALIAS oa-app-game-files)
 target_link_libraries(oa-app-game-files PUBLIC oa-app-headers oa-app-game-directory oa-app-mod-profile
-  oa-base-threads oa-data-content-bundles PRIVATE oa-formats-zip oa-formats-inno-setup
-  oa-platform-preferences oa-platform-shims oa-options)
+  oa-base-threads oa-data-content-bundles PRIVATE oa-formats-zip oa-formats-inno-setup oa-formats-udif
+  oa-formats-hfsplus oa-formats-xar oa-formats-cpio oa-base-sha256 oa-platform-preferences
+  oa-platform-shims oa-options)
 # The player's own folder: where it is, the folders it holds, a folder for
 # each mod in Saves, Screenshots, Films and Recordings, the one-time moves
 # of saved games from beside the preferences file and loose in Saves, and of
@@ -764,6 +770,21 @@ if(BUILD_TESTING)
     oa-test-support oa-options)
   add_test(NAME app-content-copy COMMAND oa-app-content-copy-test)
   set_tests_properties(app-content-copy PROPERTIES TIMEOUT 60)
+  # The disk image for older Macs: a fixture image opens without being the
+  # known installer, the game folder is chosen over a decoy, and a file streams.
+  add_executable(oa-app-disk-image-test src/app/disk_image_test.cpp)
+  target_link_libraries(oa-app-disk-image-test PRIVATE oa-app-game-files oa-platform-shims
+    oa-test-support oa-base-sha256 oa-options)
+  target_compile_definitions(oa-app-disk-image-test PRIVATE
+    OA_UDIF_FIXTURE="${CMAKE_SOURCE_DIR}/src/formats/udif/tests/data/fixture.dmg")
+  add_test(NAME app-disk-image COMMAND oa-app-disk-image-test)
+  # The macOS installer reader: a small package copied in one pass, and the
+  # check that reports its files.
+  add_executable(oa-app-macos-installer-test src/app/macos_installer_test.cpp)
+  target_link_libraries(oa-app-macos-installer-test PRIVATE oa-app-game-files oa-platform-shims
+    ZLIB::ZLIB oa-test-support oa-options)
+  add_test(NAME app-macos-installer COMMAND oa-app-macos-installer-test)
+  set_tests_properties(app-macos-installer PROPERTIES TIMEOUT 60)
   # The renderer records by table: the text of every key and value, values
   # that cannot be read, strikes that become records and what clears them,
   # and the native-density key a run writes or erases as it ends.
@@ -980,7 +1001,8 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_megamap.cpp
   src/app/runtime_skirmish_host.cpp
   src/app/runtime_skirmish_start.cpp src/app/runtime_map_units.cpp src/app/runtime_world_draw.cpp src/app/world_draws.cpp src/app/runtime_benchmark.cpp src/app/runtime_music.cpp
-  src/app/runtime_saveload.cpp src/app/runtime_sides.cpp src/app/asset_files.cpp
+  src/app/runtime_saveload.cpp src/app/runtime_saves.cpp src/app/runtime_recordings.cpp
+  src/app/runtime_sides.cpp src/app/asset_files.cpp
   src/app/runtime_platform.cpp
   src/app/runtime_endgame.cpp src/app/runtime_radar.cpp
   src/app/runtime_kill_board.cpp
@@ -1067,6 +1089,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_registries_check.cpp
   src/app/runtime_library_check.cpp src/app/runtime_library_actions_check.cpp
   src/app/runtime_library_map_preview_check.cpp
+  src/app/runtime_library_content_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
@@ -1104,7 +1127,8 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-app-map-packs
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
   oa-data-content-bundles
-  oa-ui-frontend-multiplayer oa-ui-library oa-ui-map-browser oa-ui-first-run)
+  oa-ui-frontend-multiplayer oa-ui-library oa-ui-map-browser oa-ui-first-run
+  oa-data-saves)
 # The table that combines the extensions' tables of oa-game
 # (extension_list.hpp); the extensions themselves are registered with
 # oa_add_extension (cmake/OaExtensions.cmake).
@@ -1812,6 +1836,31 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_library_previews_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED library-map-previews-clean)
+      # Core Contingency is turned off and its maps leave the skirmish list
+      # when the Library closes. The demo is then chosen, when
+      # OA_DEMO_INSTALLER names its installer, and mounted on the next close.
+      # --game-dir is the source of the copy; the check plays the player's copy.
+      set(oa_library_content_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/library-content")
+      file(MAKE_DIRECTORY "${oa_library_content_dir}")
+      add_test(NAME library-content-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_library_content_dir}/Open Annihilation"
+        "${oa_library_content_dir}/library-content.conf")
+      set_tests_properties(library-content-clean PROPERTIES
+        FIXTURES_SETUP library-content-clean)
+      add_test(NAME native-library-content COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-library-content
+        --preferences-file "${oa_library_content_dir}/library-content.conf"
+        --user-folder "${oa_library_content_dir}/Open Annihilation")
+      set(oa_library_content_env
+        "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      if(OA_DEMO_INSTALLER)
+        string(APPEND oa_library_content_env ";OA_DEMO_INSTALLER=${OA_DEMO_INSTALLER}")
+      endif()
+      set_tests_properties(native-library-content PROPERTIES
+        TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_library_content_dir}"
+        ENVIRONMENT "${oa_library_content_env}"
+        FIXTURES_REQUIRED library-content-clean)
       # Made-up mod packages posted as the download queue posts them, from a
       # built-in registry and two added ones, installed while the Library
       # shows: the built-in one's with no question, the added ones' asking

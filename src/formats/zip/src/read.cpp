@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "inflater.hpp"
 #include "oa/formats/zip.hpp"
+#include "oa/formats/zip/inflate.hpp"
 #include "records.hpp"
 
 namespace oa::formats::zip {

@@ -88,8 +88,10 @@ disk image for older Macs
 `total_annihilation_commander_pack_2.0.0.10.dmg`. The 1997 demo installer
 is separate from these three, and is recognised where it is today. An
 attended start reads the Windows installer, when the installation is that
-file, and copies the game out of it. `--check-installer FILE` lists the
-bundles found in one and every file's SHA-256, and does nothing else.
+file, and copies the game out of it. The disk image is read in place: it is
+not mounted. `--check-installer FILE` lists the bundles found in a
+recognised installer and every file's SHA-256, and does nothing else. A
+bundle with no file in the installer is left out.
 
 ## For a mod author
 

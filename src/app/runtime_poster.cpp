@@ -189,6 +189,7 @@ void Runtime::capture_film_frame() {
         stop_film_capture(path.c_str());
         return;
     }
+    note_film_content(save_game_root() / save_relative_path(path));
     game.next_capture_tick += static_cast<uint32_t>(kFilmTicksPerSecond / game.capture_rate);
     match_timing_.previous_clock =
         oa::base::game_loop::scaled_clock(clock_milliseconds(), match_clock_scale());
@@ -199,6 +200,8 @@ void Runtime::begin_film_capture(const char* path) {
     render();
     if (!save_numbered_frame(path, kFilmFramePrefix))
         stop_film_capture(path);
+    else
+        note_film_content(save_game_root() / save_relative_path(path));
 }
 
 void Runtime::stop_film_capture(const char* path) {

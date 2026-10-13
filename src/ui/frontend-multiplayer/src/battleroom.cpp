@@ -927,7 +927,7 @@ RowBadgeState lobby_row_badge(Lobby& lobby, int32_t slot) noexcept {
     return {row_badge(lobby, slot), lobby_rules_differ_from_host(lobby, slot)};
 }
 
-bool lobby_rules_differ_from_host(Lobby& lobby, int32_t slot) noexcept {
+bool lobby_sim_hash_differs_from_host(Lobby& lobby, int32_t slot) noexcept {
     if (row_badge(lobby, slot) != RowBadge::open_annihilation)
         return false;
     const auto host = lobby_host_slot(lobby);
@@ -949,6 +949,42 @@ bool lobby_rules_differ_from_host(Lobby& lobby, int32_t slot) noexcept {
         return false;
     const auto& plain = lobby.presence_records.plain_sim_hash;
     return row_hash && plain && *row_hash != *plain;
+}
+
+bool lobby_rules_differ_from_host(Lobby& lobby, int32_t slot) noexcept {
+    if (lobby_sim_hash_differs_from_host(lobby, slot))
+        return true;
+    if (row_badge(lobby, slot) != RowBadge::open_annihilation)
+        return false;
+    const auto host = lobby_host_slot(lobby);
+    if (host == kNoSlot || host == slot)
+        return false;
+    return netgame::presence_content_match(
+               lobby_presence_record(lobby, slot), lobby_presence_record(lobby, host)
+           ) == netgame::PresenceContentMatch::differs;
+}
+
+bool lobby_content_allows_start(Lobby& lobby) noexcept {
+    if (!host_is_local(lobby))
+        return true;
+    const auto host = lobby_host_slot(lobby);
+    if (host == kNoSlot)
+        return true;
+    const auto host_record = lobby_presence_record(lobby, host);
+    for (int32_t slot = 0; slot < kSlotCount; ++slot) {
+        if (slot == host)
+            continue;
+        if (row_badge(lobby, slot) != RowBadge::open_annihilation)
+            continue;
+        const auto& player = slot_player(lobby, slot);
+        // This machine's players share its record, so they match themselves.
+        if (local_or_computer(player))
+            continue;
+        if (netgame::presence_content_match(lobby_presence_record(lobby, slot), host_record) ==
+            netgame::PresenceContentMatch::differs)
+            return false;
+    }
+    return true;
 }
 
 void presence_refresh(Lobby& lobby) noexcept {
@@ -2128,7 +2164,11 @@ void lobby_enter_battleroom(Lobby& lobby, Panel& panel) noexcept {
     unit_sync_create(lobby, host);
     const bool synced = unit_sync_complete(lobby);
     panel_set_active(panel, "START", synced);
-    panel_set_grayed(panel, "START", !(host && lobby_ready_to_start(lobby) && synced));
+    panel_set_grayed(
+        panel,
+        "START",
+        !(host && lobby_ready_to_start(lobby) && lobby_content_allows_start(lobby) && synced)
+    );
     panel_set_grayed(panel, "RESTRICTIONS", false);
     panel_set_text(panel, "METALTEXT", "0");
     panel_set_text(panel, "ENERGYTEXT", "0");
@@ -2547,6 +2587,10 @@ LobbyAction handle_panel_event(Lobby& lobby, Panel& panel) noexcept {
         return action;
     }
     if (panel_selected_is(panel, "START")) {
+        if (!lobby_content_allows_start(lobby)) {
+            panel.selected = kNoControl;
+            return action;
+        }
         if (seat_neutral_computer(lobby, panel)) {
             panel.selected = kNoControl;
             return action;
@@ -2728,7 +2772,7 @@ LobbyAction lobby_tick(Lobby& lobby, Panel& panel, LobbyFront front, Panel* view
         if (front == LobbyFront::battleroom) {
             if (host_is_local(lobby)) {
                 const bool synced = unit_sync_complete(lobby);
-                const bool ready = lobby_ready_to_start(lobby);
+                const bool ready = lobby_ready_to_start(lobby) && lobby_content_allows_start(lobby);
                 const auto tick = now(lobby);
                 panel_set_grayed(panel, "SYNCHING", true);
                 if (lobby.start_frame > 0 && lobby_clock_passed(tick, lobby.start_frame_tick)) {

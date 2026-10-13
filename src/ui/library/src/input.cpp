@@ -907,8 +907,23 @@ ScreenResult activate(
         result.action = Action::close;
         return result;
     case controls::active_change:
+        if (!active_content(library).change_enabled)
+            return {};
         result.action = Action::change_base_game;
         return result;
+    case controls::base_cancel:
+        close_base_chooser(library);
+        return result;
+    case controls::base_use: {
+        const BaseUse used = use_marked_base_game(library);
+        if (used.kind == BaseUseKind::needs_source) {
+            result.action = Action::copy_base_game;
+            result.base_game = used.id;
+        }
+        return result;
+    }
+    case controls::base_blocker:
+        return {};
     case controls::active_unload:
         // The same action SWITCH OFF returns. The host asks switch_off_question
         // and, on SWITCH, plays no mod. The entry is the mod being played,
@@ -924,6 +939,13 @@ ScreenResult activate(
         }
         return result;
     default:
+        if (controls::base_row_control(id)) {
+            const auto index = static_cast<std::size_t>(id - controls::first_base_row);
+            if (!library.chooser.open || index >= library.chooser.rows.size())
+                return {};
+            mark_base_game(library, library.chooser.rows[index].id);
+            return result;
+        }
         break;
     }
     return {};
@@ -1145,6 +1167,39 @@ ScreenResult library_pointer(
     int32_t finger_reach
 ) {
     kit::Interaction& interaction = state.interaction;
+    // The chooser covers the Library. A press reaches its rows and buttons,
+    // or the shade, and never the tabs, the maps or a drag under it.
+    if (library.chooser.open) {
+        switch (kind) {
+        case PointerKind::move: {
+            const kit::PointerOutcome outcome = kit::pointer_move(interaction, list, at);
+            ScreenResult result;
+            result.redraw = outcome.result != kit::PointerResult::none;
+            return result;
+        }
+        case PointerKind::down: {
+            if (button != 1)
+                return {};
+            state.drag = {};
+            state.maps_bar_held = false;
+            const kit::PointerOutcome outcome = kit::pointer_down(interaction, list, at);
+            ScreenResult result;
+            result.redraw = outcome.result != kit::PointerResult::none;
+            return result;
+        }
+        case PointerKind::up: {
+            if (button != 1)
+                return {};
+            const kit::PointerOutcome outcome = kit::pointer_up(interaction, list, at);
+            if (outcome.result == kit::PointerResult::activated)
+                return activate(library, state, list, outcome.control, std::nullopt, at);
+            ScreenResult result;
+            result.redraw = outcome.result != kit::PointerResult::none;
+            return result;
+        }
+        }
+        return {};
+    }
     switch (kind) {
     case PointerKind::move: {
         if (state.maps_bar_held) {
@@ -1278,6 +1333,26 @@ ScreenResult library_pointer(
 ScreenResult
 library_key(Library& library, ScreenState& state, const kit::DisplayList& list, kit::Key pressed) {
     kit::Interaction& interaction = state.interaction;
+    if (library.chooser.open) {
+        if (pressed == kit::Key::escape) {
+            close_base_chooser(library);
+            return redrawn();
+        }
+        const kit::KeyOutcome outcome = kit::key(interaction, list, pressed);
+        switch (outcome.result) {
+        case kit::KeyResult::none:
+            return {};
+        case kit::KeyResult::redraw:
+            return redrawn();
+        case kit::KeyResult::to_control:
+            return activate(library, state, list, outcome.control, pressed, std::nullopt);
+        case kit::KeyResult::accept:
+        case kit::KeyResult::scroll:
+        case kit::KeyResult::cancel:
+            return {};
+        }
+        return {};
+    }
     // A focus the screen no longer shows moves to the list, to the maps
     // search when a map link scrolled away, or to the first stop.
     if (interaction.focus_shown && kit::control_of(list, interaction.focused) == nullptr) {
@@ -1499,6 +1574,8 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
 ScreenResult library_text(
     Library& library, ScreenState& state, const kit::DisplayList& list, std::string_view utf8
 ) {
+    if (library.chooser.open)
+        return {};
     if (state.interaction.focus_shown && state.interaction.focused == controls::active_search) {
         if (kit::control_of(list, controls::active_search) == nullptr ||
             !kit::insert_text(state.maps_search, utf8))
@@ -1516,6 +1593,8 @@ ScreenResult library_text(
 ScreenResult library_wheel(
     Library& library, ScreenState& state, const kit::DisplayList& list, kit::Point at, float notches
 ) {
+    if (library.chooser.open)
+        return {};
     if (state.menu != MenuKind::none) {
         for (const kit::Item& item : list.items) {
             const auto* look = std::get_if<kit::ChoiceMenuLook>(&item.look);
@@ -1544,6 +1623,13 @@ ScreenResult library_wheel(
 ScreenResult library_command(
     Library& library, ScreenState& state, const kit::DisplayList& list, ScreenCommand command
 ) {
+    if (library.chooser.open) {
+        if (command == ScreenCommand::back) {
+            close_base_chooser(library);
+            return redrawn();
+        }
+        return {};
+    }
     switch (command) {
     case ScreenCommand::find:
         if (page_shows(list)) {
@@ -1604,6 +1690,8 @@ ScreenResult library_command(
 
 ScreenResult
 library_stick(Library& library, ScreenState& state, const kit::DisplayList& list, float notches) {
+    if (library.chooser.open)
+        return {};
     return turn_pane(library, state, list, focused_pane(state, list), notches);
 }
 

@@ -41,6 +41,15 @@
 //        downloads folder and at least one enabled registry whose downloads
 //        are on); bits 1 to 7 sent as 0 and ignored when read. Absent: the
 //        sender does not say.
+//   0x31 bundles: u8 flags, bit 0 a chosen bundle differs from a hash the
+//        game knows (bits 1 to 7 sent as 0 and ignored when read); a kebab
+//        string 1 to 64, the base game; u8 count, at most 16; then that many
+//        kebab strings 1 to 64, the expansions. Music changes no rules, so a
+//        sender leaves it out. A value that breaks this rule is left out.
+//        Absent: the sender does not say which content it plays (an OA 0.7
+//        machine, or one that is not playing a managed copy).
+//   0x32 language: a text string 1 to 32, the language's name in English
+//        ("English", "Simplified Chinese"). Absent: the sender does not say.
 //   0x40 map pack: kebab string 1 to 64 the package key, u32 the catalogue
 //        release, 32 bytes the package's SHA-256, kebab string 1 to 32 the
 //        registry's id, ascii string 0 to 255 its descriptor URL (empty as
@@ -56,6 +65,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace oa::netgame {
@@ -92,6 +102,8 @@ enum class PresenceTag : uint8_t {
     view_hacks = 0x22, ///< view hacks that are on
     developer = 0x23,  ///< Developer Mode and its overrides
     content = 0x30,    ///< whether the machine can fetch content
+    bundles = 0x31,    ///< the base game and the rule-changing expansions
+    language = 0x32,   ///< the language's name in English
     map_pack = 0x40,   ///< the map pack the host is playing
 };
 
@@ -182,6 +194,51 @@ struct PresenceContent {
     friend bool operator==(const PresenceContent&, const PresenceContent&) = default;
 };
 
+/// How many expansions the bundles field carries.
+inline constexpr std::size_t presence_bundle_count_max = 16;
+/// The longest base-game or expansion id the bundles field carries.
+inline constexpr std::size_t presence_bundle_id_max = 64;
+/// The expansion that changes no rules. Comparison, the tip and the digest
+/// ignore it, and a machine that writes its own record leaves it out.
+inline constexpr std::string_view presence_uncompared_expansion{"music"};
+/// The most bytes of the canonical content identity: the longest base id,
+/// sixteen longest expansion ids, a zero after each, one more zero, and the
+/// flag byte.
+inline constexpr std::size_t presence_content_identity_max_bytes =
+    presence_bundle_id_max + 1 + presence_bundle_count_max * (presence_bundle_id_max + 1) + 1 + 1;
+
+/// The base game and expansions a machine plays, tag 0x31.
+struct PresenceBundles {
+    std::string base_game;               ///< the base game's id
+    std::vector<std::string> expansions; ///< expansion ids, music included when a peer sent it
+    /// A chosen base game or rule-changing expansion differs from a hash the game knows.
+    bool differs_from_known{};
+
+    /// Compares two bundle statements.
+    friend bool operator==(const PresenceBundles&, const PresenceBundles&) = default;
+};
+
+/// How two records' bundle statements compare. Unknown when either omits the field.
+enum class PresenceContentMatch : uint8_t {
+    unknown, ///< one record omits the bundles field, or its value broke the rule
+    same,    ///< the same base game and the same rule-changing expansions, and neither hash flag
+    differs, ///< the base games, the expansions or a hash flag disagree
+};
+
+/// What differs between a player's bundles and the host's. Allocating; the
+/// battle room's card uses it. The draw and the start gate use
+/// presence_content_match, which does not allocate.
+struct PresenceContentGap {
+    bool comparable{};       ///< both records carry the bundles field
+    bool hashes_differ{};    ///< either side's differs-from-known flag is set
+    bool bases_differ{};     ///< the base games are not the same id
+    std::string player_base; ///< the player's base game, when comparable
+    std::string host_base;   ///< the host's base game, when comparable
+    std::vector<std::string>
+        missing;                    ///< rule-changing expansions the host has and the player lacks
+    std::vector<std::string> extra; ///< rule-changing expansions the player has and the host lacks
+};
+
 /// One presence record. A field that was not sent, or whose value broke its rule, is absent.
 struct PresenceRecord {
     uint8_t version{presence_record_version}; ///< format version, 1 or more
@@ -195,6 +252,10 @@ struct PresenceRecord {
     std::optional<PresenceMapPack> map_pack;
     /// Whether the machine can fetch content; absent when the sender does not say.
     std::optional<PresenceContent> content;
+    /// The base game and expansions; absent when the sender does not say.
+    std::optional<PresenceBundles> bundles;
+    /// The language's English name; absent when the sender does not say.
+    std::optional<std::string> language;
 
     /// Compares two records.
     friend bool operator==(const PresenceRecord&, const PresenceRecord&) = default;
@@ -216,8 +277,9 @@ presence_record_length(const uint8_t* bytes, std::size_t available, uint16_t* le
 
 /// Writes a presence record.
 ///
-/// Fields that are present go out in the order engine, content, mod, mod
-/// origin, sim hash, map pack, developer, game hacks, view hacks. A list
+/// Fields that are present go out in the order engine, content, bundles,
+/// language, mod, mod origin, sim hash, map pack, developer, game hacks,
+/// view hacks. A list
 /// field carries its full count and as many ids, in order, as keep the
 /// record within min(capacity, 1024). A string that does not fit its rule
 /// is refused; it is never cut. The record is never longer than 1024 bytes.
@@ -237,8 +299,9 @@ presence_record_length(const uint8_t* bytes, std::size_t available, uint16_t* le
 /// A wrong frame, a version of 0, or a field that runs past the end refuses
 /// the whole record and leaves `out` unchanged. An unknown tag is skipped.
 /// A known field whose value breaks its rule is left out: a content field
-/// whose value is not one byte among them; bits 1 to 7 of its byte are
-/// ignored. A repeated tag keeps the first occurrence. It may allocate.
+/// whose value is not one byte, and a bundles field whose value breaks its
+/// rule, among them. Bits of a flag byte other than the ones named above
+/// are ignored. A repeated tag keeps the first occurrence. It may allocate.
 ///
 /// @param record the record, type byte first
 /// @param size its length in bytes; nothing past size is read
@@ -272,6 +335,49 @@ decode_presence(const uint8_t* record, std::size_t size, PresenceRecord* out);
 /// @return the hash, or nothing
 [[nodiscard]] std::optional<PresenceDigest>
 presence_sim_hash(const uint8_t* record, std::size_t size) noexcept;
+
+/// Compares the bundles fields of two records, without allocating.
+///
+/// Music is ignored, and the expansions are a set. Either side's
+/// differs-from-known flag makes them differ, including when both are set.
+/// A record that omits the field, or whose field broke its rule, makes the
+/// result unknown: the caller does not treat that as a difference.
+///
+/// @param first_record one record, type byte first; empty is unknown
+/// @param second_record the other record
+/// @return unknown, same or differs
+[[nodiscard]] PresenceContentMatch presence_content_match(
+    std::span<const uint8_t> first_record, std::span<const uint8_t> second_record
+) noexcept;
+
+/// Names how a player's bundles differ from the host's.
+///
+/// Music is ignored. The result is not comparable when either record omits
+/// the field. It may allocate.
+///
+/// @param player the player's record
+/// @param host the host's record
+/// @return the gap
+[[nodiscard]] PresenceContentGap
+presence_content_gap(const PresenceRecord& player, const PresenceRecord& host);
+
+/// Writes the canonical bytes of a record's bundles, for the integrity digest.
+///
+/// Empty, and `written` zero, when the record has no bundles field, so a
+/// digest that appends these bytes is unchanged. Otherwise: the base game,
+/// a zero, each rule-changing expansion in lexicographic order each ended
+/// by a zero, one more zero, then a byte 1 when differs-from-known is set
+/// and 0 otherwise. Music is left out. Duplicates are left out.
+///
+/// @param record the record
+/// @param[out] out storage for the bytes
+/// @param capacity bytes available at out
+/// @param[out] written how many bytes were written
+/// @return ok; bad_argument for a null pointer or a bundles value outside
+///         its rule; buffer_too_small
+[[nodiscard]] WireError presence_content_identity(
+    const PresenceRecord& record, uint8_t* out, std::size_t capacity, std::size_t* written
+) noexcept;
 
 /// Writes the value of a map-pack field, tag 0x40, without its field header.
 ///

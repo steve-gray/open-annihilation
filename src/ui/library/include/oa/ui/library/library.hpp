@@ -144,11 +144,11 @@ struct Listing {
     /// The day this release was published, `YYYY-MM-DD` as the catalogue
     /// writes it; empty when the catalogue names none.
     std::string published{};
-    /// Base games the package runs with. Empty until a catalogue carries the
-    /// keys; a catalogue listing does not fill these.
+    /// Base games the package runs with, as the catalogue's supportedGames
+    /// names them. Empty when the catalogue omits the key.
     std::vector<std::string> supported_games{};
-    /// Expansions that must be on. Empty until a catalogue carries the keys,
-    /// and empty when a filled package names none.
+    /// Expansions that must be on, as requiredExpansions names them. Empty
+    /// when the catalogue omits the key, and empty when it names none.
     std::vector<std::string> required_expansions{};
 };
 
@@ -304,6 +304,9 @@ struct ContentSnapshot {
     std::vector<std::string> mod_required{};
     /// `--content` named the choice. Pills do not change it.
     bool locked{};
+    /// The stored note says a mod was cleared because an expansion it needs
+    /// went off. The Active tab says so, and refresh keeps that for the run.
+    bool expansion_cleared{};
 };
 
 /// One installed map pack, as the Active tab lists its maps.
@@ -543,15 +546,23 @@ struct TextHooks {
     std::string_view (*shown)(void* context, std::string_view english){};
 };
 
+/// Why the pending choice unloads the mod when the Library closes.
+enum class PendingClear : uint8_t {
+    none,                   ///< the mod stays
+    base_game_chosen,       ///< another base game was chosen
+    required_expansion_off, ///< an expansion the mod needs went off
+};
+
 /// The choice the Active tab is holding until the Library closes.
 ///
-/// `edited` is set when the pills have changed the stored expansions.
-/// `asking` is set while the player is being asked before a mod is unloaded.
-/// The host applies nothing here: G10 reads this when the Library closes.
+/// `edited` is set when the pills or the base game chooser have changed the
+/// stored choice. `asking` is set while the player is being asked before a
+/// mod is unloaded. Nothing here writes a preference or remounts the files:
+/// the host reads this when the Library closes, and only then.
 struct ContentDraft {
     bool edited{};
-    /// The base game the pending choice names. Empty until a pill edits it,
-    /// and then the stored base game.
+    /// The base game the pending choice names. Empty until a pill or the
+    /// chooser edits it, and then the stored base game.
     std::string base_game{};
     /// Expansion ids that are on in the pending choice.
     std::vector<std::string> expansions{};
@@ -570,6 +581,82 @@ struct ContentDraft {
     std::string last_id{};
     /// That expansion is on in the pending choice.
     bool last_on{};
+    /// Another base game was chosen. The Active tab says it is used when the
+    /// Library closes, and the mod tile says No Mod when `unload_mod` is set.
+    bool pending_base{};
+    /// The mod tile shows No Mod. The mod stays mounted until the Library closes.
+    /// Choosing another base game and a required expansion going off are the
+    /// two reasons, and `clear_reason` says which. The host clears the
+    /// remembered mod for either when the Library closes.
+    bool unload_mod{};
+    /// Why `unload_mod` is set.
+    PendingClear clear_reason{PendingClear::none};
+    /// The mod's name when `clear_reason` is a required expansion, for the hint.
+    std::string unloaded_mod{};
+    /// The expansion that unloaded it. Turning it back on clears the unload,
+    /// unless another base game is already pending.
+    std::string unloaded_for{};
+    /// The host has already applied this draft. A second close does nothing.
+    bool applied{};
+};
+
+/// How one base game is shown in the chooser.
+enum class BaseGameState : uint8_t {
+    in_use,    ///< the pending choice names it
+    copied,    ///< copied, and not the pending choice
+    not_added, ///< not copied: choosing it asks for a source
+};
+
+/// One base game in the chooser.
+struct BaseGameRow {
+    std::string id{};
+    /// The letters on the badge ("TA", "DEMO").
+    std::string letters{};
+    std::string name{};
+    std::string version{};
+    BaseGameState state{BaseGameState::not_added};
+    /// The state pill's words.
+    std::string state_text{};
+    /// The line under the name: where it was copied from, or what choosing it asks.
+    std::string detail{};
+    /// Expansion names, drawn as pills. They take no press.
+    std::vector<std::string> expansions{};
+    /// The radio marks this row.
+    bool marked{};
+};
+
+/// The base game chooser over the Library.
+struct BaseChooser {
+    bool open{};
+    /// The base game the radio marks.
+    std::string marked{};
+    /// Shown when the marked game is not the one in use. Empty otherwise.
+    std::string note{};
+    /// A copy that failed, under the note. Empty when the last copy worked.
+    std::string problem{};
+    std::vector<BaseGameRow> rows{};
+};
+
+/// What Use this game did.
+enum class BaseUseKind : uint8_t {
+    none,         ///< the chooser was closed, or the press did nothing
+    applied,      ///< the pending choice now names the marked game
+    needs_source, ///< the marked game is not copied; the host asks for it
+    refused,      ///< a match is running, or the command line named the choice
+};
+
+/// The result of Use this game.
+struct BaseUse {
+    BaseUseKind kind{BaseUseKind::none};
+    /// The marked base game, when `kind` is `needs_source`.
+    std::string id{};
+};
+
+/// What opening the chooser did, and which control takes the focus.
+struct BaseOpen {
+    bool opened{};
+    /// The in-use row's control. no_control when the chooser did not open.
+    int32_t focus{-1};
 };
 
 /// The Library's whole state.
@@ -589,10 +676,18 @@ struct Library {
     std::optional<EntryId> selected{};  ///< one of the visible entries; none when none shows
     bool details_open{};                ///< the selected entry's details page is open
     TextHooks text{};                   ///< how texts are looked up; empty for English
-    /// The Active tab's pending choice. A pill writes it here. It is not the
-    /// stored choice, and it is kept across refresh while that choice is the
-    /// same. Empty `edited` shows `inputs.content` as it was read.
+    /// The Active tab's pending choice. A pill or the base game chooser writes
+    /// it here. It is not the stored choice, and it is kept across refresh
+    /// while that choice is the same. Empty `edited` shows `inputs.content`
+    /// as it was read.
     ContentDraft content{};
+    /// The base game chooser, over the Library. Empty `open` draws nothing.
+    /// Choosing a game writes the pending choice; it does not remount.
+    BaseChooser chooser{};
+    /// A stored note said a mod was cleared because an expansion it needs
+    /// went off. Set when the inputs say so, and kept across refresh so the
+    /// Active tab can still say why after the host clears the preference.
+    bool expansion_note{};
     /// The base game's badge, scaled for the squares of the last layout.
     /// Those pictures point here until the next layout, which clears this.
     mutable std::deque<std::vector<uint8_t>> scaled_badge_pixels{};
@@ -895,6 +990,9 @@ struct ActiveContent {
     std::vector<ExpansionPill> pills{};
     /// What an expansion needs, or that a pending change applies when the Library closes.
     std::string hint{};
+    /// CHANGE… takes a press. Off during a match, while `--content` locked the
+    /// run, and while the command line chose the mod.
+    bool change_enabled{true};
 };
 
 /// Describes the base game tile and the expansion pills.
@@ -943,6 +1041,49 @@ void accept_expansion_off(Library& library);
 ///
 /// @param[in,out] library the Library
 void cancel_expansion_off(Library& library);
+
+/// Opens the base game chooser on the pending choice's game.
+///
+/// Nothing opens during a match, while `--content` locked the run, or while
+/// the command line chose the mod. The files are not remounted.
+///
+/// @param[in,out] library the Library
+/// @return whether it opened, and the control that takes the focus
+[[nodiscard]] BaseOpen open_base_chooser(Library& library);
+
+/// Closes the chooser. The pending choice stays.
+///
+/// @param[in,out] library the Library
+void close_base_chooser(Library& library);
+
+/// Marks one base game in the open chooser. A closed chooser is left as it is.
+///
+/// @param[in,out] library the Library
+/// @param id the base game
+void mark_base_game(Library& library, std::string_view id);
+
+/// Rebuilds the open chooser's rows from the inputs, keeping the marked game.
+///
+/// @param[in,out] library the Library
+void refresh_base_chooser(Library& library);
+
+/// Keeps a failed copy's words on the open chooser.
+///
+/// @param[in,out] library the Library
+/// @param problem the words; empty clears them
+void note_base_copy_problem(Library& library, std::string_view problem);
+
+/// Uses the marked base game.
+///
+/// A game that is not copied is `needs_source` and the chooser stays open.
+/// A copied game is given to choose_content_base_game and kept on the pending
+/// draft: every copied expansion of it is on, and a mod being played is
+/// marked unloaded. The same game as the pending choice only closes the
+/// chooser. Nothing is written to the preferences, and nothing is remounted.
+///
+/// @param[in,out] library the Library
+/// @return what the press did
+[[nodiscard]] BaseUse use_marked_base_game(Library& library);
 
 /// How well one search word was found: the best field it is in.
 enum class MatchClass : uint8_t {
@@ -1011,25 +1152,36 @@ enum class Action : uint8_t {
     /// CHANGE… on the base game tile. The host opens the chooser. This press
     /// does not change the choice.
     change_base_game,
+    /// USE THIS GAME named a base game that is not copied. The host asks for
+    /// its source and copies it. `ScreenResult::base_game` names it. The
+    /// chooser stays open until the copy is in the pending choice.
+    copy_base_game,
     /// ADD FROM… on an expansion that is not copied. The host opens the
     /// locator. `ScreenResult::expansion` names it. This press does not turn it on.
     add_expansion,
     /// A pill would turn off an expansion a playing mod needs. The host asks
     /// expansion_off_question and, on Turn off, calls accept_expansion_off.
     ask_expansion_off,
+    /// TURN ON on a package whose required expansions are off. One press
+    /// turns on every one G04 accepts, on the pending draft. It applies
+    /// when the Library closes.
+    turn_on,
 };
 
 /// One button of an entry's details.
 struct ActionButton {
     Action action{Action::get};
     bool enabled{};
-    std::string_view text{}; ///< the button's words, from text.hpp, looked up
+    /// The button's words. A fixed action's are the text.hpp word, looked
+    /// up. TURN ON names the expansion, so the words are owned here.
+    std::string text{};
 };
 
 /// Lists an entry's buttons, in the order they are shown.
 ///
-/// GET or UPDATE first, or CANCEL while it is queued, or RETRY when its
-/// download failed and can be tried again; then PLAY NOW for an installed mod
+/// TURN ON when the package needs expansions that are off, then GET or
+/// UPDATE, or CANCEL while it is queued, or RETRY when its download failed
+/// and can be tried again; then PLAY NOW for an installed mod
 /// that is not being played, or SWITCH OFF for the one that is, ROLL BACK
 /// when a copy is kept, UNINSTALL and OPEN FOLDER when installed, and
 /// HOMEPAGE when the listing has one. PLAY NOW, SWITCH OFF and ROLL BACK are
@@ -1042,6 +1194,11 @@ struct ActionButton {
 /// in use, and nothing while it is. An installed language pack that is not
 /// in use offers USE NOW where a mod offers PLAY NOW. A language that is
 /// listed and not installed keeps GET and has no USE NOW.
+/// TURN ON comes first when turning the package's required expansions on,
+/// through the same rules as the Active tab's pills, would let it run.
+/// PLAY NOW and USE NOW are off when the package's games or expansions do
+/// not match the pending choice. GET stays on. A package that cannot run
+/// stays in the list.
 ///
 /// @param library the Library
 /// @param entry one of its entries
@@ -1056,19 +1213,90 @@ struct ActionButton {
 /// @return true when the switch can be asked for
 [[nodiscard]] bool can_switch(const Library& library) noexcept;
 
-/// Tells whether the header's refresh icon can be pressed: a registry is on
-/// that it can ask, none is being asked now, and no game is being played.
-///
-/// @param library the Library
-/// @return true when it can
-[[nodiscard]] bool can_check_now(const Library& library) noexcept;
-
 /// How a fact's value is marked.
 enum class Mark : uint8_t {
     none,
     good, ///< met
     warn, ///< not met, or a change the player should know of
 };
+
+/// How a package's games and required expansions sit on the pending choice.
+///
+/// Empty `games` and `expansions` mean the package names neither, and it
+/// runs. A row sentence is written when it names an expansion or the
+/// current game is not one it supports. `turn_on` is empty unless one
+/// press, through turn_content_expansion, would turn on every required
+/// expansion that is off.
+struct ContentLines {
+    /// The sentence under the row. Empty when there is nothing to add.
+    std::string row{};
+    /// The Games fact. Empty when the package names no games.
+    std::string games{};
+    Mark games_mark{Mark::none};
+    /// The expansion Needs fact. Empty when the package names no expansion.
+    std::string expansions{};
+    Mark expansions_mark{Mark::none};
+    /// PLAY NOW and USE NOW stay off: the game is not one it supports, or
+    /// a required expansion is off.
+    bool blocks_play{};
+    /// The expansions one TURN ON press turns on, in the order asked.
+    std::vector<std::string> turn_on{};
+    /// The first of those, as the button names it.
+    std::string turn_on_name{};
+    /// More than one expansion in `turn_on`.
+    bool several{};
+};
+
+/// Describes a package against the pending choice, or the stored choice
+/// when the draft has not been edited.
+///
+/// Installed lists are used when they name a game or an expansion, and the
+/// listing's otherwise. Lists that are both empty name nothing. An expansion
+/// list with no games takes the default games: both base games for a
+/// language pack, and totala otherwise.
+///
+/// @param library the Library
+/// @param entry one of its entries
+/// @return the sentences, the facts and whether TURN ON is offered
+[[nodiscard]] ContentLines content_lines(const Library& library, const Entry& entry);
+
+/// Tells whether PLAY NOW or USE NOW can run this package on the pending choice.
+///
+/// A package that names no games and no expansions can. The base game entry
+/// and a built-in language can.
+///
+/// @param library the Library
+/// @param entry one of its entries
+/// @return true when the package can run
+[[nodiscard]] bool package_can_run(const Library& library, const Entry& entry);
+
+/// Turns on the expansions TURN ON names, on the pending draft.
+///
+/// One press asks turn_content_expansion for each expansion that is off,
+/// skipping one an earlier press in the same call already turned on. Nothing
+/// is written to the preferences. The choice applies when the Library closes.
+///
+/// @param[in,out] library the Library
+/// @param entry the package whose button was pressed
+/// @return true when the draft changed
+bool turn_on_required(Library& library, const Entry& entry);
+
+/// The note under the buttons while TURN ON is showing.
+///
+/// Empty when the selected entry has no such button. A mod or a map pack
+/// says PLAY NOW will work once the Library closes, and a language says
+/// USE NOW.
+///
+/// @param library the Library
+/// @return the note; empty when the selection has none
+[[nodiscard]] std::string turn_on_note(const Library& library);
+
+/// Tells whether the header's refresh icon can be pressed: a registry is on
+/// that it can ask, none is being asked now, and no game is being played.
+///
+/// @param library the Library
+/// @return true when it can
+[[nodiscard]] bool can_check_now(const Library& library) noexcept;
 
 /// One line of an entry's details, in a long form and a short form.
 struct Fact {
@@ -1079,8 +1307,12 @@ struct Fact {
     Mark mark{Mark::none};
 };
 
-/// Lists an entry's facts: Installed, Latest, Author, Size, Base, Needs,
-/// Hacks, Rules, Maps, Coverage and From, those it has.
+/// Lists an entry's facts: Installed, Latest, Author, Size, Base, Games,
+/// Needs, Hacks, Rules, Maps, Coverage and From, those it has.
+///
+/// Games names the base games the package runs with. A second Needs, after
+/// the engine's, names the expansions that must be on. Both are left out
+/// when the package names neither.
 ///
 /// Installed is the installed copy's version and revision, and Latest the
 /// listing's, each as release_text writes them ("4.8 (rev 3)", "1.0" for a

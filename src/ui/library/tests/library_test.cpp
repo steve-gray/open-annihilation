@@ -15,6 +15,7 @@
 #include "oa/ui/library/library.hpp"
 #include "oa/ui/library/mod_questions.hpp"
 #include "oa/ui/library/text.hpp"
+#include "oa/ui/library/uninstall.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -2617,6 +2618,531 @@ void test_expansion_pills() {
     OA_CHECK(face.pills.empty());
 }
 
+/// The base game chooser marks a game and keeps the choice on the draft.
+void test_base_chooser() {
+    lib::Inputs inputs;
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"totala", "campaign", "core-contingency", "music"};
+    inputs.content.enabled = {"campaign"};
+    lib::Installed ridge;
+    ridge.kind = Kind::mod;
+    ridge.key = "ridge";
+    ridge.name = "Ridge";
+    ridge.playing = true;
+    inputs.installed.push_back(ridge);
+    lib::Library library;
+    lib::refresh(library, inputs);
+
+    library.inputs.in_match = true;
+    OA_CHECK(!lib::open_base_chooser(library).opened);
+    library.inputs.in_match = false;
+    library.inputs.content.locked = true;
+    OA_CHECK(!lib::open_base_chooser(library).opened);
+    library.inputs.content.locked = false;
+    library.inputs.mod_from_command_line = true;
+    OA_CHECK(!lib::open_base_chooser(library).opened);
+    library.inputs.mod_from_command_line = false;
+
+    const lib::BaseOpen opened = lib::open_base_chooser(library);
+    OA_CHECK(opened.opened && library.chooser.open);
+    OA_CHECK(library.chooser.marked == "totala");
+    bool saw_demo = false;
+    for (const lib::BaseGameRow& row : library.chooser.rows) {
+        if (row.id == "totala")
+            OA_CHECK(row.state == lib::BaseGameState::in_use && row.marked);
+        if (row.id == "totala-demo") {
+            saw_demo = true;
+            OA_CHECK(row.state == lib::BaseGameState::not_added);
+            OA_CHECK(row.name == "Total Annihilation demo");
+            OA_CHECK(row.version == "1997");
+            OA_CHECK(row.letters == "DEMO");
+            OA_CHECK(row.expansions.empty());
+        }
+    }
+    OA_CHECK(saw_demo);
+
+    lib::mark_base_game(library, "totala-demo");
+    OA_CHECK(library.chooser.marked == "totala-demo");
+    OA_CHECK(library.chooser.note.find("Ridge") != std::string::npos);
+    OA_CHECK(library.chooser.note.find("Library closes") != std::string::npos);
+    const lib::BaseUse needs = lib::use_marked_base_game(library);
+    OA_CHECK(needs.kind == lib::BaseUseKind::needs_source);
+    OA_CHECK(needs.id == "totala-demo");
+    OA_CHECK(!library.content.edited && library.chooser.open);
+
+    library.inputs.in_match = true;
+    const lib::BaseUse blocked = lib::use_marked_base_game(library);
+    OA_CHECK(blocked.kind == lib::BaseUseKind::refused);
+    library.inputs.in_match = false;
+
+    lib::mark_base_game(library, "totala");
+    OA_CHECK(library.chooser.note.empty());
+    const lib::BaseUse same = lib::use_marked_base_game(library);
+    OA_CHECK(same.kind == lib::BaseUseKind::none);
+    OA_CHECK(!library.chooser.open && !library.content.edited);
+
+    inputs.content.copied.push_back("totala-demo");
+    lib::refresh(library, inputs);
+    OA_CHECK(lib::open_base_chooser(library).opened);
+    lib::mark_base_game(library, "totala");
+    lib::close_base_chooser(library);
+    OA_CHECK(!library.chooser.open && !library.content.pending_base);
+
+    OA_CHECK(lib::open_base_chooser(library).opened);
+    lib::mark_base_game(library, "totala-demo");
+    const lib::BaseUse applied = lib::use_marked_base_game(library);
+    OA_CHECK(applied.kind == lib::BaseUseKind::applied);
+    OA_CHECK(!library.chooser.open);
+    OA_CHECK(library.content.pending_base);
+    OA_CHECK(library.content.base_game == "totala-demo");
+    OA_CHECK(library.content.expansions.empty());
+    OA_CHECK(library.content.unload_mod);
+    OA_CHECK(library.content.clear_reason == lib::PendingClear::base_game_chosen);
+    OA_CHECK_TEXT(
+        lib::active_content(library).hint, "This base game is used when the Library closes."
+    );
+
+    lib::Library asked;
+    lib::Inputs pill_inputs;
+    pill_inputs.content.base_id = "totala";
+    pill_inputs.content.copied = {"campaign"};
+    pill_inputs.content.enabled = {"campaign"};
+    pill_inputs.content.mod_required = {"campaign"};
+    pill_inputs.installed.push_back(ridge);
+    lib::refresh(asked, std::move(pill_inputs));
+    OA_CHECK(lib::press_expansion(asked, "campaign").kind == lib::ContentPressKind::ask);
+    lib::accept_expansion_off(asked);
+    OA_CHECK(asked.content.unload_mod);
+    OA_CHECK(!asked.content.pending_base);
+    OA_CHECK(asked.content.clear_reason == lib::PendingClear::required_expansion_off);
+}
+
+/// Returns a button of an action, or null.
+///
+/// @param buttons the buttons
+/// @param action the action
+/// @return the button
+const lib::ActionButton* button_of(const std::vector<lib::ActionButton>& buttons, Action action) {
+    for (const lib::ActionButton& button : buttons)
+        if (button.action == action)
+            return &button;
+    return nullptr;
+}
+
+/// Tells whether the visible rows include an entry.
+///
+/// @param library the Library
+/// @param key the key
+/// @param registry the registry
+/// @return true when a row shows it
+bool row_visible(const lib::Library& library, std::string_view key, std::string_view registry) {
+    const std::string wanted = std::string(key) + "@" + std::string(registry);
+    const std::vector<std::string> keys = visible_keys(library);
+    return std::find(keys.begin(), keys.end(), wanted) != keys.end();
+}
+
+/// Copies the retail expansions a package's TURN ON press can ask for.
+///
+/// @param[in,out] inputs the inputs
+void copied_retail(lib::Inputs& inputs) {
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"campaign", "core-contingency", "battle-tactics", "music"};
+}
+
+/// A mod's games and the expansions it needs, on the row, the facts and TURN ON.
+void test_package_needs() {
+    const auto ridge_mod = [](lib::Inputs& inputs, bool installed_copy) {
+        lib::Listing listed = listing(core, Kind::mod, "ridge", "Ridge");
+        listed.supported_games = {"totala"};
+        listed.required_expansions = {"battle-tactics"};
+        inputs.listings.push_back(listed);
+        if (!installed_copy)
+            return;
+        lib::Installed have = installed(core, Kind::mod, "ridge", "Ridge");
+        have.supported_games = {"totala"};
+        have.required_expansions = {"battle-tactics"};
+        inputs.installed.push_back(have);
+    };
+
+    lib::Inputs inputs = base_inputs();
+    inputs.registries[0].downloads_on = true;
+    ridge_mod(inputs, true);
+    copied_retail(inputs);
+    inputs.content.enabled = {"campaign", "core-contingency"};
+    lib::Library library = built(inputs);
+    const lib::Entry* entry = at(library, core, Kind::mod, "ridge");
+    OA_CHECK(entry != nullptr && row_visible(library, "ridge", core));
+    if (entry == nullptr)
+        return;
+    OA_CHECK_TEXT(lib::content_lines(library, *entry).row, "Needs Battle Tactics, which is off");
+    const std::vector<lib::ActionButton> before = lib::entry_actions(library, *entry);
+    const lib::ActionButton* turn = button_of(before, Action::turn_on);
+    const lib::ActionButton* play = button_of(before, Action::play_now);
+    OA_CHECK(turn != nullptr && turn == &before.front() && turn->enabled);
+    if (turn != nullptr)
+        OA_CHECK_TEXT(turn->text, "TURN ON Battle Tactics");
+    OA_CHECK(play != nullptr && !play->enabled);
+    lib::select(library, entry->id);
+    OA_CHECK_TEXT(
+        lib::details_note(library),
+        "Turning it on applies when the Library closes, and then PLAY NOW works."
+    );
+    OA_CHECK(lib::turn_on_required(library, *entry));
+    OA_CHECK(holds_id(library.content.expansions, "battle-tactics"));
+    OA_CHECK(holds_id(library.content.expansions, "campaign"));
+    OA_CHECK(holds_id(library.content.expansions, "core-contingency"));
+    const std::vector<lib::ActionButton> after = lib::entry_actions(library, *entry);
+    OA_CHECK(button_of(after, Action::turn_on) == nullptr);
+    const lib::ActionButton* play_after = button_of(after, Action::play_now);
+    OA_CHECK(play_after != nullptr && play_after->enabled);
+    OA_CHECK_TEXT(lib::content_lines(library, *entry).row, "Needs Battle Tactics · on");
+
+    // Battle Tactics pulls Campaign on with it, and not Core Contingency.
+    lib::Inputs waiting = base_inputs();
+    ridge_mod(waiting, true);
+    copied_retail(waiting);
+    lib::Library closed = built(std::move(waiting));
+    const lib::Entry* tactics = at(closed, core, Kind::mod, "ridge");
+    OA_CHECK(tactics != nullptr);
+    if (tactics != nullptr) {
+        OA_CHECK(lib::turn_on_required(closed, *tactics));
+        OA_CHECK(holds_id(closed.content.expansions, "campaign"));
+        OA_CHECK(holds_id(closed.content.expansions, "battle-tactics"));
+        OA_CHECK(!holds_id(closed.content.expansions, "core-contingency"));
+    }
+
+    lib::Inputs demo = base_inputs();
+    lib::Listing demo_listed = listing(core, Kind::mod, "ridge", "Ridge");
+    demo_listed.supported_games = {"totala-demo"};
+    demo.listings.push_back(demo_listed);
+    lib::Installed demo_have = installed(core, Kind::mod, "ridge", "Ridge");
+    demo_have.supported_games = {"totala-demo"};
+    demo.installed.push_back(demo_have);
+    copied_retail(demo);
+    lib::Library demo_library = built(std::move(demo));
+    const lib::Entry* demo_entry = at(demo_library, core, Kind::mod, "ridge");
+    OA_CHECK(demo_entry != nullptr && row_visible(demo_library, "ridge", core));
+    if (demo_entry != nullptr) {
+        const lib::ContentLines lines = lib::content_lines(demo_library, *demo_entry);
+        OA_CHECK_TEXT(lines.row, "For the Total Annihilation demo only");
+        OA_CHECK(lines.turn_on.empty() && lines.blocks_play);
+        OA_CHECK_TEXT(lines.games, "Total Annihilation demo");
+        OA_CHECK(lines.games_mark == Mark::warn);
+        const std::vector<lib::ActionButton> demo_buttons =
+            lib::entry_actions(demo_library, *demo_entry);
+        const lib::ActionButton* demo_play = button_of(demo_buttons, Action::play_now);
+        OA_CHECK(
+            demo_play != nullptr && !demo_play->enabled &&
+            button_of(demo_buttons, Action::turn_on) == nullptr
+        );
+    }
+
+    lib::Inputs met = base_inputs();
+    lib::Listing met_listed = listing(core, Kind::mod, "ridge", "Ridge");
+    met_listed.supported_games = {"totala"};
+    met_listed.required_expansions = {"core-contingency"};
+    met.listings.push_back(met_listed);
+    lib::Installed met_have = installed(core, Kind::mod, "ridge", "Ridge");
+    met_have.supported_games = {"totala"};
+    met_have.required_expansions = {"core-contingency"};
+    met.installed.push_back(met_have);
+    copied_retail(met);
+    met.content.enabled = {"campaign", "core-contingency"};
+    lib::Library met_library = built(std::move(met));
+    const lib::Entry* met_entry = at(met_library, core, Kind::mod, "ridge");
+    OA_CHECK(met_entry != nullptr);
+    if (met_entry != nullptr) {
+        OA_CHECK_TEXT(
+            lib::content_lines(met_library, *met_entry).row, "Needs Core Contingency · on"
+        );
+        const std::vector<lib::ActionButton> met_buttons =
+            lib::entry_actions(met_library, *met_entry);
+        const lib::ActionButton* met_play = button_of(met_buttons, Action::play_now);
+        OA_CHECK(met_play != nullptr && met_play->enabled);
+        OA_CHECK(button_of(met_buttons, Action::turn_on) == nullptr);
+    }
+
+    lib::Inputs offered = base_inputs();
+    offered.registries[0].downloads_on = true;
+    ridge_mod(offered, false);
+    copied_retail(offered);
+    lib::Library offer_library = built(std::move(offered));
+    const lib::Entry* offer = at(offer_library, core, Kind::mod, "ridge");
+    OA_CHECK(offer != nullptr && row_visible(offer_library, "ridge", core));
+    if (offer != nullptr) {
+        const lib::ContentLines lines = lib::content_lines(offer_library, *offer);
+        OA_CHECK_TEXT(lines.row, "Needs Battle Tactics, which is off");
+        OA_CHECK_TEXT(lines.games, "Total Annihilation ✓");
+        OA_CHECK_TEXT(lines.expansions, "Battle Tactics off");
+        const std::vector<lib::ActionButton> offer_buttons =
+            lib::entry_actions(offer_library, *offer);
+        const lib::ActionButton* get = button_of(offer_buttons, Action::get);
+        OA_CHECK(get != nullptr && get->enabled);
+        OA_CHECK(button_of(offer_buttons, Action::play_now) == nullptr);
+        OA_CHECK(button_of(offer_buttons, Action::turn_on) != nullptr);
+    }
+
+    lib::Inputs packs = base_inputs();
+    packs.registries[0].downloads_on = true;
+    lib::Listing map_listed = listing(core, Kind::map_pack, "ridge-maps", "Ridge Maps");
+    map_listed.supported_games = {"totala"};
+    map_listed.required_expansions = {"battle-tactics"};
+    lib::MapLine map_line;
+    map_line.name = "Ridgeline";
+    map_line.players = 2;
+    map_line.size = "16x16";
+    map_listed.maps.push_back(map_line);
+    packs.listings.push_back(map_listed);
+    lib::Installed map_have = installed(core, Kind::map_pack, "ridge-maps", "Ridge Maps");
+    map_have.supported_games = {"totala"};
+    map_have.required_expansions = {"battle-tactics"};
+    packs.installed.push_back(map_have);
+    lib::Listing language_listed = listing(core, Kind::language, "de", "Deutsch");
+    language_listed.supported_games = {"totala"};
+    language_listed.required_expansions = {"battle-tactics"};
+    packs.listings.push_back(language_listed);
+    lib::Installed language_have = installed(core, Kind::language, "de", "Deutsch");
+    language_have.supported_games = {"totala"};
+    language_have.required_expansions = {"battle-tactics"};
+    packs.installed.push_back(language_have);
+    copied_retail(packs);
+    lib::Library pack_library = built(std::move(packs));
+    lib::set_tab(pack_library, lib::Tab::maps);
+    const lib::Entry* map_entry = at(pack_library, core, Kind::map_pack, "ridge-maps");
+    OA_CHECK(map_entry != nullptr && row_visible(pack_library, "ridge-maps", core));
+    if (map_entry != nullptr) {
+        OA_CHECK_TEXT(
+            lib::content_lines(pack_library, *map_entry).row, "Needs Battle Tactics, which is off"
+        );
+        const std::vector<lib::ActionButton> map_buttons =
+            lib::entry_actions(pack_library, *map_entry);
+        OA_CHECK(button_of(map_buttons, Action::play_now) == nullptr);
+        OA_CHECK(button_of(map_buttons, Action::turn_on) != nullptr);
+        lib::select(pack_library, map_entry->id);
+        OA_CHECK_TEXT(
+            lib::details_note(pack_library), "Turning it on applies when the Library closes."
+        );
+    }
+    lib::set_tab(pack_library, lib::Tab::languages);
+    const lib::Entry* language_entry = at(pack_library, core, Kind::language, "de");
+    OA_CHECK(language_entry != nullptr && row_visible(pack_library, "de", core));
+    if (language_entry != nullptr) {
+        const std::vector<lib::ActionButton> language_buttons =
+            lib::entry_actions(pack_library, *language_entry);
+        const lib::ActionButton* use = button_of(language_buttons, Action::use_now);
+        OA_CHECK(use != nullptr && !use->enabled);
+        lib::select(pack_library, language_entry->id);
+        OA_CHECK_TEXT(
+            lib::details_note(pack_library),
+            "Turning it on applies when the Library closes, and then USE NOW works."
+        );
+        OA_CHECK(lib::turn_on_required(pack_library, *language_entry));
+        const std::vector<lib::ActionButton> used_buttons =
+            lib::entry_actions(pack_library, *language_entry);
+        const lib::ActionButton* used = button_of(used_buttons, Action::use_now);
+        OA_CHECK(used != nullptr && used->enabled);
+    }
+
+    lib::Inputs missing = base_inputs();
+    ridge_mod(missing, true);
+    missing.content.base_id = "totala";
+    missing.content.copied = {"campaign", "core-contingency"};
+    lib::Library missing_library = built(std::move(missing));
+    const lib::Entry* missing_entry = at(missing_library, core, Kind::mod, "ridge");
+    OA_CHECK(missing_entry != nullptr);
+    if (missing_entry != nullptr) {
+        const lib::ContentLines lines = lib::content_lines(missing_library, *missing_entry);
+        OA_CHECK_TEXT(lines.row, "Needs Battle Tactics, which is off");
+        OA_CHECK(lines.turn_on.empty());
+    }
+
+    lib::Inputs locked = base_inputs();
+    ridge_mod(locked, true);
+    copied_retail(locked);
+    locked.content.locked = true;
+    lib::Library locked_library = built(locked);
+    const lib::Entry* locked_entry = at(locked_library, core, Kind::mod, "ridge");
+    OA_CHECK(locked_entry != nullptr);
+    if (locked_entry != nullptr) {
+        OA_CHECK(lib::content_lines(locked_library, *locked_entry).turn_on.empty());
+        const std::vector<lib::ActionButton> locked_buttons =
+            lib::entry_actions(locked_library, *locked_entry);
+        const lib::ActionButton* locked_play = button_of(locked_buttons, Action::play_now);
+        OA_CHECK(locked_play != nullptr && !locked_play->enabled);
+    }
+    locked.in_match = true;
+    locked.content.locked = false;
+    lib::Library during = built(locked);
+    const lib::Entry* during_entry = at(during, core, Kind::mod, "ridge");
+    OA_CHECK(during_entry != nullptr);
+    if (during_entry != nullptr) {
+        OA_CHECK(lib::content_lines(during, *during_entry).turn_on.empty());
+        const std::vector<lib::ActionButton> during_buttons =
+            lib::entry_actions(during, *during_entry);
+        const lib::ActionButton* during_play = button_of(during_buttons, Action::play_now);
+        OA_CHECK(during_play != nullptr && !during_play->enabled);
+    }
+    locked.in_match = false;
+    locked.mod_from_command_line = true;
+    locked.content.enabled = {"campaign", "core-contingency", "battle-tactics"};
+    lib::Library commanded = built(std::move(locked));
+    const lib::Entry* commanded_entry = at(commanded, core, Kind::mod, "ridge");
+    OA_CHECK(commanded_entry != nullptr);
+    if (commanded_entry != nullptr) {
+        OA_CHECK(lib::content_lines(commanded, *commanded_entry).turn_on.empty());
+        const std::vector<lib::ActionButton> commanded_buttons =
+            lib::entry_actions(commanded, *commanded_entry);
+        const lib::ActionButton* commanded_play = button_of(commanded_buttons, Action::play_now);
+        OA_CHECK(commanded_play != nullptr && !commanded_play->enabled);
+    }
+
+    lib::Inputs cleared = base_inputs();
+    cleared.content.expansion_cleared = true;
+    lib::Library cleared_library = built(std::move(cleared));
+    OA_CHECK(cleared_library.expansion_note);
+    OA_CHECK_TEXT(
+        lib::active_content(cleared_library).hint,
+        "The mod was unloaded because an expansion it needs is off. The game plays with No Mod."
+    );
+
+    lib::Inputs played_inputs = base_inputs();
+    lib::Installed played = installed(core, Kind::mod, "ridge", "Ridge");
+    played.playing = true;
+    played.required_expansions = {"campaign"};
+    played.supported_games = {"totala"};
+    played_inputs.installed.push_back(played);
+    copied_retail(played_inputs);
+    played_inputs.content.enabled = {"campaign"};
+    played_inputs.content.mod_required = {"campaign"};
+    lib::PlayingMod playing;
+    playing.name = "Ridge";
+    played_inputs.playing_mod = playing;
+    lib::Library played_library = built(std::move(played_inputs));
+    const lib::ContentPress asked = lib::press_expansion(played_library, "campaign");
+    OA_CHECK(asked.kind == lib::ContentPressKind::ask);
+    lib::accept_expansion_off(played_library);
+    OA_CHECK_TEXT(
+        lib::active_content(played_library).hint,
+        "Ridge was unloaded because Campaign is off. The game plays with No Mod."
+    );
+    const lib::ContentPress restored = lib::press_expansion(played_library, "campaign");
+    OA_CHECK(restored.kind == lib::ContentPressKind::redraw);
+    OA_CHECK(played_library.content.unloaded_mod.empty());
+    OA_CHECK(
+        lib::active_content(played_library).hint == "Campaign turns on when the Library closes."
+    );
+
+    lib::Inputs ranged = base_inputs();
+    lib::Listing ranged_listed = listing(core, Kind::mod, "ridge", "Ridge");
+    ranged_listed.requires_engine = ">= 0.8.0";
+    ranged_listed.base = "ta-3.1c";
+    ranged_listed.supported_games = {"totala", "totala-demo"};
+    ranged_listed.required_expansions = {"campaign"};
+    ranged.listings.push_back(ranged_listed);
+    lib::Installed ranged_have = installed(core, Kind::mod, "ridge", "Ridge");
+    ranged_have.supported_games = {"totala", "totala-demo"};
+    ranged_have.required_expansions = {"campaign"};
+    ranged.installed.push_back(ranged_have);
+    copied_retail(ranged);
+    ranged.content.enabled = {"campaign"};
+    lib::Library ranged_library = built(std::move(ranged));
+    const lib::Entry* ranged_entry = at(ranged_library, core, Kind::mod, "ridge");
+    OA_CHECK(ranged_entry != nullptr);
+    if (ranged_entry != nullptr) {
+        const std::vector<lib::Fact> facts = lib::facts(ranged_library, *ranged_entry);
+        std::vector<std::string> labels;
+        int needs_seen = 0;
+        for (const lib::Fact& item : facts) {
+            labels.push_back(item.long_label);
+            if (item.long_label != "Needs")
+                continue;
+            if (needs_seen == 0)
+                OA_CHECK_TEXT(item.long_value, "Open Annihilation 0.8.0 or later");
+            if (needs_seen == 1) {
+                OA_CHECK_TEXT(item.long_value, "Campaign ✓");
+                OA_CHECK(item.mark == Mark::none);
+            }
+            ++needs_seen;
+        }
+        OA_CHECK(needs_seen == 2);
+        OA_CHECK(
+            std::find(labels.begin(), labels.end(), "Games") != labels.end() &&
+            std::find(labels.begin(), labels.end(), "Base") <
+                std::find(labels.begin(), labels.end(), "Games") &&
+            std::find(labels.begin(), labels.end(), "Games") <
+                std::find(labels.begin(), labels.end(), "Needs")
+        );
+        const lib::ContentLines lines = lib::content_lines(ranged_library, *ranged_entry);
+        OA_CHECK_TEXT(lines.games, "Total Annihilation ✓ · Total Annihilation demo");
+        OA_CHECK(!lines.row.empty());
+        OA_CHECK_TEXT(lines.row, "Needs Campaign · on");
+    }
+}
+
+/// A required expansion unloads the mod, then another base game is chosen.
+/// The draft holds one choice, so the close stores it once.
+void test_base_game_after_required_off() {
+    lib::Inputs inputs;
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"totala", "totala-demo", "campaign"};
+    inputs.content.enabled = {"campaign"};
+    inputs.content.mod_required = {"campaign"};
+    lib::Installed ridge;
+    ridge.kind = Kind::mod;
+    ridge.key = "ridge";
+    ridge.name = "Ridge";
+    ridge.playing = true;
+    inputs.installed.push_back(ridge);
+    lib::Library library;
+    lib::refresh(library, inputs);
+
+    OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::ask);
+    lib::accept_expansion_off(library);
+    OA_CHECK(library.content.unload_mod);
+    OA_CHECK(!library.content.pending_base);
+    OA_CHECK(!library.content.applied);
+    OA_CHECK(library.content.clear_reason == lib::PendingClear::required_expansion_off);
+    OA_CHECK(library.content.unloaded_mod == "Ridge");
+    OA_CHECK(library.content.unloaded_for == "campaign");
+    OA_CHECK_TEXT(
+        lib::active_content(library).hint,
+        "Ridge was unloaded because Campaign is off. The game plays with No Mod."
+    );
+    OA_CHECK_TEXT(lib::active_setup(library).mod_line, "No Mod");
+
+    OA_CHECK(lib::open_base_chooser(library).opened);
+    lib::mark_base_game(library, "totala-demo");
+    OA_CHECK(library.chooser.note.find("Ridge") == std::string::npos);
+    OA_CHECK(library.chooser.note.find("Library closes") != std::string::npos);
+    const lib::BaseUse used = lib::use_marked_base_game(library);
+    OA_CHECK(used.kind == lib::BaseUseKind::applied);
+    OA_CHECK(!library.chooser.open);
+    OA_CHECK(library.content.base_game == "totala-demo");
+    OA_CHECK(library.content.expansions.empty());
+    OA_CHECK(library.content.pending_base);
+    OA_CHECK(library.content.unload_mod);
+    OA_CHECK(library.content.clear_reason == lib::PendingClear::required_expansion_off);
+    OA_CHECK(library.content.unloaded_mod == "Ridge");
+    OA_CHECK(library.content.unloaded_for == "campaign");
+    OA_CHECK(library.content.edited);
+    OA_CHECK(!library.content.applied);
+    OA_CHECK_TEXT(
+        lib::active_content(library).hint, "This base game is used when the Library closes."
+    );
+    OA_CHECK_TEXT(lib::active_setup(library).mod_line, "No Mod");
+
+    // The host applies this one draft on close, then a second close finds it applied.
+    const bool first_close = library.content.edited && !library.content.applied;
+    OA_CHECK(first_close);
+    library.content.applied = true;
+    library.content.edited = false;
+    const bool second_close = library.content.edited && !library.content.applied;
+    OA_CHECK(!second_close);
+    OA_CHECK(library.content.clear_reason == lib::PendingClear::required_expansion_off);
+    OA_CHECK(library.content.base_game == "totala-demo");
+    OA_CHECK(library.content.unload_mod);
+}
+
 void test_lookup() {
     lib::TextHooks hooks;
     hooks.shown = reversed_words;
@@ -2653,6 +3179,8 @@ int main() {
     test_switch_off();
     test_base_game();
     test_expansion_pills();
+    test_base_chooser();
+    test_base_game_after_required_off();
     test_check_now();
     test_built_in_languages();
     test_tab_counts();
@@ -2666,6 +3194,7 @@ int main() {
     test_change_texts();
     test_texts();
     test_registry_texts();
+    test_package_needs();
     test_lookup();
     return oa::test::check_exit_status();
 }

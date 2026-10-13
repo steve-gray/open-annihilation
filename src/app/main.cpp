@@ -17,6 +17,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/content_copy.hpp"
+#include "oa/app/disk_image_source.hpp"
 #include "oa/app/game_files_import.hpp"
 #include "oa/app/input_hints.hpp"
 #include "oa/app/package_install.hpp"
@@ -885,6 +886,7 @@ int run_once(
             game_directory = std::move(copied);
         options.game_dir = game_directory->installation;
     }
+    options.managed_content = game_directory->source == GameDirectorySource::managed;
     options.game_folders = game_directory->folders;
     if (options.game_folders.empty())
         options.game_folders = {options.game_dir};
@@ -1287,7 +1289,7 @@ int main(int argc, char** argv) {
         // line is parsed; the runtime gets the table that combines them.
         const ExtensionList extensions(registered_extensions());
         const Extension& extension = extensions.combined();
-        const Options parsed = parse_options(argc, argv, extension);
+        Options parsed = parse_options(argc, argv, extension);
         // The Game files screen's check installs its scripted platform
         // before anything reads the hooks.
         if constexpr (self_checks_built)
@@ -1330,6 +1332,16 @@ int main(int argc, char** argv) {
         // a change waiting for this start left is taken up before the
         // folder is looked for.
         GameFilesStart game_files = start_game_files(parsed);
+        // The content check plays the player's copy, so Core Contingency's
+        // maps can leave the skirmish list. --game-dir is only the source of
+        // that copy: an unattended start would refuse to make it.
+        if (parsed.check_library_content && !parsed.game_dir.empty()) {
+            Options seeding = parsed;
+            seeding.unattended = false;
+            seeding.headless_check = false;
+            publish_managed_copy(seeding, parsed.game_dir, false);
+            parsed.game_dir.clear();
+        }
         // The window, its renderer and the lookup log last the whole
         // process: the window opens where the game opens it, or early for
         // the Game files screen, and only once, and a switch of the mod from

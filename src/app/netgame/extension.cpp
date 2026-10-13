@@ -908,7 +908,12 @@ struct RuntimeExtension {
     /// @param runtime The running app.
     /// @return False without --play-demo, leaving the start to the menu music.
     static bool start_scene(void* /*context*/, Runtime& runtime) {
+        if (net_options().play_demo.empty() && !runtime.pending_demo_path().empty())
+            netgame_context().options.play_demo = path_from_utf8(runtime.pending_demo_path());
         if (net_options().play_demo.empty())
+            return false;
+        const auto& demo = net_options().play_demo;
+        if (runtime.offer_content_switch(demo, path_to_utf8(demo.filename()), true))
             return false;
         NetworkPlay::of(runtime).start_demo_playback();
         return true;
