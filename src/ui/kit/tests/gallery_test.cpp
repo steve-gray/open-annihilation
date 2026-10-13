@@ -847,6 +847,15 @@ int main() {
         no_text_shows_the_version(shown, laid);
         using_the_samples_changes_the_model_alone(shown, frame);
         the_gallery_draws(shown, frame, laid);
+        if (shown.size_class != kit::SizeClass::compact) {
+            const kit::Item* coach = nullptr;
+            for (const kit::Item& item : laid.list.items)
+                if (item.role == kit::Role::coach_mark)
+                    coach = &item;
+            expect(
+                coach != nullptr && coach->rect.width >= 140, shown, "the coach mark is squeezed"
+            );
+        }
     }
     return oa::test::check_exit_status();
 }
