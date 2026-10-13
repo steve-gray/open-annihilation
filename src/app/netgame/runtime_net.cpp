@@ -1423,9 +1423,11 @@ struct NetworkPlay::NetHost {
         if (!out)
             std::cerr << "multiplayer: the recording could not be saved to "
                       << path_to_utf8(state.recording_path) << '\n';
-        else
+        else {
+            play.runtime_.note_content_beside(state.recording_path);
             std::cout << "multiplayer: recorded the game to " << path_to_utf8(state.recording_path)
                       << '\n';
+        }
     }
 
     static void abort(NetworkPlay& play, std::string_view reason) {

@@ -12,6 +12,7 @@
 #pragma once
 
 #include "oa/data/content_bundles.hpp"
+#include "oa/data/content_bundles/record.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -36,7 +37,8 @@ inline constexpr std::string_view managed_games_folder = "games";
 /// The folder of expansions under the player's folder.
 inline constexpr std::string_view managed_expansions_folder = "expansions";
 /// The record written in a bundle folder.
-inline constexpr std::string_view content_record_name = ".oa-content";
+inline constexpr std::string_view content_record_name =
+    oa::data::content_bundles::content_record_name;
 
 /// How many bytes to require free before a copy.
 ///
@@ -143,6 +145,9 @@ struct StreamRequest {
     void* chunk_context{};
 };
 
+struct CopyRequest;
+struct CopyResult;
+
 /// A place game files can be read from, without running an installer.
 ///
 /// A folder implements it. An installer implements the same three operations:
@@ -183,6 +188,22 @@ class ContentSource {
     /// @return true when the file was finished or the stop was honoured
     [[nodiscard]] virtual bool
     stream_file(const StreamRequest& request, StreamResult& result, std::string* error) = 0;
+
+    /// Copies every matched file in one pass.
+    ///
+    /// The default does nothing and returns false, and the copy then reads
+    /// the source one file at a time. A source whose files come in order
+    /// returns true and has finished the copy, including a copy that failed:
+    /// `result` says how.
+    ///
+    /// @param request where the files go, and when to stop
+    /// @param[out] result how the copy ended, when this returns true
+    /// @return true when this source copied the files itself
+    [[nodiscard]] virtual bool copy_together(const CopyRequest& request, CopyResult& result) {
+        (void)request;
+        (void)result;
+        return false;
+    }
 
     /// Resolves a listed name to a file on disk, for a volume that can share
     /// its blocks.
@@ -298,41 +319,21 @@ class WindowsInstallerSource final : public ContentSource {
     std::unique_ptr<State> state_;
 };
 
-/// One file recorded in a bundle folder.
-struct ContentRecordFile {
-    /// The name it is stored under, relative to the bundle folder.
-    std::string copy_name;
-    /// Size in bytes.
-    uint64_t size{};
-    /// Modification time, seconds since 1970.
-    int64_t modified{};
-    /// SHA-256 of the bytes.
-    oa::base::sha256::Digest digest{};
-};
+/// One file recorded in a bundle folder. The format lives in
+/// `oa/data/content_bundles/record.hpp`.
+using ContentRecordFile = oa::data::content_bundles::ContentRecordFile;
 
 /// The .oa-content record of one bundle folder.
-struct ContentRecord {
-    /// True when the file exists.
-    bool present{};
-    /// True when the file is a record this reader understands.
-    bool valid{};
-    /// True when the file exists and could not be read.
-    bool io_error{};
-    /// The bundle id the record names.
-    std::string bundle_id;
-    /// The source the files were copied from, as the player named it.
-    std::string source;
-    /// The files recorded so far.
-    std::vector<ContentRecordFile> files;
-};
+using ContentRecord = oa::data::content_bundles::ContentRecord;
 
-/// Reads a bundle folder's record.
+/// Reads a bundle folder's record from the record file's path.
 ///
 /// A missing file is an empty record with present false. A file that is not
 /// a record is present and not valid, which a copy treats as empty. A file
-/// that cannot be read sets io_error.
+/// that cannot be read sets io_error. The bytes are read by
+/// `read_bundle_folder_record`.
 ///
-/// @param file the record's path
+/// @param file the record's path, `<bundle folder>/.oa-content`
 /// @param[out] error why it could not be read; may be null; unset otherwise
 /// @return the record
 [[nodiscard]] ContentRecord
@@ -586,6 +587,97 @@ struct CopyCheckFile {
 /// @param documents the scratch Documents folder
 /// @return 0 when the check passed, 1 when it did not
 [[nodiscard]] int run_content_copy_check(const std::filesystem::path& documents);
+
+/// The macOS installer package. The game files are read from its payload in
+/// one pass and matched against `bundles`. When `require_known` is set, the
+/// file has to be the recognised installer before anything is copied.
+class MacosInstallerSource final : public ContentSource {
+  public:
+
+    /// Takes the installer the player named and the table its files are
+    /// matched against. The table has to outlive the source.
+    ///
+    /// @param file the installer file
+    /// @param bundles the bundles a file of the right name and size belongs to
+    /// @param require_known true when the file has to be the recognised installer
+    MacosInstallerSource(
+        std::filesystem::path file,
+        std::span<const oa::data::content_bundles::Bundle> bundles,
+        bool require_known = true
+    );
+
+    /// The installer file, as the copy's record keeps it.
+    [[nodiscard]] std::string origin() const override;
+    /// Checks the file, and reads the installer's table of contents.
+    [[nodiscard]] bool open(std::string* error) override;
+    /// Lists the game files the installer holds.
+    [[nodiscard]] bool list(std::vector<ContentSourceFile>& files, std::string* error) override;
+    /// Writes one listed game file. The payload is read from the start.
+    [[nodiscard]] bool
+    stream_file(const StreamRequest& request, StreamResult& result, std::string* error) override;
+    /// Copies the matched game files in one pass over the payload.
+    [[nodiscard]] bool copy_together(const CopyRequest& request, CopyResult& result) override;
+
+  private:
+
+    friend struct InstallerWalk;
+
+    /// Writes the installer's check. See report_macos_installer.
+    friend int report_macos_installer(
+        const std::filesystem::path& file,
+        std::span<const oa::data::content_bundles::Bundle> bundles,
+        bool require_known,
+        std::ostream& out
+    );
+
+    /// Checks the installer and writes one line for each table file.
+    ///
+    /// @param out where the lines are written
+    /// @return 0 when every table file is present and known, 1 otherwise
+    [[nodiscard]] int write_check(std::ostream& out);
+
+    /// Opens the installer once.
+    ///
+    /// @param[out] error why it could not be opened; may be null
+    /// @param news where a check of the file is announced; may be null
+    /// @return true when the payload can be read
+    [[nodiscard]] bool ensure(std::string* error, std::ostream* news);
+
+    std::filesystem::path file_{};
+    std::span<const oa::data::content_bundles::Bundle> bundles_{};
+    bool require_known_{};
+    bool opened_{};
+    std::string open_error_{};
+    uint64_t scripts_at_{};
+    uint64_t scripts_bytes_{};
+    bool outer_gzip_{};
+    bool ready_{};
+};
+
+/// Reads the macOS installer and checks the game files it holds.
+///
+/// Nothing is written. A known installer is recognised by its size and
+/// SHA-256 when `require_known` is set. Each file the table names is
+/// reported, and a missing file or a file that is not a known hash fails
+/// the check.
+///
+/// @param file the installer
+/// @param bundles the table to match against
+/// @param require_known true when the file has to be the recognised installer
+/// @param out where the report is written
+/// @return 0 when the check passed, 1 when it did not
+[[nodiscard]] int report_macos_installer(
+    const std::filesystem::path& file,
+    std::span<const oa::data::content_bundles::Bundle> bundles,
+    bool require_known,
+    std::ostream& out
+);
+
+/// Checks the recognised macOS installer and writes the report to standard output.
+///
+/// @param file the installer
+/// @return 0 when the check passed, 1 when it did not
+[[nodiscard]] int run_macos_installer_check(const std::filesystem::path& file);
 
 /// One file of a copied bundle whose bytes are not a hash the table knows.
 struct ContentFileDifference {

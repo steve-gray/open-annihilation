@@ -4,6 +4,7 @@
 // .tad demo playback: the recording's map and players become a match in
 // which every recorded player is remote and the local slot only watches; the
 // recorded packets arrive through the network receive path.
+#include "oa/app/game_directory.hpp"
 #include "oa/app/runtime.hpp"
 #include "network_play.hpp"
 #include "oa/app/check_host.hpp"
@@ -76,6 +77,10 @@ void NetworkPlay::start_demo_playback() {
                             : demo::demo_open(&session->playback, net_options().play_demo, &error);
     if (!loaded)
         throw std::runtime_error(error);
+    const fs::path recorded = staged ? path_from_utf8(staged->name) : net_options().play_demo;
+    const std::string needs = runtime_.content_switch_sentence(recorded);
+    if (!needs.empty())
+        throw std::runtime_error(needs);
     const bool ignore_unit_table = staged ? !staged->strict : net_options().demo_ignore_unit_table;
     const auto& recording = session->playback.demo;
     const auto& players = recording.players;

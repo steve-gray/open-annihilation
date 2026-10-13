@@ -8,6 +8,22 @@
 
 
 
+["{title}" was saved with {name}.]
+	{
+	de="{title}" wurde mit {name} gespeichert.;
+	fr="{title}" a été sauvegardé avec {name}.;
+	es="{title}" se guardó con {name}.;
+	it="{title}" è stato salvato con {name}.;
+	}
+
+["{title}" was saved with {name}, which is off.]
+	{
+	de="{title}" wurde mit {name} gespeichert, und das ist aus.;
+	fr="{title}" a été sauvegardé avec {name}, qui est désactivé.;
+	es="{title}" se guardó con {name}, que está desactivado.;
+	it="{title}" è stato salvato con {name}, che è spento.;
+	}
+
 [,]
 	{
 	de=,;
@@ -2630,6 +2646,14 @@
 	fr=Les explosions éclairent le sol à moitié;
 	es=Las explosiones iluminan el suelo a la mitad;
 	it=Le esplosioni illuminano il terreno a metà;
+	}
+
+[Expansions]
+	{
+	de=Erweiterungen;
+	fr=Extensions;
+	es=Expansiones;
+	it=Espansioni;
 	}
 
 [External Exports]
@@ -5536,6 +5560,14 @@
 	it=Non installato · {size};
 	}
 
+[NOW]
+	{
+	de=JETZT;
+	fr=MAINTENANT;
+	es=AHORA;
+	it=ORA;
+	}
+
 [Not now]
 	{
 	de=Nicht jetzt;
@@ -7736,6 +7768,14 @@
 	it=Limite del ritmo di dono delle strutture;
 	}
 
+[Switching to {name} restarts the game's files, then loads this save.]
+	{
+	de=Der Wechsel zu {name} lädt die Spieldateien neu und dann diesen Spielstand.;
+	fr=Passer à {name} relance les fichiers du jeu, puis charge cette sauvegarde.;
+	es=Cambiar a {name} reinicia los archivos del juego y luego carga esta partida.;
+	it=Passare a {name} riavvia i file del gioco e poi carica questo salvataggio.;
+	}
+
 [Switch to {title} now? The game reloads its data for the new mod and returns to the main menu. Your other settings are kept.]
 	{
 	de=Jetzt zu {title} wechseln? Das Spiel lädt seine Daten für den neuen Mod neu und kehrt zum Hauptmenü zurück. Deine anderen Einstellungen bleiben.;
@@ -7808,6 +7848,14 @@
 	it=TOCCO: {action};
 	}
 
+[THE SAVE]
+	{
+	de=DER SPIELSTAND;
+	fr=LA SAUVEGARDE;
+	es=LA PARTIDA;
+	it=IL SALVATAGGIO;
+	}
+
 [THE MAIN MENU]
 	{
 	de=DAS HAUPTMENÜ;
@@ -7830,6 +7878,22 @@
 	fr=RÉESSAYER;
 	es=REINTENTAR;
 	it=RIPROVA;
+	}
+
+[Turn on and load]
+	{
+	de=Einschalten und laden;
+	fr=Activer et charger;
+	es=Activar y cargar;
+	it=Accendi e carica;
+	}
+
+[Turning {name} on restarts the game's files, then loads this save. Your other expansions stay as they are.]
+	{
+	de={name} einzuschalten lädt die Spieldateien neu und dann diesen Spielstand. Deine anderen Erweiterungen bleiben, wie sie sind.;
+	fr=Activer {name} relance les fichiers du jeu, puis charge cette sauvegarde. Tes autres extensions restent comme elles sont.;
+	es=Activar {name} reinicia los archivos del juego y luego carga esta partida. Tus otras expansiones se quedan como están.;
+	it=Accendere {name} riavvia i file del gioco e poi carica questo salvataggio. Le altre espansioni restano come sono.;
 	}
 
 [TURN OFF]
@@ -8782,6 +8846,22 @@
 	fr=Ce mod ne peut pas être utilisé;
 	es=Este mod no se puede usar;
 	it=Questo mod non si può usare;
+	}
+
+[This run names its content, so it cannot switch.]
+	{
+	de=Dieser Start nennt seinen Inhalt, darum kann er nicht wechseln.;
+	fr=Cette partie nomme son contenu, donc elle ne peut pas changer.;
+	es=Esta partida nombra su contenido, así que no puede cambiar.;
+	it=Questa partita indica i suoi contenuti, quindi non può cambiare.;
+	}
+
+[This save needs other content]
+	{
+	de=Dieser Spielstand braucht anderen Inhalt;
+	fr=Cette sauvegarde a besoin d'un autre contenu;
+	es=Esta partida guardada necesita otro contenido;
+	it=Questo salvataggio ha bisogno di altri contenuti;
 	}
 
 [This replaces the game files on this {device} ({size}) with the folder you chose. The current folder is kept as Total Annihilation (old) until you remove it. Saved games and settings stay.]
@@ -11070,6 +11150,30 @@
 	fr=x5 : Maj pour les boutons de construction, cinq à la fois. Touche pour le verrouiller, maintiens pour une fois.;
 	es=x5: Mayús para los botones de construcción, cinco a la vez. Toca para fijarlo, mantén para una vez.;
 	it=x5: Maiusc per i pulsanti di costruzione, cinque alla volta. Tocca per bloccarlo, tieni premuto per una volta.;
+	}
+
+[{name} is not copied, so this save cannot be loaded with it.]
+	{
+	de={name} ist nicht kopiert, darum lässt sich dieser Spielstand damit nicht laden.;
+	fr={name} n'est pas copié, donc cette sauvegarde ne peut pas se charger avec.;
+	es={name} no está copiado, así que esta partida no se puede cargar con eso.;
+	it={name} non è stato copiato, quindi questo salvataggio non si può caricare con quello.;
+	}
+
+[{row}: {saved} / {now}]
+	{
+	de={row}: {saved} / {now};
+	fr={row}: {saved} / {now};
+	es={row}: {saved} / {now};
+	it={row}: {saved} / {now};
+	}
+
+[{save_heading} / {now_heading}]
+	{
+	de={save_heading} / {now_heading};
+	fr={save_heading} / {now_heading};
+	es={save_heading} / {now_heading};
+	it={save_heading} / {now_heading};
 	}
 
 [{To} changes the game's rules. Saved games from {from} won't load under {to}. {From} is kept, and ROLL BACK brings it back.]

@@ -4,13 +4,13 @@
 // Game directory resolution and installation checks for oa-game.
 #include "oa/app/game_directory.hpp"
 #include "oa/data/content_bundles.hpp"
+#include "oa/data/content_bundles/record.hpp"
 #include "oa/formats/hpi.hpp"
 #include "oa/platform/files.hpp"
 #include "oa/ui/engine_settings.hpp"
 
 #include <algorithm>
 #include <cctype>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <system_error>
@@ -375,9 +375,9 @@ void take_archive(const fs::path& root, const fs::path& archive, GameInstall& in
 
 // The managed copy's folder names. They match content_copy.hpp. That module
 // links this one, so this file keeps its own copies and does not call it.
+// The record itself is read through content_bundles.
 constexpr std::string_view kManagedGamesFolder = "games";
 constexpr std::string_view kManagedExpansionsFolder = "expansions";
-constexpr std::string_view kContentRecordName = ".oa-content";
 
 [[nodiscard]] bool directory_named(const fs::path& folder, std::string_view name) {
     return equal_ignoring_case(path_to_utf8(folder.filename()), name);
@@ -400,94 +400,16 @@ bundle_directory(const fs::path& user, const oa::data::content_bundles::Bundle& 
     return user / std::string(kManagedExpansionsFolder) / std::string(bundle.extends[0]) / id;
 }
 
-// A `.oa-content` record, read far enough to know which bundle it lists.
-struct ReadRecord {
-    bool valid = false;
-    std::string bundle_id;
-    std::vector<std::string> files;
-};
-
-[[nodiscard]] bool digits_only(std::string_view text, bool sign) {
-    if (text.empty())
-        return false;
-    std::size_t start = 0;
-    if (sign && (text.front() == '-' || text.front() == '+')) {
-        if (text.size() == 1)
-            return false;
-        start = 1;
-    }
-    for (std::size_t index = start; index < text.size(); ++index)
-        if (std::isdigit(static_cast<unsigned char>(text[index])) == 0)
-            return false;
-    return true;
-}
-
-[[nodiscard]] bool sha256_hex(std::string_view text) {
-    if (text.size() != 64)
-        return false;
-    for (const char character : text)
-        if (std::isxdigit(static_cast<unsigned char>(character)) == 0)
-            return false;
-    return true;
-}
-
-[[nodiscard]] bool has_prefix(std::string_view text, std::string_view prefix) {
-    return text.size() >= prefix.size() && text.compare(0, prefix.size(), prefix) == 0;
-}
-
-// Reads the bundle id and the file names. A file that is not a record this
-// reader understands is not valid. The hash is checked only as 64 hex digits.
-[[nodiscard]] ReadRecord read_bundle_record(const fs::path& file) {
-    ReadRecord record{};
-    std::ifstream input(file);
-    if (!input)
-        return record;
-    std::string line;
-    const auto take = [&]() {
-        if (!std::getline(input, line))
-            return false;
-        if (!line.empty() && line.back() == '\r')
-            line.pop_back();
-        return true;
-    };
-    if (!take() || line != "oa-content 1")
-        return record;
-    if (!take() || !has_prefix(line, "bundle "))
-        return record;
-    std::string bundle_id = line.substr(7);
-    if (bundle_id.empty())
-        return record;
-    if (!take() || !has_prefix(line, "source "))
-        return record;
-    std::vector<std::string> files;
-    while (take()) {
-        if (!has_prefix(line, "file ") || line.size() == 5)
-            return record;
-        files.push_back(line.substr(5));
-        if (!take() || !has_prefix(line, "size ") || !digits_only(line.substr(5), false))
-            return record;
-        if (!take() || !has_prefix(line, "modified ") || !digits_only(line.substr(9), true))
-            return record;
-        if (!take() || !has_prefix(line, "sha256 ") || !sha256_hex(line.substr(7)))
-            return record;
-    }
-    if (files.empty())
-        return record;
-    record.valid = true;
-    record.bundle_id = std::move(bundle_id);
-    record.files = std::move(files);
-    return record;
-}
-
 [[nodiscard]] bool record_covers(
-    const oa::data::content_bundles::Bundle& bundle, const std::vector<std::string>& files
+    const oa::data::content_bundles::Bundle& bundle,
+    const oa::data::content_bundles::ContentRecord& record
 ) {
     if (bundle.files.empty())
         return false;
     for (const auto& entry : bundle.files) {
         bool found = false;
-        for (const std::string& name : files) {
-            if (equal_ignoring_case(name, entry.copy_name)) {
+        for (const oa::data::content_bundles::ContentRecordFile& item : record.files) {
+            if (equal_ignoring_case(item.copy_name, entry.copy_name)) {
                 found = true;
                 break;
             }
@@ -504,11 +426,13 @@ struct ReadRecord {
     if (user.empty() || !fs::is_directory(user, failure) || failure)
         return ids;
     for (const auto& bundle : oa::data::content_bundles::bundles()) {
-        const ReadRecord record =
-            read_bundle_record(bundle_directory(user, bundle) / std::string(kContentRecordName));
+        const oa::data::content_bundles::ContentRecord record =
+            oa::data::content_bundles::read_bundle_folder_record(
+                bundle_directory(user, bundle), nullptr
+            );
         if (!record.valid || record.bundle_id != bundle.id)
             continue;
-        if (!record_covers(bundle, record.files))
+        if (!record_covers(bundle, record))
             continue;
         ids.emplace_back(bundle.id);
     }
@@ -527,8 +451,9 @@ struct ReadRecord {
         const fs::path user = folder.parent_path().parent_path();
         const bool known =
             oa::data::content_bundles::find_bundle(path_to_utf8(folder.filename())) != nullptr;
-        const bool recorded =
-            fs::is_regular_file(folder / std::string(kContentRecordName), failure);
+        const bool recorded = fs::is_regular_file(
+            folder / std::string(oa::data::content_bundles::content_record_name), failure
+        );
         if ((known || recorded) && has_managed_layout(user))
             return user;
     }

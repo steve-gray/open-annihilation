@@ -32,6 +32,12 @@ hands it the archive's bytes, or a hook that reads or writes them.
   and CRC-32 at its end.
 - `read_stream_entry` reads a small entry whole into memory.
 
+`oa/formats/zip/inflate.hpp`, the same namespace:
+
+- `Inflater` inflates one raw deflate stream, with no zlib or gzip wrapper,
+  a piece at a time. The zip readers use it, and so does a format whose own
+  wrapper sits in front of the same deflate.
+
 `oa/formats/zip/writer.hpp`, the same namespace:
 
 - `StreamWriter` writes an archive through an `OutputHooks` write hook.

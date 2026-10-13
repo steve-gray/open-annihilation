@@ -269,6 +269,7 @@ Runtime::ExtensionRelease::~ExtensionRelease() {
 }
 
 int Runtime::run() {
+    take_pending_content();
     log_first_run_gate(false);
     int exit_code = 0;
     const auto extension_run = [&](RunPhase phase) {
@@ -1161,6 +1162,12 @@ void Runtime::move_frontend_focus(oa::ui::gui_input::FocusDirection direction) {
 }
 
 void Runtime::load(Screen screen) {
+    if (screen == Screen::main_menu && !pending_save_path_.empty()) {
+        const fs::path pending = path_from_utf8(pending_save_path_);
+        pending_save_path_.clear();
+        if (load_saved_game(pending))
+            return;
+    }
     // A pack map's files are mounted for the skirmish setup that chose the
     // map and the match it starts; the main menu shows none.
     if (screen == Screen::main_menu)
