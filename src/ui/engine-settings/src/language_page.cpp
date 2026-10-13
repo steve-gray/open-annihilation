@@ -262,17 +262,13 @@ std::string language_hint(const SettingsModel& model, std::size_t line) {
                        std::string(shown_text(". Choose it again to try again."));
             return "Downloads, then switches to it.";
         }
-    if (line == 0)
-        return "The game's own text and unit names, where its";
-    if (line == 1)
-        return "data has them in the language.";
-    return {};
+    if (line != 0)
+        return {};
+    return "The game's own text and unit names, where its data has them in the language.";
 }
 
-std::size_t language_hint_lines(const SettingsModel& model) {
-    if (model.dialog != nullptr && pending_language(*model.dialog) != nullptr)
-        return 1;
-    return 2;
+std::size_t language_hint_lines(const SettingsModel&) {
+    return 1;
 }
 
 int32_t language_mark_toward(const Dialog& dialog, int32_t marked, int32_t step) {
