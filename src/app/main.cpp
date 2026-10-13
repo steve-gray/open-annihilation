@@ -727,6 +727,65 @@ void publish_managed_copy(
     const Options& options, const fs::path& installation, bool game_dir_named
 );
 
+/// Reports whether this start mounts the player's copy.
+///
+/// `--game-dir` and `--archive` keep today's folder. A scripted run that
+/// names neither `--user-folder` nor `--preferences-file` does too, so it
+/// never plays the copy in the player's own folder. Every other start does.
+///
+/// @param options the parsed command line
+/// @return true when the copy is mounted
+[[nodiscard]] bool mount_managed_copy(const Options& options) {
+    if (!options.game_dir.empty() || !options.archives.empty())
+        return false;
+    if (options.user_folder || options.preferences_file)
+        return true;
+    const char* ci = SDL_getenv("CI");
+    const char* video = SDL_GetHint(SDL_HINT_VIDEO_DRIVER);
+    const bool scripted = options.unattended || options.headless_check ||
+                          unattended_environment(
+                              ci == nullptr ? std::string_view{} : std::string_view{ci},
+                              video == nullptr ? std::string_view{} : std::string_view{video}
+                          );
+    return !scripted;
+}
+
+/// Mounts the player's copy of the chosen base game and expansions.
+///
+/// The preferences are read again on every call, so the soft restart a mod
+/// switch uses picks up a choice saved since the previous start. A problem
+/// finding the player's folder leaves the start to the game folder, unless
+/// `--content` named the bundles.
+///
+/// @param options the parsed command line
+/// @return the composed folders, or nullopt when no copy is recorded
+[[nodiscard]] std::optional<GameDirectory> compose_from_options(const Options& options) {
+    oa::platform::preferences::Values values;
+    fs::path user;
+    try {
+        const fs::path preferences = preference_file(options.preferences_file);
+        std::error_code failure;
+        if (fs::exists(preferences, failure) && !failure)
+            values = oa::platform::preferences::load(preferences);
+        std::string note;
+        user = own_user_folder(
+            options.user_folder, options.preferences_file, preferences, values, note
+        );
+    } catch (const std::exception&) {
+        if (!options.content.empty())
+            throw;
+        return std::nullopt;
+    }
+    ManagedMount request{};
+    request.user_folder = std::move(user);
+    request.content = options.content;
+    request.mod_dir = options.mod_dir;
+    request.base_game = options.base_game;
+    request.mod_file = options.mod_file;
+    request.accept_unimplemented_hacks = options.accept_unimplemented_hacks;
+    return compose_managed_content(request, values);
+}
+
 /// Runs the game once: finds the game folders and their profile, with the
 /// Game files screen where the platform brings game files in and none is
 /// usable, opens the window the first time, plays the intro movies the
@@ -751,6 +810,9 @@ int run_once(
     ModSwitchMemory& switch_memory
 ) {
     const bool game_dir_named = !options.game_dir.empty();
+    // Captured before game_dir is filled with the folder this start plays:
+    // the second compose, after a copy made on this start, still runs.
+    const bool mount_copy = mount_managed_copy(options);
     // A soft restart reads the settings the switch saved: the mod the Game
     // files screen would play and the backups setting.
     if (options.restarts > 0 && game_files.installed &&
@@ -770,10 +832,18 @@ int run_once(
             run_folder_chooser_key_check(options, display_hooks(chooser), options.snapshot);
         return passed ? 0 : 1;
     }
+    // A start that does not name --game-dir mounts the player's copy. The
+    // choice is read from the preferences on every start, including the soft
+    // restart a mod switch uses, so a change of choice is what the next start
+    // mounts. --game-dir keeps the scan of the named folder.
+    std::optional<GameDirectory> game_directory;
+    if (mount_copy)
+        game_directory = compose_from_options(options);
     GameFilesNeeded needed;
-    auto game_directory = find_game_directory(
-        options, (game_files.offered || folder_chooser_offered(options)) ? &needed : nullptr
-    );
+    if (!game_directory)
+        game_directory = find_game_directory(
+            options, (game_files.offered || folder_chooser_offered(options)) ? &needed : nullptr
+        );
     // Without a usable folder where the in-engine chooser is asked for, it picks one.
     if (!game_directory && needed.needed && needed.chooser) {
         ChooserDisplay chooser{&display, &options};
@@ -808,6 +878,13 @@ int run_once(
             " (name it with --game-dir PATH)"
         );
     publish_managed_copy(options, options.game_dir, game_dir_named);
+    // A copy made on this start is what the start plays. --game-dir is left
+    // on the folder it named.
+    if (mount_copy) {
+        if (std::optional<GameDirectory> copied = compose_from_options(options))
+            game_directory = std::move(copied);
+        options.game_dir = game_directory->installation;
+    }
     options.game_folders = game_directory->folders;
     if (options.game_folders.empty())
         options.game_folders = {options.game_dir};
@@ -832,7 +909,12 @@ int run_once(
         // Its limits size the game's tables from the start, and its
         // rules reach every match.
         report_mod_profile(*options.mod_profile, game_directory->profile_warnings, std::cout);
-    } else if (options.game_folders.size() > 1) {
+    } else if (
+        options.game_folders.size() > 1 &&
+        (game_directory->source != GameDirectorySource::managed || game_directory->mod_layered)
+    ) {
+        // A composed mount's extra folders are expansion bundles. Only a mod
+        // folder, which is layered first, is reported when it has no profile.
         std::cout << "open-annihilation: the mod folder "
                   << path_to_utf8(options.game_folders.front())
                   << " holds no oamod.yaml; its files are layered over the game folder, "
