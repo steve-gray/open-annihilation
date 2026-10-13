@@ -974,6 +974,22 @@ class Runtime final : public menu::Host,
     /// keep the player's. A setup already kept stays kept.
     void keep_player_skirmish_settings();
 
+    /// The base game, rule-changing expansions and language a presence record
+    /// may name. Bundles are named only for a managed copy whose choice is
+    /// usable. Music is left out. The language is the English name.
+    struct PresenceAnnouncement {
+        bool announce_bundles = false;       ///< the managed copy is mounted and usable
+        std::string base_game;               ///< the base game's id
+        std::vector<std::string> expansions; ///< rule-changing expansions, music left out
+        bool differs_from_known = false;     ///< a chosen bundle's file is not a known hash
+        std::string language;                ///< the shown language's English name
+    };
+
+    /// Reads what a presence record adds for this machine's content and language.
+    ///
+    /// @return the announcement
+    [[nodiscard]] PresenceAnnouncement presence_announcement() const;
+
   private:
 
     /// Runs one pass of the idle loop.
@@ -5074,6 +5090,16 @@ class Runtime final : public menu::Host,
     ///
     /// @return the choice
     [[nodiscard]] oa::data::content_bundles::ContentChoice content_choice() const;
+
+    /// Reports whether this start plays the managed copy.
+    ///
+    /// True when the game folder was composed as the player's copy. A named
+    /// --game-dir, an archive, and a scripted run that names neither a user
+    /// folder nor a preferences file are false. Presence names the base game
+    /// and expansions only when this is true.
+    ///
+    /// @return true when the managed copy is mounted
+    [[nodiscard]] bool managed_content_mounted() const noexcept;
 
     /// Turns one expansion on or off and stores the choice when it changes.
     ///

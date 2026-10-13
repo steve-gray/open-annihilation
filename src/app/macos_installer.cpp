@@ -893,7 +893,7 @@ bool on_begin(void* context, const oa::formats::cpio::File& file, bool& take) {
             if (slot.complete)
                 pump->skip_slot(slot);
             else
-                choose_slot( named, chosen);
+                choose_slot(named, chosen);
         } else if (!slot.seen && file.bytes == 0 && slot.file->size > 0) {
             PendingLink link;
             link.device = file.device;
@@ -917,7 +917,7 @@ bool on_begin(void* context, const oa::formats::cpio::File& file, bool& take) {
             if (slot.complete)
                 pump->skip_slot(slot);
             else
-                choose_slot( link.slot, chosen);
+                choose_slot(link.slot, chosen);
         }
         pump->pending = std::move(still);
     }
