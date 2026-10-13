@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-#include "oa/formats/oamod/content_needs.hpp"
+#include "oa/data/content_bundles/content_needs.hpp"
 
 #include "oa/data/content_bundles.hpp"
 
@@ -9,10 +9,15 @@
 #include <string_view>
 #include <vector>
 
-namespace oa::formats::oamod {
+namespace oa::data::content_bundles {
 namespace {
 
 namespace bundles = oa::data::content_bundles;
+namespace oamod = oa::formats::oamod;
+using oamod::KeyProblem;
+using oamod::Node;
+using oamod::NodeKind;
+using oamod::TextPosition;
 
 /// The most ids one key lists. There are fewer built-in bundles than this.
 constexpr std::size_t most_ids = 16;
@@ -258,4 +263,4 @@ void read_content_needs(
     }
 }
 
-} // namespace oa::formats::oamod
+} // namespace oa::data::content_bundles

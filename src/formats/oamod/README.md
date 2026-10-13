@@ -51,11 +51,8 @@ profile refuses at resolve time, and a language pack is refused when it is
 installed. `tools/oamod_yaml.py` checks the same rules, and both read
 `src/formats/oamod/tests/package_keys_cases.txt`.
 
-`oa/formats/oamod/content_needs.hpp` reads `supportedGames` and
-`requiredExpansions` for the same three manifests. An id is a built-in
-base game or expansion. An omitted `supportedGames` means `totala` for a
-mod or a map pack, and every base game for a language pack, unless
-`requires.base` is `ta-3.1c`, which then reads as `[totala]`.
+`supportedGames` and `requiredExpansions`, which name built-in bundles, are
+read by `src/data/content-bundles` (`oa/data/content_bundles/content_needs.hpp`).
 
 `formats-oamod` checks what each rule accepts, every refusal with its rule
 and position, the limits, and the numbers' canonical text and comparison.

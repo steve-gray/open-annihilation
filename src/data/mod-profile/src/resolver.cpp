@@ -9,7 +9,7 @@
 
 #include "oa/data/mod_profile.hpp"
 #include "oa/data/mod_profile/registry.hpp"
-#include "oa/formats/oamod/content_needs.hpp"
+#include "oa/data/content_bundles/content_needs.hpp"
 #include "oa/formats/oamod/package_keys.hpp"
 
 #ifndef OA_ENGINE_VERSION
@@ -623,8 +623,12 @@ class Resolver {
             requires_node != nullptr && requires_node->kind == NodeKind::mapping ? requires_node
                                                                                  : nullptr;
         std::vector<formats::oamod::KeyProblem> problems;
-        formats::oamod::read_content_needs(
-            root, requires_block, formats::oamod::GamesWhenOmitted::totala, content_needs_, problems
+        oa::data::content_bundles::read_content_needs(
+            root,
+            requires_block,
+            oa::data::content_bundles::GamesWhenOmitted::totala,
+            content_needs_,
+            problems
         );
         for (const formats::oamod::KeyProblem& problem : problems)
             error(problem.position, problem.path, problem.message);
@@ -2004,7 +2008,7 @@ class Resolver {
     ResolveResult& result_;
 
     Value meta_{make_map()};
-    formats::oamod::ContentNeeds content_needs_{};
+    oa::data::content_bundles::ContentNeeds content_needs_{};
     std::array<std::vector<std::pair<std::string, Value>>, 8> given_values_{};
     std::vector<WrittenEntry> written_limits_{};
     std::vector<WrittenEntry> written_hacks_{};

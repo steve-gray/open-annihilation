@@ -16,7 +16,7 @@
 
 #include "oa/app/demo_installer.hpp"
 #include "oa/app/mod_profile_loader.hpp"
-#include "oa/data/content_choice.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/platform/game_installs.hpp"
 #include "oa/platform/preferences.hpp"
 #include <cstdint>

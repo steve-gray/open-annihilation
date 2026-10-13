@@ -64,7 +64,7 @@
 #include "oa/ui/frontend/resource_palette.hpp"
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
-#include "oa/data/content_choice.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/ui/pad_controls.hpp"
 #include "oa/app/acceleration_status.hpp"
 #include "oa/app/content/downloads.hpp"

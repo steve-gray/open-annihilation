@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The choice of base game and expansions, decided from the built-in bundles.
-#include "oa/data/content_choice.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
 
 #include "oa/data/content_bundles.hpp"
 
