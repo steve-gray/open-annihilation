@@ -791,6 +791,8 @@ void refresh(Library& library, Inputs inputs) {
         }
     }
     note_content(library);
+    if (library.inputs.content.expansion_cleared)
+        library.expansion_note = true;
     ensure_base_game(library);
     ensure_built_in_languages(library);
     recompute(library);
@@ -1100,7 +1102,7 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
     const QueueItem* item = entry.queued;
     std::vector<ActionButton> buttons;
     const auto add = [&](Action action, bool enabled) {
-        buttons.push_back({action, enabled, action_text(action, text)});
+        buttons.push_back({action, enabled, std::string(action_text(action, text))});
     };
     // The base game is not a package. While it is played it offers nothing;
     // while a mod is, PLAY NOW follows SWITCH OFF's rule and does its work.
@@ -1116,6 +1118,14 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
             add(Action::use_now, true);
         return buttons;
     }
+    const ContentLines lines = content_lines(library, entry);
+    if (!lines.turn_on.empty()) {
+        buttons.push_back(
+            {Action::turn_on,
+             true,
+             filled(text, words::action_turn_on, {{"name", lines.turn_on_name}})}
+        );
+    }
     if (entry.state == State::get || entry.state == State::update) {
         if (item != nullptr && pending(item->phase))
             add(Action::cancel, true);
@@ -1127,10 +1137,14 @@ std::vector<ActionButton> entry_actions(const Library& library, const Entry& ent
     const Installed* installed = entry.installed;
     // The mod being played switches off where another mod plays now: the
     // game then plays none.
-    if (installed != nullptr && entry.id.kind == Kind::mod)
-        add(installed->playing ? Action::switch_off : Action::play_now, can_switch(library));
+    if (installed != nullptr && entry.id.kind == Kind::mod) {
+        if (installed->playing)
+            add(Action::switch_off, can_switch(library));
+        else
+            add(Action::play_now, can_switch(library) && !lines.blocks_play);
+    }
     if (installed != nullptr && entry.id.kind == Kind::language && !installed->in_use)
-        add(Action::use_now, true);
+        add(Action::use_now, !lines.blocks_play);
     if (installed != nullptr && installed->kept)
         add(Action::roll_back, !in_match);
     if (installed != nullptr) {
@@ -1155,6 +1169,29 @@ std::vector<Fact> facts(const Library& library, const Entry& entry) {
     // The base game is not a package: its details are its summary alone.
     if (is_base_game(entry.id) || is_built_in_language(entry.id))
         return list;
+
+    const ContentLines lines = content_lines(library, entry);
+    bool games_written = false;
+    bool expansions_written = false;
+    const auto write_games = [&] {
+        if (games_written || lines.games.empty())
+            return;
+        list.push_back(
+            fact_of(shown(text, words::fact_games), lines.games, lines.games, lines.games_mark)
+        );
+        games_written = true;
+    };
+    const auto write_expansions = [&] {
+        if (expansions_written || lines.expansions.empty())
+            return;
+        list.push_back(fact_of(
+            shown(text, words::fact_needs),
+            lines.expansions,
+            lines.expansions,
+            lines.expansions_mark
+        ));
+        expansions_written = true;
+    };
 
     // Which version is installed and which is newest, and who made it: each
     // left out when it has nothing to say.
@@ -1205,6 +1242,7 @@ std::vector<Fact> facts(const Library& library, const Entry& entry) {
                 fact_of(shown(text, words::fact_base), listing->base, listing->base, Mark::warn)
             );
         }
+        write_games();
 
         if (const std::optional<formats::oamod::EngineRange> range =
                 formats::oamod::parse_engine_range(listing->requires_engine)) {
@@ -1218,6 +1256,7 @@ std::vector<Fact> facts(const Library& library, const Entry& entry) {
                 met ? Mark::good : Mark::warn
             ));
         }
+        write_expansions();
 
         if (listing->kind == Kind::mod) {
             const std::string game = std::to_string(listing->game_hacks);
@@ -1257,6 +1296,8 @@ std::vector<Fact> facts(const Library& library, const Entry& entry) {
             }
         }
     }
+    write_games();
+    write_expansions();
 
     if (entry.id.kind == Kind::mod) {
         if (entry.update != nullptr && entry.installed != nullptr) {

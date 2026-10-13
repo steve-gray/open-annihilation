@@ -26,6 +26,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/mod_summary.hpp"
 #include "oa/app/package_install.hpp"
+#include "oa/app/package_install/oamod.hpp"
 #include "oa/app/package_install/inbox.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/user_folder.hpp"
@@ -34,6 +35,7 @@
 #include "oa/data/pe_icon.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/data/registry/descriptor.hpp"
@@ -1284,6 +1286,8 @@ library::Inputs Runtime::library_inputs() {
             listing.size = package.size;
             listing.coverage = package.coverage;
             listing.published = package.published;
+            listing.supported_games = package.supported_games;
+            listing.required_expansions = package.required_expansions;
             const content::RegistryView* view = registry_view(*snapshot, entry.registry);
             for (const data::catalogue::MapEntry& map : package.maps) {
                 library::MapLine line;
@@ -1452,6 +1456,14 @@ library::Inputs Runtime::library_inputs() {
                     std::string(oa::data::languages::interface_text(details.description));
             else
                 shown.description = details.description;
+            if (details.has_profile) {
+                const package_install::InstalledPackage read =
+                    package_install::oamod::read_installed_mod(path);
+                if (read.kind == package_install::FolderKind::package) {
+                    shown.supported_games = read.supported_games;
+                    shown.required_expansions = read.required_expansions;
+                }
+            }
             shown.playing = package_target_in_use(package_install::mod_kind(), path);
             if (details.roll_back)
                 shown.kept = library::Kept{details.kept_version, details.kept_revision};
@@ -1638,6 +1650,15 @@ library::Inputs Runtime::library_inputs() {
     if (inputs.playing_mod) {
         if (const oa::data::mod_profile::ModProfile* profile = mod_profile())
             inputs.content.mod_required = profile->required_expansions;
+    }
+    const auto noted = preference_values_.find(std::string(settings::key::content_note));
+    if (noted != preference_values_.end() &&
+        noted->second == oa::data::content_bundles::required_expansion_note) {
+        inputs.content.expansion_cleared = true;
+        preference_values_.erase(noted);
+        preferences_dirty_ = true;
+        if (const std::optional<std::string> failure = EngineSettingsState::flush(*this))
+            std::cerr << "open-annihilation: library: " << *failure << '\n';
     }
     const fs::path& game_folder =
         options_.game_folders.empty() ? options_.game_dir : options_.game_folders.back();
@@ -2038,6 +2059,8 @@ struct Runtime::LibraryScreen final : LayerScreen {
             tag = entry.id.key;
         else
             return;
+        if (!library::package_can_run(runtime_.library_host().model, entry))
+            return;
         const oa::data::languages::Language* language = oa::data::languages::find_by_tag(tag);
         if (language == nullptr || !oa::data::languages::playable(*language))
             return;
@@ -2130,6 +2153,11 @@ struct Runtime::LibraryScreen final : LayerScreen {
         case library::Action::use_now:
             if (entry != nullptr)
                 use_language_now(*entry);
+            return false;
+        case library::Action::turn_on:
+            if (entry != nullptr)
+                library::turn_on_required(host.model, *entry);
+            ++host.model_revision;
             return false;
         case library::Action::change_base_game:
         case library::Action::add_expansion:

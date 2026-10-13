@@ -706,6 +706,14 @@ struct ContentNoticeCopy {
 ///
 /// @param file the installer
 /// @return 0 when every file of every found bundle matches, 1 otherwise
+[[nodiscard]] int run_windows_installer_check(const std::filesystem::path& file);
+
+/// --check-installer: checks a recognised installer with the reader of its
+/// kind, known by its size. A file of no known installer's size goes to the
+/// Windows check, which refuses it.
+///
+/// @param file the installer
+/// @return 0 when the check passed, 1 when it did not
 [[nodiscard]] int run_installer_check(const std::filesystem::path& file);
 
 } // namespace oa::app

@@ -154,9 +154,10 @@ from the bytes already written. `--game-dir` does not copy. A run that
 nobody is watching does not copy: it uses a managed base game already
 there, or it stops with a message. `--check-content-copy PATH` checks that
 copy against a small fixture, using PATH as the Documents folder, and does
-nothing else. `--check-installer FILE` reads a Windows installer, lists the
-bundles it holds and every file's SHA-256, and does nothing else. Mounting
-the composed folder is separate: the game still
+nothing else. `--check-installer FILE` reads a recognised Windows installer
+or the disk image for older Macs, lists the bundles it holds and every
+file's SHA-256, and does nothing else. Mounting the composed folder is
+separate: the game still
 plays from the installation folder.
 
 ### The check

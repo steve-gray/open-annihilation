@@ -202,6 +202,8 @@ void Runtime::library_entry_action(library::Action action, const library::EntryI
                       options_.base_game))
         return;
     if (action == library::Action::play_now && !base_game) {
+        if (!library::package_can_run(host.model, *found))
+            return;
         std::string refusal;
         if (!switch_to_mod_folder(folder, refusal)) {
             status_ = refusal;

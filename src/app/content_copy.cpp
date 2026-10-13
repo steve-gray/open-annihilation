@@ -8,6 +8,7 @@
 // stopped copy is continued from the bytes already written. The source is
 // only read.
 #include "oa/app/content_copy.hpp"
+#include "oa/app/disk_image_source.hpp"
 
 #include "oa/app/game_directory.hpp"
 #include "oa/base/sha256.hpp"
@@ -2198,6 +2199,15 @@ check_managed_content(const fs::path& user_folder, std::span<const bundles::Bund
         check.bundles.push_back(std::move(reported));
     }
     return check;
+}
+
+int run_installer_check(const fs::path& file) {
+    std::error_code error;
+    const uintmax_t size = fs::file_size(file, error);
+    const bundles::Installer* known = error ? nullptr : bundles::find_installer(size);
+    if (known != nullptr && known->kind == bundles::InstallerKind::older_mac)
+        return run_older_mac_installer_check(file);
+    return run_windows_installer_check(file);
 }
 
 } // namespace oa::app

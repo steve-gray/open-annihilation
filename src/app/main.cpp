@@ -17,6 +17,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/content_copy.hpp"
+#include "oa/app/disk_image_source.hpp"
 #include "oa/app/game_files_import.hpp"
 #include "oa/app/input_hints.hpp"
 #include "oa/app/package_install.hpp"
