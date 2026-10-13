@@ -28,6 +28,7 @@ struct Recorder {
     int cleared = 0;
     int32_t camera_x = 0;
     int32_t camera_y = 0;
+    int centred = 0;
     bool sees = false;
     int stops = 0;
     int squad_calls = 0;
@@ -50,8 +51,10 @@ Hooks hooks_for(Recorder& r) {
     h.reset_command = [](void* c) { ++static_cast<Recorder*>(c)->resets; };
     h.selection_cleared = [](void* c) { ++static_cast<Recorder*>(c)->cleared; };
     h.center_camera = [](void* c, const FixedVec3& p, bool) {
-        static_cast<Recorder*>(c)->camera_x = p.x >> 16;
-        static_cast<Recorder*>(c)->camera_y = p.z >> 16;
+        auto& rec = *static_cast<Recorder*>(c);
+        rec.camera_x = p.x >> 16;
+        rec.camera_y = p.z >> 16;
+        ++rec.centred;
     };
     h.stop_follow = [](void* c) { ++static_cast<Recorder*>(c)->stops; };
     h.set_squad = [](void* c, Unit& unit, int32_t squad) {
@@ -460,6 +463,43 @@ int main() {
         CHECK(selected(*w, 1) && selected(*w, 2) && selected(*w, 3) && r.resets == 3);
         CHECK(!select_squad(*w, 7, false, skip, h));
         CHECK(selected(*w, 1) && !selected(*w, 2) && !selected(*w, 3));
+        world_destroy(w);
+    }
+    {
+        // A second recall of a squad that is already exactly the selection
+        // centres on the average of the units' map positions and asks the
+        // follow to stop. The first recall only selects. A later recall does
+        // the same, with no double-press timer. A selection that is not the
+        // squad does not move the camera.
+        World* w = make_world();
+        r = Recorder{};
+        TypeMask skip{};
+        w->units[1].squad = 2;
+        w->units[2].squad = 2;
+        w->units[1].position.x = fx(10);
+        w->units[2].position.x = fx(13);
+        w->units[1].position.z = fx(40);
+        w->units[2].position.z = fx(50);
+        w->units[3].flags |= OA_UNIT_FLAG_SELECTED;
+        w->game.follow_unit = 9;
+        CHECK(select_squad(*w, 2, false, skip, h));
+        CHECK(selected(*w, 1) && selected(*w, 2) && !selected(*w, 3));
+        CHECK(r.centred == 0 && r.stops == 0);
+        CHECK(w->game.follow_unit == 9);
+        CHECK(select_squad(*w, 2, false, skip, h));
+        CHECK(selected(*w, 1) && selected(*w, 2) && !selected(*w, 3));
+        CHECK(r.centred == 1 && r.stops == 1);
+        CHECK(r.camera_x == 11 && r.camera_y == 45);
+        CHECK(w->game.follow_unit == 9);
+        w->units[3].flags |= OA_UNIT_FLAG_SELECTED;
+        const int centred_before = r.centred;
+        CHECK(select_squad(*w, 2, true, skip, h));
+        CHECK(selected(*w, 3) && r.centred == centred_before && r.stops == 1);
+        CHECK(select_squad(*w, 2, false, skip, h));
+        CHECK(!selected(*w, 3) && r.centred == centred_before);
+        CHECK(select_squad(*w, 2, false, skip, h));
+        CHECK(r.centred == centred_before + 1 && r.stops == 2);
+        CHECK(r.camera_x == 11 && r.camera_y == 45);
         world_destroy(w);
     }
     if (failures != 0)
