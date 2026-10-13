@@ -38,15 +38,39 @@ constexpr const Metrics& kMetrics = compact_metrics;
 /// @param view the row
 /// @return the control's width, in points; 0 for a row whose control, if it
 ///     has one, stands elsewhere
+/// Returns one button of a buttons row. Measured widths, when the view has
+/// them, replace the class's folder widths.
+///
+/// @param view the row
+/// @param area the row's buttons
+/// @param at the button, from the left
+/// @return the button; empty when `at` is past the row's buttons
+[[nodiscard]] Rect button_rect(const RowView& view, const Rect& area, std::size_t at) noexcept {
+    if (view.button_widths.empty())
+        return row_button(area, at);
+    if (at >= view.button_widths.size())
+        return {area.x, area.y, 0, 0};
+    int32_t left = area.x;
+    for (std::size_t before = 0; before < at; ++before)
+        left += view.button_widths[before] + kMetrics.folder_button_gap;
+    return {left, area.y, view.button_widths[at], area.height};
+}
+
 [[nodiscard]] int32_t label_line_control_width(const RowView& view) noexcept {
     switch (view.kind) {
     case RowKind::toggle:
-        return kMetrics.switch_width;
+        return std::max(kMetrics.switch_width, view.control_width);
     case RowKind::levels:
         return view.count * view.control_width + 2;
     case RowKind::value_and_button:
         return view.control_width > 0 ? view.control_width : kMetrics.button_row_width;
     case RowKind::buttons: {
+        if (!view.button_widths.empty()) {
+            int32_t width = 0;
+            for (std::size_t at = 0; at < view.button_widths.size(); ++at)
+                width += view.button_widths[at] + (at > 0 ? kMetrics.folder_button_gap : 0);
+            return width;
+        }
         int32_t width = 0;
         const std::size_t count =
             std::min(view.buttons.size(), kMetrics.folder_button_widths.size());
@@ -393,7 +417,7 @@ void push_control(
             push_item(
                 list,
                 Role::button,
-                row_button(area, at),
+                button_rect(view, area, at),
                 control,
                 look.caption,
                 button_state,
@@ -812,13 +836,38 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
         row.top = top;
         const int32_t label_top = top + 1 + placement.row_padding;
         const bool locked = !view.lock.empty();
+        const int32_t lock_width = view.lock_columns > 0 ? view.lock_columns : kMetrics.lock_width;
         // The lock, right-aligned on the label line; the label ends short of it.
-        const Rect right_lock{
-            placement.right - kMetrics.lock_width, label_top, kMetrics.lock_width, line_height
-        };
+        const Rect right_lock{placement.right - lock_width, label_top, lock_width, line_height};
         int32_t label_right = placement.right;
         const int32_t control_width = label_line_control_width(view);
-        if (control_width == 0 || (locked && view.hint_is_status)) {
+        // A label that does not fit beside its control, or beside its lock,
+        // takes the whole line. The control and the lock stand under it. A
+        // slider's track stays on its own line either way.
+        const bool drop_line = view.control_below && (control_width > 0 || locked);
+        int32_t control_top = label_top;
+        if (drop_line)
+            control_top = label_top + line_height + kMetrics.hint_gap;
+        if (drop_line) {
+            const bool control_here = control_width > 0 && !view.hint_is_status;
+            if (control_here) {
+                row.control_area = {
+                    placement.right - control_width, control_top, control_width, line_height
+                };
+            }
+            if (locked && !view.hint_is_status && control_here) {
+                row.lock_area = {
+                    row.control_area.x - kMetrics.label_gap - lock_width,
+                    control_top,
+                    lock_width,
+                    line_height
+                };
+            } else if (locked) {
+                row.lock_area = {
+                    placement.right - lock_width, control_top, lock_width, line_height
+                };
+            }
+        } else if (control_width == 0 || (locked && view.hint_is_status)) {
             // A control of a line of its own leaves the lock the label line's
             // right; a row whose hint is its status shows its lock where its
             // control would be.
@@ -835,9 +884,9 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
             // shows, with its lock left of it.
             if (locked) {
                 row.lock_area = {
-                    row.control_area.x - kMetrics.label_gap - kMetrics.lock_width,
+                    row.control_area.x - kMetrics.label_gap - lock_width,
                     label_top,
-                    kMetrics.lock_width,
+                    lock_width,
                     line_height
                 };
                 label_right = row.lock_area.x - kMetrics.label_gap;
@@ -852,7 +901,7 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
         } else {
             row.label = {placement.left, label_top, label_right - placement.left, line_height};
         }
-        int32_t bottom = label_top + line_height + kMetrics.hint_gap;
+        int32_t bottom = (drop_line ? control_top : label_top) + line_height + kMetrics.hint_gap;
         for (std::size_t line = 0; line < view.hints.size(); ++line) {
             if (line > 0 && placement.tall)
                 bottom += kMetrics.tall_hint_line_gap;
@@ -862,16 +911,18 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
         switch (view.kind) {
         case RowKind::slider: {
             bottom += kMetrics.slider_gap;
-            const int32_t value_left = placement.right - kMetrics.slider_value_width;
+            const int32_t wanted =
+                view.value_columns > 0 ? view.value_columns : kMetrics.slider_value_width;
+            const int32_t room = std::max(width - kMetrics.slider_value_gap, int32_t{1});
+            const int32_t value_width = std::min(std::max(wanted, int32_t{1}), room);
+            const int32_t value_left = placement.right - value_width;
             row.control_area = {
                 placement.left,
                 bottom,
-                value_left - kMetrics.slider_value_gap - placement.left,
+                std::max(value_left - kMetrics.slider_value_gap - placement.left, int32_t{0}),
                 kMetrics.slider_line_height
             };
-            row.value = {
-                value_left, bottom, kMetrics.slider_value_width, kMetrics.slider_line_height
-            };
+            row.value = {value_left, bottom, value_width, kMetrics.slider_line_height};
             bottom += kMetrics.slider_line_height;
             break;
         }
@@ -892,6 +943,21 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
             break;
         }
         case RowKind::value_and_button:
+            // A label and a value that do not fit on one line with the button:
+            // the label keeps the first line and the value stands with the
+            // button on the next. An empty label leaves the value the first line.
+            if (drop_line && !view.label.empty() && has_area(row.control_area)) {
+                const int32_t value_right = row.control_area.x - kMetrics.label_gap;
+                row.value = {
+                    placement.left,
+                    row.control_area.y,
+                    std::max(value_right - placement.left, int32_t{0}),
+                    line_height
+                };
+            } else {
+                row.value = row.label;
+            }
+            break;
         case RowKind::text:
             // The value shares the label's box on the label line.
             row.value = row.label;
@@ -1021,7 +1087,7 @@ void add_rows(DisplayList& list, const PlacedRows& placed, const RowsState& stat
         if (has_control && state.focused == control) {
             // A row of buttons rings the button the keys mark.
             const Rect ring = view.kind == RowKind::buttons
-                                  ? row_button(row.control_area, state.marked_button)
+                                  ? button_rect(view, row.control_area, state.marked_button)
                                   : row.control_area;
             push_item(list, Role::focus_ring, ring, no_control, {}, {}, FocusRingLook{true}, clip);
         }

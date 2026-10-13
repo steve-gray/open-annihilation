@@ -13,6 +13,7 @@
 #include "oa/app/window_icon.hpp"
 #include "oa/formats/png.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
 #include <array>
@@ -142,6 +143,9 @@ class LayoutPainter {
     ///
     /// @param parts the parts
     void paint(const kit::DisplayList& parts) {
+        // A new paint: text that crosses other text is judged within this
+        // frame, while records from earlier frames of the same screen stay.
+        kit::text_fit_begin_paint();
         auto& canvas = painter_.canvas();
         const Box whole{0, 0, canvas.width, canvas.height};
         painter_.reset_clip();
@@ -325,6 +329,17 @@ class LayoutPainter {
             int pen = box.x;
             if (align == Align::centre)
                 pen = box.x + (box.width - line.coverage.advance) / 2;
+            // One line's own box, so stacked lines of one item are not taken
+            // to cross each other. The width is the item's.
+            kit::note_text_fit(
+                text,
+                line.coverage.advance,
+                box.x,
+                baseline - rows.ascent,
+                box.width,
+                line_height,
+                pen
+            );
             paint::paint_line(painter_, line, pen, baseline, colour);
             baseline += line_height;
         }

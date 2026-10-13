@@ -8,6 +8,7 @@
 #include "oa/ui/kit/components.hpp"
 
 #include "oa/ui/kit/chrome.hpp"
+#include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/components_more.hpp"
 #include "oa/ui/kit/controls.hpp"
 #include "oa/ui/kit/first_run.hpp"
@@ -2018,6 +2019,7 @@ void add_mark(DisplayList& list, Point at, Mark mark, Colour ink) {
 }
 
 void paint(const Canvas& canvas, const DisplayList& list) {
+    text_fit_begin_paint();
     for (const Item& item : list.items)
         paint_item(canvas, item);
 }

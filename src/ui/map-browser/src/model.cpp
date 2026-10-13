@@ -80,20 +80,28 @@ std::size_t first_character_bytes(std::string_view text) noexcept {
     return bytes;
 }
 
-/// Returns where a card sorts by its origin: base, installed, online.
+/// Tells whether two texts are the same, ignoring ASCII case.
 ///
-/// @param card the card
-/// @return 0, 1 or 2
-int32_t origin_rank(const MapCard& card) noexcept {
-    switch (card.origin) {
-    case MapCard::Origin::base:
-        return 0;
-    case MapCard::Origin::installed:
-        return 1;
-    case MapCard::Origin::online:
-        return 2;
-    }
-    return 2;
+/// @param left a text
+/// @param right another
+/// @return true when they match
+bool same_text(std::string_view left, std::string_view right) noexcept {
+    if (left.size() != right.size())
+        return false;
+    for (std::size_t index = 0; index < left.size(); ++index)
+        if (lowered(left[index]) != lowered(right[index]))
+            return false;
+    return true;
+}
+
+/// Returns the stem of a game name: the bytes before the first '@', or the
+/// whole name when it has none.
+///
+/// @param name the game name
+/// @return the stem
+std::string_view name_stem(std::string_view name) noexcept {
+    const std::size_t at = name.find('@');
+    return at == std::string_view::npos ? name : name.substr(0, at);
 }
 
 /// Tells whether a card's origin is the source a filter shows.
@@ -105,14 +113,32 @@ bool source_matches(Filters::Source source, const MapCard& card) noexcept {
     switch (source) {
     case Filters::Source::all:
         return true;
-    case Filters::Source::base:
-        return card.origin == MapCard::Origin::base;
-    case Filters::Source::installed:
-        return card.origin == MapCard::Origin::installed;
-    case Filters::Source::online:
-        return card.origin == MapCard::Origin::online;
+    case Filters::Source::game:
+        return card.origin == MapCard::Origin::game;
+    case Filters::Source::mod:
+        return card.origin == MapCard::Origin::mod;
+    case Filters::Source::downloads:
+        return card.origin == MapCard::Origin::installed || card.origin == MapCard::Origin::online;
     }
     return true;
+}
+
+/// Tells whether the players and size selectors and the search leave a card.
+/// The source filter is not asked: the source pills count every card these
+/// leave.
+///
+/// @param card the card
+/// @param filters the filters
+/// @return true when it counts
+bool narrowed(const MapCard& card, const Filters& filters) {
+    if (filters.players && *filters.players != 0 && !players_match(*filters.players, card))
+        return false;
+    if (filters.size) {
+        const std::optional<char> letter = size_letter(card.size);
+        if (!letter || *letter != *filters.size)
+            return false;
+    }
+    return query_matches(card, filters.query);
 }
 
 /// The counts a numplayers list names: each whole number from 2 to
@@ -166,10 +192,13 @@ bool count_matches(int32_t chip, int32_t count) noexcept {
 } // namespace
 
 std::vector<MapCard> merge_cards(
-    std::vector<MapCard> base, std::vector<MapCard> installed, std::vector<MapCard> online
+    std::vector<MapCard> game,
+    std::vector<MapCard> mod,
+    std::vector<MapCard> installed,
+    std::vector<MapCard> online
 ) {
     std::vector<MapCard> cards;
-    cards.reserve(base.size() + installed.size() + online.size());
+    cards.reserve(game.size() + mod.size() + installed.size() + online.size());
     std::set<std::string, std::less<>> named;
     const auto take = [&](std::vector<MapCard>& from, MapCard::Origin origin) {
         for (MapCard& card : from) {
@@ -179,7 +208,8 @@ std::vector<MapCard> merge_cards(
             cards.push_back(std::move(card));
         }
     };
-    take(base, MapCard::Origin::base);
+    take(game, MapCard::Origin::game);
+    take(mod, MapCard::Origin::mod);
     take(installed, MapCard::Origin::installed);
     take(online, MapCard::Origin::online);
     return cards;
@@ -250,7 +280,41 @@ bool players_match(int32_t chip, const MapCard& card) noexcept {
 }
 
 bool query_matches(const MapCard& card, std::string_view query) {
-    return holds(card.title, query) || holds(card.name, query) || holds(card.pack_name, query);
+    return holds(card.title, query) || holds(card.name, query) || holds(card.pack_name, query) ||
+           holds(card.source_name, query);
+}
+
+std::string overlay_name(const MapCard& card) {
+    const bool pack =
+        card.origin == MapCard::Origin::installed || card.origin == MapCard::Origin::online;
+    if (pack && !card.pack_name.empty() &&
+        (same_text(card.pack_name, card.title) || same_text(card.pack_name, name_stem(card.name))))
+        return "Downloaded";
+    if (!card.source_name.empty())
+        return card.source_name;
+    return card.pack_name;
+}
+
+SourceCounts source_counts(const Browser& browser) {
+    SourceCounts counts;
+    for (const MapCard& card : browser.cards) {
+        if (!narrowed(card, browser.filters))
+            continue;
+        ++counts.all;
+        switch (card.origin) {
+        case MapCard::Origin::game:
+            ++counts.game;
+            break;
+        case MapCard::Origin::mod:
+            ++counts.mod;
+            break;
+        case MapCard::Origin::installed:
+        case MapCard::Origin::online:
+            ++counts.downloads;
+            break;
+        }
+    }
+    return counts;
 }
 
 void apply_filters(Browser& browser) {
@@ -258,19 +322,7 @@ void apply_filters(Browser& browser) {
     browser.shown.clear();
     for (std::size_t index = 0; index < browser.cards.size(); ++index) {
         const MapCard& card = browser.cards[index];
-        if (!source_matches(filters.source, card))
-            continue;
-        if (!filters.players.empty() &&
-            std::none_of(filters.players.begin(), filters.players.end(), [&](int32_t chip) {
-                return players_match(chip, card);
-            }))
-            continue;
-        if (!filters.sizes.empty()) {
-            const std::optional<char> letter = size_letter(card.size);
-            if (!letter || filters.sizes.count(*letter) == 0)
-                continue;
-        }
-        if (!query_matches(card, filters.query))
+        if (!source_matches(filters.source, card) || !narrowed(card, filters))
             continue;
         browser.shown.push_back(index);
     }
@@ -278,8 +330,6 @@ void apply_filters(Browser& browser) {
         browser.shown.begin(), browser.shown.end(), [&](std::size_t left, std::size_t right) {
             const MapCard& one = browser.cards[left];
             const MapCard& other = browser.cards[right];
-            if (origin_rank(one) != origin_rank(other))
-                return origin_rank(one) < origin_rank(other);
             if (before(one.title, other.title))
                 return true;
             if (before(other.title, one.title))

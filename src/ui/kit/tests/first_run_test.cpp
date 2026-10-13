@@ -840,10 +840,12 @@ void own_name_shrinks_to_fit_and_the_active_card_has_a_ring() {
         return surface;
     };
     const renderer::Surface short_name = draw("W", kit::LanguageAvailability::built_in);
+    kit::begin_text_fit_frame();
     const renderer::Surface long_name =
         draw(std::string(80, 'W'), kit::LanguageAvailability::built_in);
     // The card's border is bright on every row, so the count stays in the
-    // text. A shrunk line is shorter than one grown to the box.
+    // text. A long name that the large size cannot fit wraps at the font's
+    // own size inside the box, so it draws and is not recorded as wider.
     const int32_t side = 18 * card_w / 232;
     const int32_t text_left = origin + side;
     const int32_t text_right = origin + card_w - side;
@@ -851,7 +853,11 @@ void own_name_shrinks_to_fit_and_the_active_card_has_a_ring() {
         name_rows(short_name, text_left, text_right, name_top, name_top + name_h);
     const int long_rows = name_rows(long_name, text_left, text_right, name_top, name_top + name_h);
     expect(short_rows > 0, "a short own name drew nothing");
-    expect(long_rows > 0 && long_rows < short_rows, "a long own name was cut instead of shrunk");
+    expect(long_rows > 0, "a long own name drew nothing");
+    bool own_name_wider = false;
+    for (const kit::TextFitRecord& record : kit::text_fit_records())
+        own_name_wider = own_name_wider || record.wider;
+    expect(!own_name_wider, "a long own name was drawn wider than its box");
 
     const int32_t badge_x = origin + side + (card_w - 2 * side - badge) / 2;
     const int32_t badge_y = origin + pad_top;

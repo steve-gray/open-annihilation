@@ -15,6 +15,7 @@
 #include "oa/test/check.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/text.hpp"
 
 #include "downloads_page.hpp"
 #include "geometry.hpp"
@@ -242,20 +243,22 @@ kit::PlacedRows placed_rows(const settings::Dialog& dialog) {
 void hint_matches(
     const kit::RowView& view, const std::string& hint, const settings::Dialog& dialog
 ) {
-    const std::vector<std::string> lines = geometry::break_lines(
-        hint, geometry::sizes_of(dialog).hint_line_characters, geometry::most_notice_lines
-    );
+    const int32_t room = static_cast<int32_t>(geometry::sizes_of(dialog).hint_line_characters) *
+                         oa::ui::kit::estimated_character_width;
+    const std::string shown(geometry::shown_text(hint));
+    const std::vector<std::string> lines =
+        oa::ui::kit::wrap(shown, std::max(room, int32_t{1}), &geometry::estimated_width);
     OA_CHECK(view.hints.size() == lines.size());
     for (std::size_t index = 0; index < view.hints.size() && index < lines.size(); ++index) {
-        if (view.hints[index] != geometry::shown_text(lines[index])) {
+        if (view.hints[index] != lines[index]) {
             std::fprintf(
                 stderr,
                 "hint line %zu: '%s' against '%s'\n",
                 index,
                 view.hints[index].c_str(),
-                std::string(geometry::shown_text(lines[index])).c_str()
+                lines[index].c_str()
             );
-            OA_CHECK(view.hints[index] == geometry::shown_text(lines[index]));
+            OA_CHECK(view.hints[index] == lines[index]);
         }
     }
 }

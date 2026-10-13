@@ -184,27 +184,34 @@ offers, in one grid with previews, laid out for the window at your
 Interface size ([settings](../settings.md#graphics)):
 
 - **The header** says "Maps", where you came from and what you play:
-  "Skirmish · No Mod", "Battle room · playing Ridge".
-- **Filters**: All, Base game, Installed packs or Online; PLAYERS 2, 3, 4
-  or 5–10; SIZE S, M or L (S up to 10 on its longer side, M up to 20, L
-  above); and "Search maps", which finds a map by its title, its name or
-  its pack's name.
-- **The cards**: base maps, then maps from installed packs, then maps
-  online, each by title, a map you have installed shown once. Each shows
-  its preview, "Loading preview" until it is drawn, or "No preview"; a chip
-  saying "Base", its pack's name or "Online"; and "4 · 16×16", its players
-  and size. Previews are drawn only for the cards in view.
-- **The footer** shows the chosen map: its title; "Base game · 4 players ·
-  16×16", or its pack, version and registry with its players, size and, for
-  a map online, the download's size; whether it fits, "Fits No Mod ✓",
-  "Doesn't fit Ridge" with the reason, or, for a map online, "Fit with No
-  Mod is checked when it's installed" or what the registry's catalogue
-  says ("Its catalogue says it does not fit Ridge.").
+  "Skirmish · No Mod", "Battle room · playing Ridge". The **X** at the top
+  right closes the browser, as in the Library and Settings.
+- **Filters**, as counted pills: All, Game (the base game and every
+  expansion that is on), Mod (maps from the mod's own layers) and Downloads
+  (packs you have installed and packs a catalogue offers, together), each
+  with its count, as in "All (324)". **PLAYERS** and **SIZE** are one
+  choice each, Any first, then 2, 3, 4 or 5–10, and S, M or L (S up to 10
+  on its longer side, M up to 20, L above). "Search maps" finds a map by
+  its title, its name, its pack's name or where it comes from.
+- **The cards** are in order of their titles, a map online among the rest,
+  and a map you have installed shown once. Each shows its preview, "Loading
+  preview" until it is drawn, or "No preview"; a chip naming where it comes
+  from ("TA 3.1c", "Core Contingency", "Battle Tactics", the mod's name,
+  the pack's name, or "Downloaded" when the pack is named for the map);
+  and "4 · 16×16", its players and size. Previews are drawn only for the
+  cards in view. Pictures of the three sizes are in
+  [images/maps](../images/maps/).
+- **The footer** shows the chosen map: its title; the same source name as
+  its chip for a game or mod map, or its pack, version and registry, then
+  its players, size and, for a map online, the download's size; whether it
+  fits, "Fits No Mod ✓", "Doesn't fit Ridge" with the reason, or, for a map
+  online, "Fit with No Mod is checked when it's installed" or what the
+  registry's catalogue says ("Its catalogue says it does not fit Ridge.").
 - **Select**, for a map you have, chooses it in the list you came from,
   where you then press LOAD or start as ever. **Download and select**, for a
   map online, downloads its pack as the Library's GET does, shows how far it
-  has come, and chooses the map once the pack is installed. **Cancel**
-  closes the browser; a download already started goes on.
+  has come, and chooses the map once the pack is installed. **Cancel**, and
+  the **X**, close the browser; a download already started goes on.
 
 A map online that its catalogue says does not fit what you play is greyed,
 and OA checks it again against what you have once it is installed.
