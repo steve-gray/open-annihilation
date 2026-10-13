@@ -12,6 +12,7 @@
 #include "reports.hpp"
 
 #include "oa/formats/json.hpp"
+#include "oa/core/player_setup.h"
 #include "oa/core/world.h"
 #include "oa/sim/scenario/outcome.hpp"
 #include "oa/test/check.hpp"
@@ -470,6 +471,20 @@ void check_events() {
         events.size() == 1 && text(events[0], "event") == "game_over" &&
         text(events[0], "outcome") == "defeat" && text(events[0], "winner") == "Brute"
     );
+    if (events.size() == 1) {
+        // The two players are mutual allies, so both won, and the shared
+        // results name no second winner. This machine's own winner stays Brute.
+        OA_CHECK(events[0].find("state_hash") == nullptr);
+        OA_CHECK(number(events[0], "tick") == 300);
+        const Json* results = events[0].find("results");
+        OA_CHECK(results != nullptr && results->elements().size() == 2);
+        if (results != nullptr && results->elements().size() == 2) {
+            OA_CHECK(text(results->elements()[0], "name") == "Pilot");
+            OA_CHECK(text(results->elements()[0], "outcome") == "won");
+            OA_CHECK(text(results->elements()[1], "name") == "Brute");
+            OA_CHECK(text(results->elements()[1], "outcome") == "won");
+        }
+    }
 
     // Only the kinds wanted are sent, and the watch goes on following the rest.
     sent.wanted = event_kind::match;
@@ -479,6 +494,12 @@ void check_events() {
     automation::watch_match_gone(watch, hooks);
     events = take(sent);
     OA_CHECK(events.size() == 1 && text(events[0], "change") == "ended");
+    if (events.size() == 1) {
+        OA_CHECK(text(events[0], "winner") == "Brute");
+        OA_CHECK(number(events[0], "tick") == 300);
+        OA_CHECK(events[0].find("results") != nullptr);
+        OA_CHECK(events[0].find("state_hash") == nullptr);
+    }
     OA_CHECK(watch.match == nullptr);
 
     // A new match's loading, before its frames: this machine's progress.
@@ -493,6 +514,125 @@ void check_events() {
     );
     for (const Json& event : events)
         OA_CHECK(number(event, "seq").has_value());
+}
+
+/// A world with no one seated. Seats set their own index.
+///
+/// @return the world
+std::unique_ptr<oa::World> fresh_world() {
+    auto world = std::make_unique<oa::World>();
+    for (auto& player : world->game.players)
+        player.index = OA_PLAYER_COUNT;
+    world->game.tick = 300;
+    return world;
+}
+
+/// Finds a seat of a results array by name.
+///
+/// @param results the results array
+/// @param name the player's name
+/// @return the seat; null when it is not there
+const Json* seat_named(const Json& results, std::string_view name) {
+    for (const Json& seat_row : results.elements())
+        if (text(seat_row, "name") == name)
+            return &seat_row;
+    return nullptr;
+}
+
+/// How a match ended for each seat: one player against another, a team, a
+/// player who left, and a draw. A watcher changes none of that.
+void check_results() {
+    auto free_for_all = fresh_world();
+    seat(*free_for_all, 0, "Pilot", OA_PLAYER_STATUS_LOCAL, 0, 2);
+    seat(*free_for_all, 1, "Brute", OA_PLAYER_STATUS_COMPUTER, 1, 5);
+    seat(*free_for_all, 2, "Eye", OA_PLAYER_STATUS_COMPUTER, 0, 1);
+    free_for_all->game.players[0].unit_count = 0;
+    free_for_all->game.players[0].units_created = 4;
+    free_for_all->game.players[0].losses = 4;
+    free_for_all->game.players[1].unit_count = 3;
+    free_for_all->game.players[1].units_created = 3;
+    free_for_all->game.players[1].kills = 1;
+    free_for_all->game.players[1].losses = 2;
+    free_for_all->player_info[2].options = OA_SETUP_OPTION_WATCHER;
+    const automation::MatchResults free = automation::match_results(*free_for_all);
+    const Json free_json =
+        object_of([&](JsonWriter& json) { automation::write_result_fields(json, free, true); });
+    OA_CHECK(text(free_json, "winner") == "Brute");
+    OA_CHECK(number(free_json, "tick") == 300);
+    OA_CHECK(free_json.find("state_hash") == nullptr);
+    const Json* free_results = free_json.find("results");
+    OA_CHECK(free_results != nullptr && free_results->elements().size() == 3);
+    if (free_results != nullptr) {
+        const Json* pilot = seat_named(*free_results, "Pilot");
+        const Json* brute = seat_named(*free_results, "Brute");
+        const Json* eye = seat_named(*free_results, "Eye");
+        OA_CHECK(pilot != nullptr && text(*pilot, "outcome") == "lost");
+        OA_CHECK(brute != nullptr && text(*brute, "outcome") == "won");
+        OA_CHECK(eye != nullptr && text(*eye, "outcome") == "watcher");
+        if (pilot != nullptr && brute != nullptr && eye != nullptr) {
+            OA_CHECK(is_null(*pilot, "team") && number(*pilot, "side") == 0);
+            OA_CHECK(number(*pilot, "units") == 0 && number(*pilot, "losses") == 4);
+            OA_CHECK(number(*brute, "units") == 3 && number(*brute, "kills") == 1);
+            OA_CHECK(number(*brute, "losses") == 2 && number(*brute, "side") == 1);
+            OA_CHECK(number(*eye, "slot") == 2);
+        }
+    }
+
+    auto team = fresh_world();
+    seat(*team, 0, "Alpha", OA_PLAYER_STATUS_LOCAL, 0, 2);
+    seat(*team, 1, "Beta", OA_PLAYER_STATUS_COMPUTER, 0, 3);
+    seat(*team, 2, "Gone", OA_PLAYER_STATUS_COMPUTER, 0, 4);
+    seat(*team, 3, "Foe", OA_PLAYER_STATUS_COMPUTER, 1, 5);
+    team->game.players[0].team = 1;
+    team->game.players[1].team = 1;
+    team->game.players[2].team = 1;
+    team->game.players[3].team = 2;
+    team->game.players[0].unit_count = 2;
+    team->game.players[1].unit_count = 1;
+    team->game.players[2].unit_count = 0;
+    team->game.players[2].units_created = 3;
+    team->game.players[3].unit_count = 0;
+    team->game.players[3].units_created = 4;
+    const automation::MatchResults allied = automation::match_results(*team);
+    OA_CHECK(!allied.winner);
+    OA_CHECK(allied.seats.size() == 4);
+    if (allied.seats.size() == 4) {
+        OA_CHECK(allied.seats[0].outcome == "won" && allied.seats[0].team == 1);
+        OA_CHECK(allied.seats[1].outcome == "won");
+        OA_CHECK(allied.seats[2].name == "Gone" && allied.seats[2].outcome == "won");
+        OA_CHECK(allied.seats[3].name == "Foe" && allied.seats[3].outcome == "lost");
+    }
+
+    auto departed = fresh_world();
+    seat(*departed, 0, "Pilot", OA_PLAYER_STATUS_LOCAL, 0, 2);
+    seat(*departed, 1, "Brute", OA_PLAYER_STATUS_COMPUTER, 1, 5);
+    departed->game.players[0].in_use = 0;
+    departed->game.players[0].reject_reason = 1;
+    departed->game.players[0].units_created = 5;
+    departed->game.players[0].unit_count = 2;
+    departed->game.players[1].unit_count = 3;
+    const automation::MatchResults left = automation::match_results(*departed);
+    OA_CHECK(left.winner && *left.winner == "Brute");
+    OA_CHECK(left.seats.size() == 2);
+    if (left.seats.size() == 2) {
+        OA_CHECK(left.seats[0].outcome == "left" && left.seats[0].units == 2);
+        OA_CHECK(left.seats[1].outcome == "won");
+    }
+
+    auto drawn = fresh_world();
+    seat(*drawn, 0, "Pilot", OA_PLAYER_STATUS_LOCAL, 0, 2);
+    seat(*drawn, 1, "Brute", OA_PLAYER_STATUS_COMPUTER, 1, 5);
+    drawn->game.players[0].unit_count = 0;
+    drawn->game.players[0].units_created = 2;
+    drawn->game.players[1].unit_count = 0;
+    drawn->game.players[1].units_created = 2;
+    const automation::MatchResults draw = automation::match_results(*drawn);
+    OA_CHECK(!draw.winner);
+    OA_CHECK(draw.seats.size() == 2);
+    if (draw.seats.size() == 2) {
+        OA_CHECK(draw.seats[0].outcome == "drawn" && draw.seats[1].outcome == "drawn");
+        OA_CHECK(!draw.seats[0].team && !draw.seats[1].team);
+    }
 }
 
 void check_kinds() {
@@ -511,6 +651,7 @@ int main() {
     check_match();
     check_room();
     check_events();
+    check_results();
     check_kinds();
     return oa::test::check_exit_status();
 }

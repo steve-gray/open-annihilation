@@ -19,20 +19,25 @@
 //              one player, else absent), text
 //   loaded     player and slot (null while this machine's own load has no
 //              players yet), progress (0 to 100), local
-//   match      change ("started" or "ended")
+//   match      change ("started" or "ended"); ended also carries results,
+//              winner and tick, taken while the match was still there
 //   pause      paused
 //   speed      speed (1 to 20; 10 is normal)
 //   alliance   from, from_slot, to, to_slot, allied
-//   game_over  outcome ("victory" or "defeat"), winner (a name, or null)
+//   game_over  outcome ("victory" or "defeat"), winner (a name, or null,
+//              this machine's own), then results and tick, the same on
+//              every machine
 //   transfer   accepted by subscribe, never sent yet: no part of the game
 //              that the endpoint reads reports units or resources given
 #pragma once
 
 #include "oa/formats/json.hpp"
 #include "oa/core/player.h"
+#include "reports.hpp"
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -143,11 +148,14 @@ struct EventWatch {
     std::array<Seat, OA_PLAYER_COUNT> seats{}; ///< the battle room's seats
     uint16_t room_chat_next{};                 ///< the room's chat line read next
 
-    const oa::World* match{};   ///< the match being watched; null for none
-    bool match_started{};       ///< its start was reported
-    bool paused{};              ///< its pause
-    uint16_t speed{};           ///< its game speed
-    bool decided{};             ///< its outcome was reported
+    const oa::World* match{}; ///< the match being watched; null for none
+    bool match_started{};     ///< its start was reported
+    bool paused{};            ///< its pause
+    uint16_t speed{};         ///< its game speed
+    bool decided{};           ///< its outcome was reported
+    /// Its results, taken while the world was still there, so the end can
+    /// name them after the world has gone.
+    std::optional<MatchResults> results;
     uint16_t match_chat_next{}; ///< its message log's line read next
     /// Its players' load progress, 0 to 100.
     std::array<uint8_t, OA_PLAYER_COUNT> load_progress{};

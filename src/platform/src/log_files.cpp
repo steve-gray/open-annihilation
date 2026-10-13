@@ -38,6 +38,7 @@ struct State {
     std::chrono::steady_clock::time_point last_check{};
     int terminal = -1; // descriptor of the standard error the program began with, when a terminal
     bool active = false;
+    bool hold = false; // write_line drops text until begin() succeeds
 };
 
 State& state() {
@@ -338,6 +339,22 @@ void maintain() {
         return;
     current.last_check = steady;
     maintain(now_utc());
+}
+
+void hold_lines_for_log() {
+    state().hold = true;
+}
+
+bool lines_held_for_log() noexcept {
+    return state().hold;
+}
+
+void write_line(std::string_view text) {
+    if (state().hold && !state().active)
+        return;
+    std::fwrite(text.data(), 1, text.size(), stdout);
+    std::fputc('\n', stdout);
+    std::fflush(stdout);
 }
 
 bool output_captured() {

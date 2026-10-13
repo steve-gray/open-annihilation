@@ -239,6 +239,7 @@ void begin_match(EventWatch& watch, const oa::World& match) {
     watch.paused = (game.sim_run_flags & kRunFlagPaused) != 0;
     watch.speed = game.requested_speed;
     watch.decided = false;
+    watch.results.reset();
     watch.match_chat_next = static_cast<uint16_t>(game.chat_head % OA_CHAT_LINE_COUNT);
     watch.load_progress = {};
     for (uint8_t from = 0; from < OA_PLAYER_COUNT; ++from)
@@ -254,6 +255,8 @@ void begin_match(EventWatch& watch, const oa::World& match) {
 /// @param hooks where events go
 void watch_match(EventWatch& watch, std::string_view screen, const EventHooks& hooks) {
     const oa::Game& game = watch.match->game;
+    // Kept while the world is here: the end is reported after it may be gone.
+    watch.results = match_results(*watch.match);
     if (!watch.match_started && screen == kMatchScreen) {
         watch.match_started = true;
         send_match(hooks, "started");
@@ -332,6 +335,8 @@ void watch_match(EventWatch& watch, std::string_view screen, const EventHooks& h
                 );
             else
                 event->null();
+            if (watch.results)
+                write_result_fields(*event, *watch.results, false);
             send_event(hooks, *event);
         }
     }
@@ -352,10 +357,19 @@ void watch_match(EventWatch& watch, std::string_view screen, const EventHooks& h
 /// @param[in,out] watch what the watch saw last
 /// @param hooks where events go
 void end_match(EventWatch& watch, const EventHooks& hooks) {
-    if (watch.match_started)
-        send_match(hooks, "ended");
+    if (watch.match_started) {
+        auto event = begin_event(hooks, event_kind::match);
+        if (event) {
+            event->key("change");
+            event->string("ended");
+            if (watch.results)
+                write_result_fields(*event, *watch.results, true);
+            send_event(hooks, *event);
+        }
+    }
     watch.match = nullptr;
     watch.match_started = false;
+    watch.results.reset();
 }
 
 } // namespace

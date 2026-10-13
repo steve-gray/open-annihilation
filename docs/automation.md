@@ -341,8 +341,16 @@ After `subscribe`, the client is sent events unasked, among the answers:
 `{"event", "seq", "frame", "tick", ...}`. The kinds are `screen`,
 `player` (a battle-room seat taken or left), `ready`, `chat`, `loaded`,
 `match` (started or ended), `pause`, `speed`, `alliance` and `game_over`.
+A `match` line whose change is `ended`, and `game_over`, also carry
+`results` and `tick`: how the game ended for each player, the same on
+every machine. `game_over` keeps its own `outcome` and `winner`, which
+are this machine's. The ended `match` line carries the shared `winner`.
 The endpoint learns them by comparing what the game holds from one frame
 to the next; nothing is added to the game to produce them.
+
+The same events can be written as lines on standard output, or to a
+file, with no connection to the endpoint.
+See [what a game reports as it is played](multiplayer/status.md).
 
 ## What it never does
 
@@ -354,8 +362,10 @@ to the next; nothing is added to the game to produce them.
   protocol is the same with it on. The one difference the other players
   see is the engine's chat line in the battle room
   ([below](#in-a-battle-room)).
-- **Run without `--fark`.** Without it no socket is opened and no file is
-  written.
+- **Run without `--fark`.** Without it no socket is opened and no
+  endpoint file is written. Status lines are separate: `--status-stdout`
+  and `--status-file` need no endpoint
+  ([status.md](multiplayer/status.md)).
 - **Listen beyond this machine.** It serves the loopback address only.
 - **Read or write files, start programs or reach the network** for a
   client: it has no request that does.
