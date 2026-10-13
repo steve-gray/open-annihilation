@@ -530,4 +530,153 @@ std::vector<fs::path> drive_folders() {
     return drives;
 }
 
+namespace {
+
+/// Tells whether a path is a folder that can be opened.
+///
+/// @param folder the path
+/// @return true when it is a directory
+bool folder_there(const fs::path& folder) {
+    if (folder.empty())
+        return false;
+    std::error_code error;
+    return fs::is_directory(folder, error);
+}
+
+/// Returns a path when it is a folder, else an empty path.
+///
+/// @param folder the path
+/// @return the folder, or empty
+fs::path existing_folder(const fs::path& folder) {
+    return folder_there(folder) ? folder : fs::path{};
+}
+
+/// The last name of a volume, or "System" for the root folder.
+///
+/// @param volume the volume
+/// @return the label
+std::string volume_label(const fs::path& volume) {
+    if (volume == "/")
+        return "System";
+    const std::string name = volume.filename().string();
+    if (!name.empty())
+        return name;
+    return volume.string();
+}
+
+/// Adds a place when its folder is not empty.
+///
+/// @param[in,out] places the places
+/// @param folder the folder; empty is skipped
+/// @param label the label
+/// @param group the band
+void add_place(
+    std::vector<LocatorPlace>& places, const fs::path& folder, std::string label, LocatorGroup group
+) {
+    if (folder.empty())
+        return;
+    places.push_back(LocatorPlace{folder, std::move(label), group});
+}
+
+} // namespace
+
+std::vector<LocatorPlace> locator_places(const LocatorFacts& facts) {
+    std::vector<LocatorPlace> places;
+    add_place(places, facts.home, "Home", LocatorGroup::places);
+    add_place(places, facts.desktop, "Desktop", LocatorGroup::places);
+    add_place(places, facts.documents, "Documents", LocatorGroup::places);
+    add_place(places, facts.downloads, "Downloads", LocatorGroup::places);
+    add_place(
+        places,
+        facts.applications,
+        facts.program_files ? "Program Files" : "Applications",
+        LocatorGroup::places
+    );
+    if (facts.deck) {
+        for (std::size_t index = 0; index < facts.sd_cards.size(); ++index) {
+            std::string label = "microSD card";
+            if (facts.sd_cards.size() > 1) {
+                const std::string name = facts.sd_cards[index].filename().string();
+                if (!name.empty())
+                    label += " " + name;
+            }
+            add_place(places, facts.sd_cards[index], std::move(label), LocatorGroup::places);
+        }
+    } else {
+        for (const fs::path& volume : facts.volumes)
+            add_place(places, volume, volume_label(volume), LocatorGroup::volumes);
+    }
+    add_place(places, facts.steam, "Steam · Proton", LocatorGroup::deck_games);
+    add_place(places, facts.heroic, "Heroic", LocatorGroup::deck_games);
+    add_place(places, facts.lutris, "Lutris", LocatorGroup::deck_games);
+    add_place(places, facts.bottles, "Bottles", LocatorGroup::deck_games);
+    return places;
+}
+
+LocatorFacts locator_place_facts(bool deck) {
+    LocatorFacts facts;
+    facts.deck = deck;
+    facts.home = home_folder();
+    if (folder_there(facts.home)) {
+        facts.desktop = existing_folder(facts.home / "Desktop");
+        facts.documents = existing_folder(facts.home / "Documents");
+        facts.downloads = existing_folder(facts.home / "Downloads");
+    } else {
+        facts.home.clear();
+    }
+#if defined(_WIN32)
+    facts.applications = existing_folder(environment_path("ProgramFiles"));
+    facts.program_files = !facts.applications.empty();
+#elif defined(__APPLE__)
+    facts.applications = existing_folder(fs::path("/Applications"));
+#endif
+    const std::vector<fs::path> drives = drive_folders();
+    if (deck)
+        facts.sd_cards = drives;
+    else
+        facts.volumes = drives;
+    const fs::path home = facts.home;
+    if (!home.empty()) {
+        const fs::path steam_tail = fs::path("steamapps") / "compatdata" /
+                                    std::to_string(total_annihilation_steam_app) / "pfx";
+        const fs::path candidates[] = {
+            home / ".local" / "share" / "Steam" / steam_tail,
+            home / ".steam" / "steam" / steam_tail,
+            home / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "Steam" /
+                steam_tail,
+            home / "Library" / "Application Support" / "Steam" / steam_tail,
+        };
+        for (const fs::path& candidate : candidates) {
+            if (folder_there(candidate)) {
+                facts.steam = candidate;
+                break;
+            }
+        }
+        facts.heroic = existing_folder(home / "Games" / "Heroic");
+        facts.lutris = existing_folder(home / "Games");
+        facts.bottles = existing_folder(home / ".local" / "share" / "bottles" / "bottles");
+        if (facts.bottles.empty()) {
+            facts.bottles = existing_folder(
+                home / ".var" / "app" / "com.usebottles.bottles" / "data" / "bottles" / "bottles"
+            );
+        }
+    }
+    return facts;
+}
+
+std::string path_under_home(const fs::path& home, const fs::path& folder) {
+    if (folder.empty())
+        return {};
+    const fs::path shown = folder.lexically_normal();
+    if (home.empty())
+        return shown.generic_string();
+    const fs::path relative = shown.lexically_relative(home.lexically_normal());
+    const std::string tail = relative.generic_string();
+    if (tail == ".")
+        return "~";
+    if (tail.empty() || tail.starts_with(".."))
+        return shown.generic_string();
+    return "~/" + tail;
+}
+
 } // namespace oa::platform::game_installs

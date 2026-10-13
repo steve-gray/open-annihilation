@@ -283,6 +283,11 @@ struct Options {
     fs::path mod_dir;
     // Plays the game folder without the remembered mod folder (--base-game).
     bool base_game = false;
+    /// The base game and expansions for this run (--content
+    /// GAME[:EXPANSION,...]). Empty when the run uses the remembered choice.
+    /// It is not written to the preferences, and the mounted files change
+    /// with the next mount.
+    std::string content{};
     // The folders loose files come from, highest precedence first: the mod
     // folder, then game_dir. main() fills it; empty means game_dir alone.
     std::vector<fs::path> game_folders;
@@ -471,6 +476,9 @@ struct Options {
     // Walks the first-run setup over the main menu: a built-in language, a
     // pack that fails and then retries, Skip setup, and both online choices.
     bool check_first_run = false;
+    // Opens the locator on --game-dir's parent, moves onto that folder with
+    // Tab and chooses it. With --snapshot, writes that PNG and a Deck PNG.
+    bool check_folder_chooser = false;
     // Sends a construction kbot on PATROL through the SDL presenter with the
     // metal store low and checks it reclaims a feature on its way.
     bool check_patrol_reclaim = false;

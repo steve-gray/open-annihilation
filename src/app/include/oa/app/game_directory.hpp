@@ -16,12 +16,14 @@
 
 #include "oa/app/demo_installer.hpp"
 #include "oa/app/mod_profile_loader.hpp"
+#include "oa/data/content_choice.hpp"
 #include "oa/platform/game_installs.hpp"
 #include "oa/platform/preferences.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -301,14 +303,14 @@ struct GameDirectory {
 /// the stored folder while it is still usable (neither when `choose`), else
 /// the one usable folder found on this machine (request.found) when no stored
 /// folder has gone, else the folder dialog until the user picks a usable
-/// folder. Where the in-engine chooser is offered (request.chooser_offered,
-/// with `needed`), it opens instead (`needed` says so, with the usable
-/// folders found) for several usable folders found, for a stored folder that
-/// has gone while a usable one was found, for a start with no usable folder
-/// in Steam's Game Mode (request.chooser_first, which --choose-game-dir
-/// follows too) or with no dialog in the build, and when the dialog cannot
-/// open (with its reason); otherwise a desktop whose dialog works resolves
-/// as without the chooser. An unattended run
+/// folder. Where the in-engine locator is offered (request.chooser_offered,
+/// with `needed`), it opens instead of the dialog (`needed` says so, with the
+/// usable folders found). On the desktop the system's dialog stays available
+/// as a button (dialog_offered). In Steam's Game Mode (request.chooser_first)
+/// that button is absent, and the dialog is not opened. A build with no
+/// dialog offers none. Where the locator is not offered, a desktop whose
+/// dialog works resolves as before, including when the dialog cannot open.
+/// An unattended run
 /// never opens the dialog: without --game-dir it takes a usable platform
 /// default, else a usable stored folder. --game-dir is inspected too, unless
 /// --archive names the archives, and refused when it names no folder or one
@@ -399,6 +401,60 @@ void remember_game_directory(oa::platform::preferences::Values& values, const fs
 /// @param folder the mod folder, stored absolute and normalised as UTF-8;
 ///        empty forgets the choice, for the base game
 void remember_mod_directory(oa::platform::preferences::Values& values, const fs::path& folder);
+
+/// Lists the base games and expansions wholly present in a folder.
+///
+/// Each regular file under the folder is matched by its path relative to
+/// the folder and its size. A bundle is copied when every one of its files
+/// matches.
+///
+/// @param folder the folder to walk; empty, or not a folder, copies nothing
+/// @return the copied bundle ids, in the built-in order
+[[nodiscard]] std::vector<std::string> copied_content_bundles(const fs::path& folder);
+
+/// Reads the content choice from the preferences.
+///
+/// The base game is `open-annihilation.base-game` and the expansions are
+/// `open-annihilation.expansions.<game>`. A non-empty `command_line` is
+/// `--content` and replaces both for this call. Nothing is written.
+///
+/// @param values the preferences
+/// @param copied the bundle ids that are copied
+/// @param command_line the `--content` value; empty when the run names none
+/// @return the choice
+[[nodiscard]] oa::data::content_bundles::ContentChoice content_choice_from_preferences(
+    const oa::platform::preferences::Values& values,
+    std::span<const std::string_view> copied,
+    std::string_view command_line
+);
+
+/// Stores the base game and its expansions in the preferences.
+///
+/// Other base games' expansion lists are left as they are. An empty
+/// expansion list is stored as an empty value, which is none on, and is
+/// different from the key being absent.
+///
+/// @param[in,out] values the preferences
+/// @param choice the choice to store; its error is not stored
+void remember_content_choice(
+    oa::platform::preferences::Values& values,
+    const oa::data::content_bundles::ContentChoice& choice
+);
+
+/// Stores a change that was applied, including clearing the mod.
+///
+/// When the mod is cleared, the mod folder and the picked folder are
+/// forgotten. A clear because a required expansion went off sets
+/// `open-annihilation.content-note` to `required-expansion`. A change that
+/// was not applied writes nothing.
+///
+/// @param[in,out] values the preferences
+/// @param result the change
+/// @return true when the preferences were written
+[[nodiscard]] bool store_content_change(
+    oa::platform::preferences::Values& values,
+    const oa::data::content_bundles::ContentChangeResult& result
+);
 
 /// Resolves the game folder with the native dialogs (game_directory_dialog.cpp).
 ///

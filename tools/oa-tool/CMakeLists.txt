@@ -26,7 +26,7 @@ target_include_directories(oa-tool-commands SYSTEM PRIVATE
   ${PROJECT_SOURCE_DIR}/third_party/monocypher)
 target_compile_features(oa-tool-commands PUBLIC cxx_std_20)
 target_link_libraries(oa-tool-commands
-  PRIVATE oa-options oa-app-package-install oa-app-game-directory oa-data-languages
+  PRIVATE oa-options oa-app-package-install oa-app-game-directory oa-data-content-bundles oa-data-languages
     oa-data-map-pack oa-data-map-fit oa-formats-oamod oa-formats-json oa-formats-ota oa-formats-tnt
     oa-formats-zip oa-base-sha256 oa-base-text oa-platform-shims oa-base-signing oa-data-catalogue
     oa-data-registry oa-platform-random oa-app-content oa-netgame-http oa-formats-url
@@ -98,6 +98,15 @@ if(BUILD_TESTING)
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/interface_words_test.py
       $<TARGET_FILE:oa-tool> ${CMAKE_SOURCE_DIR})
   set_tests_properties(tools-oa-tool-interface-words PROPERTIES TIMEOUT 120)
+
+  # The shipped catalogue covers every listed word in de, fr, es and it, and
+  # a German lookup returns German. The file is the one copied beside the game.
+  add_executable(oa-tool-interface-catalogue-test tests/interface_catalogue_test.cpp)
+  target_link_libraries(oa-tool-interface-catalogue-test PRIVATE oa-tool-commands oa-data-languages
+    oa-test-support oa-options)
+  add_test(NAME tools-oa-tool-interface-catalogue COMMAND oa-tool-interface-catalogue-test
+    ${CMAKE_SOURCE_DIR}/languages/interface.tdf)
+  set_tests_properties(tools-oa-tool-interface-catalogue PROPERTIES TIMEOUT 60)
   if(WIN32)
     add_custom_command(TARGET oa-tool-registry-test POST_BUILD
       COMMAND ${CMAKE_COMMAND} "-DDLLS=$<TARGET_RUNTIME_DLLS:oa-tool-registry-test>"

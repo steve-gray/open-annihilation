@@ -7,6 +7,9 @@ the registry into the records the engine reads, with its canonical form and
 hashes. Target `oa-data-mod-profile`, header `oa/data/mod_profile.hpp`,
 namespace `oa::data::mod_profile`. It takes bytes and plain values and never
 opens a file; `src/app/mod_profile_loader.cpp` does the file work.
+`supportedGames` and `requiredExpansions` are package facts: written, they
+enter the full hash only, and an omitted list is not filled into the
+canonical form. Omitting `supportedGames` means `totala`.
 
 ## The registry
 

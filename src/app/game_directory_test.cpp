@@ -8,10 +8,12 @@
 // preference round trip.
 // With --install it checks that the installation OA_GAME_DIR names is usable.
 #include "oa/app/game_directory.hpp"
+#include "oa/data/content_choice.hpp"
 #include "oa/formats/hpi.hpp"
 #include "oa/platform/files.hpp"
 #include "oa/platform/preferences.hpp"
 #include "oa/test/game_data.hpp"
+#include "oa/ui/engine_settings.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -1159,11 +1161,10 @@ void check_found_installs() {
         const auto result =
             resolve_game_directory(found_request(path_to_utf8(kMoved), {from_broken}), h, &needed);
         expect(
-            result && result->path == kCd && result->source == GameDirectorySource::chosen &&
-                !needed.needed && host.notices.size() == 1 &&
-                contains(host.notices[0], "chosen earlier") && host.starts.size() == 1 &&
-                host.starts[0] == kMoved,
-            "a remembered folder that has gone with nothing usable found asks with the dialog"
+            !result && needed.needed && needed.chooser && needed.dialog_offered &&
+                needed.stored_folder == kMoved && needed.found.empty() && host.starts.empty() &&
+                host.notices.empty(),
+            "a remembered folder that has gone opens the locator, with the system picker offered"
         );
     }
     {
@@ -1174,11 +1175,9 @@ void check_found_installs() {
         GameFilesNeeded needed;
         const auto result = resolve_game_directory(found_request(std::nullopt, {}), h, &needed);
         expect(
-            result && result->source == GameDirectorySource::chosen && !needed.needed &&
-                host.notices.size() == 1 &&
-                contains(host.notices[0], "needs your Total Annihilation installation") &&
-                host.starts.size() == 1,
-            "nothing found on a desktop with a dialog asks with the dialog, as before"
+            !result && needed.needed && needed.chooser && needed.dialog_offered &&
+                needed.dialog_problem.empty() && host.starts.empty() && host.notices.empty(),
+            "nothing found on a desktop opens the locator, with the system picker offered"
         );
     }
     {
@@ -1215,10 +1214,9 @@ void check_found_installs() {
         GameFilesNeeded needed;
         const auto result = resolve_game_directory(found_request(std::nullopt, {}), h, &needed);
         expect(
-            !result && needed.needed && needed.chooser && !needed.dialog_offered &&
-                needed.dialog_problem == "no portal" && host.starts.size() == 2 &&
-                host.notices.size() == 1,
-            "a dialog that cannot open hands over to the chooser with its reason"
+            !result && needed.needed && needed.chooser && needed.dialog_offered &&
+                needed.dialog_problem.empty() && host.starts.empty() && host.notices.empty(),
+            "the locator opens without trying the system dialog, which stays offered"
         );
     }
     {
@@ -1275,9 +1273,9 @@ void check_found_installs() {
         request.choose = true;
         const auto result = resolve_game_directory(request, h, &needed);
         expect(
-            result && result->source == GameDirectorySource::chosen && result->path == kCd &&
-                host.starts.size() == 1,
-            "--choose-game-dir opens the dialog over the one folder found"
+            !result && needed.needed && needed.chooser && needed.dialog_offered &&
+                needed.found.size() == 1 && host.starts.empty() && host.notices.empty(),
+            "--choose-game-dir opens the locator over the one folder found"
         );
     }
     {
@@ -1795,6 +1793,92 @@ void check_preferences(const fs::path& temporary) {
 
 } // namespace
 
+void check_content_choice(const fs::path& temporary) {
+    namespace bundles = oa::data::content_bundles;
+    namespace settings = oa::ui::engine_settings;
+    oa::platform::preferences::Values values;
+    const std::string_view copied[]{"campaign", "music", "core-contingency"};
+    const bundles::ContentChoice migrated = content_choice_from_preferences(values, copied, {});
+    expect(migrated.migration && migrated.base_game == "totala", "no base game stored is totala");
+    expect(
+        migrated.expansions.size() == 3 && migrated.expansions[0] == "campaign" &&
+            migrated.expansions[1] == "core-contingency" && migrated.expansions[2] == "music",
+        "a missing choice turns on every copied expansion that can be on"
+    );
+    remember_content_choice(values, migrated);
+    expect(
+        values[std::string(settings::key::base_game)] == "totala",
+        "the base game is stored as open-annihilation.base-game"
+    );
+    expect(
+        values[std::string(settings::key::expansions_prefix) + "totala"] ==
+            "campaign,core-contingency,music",
+        "the expansions are stored under open-annihilation.expansions.totala"
+    );
+    const bundles::ContentChoice again = content_choice_from_preferences(values, copied, {});
+    expect(!again.migration && again.expansions.size() == 3, "a stored choice is read back");
+
+    values[std::string(settings::key::mod_directory)] = "/mods/ridge";
+    values[std::string(settings::key::picked_mod_directory)] = "/mods/ridge";
+    bundles::ContentChangeResult cleared;
+    cleared.applied = true;
+    cleared.choice = migrated;
+    cleared.mod_cleared = bundles::ModClearReason::required_expansion_off;
+    expect(store_content_change(values, cleared), "an applied change is stored");
+    expect(
+        values.count(std::string(settings::key::mod_directory)) == 0 &&
+            values.count(std::string(settings::key::picked_mod_directory)) == 0,
+        "a mod whose expansion went off is forgotten"
+    );
+    expect(
+        values[std::string(settings::key::content_note)] ==
+            std::string(bundles::required_expansion_note),
+        "that clear leaves the note token, not a sentence"
+    );
+
+    values[std::string(settings::key::mod_directory)] = "/mods/ridge";
+    bundles::ContentChangeResult chose;
+    chose.applied = true;
+    chose.choice.base_game = "totala-demo";
+    chose.mod_cleared = bundles::ModClearReason::base_game_chosen;
+    expect(store_content_change(values, chose), "choosing a base game is stored");
+    expect(
+        values[std::string(settings::key::base_game)] == "totala-demo" &&
+            values.count(std::string(settings::key::mod_directory)) == 0,
+        "choosing a base game clears the mod"
+    );
+
+    bundles::ContentChangeResult refused;
+    refused.applied = false;
+    refused.choice.base_game = "totala";
+    const std::string kept = values[std::string(settings::key::base_game)];
+    expect(
+        !store_content_change(values, refused) &&
+            values[std::string(settings::key::base_game)] == kept,
+        "a refused change writes nothing"
+    );
+
+    const bundles::ContentChoice run =
+        content_choice_from_preferences(values, copied, "totala:music");
+    expect(
+        run.command_line && run.base_game == "totala" && run.expansions.size() == 1 &&
+            run.expansions[0] == "music",
+        "--content replaces the stored choice for the read"
+    );
+    expect(
+        values[std::string(settings::key::base_game)] == "totala-demo",
+        "--content does not write the preferences"
+    );
+
+    const fs::path empty = temporary / "G04-empty-content";
+    fs::create_directory(empty);
+    expect(copied_content_bundles(empty).empty(), "an empty folder has no copied bundle");
+    std::ofstream(empty / "totala1.hpi") << "short";
+    expect(
+        copied_content_bundles(empty).empty(), "a file of the wrong size is not a copied bundle"
+    );
+}
+
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--install") {
         const auto folder = oa::test::require_game_directory("the installation check");
@@ -1819,6 +1903,7 @@ int main(int argc, char** argv) {
         check_skipped_and_overlay(temporary);
         check_mod_folders(temporary);
         check_preferences(temporary);
+        check_content_choice(temporary);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "FAILED: %s\n", error.what());
         ++failures;

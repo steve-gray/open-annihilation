@@ -1321,6 +1321,89 @@ void test_package_keys() {
     OA_CHECK(met.resolution && met.resolution->profile.requires_engine == ">= 0.0.1");
 }
 
+/// supportedGames and requiredExpansions are read, and they change the full hash only.
+void test_content_needs() {
+    const ResolveResult omitted = resolve(with_requires("omit", ""));
+    OA_CHECK(omitted.resolution.has_value() && omitted.warnings.empty());
+    if (omitted.resolution) {
+        OA_CHECK(omitted.resolution->profile.supported_games == std::vector<std::string>{"totala"});
+        OA_CHECK(omitted.resolution->profile.required_expansions.empty());
+        OA_CHECK(omitted.resolution->canonical.find("supportedGames") == std::string::npos);
+        OA_CHECK(omitted.resolution->canonical.find("requiredExpansions") == std::string::npos);
+    }
+
+    const ResolveResult legacy = resolve(profile_text("legacy"));
+    OA_CHECK(legacy.resolution.has_value() && legacy.warnings.empty());
+    if (legacy.resolution) {
+        OA_CHECK(legacy.resolution->profile.supported_games == std::vector<std::string>{"totala"});
+        OA_CHECK(legacy.resolution->profile.required_expansions.empty());
+    }
+
+    const ResolveResult named = resolve(profile_text(
+        "named",
+        "supportedGames: [\"totala-demo\", \"totala\"]\n"
+        "requiredExpansions: [\"music\"]\n"
+    ));
+    const ResolveResult plain = resolve(profile_text("named"));
+    OA_CHECK(named.resolution.has_value() && named.warnings.empty());
+    if (named.resolution && plain.resolution) {
+        OA_CHECK(
+            named.resolution->profile.supported_games ==
+            (std::vector<std::string>{"totala-demo", "totala"})
+        );
+        OA_CHECK(
+            named.resolution->profile.required_expansions == std::vector<std::string>{"music"}
+        );
+        OA_CHECK(named.resolution->profile.sim_hash == plain.resolution->profile.sim_hash);
+        OA_CHECK(named.resolution->profile.full_hash != plain.resolution->profile.full_hash);
+        OA_CHECK(named.resolution->canonical.find("\"supportedGames\"") != std::string::npos);
+        OA_CHECK(named.resolution->canonical.find("\"requiredExpansions\"") != std::string::npos);
+    }
+
+    const ResolveResult none = resolve(profile_text("none", "requiredExpansions: []\n"));
+    OA_CHECK(none.resolution.has_value() && none.warnings.empty());
+    if (none.resolution)
+        OA_CHECK(none.resolution->profile.required_expansions.empty());
+
+    OA_CHECK(refused_with(profile_text("unknown", "supportedGames: [\"no-such\"]\n"), "'no-such'"));
+    OA_CHECK(refused_with(
+        profile_text("unknown", "supportedGames: [\"no-such\"]\n"), "is not a base game"
+    ));
+    OA_CHECK(refused_with(
+        profile_text("kind", "supportedGames: [\"core-contingency\"]\n"), "is not a base game"
+    ));
+    OA_CHECK(refused_with(
+        profile_text("expansion", "requiredExpansions: [\"totala\"]\n"), "is not an expansion"
+    ));
+    OA_CHECK(refused_with(
+        profile_text(
+            "extends",
+            "supportedGames: [\"totala-demo\"]\n"
+            "requiredExpansions: [\"core-contingency\"]\n"
+        ),
+        "extends none of the supported games"
+    ));
+    OA_CHECK(refused_with(
+        profile_text("empty", "supportedGames: []\n"),
+        "supportedGames must list at least one base game"
+    ));
+    OA_CHECK(refused_with(
+        profile_text("repeat", "supportedGames: [\"totala\", \"totala\"]\n"), "'totala' is repeated"
+    ));
+    OA_CHECK(
+        refused_with(profile_text("scalar", "supportedGames: totala\n"), "must be a list of ids")
+    );
+    OA_CHECK(refused_with(profile_text("number", "supportedGames: [1]\n"), "must be an id"));
+    std::string many = "supportedGames: [";
+    for (int index = 0; index < 17; ++index) {
+        if (index != 0)
+            many += ", ";
+        many += "\"g" + std::to_string(index) + "\"";
+    }
+    many += "]\n";
+    OA_CHECK(refused_with(profile_text("many-games", many), "at most 16"));
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && std::string_view{argv[1]} == "--references")
         return test_references();
@@ -1338,5 +1421,6 @@ int main(int argc, char** argv) {
     test_override_text_and_states();
     test_description();
     test_package_keys();
+    test_content_needs();
     return oa::test::check_exit_status();
 }

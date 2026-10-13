@@ -10,7 +10,8 @@ add_library(oa-data-languages src/languages.cpp src/interface_text.cpp src/langu
 add_library(oa::data::languages ALIAS oa-data-languages)
 target_include_directories(oa-data-languages PUBLIC include)
 target_compile_features(oa-data-languages PUBLIC cxx_std_20)
-target_link_libraries(oa-data-languages PUBLIC oa-core-types oa-data-defs PRIVATE oa-formats-oamod oa-formats-tdf oa-options)
+target_link_libraries(oa-data-languages PUBLIC oa-core-types oa-data-defs PRIVATE oa-formats-oamod
+  oa-data-content-bundles oa-formats-tdf oa-options)
 
 if(BUILD_TESTING)
   # The registry and its order, the fallback chains, locales matched alone

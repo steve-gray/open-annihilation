@@ -182,6 +182,7 @@ text: {needs: modern-fonts}
 unicode: true
 homepage: "https://example.org/languages"
 tags: [translation]
+supportedGames: [totala, totala-demo]
 requires: {engine: ">= 0.8.0"}
 fonts:
   - {file: NotoSansCJKsc-Bold.otf, role: ideographs}
@@ -204,7 +205,13 @@ since its text is UTF-8. The installer checks `requires.engine` when a pack is
 installed, and reading a pack that is already installed does not, so an
 installed pack stays available when this Open Annihilation is older than
 the pack asks for. Quote the requirement: a value that starts with `>`
-is refused unless it is quoted.
+is refused unless it is quoted. `supportedGames` names the base games the
+pack's text is for. Leaving it out means every base game, `totala` then
+`totala-demo`. `requires.base: ta-3.1c` still reads, and when
+`supportedGames` is omitted it means `[totala]` rather than every game.
+`requiredExpansions` names expansions that must be on; leaving it out means
+none. An id is a built-in bundle, and a required expansion must extend one
+of the supported games.
 
 `fonts`, `warmup` and `packaging` are optional, and a pack that names none
 of them still reads. `fonts` names at most four files in the pack's
@@ -430,6 +437,17 @@ and each key a language's tag:
 	fr = ...;
 	}
 ```
+
+The engine ships `languages/interface.tdf` in that folder, with these
+words in German (`de`), French (`fr`), Spanish (`es`) and Italian (`it`),
+so those languages show Open Annihilation's own screens without a
+download. The file is read with the other catalogue files, before any
+pack, by the same catalogue a pack's `interface.tdf` is added to. A later
+file replaces a text. The four languages address the player informally
+(German du, French tu, Spanish tú, Italian tu), as games in those
+languages usually do. The names Open Annihilation, OA, Core Prime, Total
+Annihilation and Cavedog Entertainment are left as written. A native
+speaker should still review each language.
 
 The Simplified Chinese pack's `interface.tdf` translates them for
 `zh-Hans`; the player's packs replace a packager's words, and a mod's

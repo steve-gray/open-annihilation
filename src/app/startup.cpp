@@ -5,6 +5,7 @@
 #include "oa/app/app.hpp"
 #include "oa/app/extension.hpp"
 #include "oa/app/game_directory.hpp"
+#include "oa/data/content_choice.hpp"
 #include "oa/app/hook_call.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/inbox.hpp"
@@ -300,6 +301,7 @@ void check_game_files_options(Options& options) {
         {options.check_language_registry, "--check-language-registry"},
         {options.check_language_notice, "--check-language-notice"},
         {options.check_first_run, "--check-first-run"},
+        {options.check_folder_chooser, "--check-folder-chooser"},
         {options.check_patrol_reclaim, "--check-patrol-reclaim"},
         {options.check_reclaim_cursor, "--check-reclaim-cursor"},
         {options.check_build_preview, "--check-build-preview"},
@@ -513,6 +515,7 @@ void check_director_options(Options& options) {
         {options.check_language_registry, "--check-language-registry"},
         {options.check_language_notice, "--check-language-notice"},
         {options.check_first_run, "--check-first-run"},
+        {options.check_folder_chooser, "--check-folder-chooser"},
         {options.check_patrol_reclaim, "--check-patrol-reclaim"},
         {options.check_reclaim_cursor, "--check-reclaim-cursor"},
         {options.check_build_preview, "--check-build-preview"},
@@ -588,6 +591,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_language_registry, "--check-language-registry"},
             {options.check_language_notice, "--check-language-notice"},
             {options.check_first_run, "--check-first-run"},
+            {options.check_folder_chooser, "--check-folder-chooser"},
             {options.check_patrol_reclaim, "--check-patrol-reclaim"},
             {options.check_reclaim_cursor, "--check-reclaim-cursor"},
             {options.check_build_preview, "--check-build-preview"},
@@ -787,6 +791,7 @@ constexpr FlagOption kFlagOptions[] = {
     {"--check-language-registry", &Options::check_language_registry},
     {"--check-language-notice", &Options::check_language_notice},
     {"--check-first-run", &Options::check_first_run},
+    {"--check-folder-chooser", &Options::check_folder_chooser},
     {"--check-patrol-reclaim", &Options::check_patrol_reclaim},
     {"--check-reclaim-cursor", &Options::check_reclaim_cursor},
     {"--check-build-preview", &Options::check_build_preview},
@@ -1177,6 +1182,10 @@ take_recording_option(std::string_view argument, ArgumentCursor& cursor, Options
 /// @return true when the option is one of these
 [[nodiscard]] bool
 take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& options) {
+    if (argument == "--content") {
+        options.content = std::string(option_value(cursor));
+        return true;
+    }
     return take_flag_option(argument, options) || take_folder_option(argument, cursor, options) ||
            take_frame_option(argument, cursor, options) ||
            take_match_option(argument, cursor, options) ||
@@ -1234,7 +1243,8 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
             std::cout
                 << "usage: open-annihilation [--game-dir PATH | --choose-game-dir] "
                    "[--archive PATH]... "
-                   "[--mod FILE] [--mod-dir PATH | --base-game] [--print-profile] "
+                   "[--mod FILE] [--mod-dir PATH | --base-game] "
+                   "[--content GAME[:EXPANSION,...]] [--print-profile] "
                    "[--accept-unimplemented-hacks] "
                    "[--skip-intro] [--first-run] [--frames N] [--headless-check] "
                    "[--snapshot PATH.ppm] [--preferences-file PATH] [--data-dir PATH] "
@@ -1252,7 +1262,7 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
                    "[--check-unit-language TAG] "
                    "[--check-language-switch] "
                    "[--check-language-registry] "
-                   "[--check-language-notice] [--check-first-run] "
+                   "[--check-language-notice] [--check-first-run] [--check-folder-chooser] "
                    "[--check-patrol-reclaim] [--check-reclaim-cursor] [--check-build-preview] "
                    "[--check-megamap-clicks] [--check-radar-orders] "
                    "[--check-pointer-interfaces] [--check-pad-controls] [--check-touch-controls] "
@@ -1442,13 +1452,13 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
         !result.check_unit_pages.empty() || result.check_kill_board ||
         !result.check_unit_language.empty() || result.check_language_switch ||
         result.check_language_registry || result.check_language_notice || result.check_first_run ||
-        result.check_patrol_reclaim || result.check_reclaim_cursor || result.check_build_preview ||
-        result.check_pointer_interfaces || result.check_megamap_clicks ||
-        result.check_radar_orders || result.check_touch_controls || result.check_pad_controls ||
-        result.check_running_while_inactive || result.check_director_view ||
-        result.check_director_render || result.check_interpolation || result.check_unit_playout ||
-        result.check_paused_save || result.check_simulation_hash || result.check_map_packs ||
-        result.check_map_browser || result.check_map_pack_lists;
+        result.check_folder_chooser || result.check_patrol_reclaim || result.check_reclaim_cursor ||
+        result.check_build_preview || result.check_pointer_interfaces ||
+        result.check_megamap_clicks || result.check_radar_orders || result.check_touch_controls ||
+        result.check_pad_controls || result.check_running_while_inactive ||
+        result.check_director_view || result.check_director_render || result.check_interpolation ||
+        result.check_unit_playout || result.check_paused_save || result.check_simulation_hash ||
+        result.check_map_packs || result.check_map_browser || result.check_map_pack_lists;
     // A capture and a showcase need the application's own loop and window,
     // which checks and benchmarks do not run.
     const bool check_run = result.fixed_clock || result.check_navigation ||
@@ -1539,6 +1549,12 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
             "--choose-game-dir opens a dialog, which headless, check, benchmark, --frames and "
             "--snapshot runs never show"
         );
+    if (!result.content.empty()) {
+        const oa::data::content_bundles::ContentChoice named =
+            oa::data::content_bundles::parse_content_argument(result.content);
+        if (!named.error.empty())
+            throw std::runtime_error(named.error);
+    }
     return result;
 }
 

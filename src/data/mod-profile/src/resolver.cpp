@@ -9,6 +9,7 @@
 
 #include "oa/data/mod_profile.hpp"
 #include "oa/data/mod_profile/registry.hpp"
+#include "oa/formats/oamod/content_needs.hpp"
 #include "oa/formats/oamod/package_keys.hpp"
 
 #ifndef OA_ENGINE_VERSION
@@ -79,14 +80,7 @@ using registry::ValueSpec;
 using registry::ValueType;
 
 /// The top-level keys a profile may hold.
-constexpr std::array<std::string_view, 19> top_keys{
-    "oamod",     "id",     "name",      "version",  "description", "homepage", "tags",
-    "requires",  "author", "packaging", "identity", "layout",      "limits",   "script-extensions",
-    "data-keys", "hacks",  "strings",   "media",    "settings",
-};
-/// The top-level keys whose values the effective profile carries as written.
-/// None of them enters the sim hash except oamod.
-constexpr std::array<std::string_view, 10> meta_keys{
+constexpr std::array<std::string_view, 21> top_keys{
     "oamod",
     "id",
     "name",
@@ -94,6 +88,35 @@ constexpr std::array<std::string_view, 10> meta_keys{
     "description",
     "homepage",
     "tags",
+    "requires",
+    "author",
+    "packaging",
+    "identity",
+    "layout",
+    "limits",
+    "script-extensions",
+    "data-keys",
+    "hacks",
+    "strings",
+    "media",
+    "settings",
+    "supportedGames",
+    "requiredExpansions",
+};
+/// The top-level keys whose values the effective profile carries as written.
+/// None of them enters the sim hash except oamod. supportedGames and
+/// requiredExpansions are among them: written, they enter the full hash;
+/// omitted, they are not filled in.
+constexpr std::array<std::string_view, 12> meta_keys{
+    "oamod",
+    "id",
+    "name",
+    "version",
+    "description",
+    "homepage",
+    "tags",
+    "supportedGames",
+    "requiredExpansions",
     "requires",
     "author",
     "packaging"
@@ -467,6 +490,7 @@ class Resolver {
         check_description(root);
         check_requires(root);
         check_package_keys(root);
+        check_content_needs(root);
         check_author(root);
         check_packaging(root);
         for (const Node& entry : root.children) {
@@ -586,6 +610,24 @@ class Resolver {
                 "; this is Open Annihilation " +
                 formats::oamod::engine_version_text(this_build_version())
         );
+    }
+
+    /// Checks supportedGames and requiredExpansions. requires.base of ta-3.1c
+    /// stays a constraint of its own; with supportedGames omitted it reads as
+    /// totala, and it does not warn.
+    ///
+    /// @param root the profile's top-level mapping
+    void check_content_needs(const Node& root) {
+        const Node* requires_node = formats::oamod::find_entry(root, "requires");
+        const Node* requires_block =
+            requires_node != nullptr && requires_node->kind == NodeKind::mapping ? requires_node
+                                                                                 : nullptr;
+        std::vector<formats::oamod::KeyProblem> problems;
+        formats::oamod::read_content_needs(
+            root, requires_block, formats::oamod::GamesWhenOmitted::totala, content_needs_, problems
+        );
+        for (const formats::oamod::KeyProblem& problem : problems)
+            error(problem.position, problem.path, problem.message);
     }
 
     /// Checks that a block is a mapping of known keys, and reports each other key.
@@ -1833,6 +1875,8 @@ class Resolver {
                 engine != nullptr && engine->kind == ValueKind::string)
                 resolution.profile.requires_engine = engine->text;
         }
+        resolution.profile.supported_games = content_needs_.supported_games;
+        resolution.profile.required_expansions = content_needs_.required_expansions;
         resolution.profile.registry_seeds = seeds_;
         fill_records(effective, resolution.profile);
         // The registry's ranges and constraints keep every limit in the range
@@ -1960,6 +2004,7 @@ class Resolver {
     ResolveResult& result_;
 
     Value meta_{make_map()};
+    formats::oamod::ContentNeeds content_needs_{};
     std::array<std::vector<std::pair<std::string, Value>>, 8> given_values_{};
     std::vector<WrittenEntry> written_limits_{};
     std::vector<WrittenEntry> written_hacks_{};

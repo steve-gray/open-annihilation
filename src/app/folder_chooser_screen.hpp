@@ -10,6 +10,7 @@
 #include "oa/app/app.hpp"
 #include "oa/app/game_directory.hpp"
 #include <SDL3/SDL.h>
+#include <filesystem>
 #include <optional>
 
 namespace oa::app {
@@ -49,6 +50,22 @@ bool run_folder_chooser_until_resolved(
     const FolderChooserDisplayHooks& display,
     GameFilesNeeded& needed,
     std::optional<GameDirectory>& game_directory
+);
+
+/// Builds a scratch home (Desktop, Documents, Downloads and a sparse Total Annihilation
+/// next to a sparse Windows installer), opens the locator on that home's Games folder
+/// with fixed places, moves the focus onto the install with Tab and chooses it. When
+/// `picture` is set, writes that PNG of the desktop locator and a second PNG with
+/// `-deck` in the name. It does not read the machine's own folders.
+///
+/// @param options the parsed command line; the scene is made under the user folder
+/// @param display how the locator reaches the game's window
+/// @param picture the desktop picture; empty writes none
+/// @return true when the folder chosen is the staged install
+bool run_folder_chooser_key_check(
+    const Options& options,
+    const FolderChooserDisplayHooks& display,
+    const std::filesystem::path& picture
 );
 
 } // namespace oa::app

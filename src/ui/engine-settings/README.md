@@ -16,6 +16,8 @@ the locks a running game puts on them (`settings_locks`).
 |---|---|---|---|---|
 | (the Library) | Mod | No Mod, or one of the mod folders the game finds | No Mod | `open-annihilation.mod-directory` (the folder's path; absent for No Mod) |
 | | A mod folder chosen outside the folders the game finds, kept while it is the Mod | any folder | none | `open-annihilation.picked-mod-directory` (the folder's path; absent for none, erased once another mod or No Mod is stored) |
+| (the Library) | Base game | Total Annihilation, or the demo | Total Annihilation, with every copied expansion of it that can be on, when the key is absent | `open-annihilation.base-game` (`totala` or `totala-demo`) |
+| | Expansions of that base game | on or off for each expansion that is copied | every copied expansion that can be on, when the key is absent | `open-annihilation.expansions.<game>` (comma-separated ids; empty means none on) |
 | Controls | Mouse wheel zoom | Off, On | On | `open-annihilation.wheel-zoom` |
 | | Maximum zoom out, a drop-down: how far out the wheel, a pinch, the touch zoom buttons and a controller zoom | Automatic (half the game's scale, a sixth while Full draws the battlefield), Whole map, 1/32, 1/16, 1/8, 1/4, 1/2; no choice but Automatic goes past the whole map | Automatic | `open-annihilation.max-zoom-out` (`automatic`, `whole-map`, `1/32`, `1/16`, `1/8`, `1/4` or `1/2`) |
 | | Maximum zoom in, a drop-down: how close the same zooms go | None (the game's own scale), 2x, 3x, 4x | 4x | `open-annihilation.max-zoom-in` (`1`, `2`, `3` or `4`) |

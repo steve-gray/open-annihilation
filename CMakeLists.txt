@@ -285,18 +285,20 @@ target_include_directories(oa-app-headers INTERFACE src/app/include)
 target_compile_definitions(oa-app-headers INTERFACE "OA_SELF_CHECKS=$<BOOL:${OA_SELF_CHECKS}>")
 # app.hpp and render_policy.hpp include the engine settings' header,
 # runtime.hpp the gamepad controls' model, game_directory.hpp the found
-# installs' header, and extension.hpp the UI kit's headers and the
-# registrations of Settings pages, kit screens, notices and prompts.
+# installs' header and the content choice, and extension.hpp the UI kit's
+# headers and the registrations of Settings pages, kit screens, notices and
+# prompts.
 target_link_libraries(oa-app-headers INTERFACE oa-base-sha256 oa-data-languages oa-data-limits
   oa-data-mod-profile oa-ui-engine-settings oa-ui-pad-controls oa-platform-game-installs
-  oa-ui-kit oa-ui-screen-registry)
+  oa-ui-kit oa-ui-screen-registry oa-data-content-bundles)
 # oa-game's command line, which the option tests parse without a running app.
 add_library(oa-app-game-options src/app/startup.cpp)
 add_library(oa::app::game_options ALIAS oa-app-game-options)
 target_link_libraries(oa-app-game-options PUBLIC oa-app-headers)
 target_link_libraries(oa-app-game-options PUBLIC oa-ui-frontend-renderer oa-ui-frontend-state oa-sim-scenario
   oa-ui-screen-registry oa-app-command-line oa-platform-preferences oa-app-mod-profile
-  PRIVATE oa-app-package-install oa-platform-job-pool oa-platform-display-modes oa-options)
+  PRIVATE oa-app-package-install oa-platform-job-pool oa-platform-display-modes oa-options
+  oa-data-content-bundles)
 # oa-game's game folder: --game-dir, the remembered folder, a folder found
 # where Steam, Heroic or Lutris put it, or the folder dialog's choice, the
 # installation checks, and the installer of the Total Annihilation demo
@@ -304,7 +306,8 @@ target_link_libraries(oa-app-game-options PUBLIC oa-ui-frontend-renderer oa-ui-f
 add_library(oa-app-game-directory src/app/game_directory.cpp src/app/demo_installer.cpp)
 add_library(oa::app::game_directory ALIAS oa-app-game-directory)
 target_link_libraries(oa-app-game-directory PUBLIC oa-app-headers oa-base-sha256 oa-platform-preferences
-  oa-app-mod-profile oa-platform-game-installs PRIVATE oa-formats-hpi oa-formats-pe oa-platform-shims oa-options)
+  oa-app-mod-profile oa-platform-game-installs oa-data-content-bundles
+  PRIVATE oa-formats-hpi oa-formats-pe oa-platform-shims oa-options)
 # oa-game's mod profile: a folder's oamod.yaml found and resolved with the
 # settings it binds, the mod folders a game folder offers, the layout and
 # discovery a profile sets, the --mod and --print-profile options, and the
@@ -1090,6 +1093,7 @@ set(oa_game_libraries oa-formats-hpi oa-app-game-options oa-app-game-directory o
   oa-ui-touch-gestures oa-ui-touch-hud oa-app-game-files oa-ui-game-files oa-app-package-install
   oa-app-map-packs
   oa-ui-pad-controls oa-ui-folder-chooser oa-platform-game-installs oa-platform-file-types
+  oa-data-content-bundles
   oa-ui-frontend-multiplayer oa-ui-library oa-ui-map-browser oa-ui-first-run)
 # The table that combines the extensions' tables of oa-game
 # (extension_list.hpp); the extensions themselves are registered with
@@ -1719,6 +1723,24 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_first_run_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED first-run-clean)
+      # The locator, driven with Tab onto the fixture install and then the
+      # choose key. It leaves before a match. Each run starts from a clean
+      # folder.
+      set(oa_folder_chooser_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/folder-chooser")
+      file(MAKE_DIRECTORY "${oa_folder_chooser_dir}")
+      add_test(NAME folder-chooser-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_folder_chooser_dir}/Open Annihilation" "${oa_folder_chooser_dir}/data"
+        "${oa_folder_chooser_dir}/folder-chooser.conf")
+      set_tests_properties(folder-chooser-clean PROPERTIES FIXTURES_SETUP folder-chooser-clean)
+      add_test(NAME native-folder-chooser COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-folder-chooser
+        --preferences-file "${oa_folder_chooser_dir}/folder-chooser.conf"
+        --user-folder "${oa_folder_chooser_dir}/Open Annihilation"
+        --data-dir "${oa_folder_chooser_dir}/data")
+      set_tests_properties(native-folder-chooser PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_folder_chooser_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED folder-chooser-clean)
       # Made-up mod packages installed through the game: a missing file
       # refused, a package the Finder made installed with no question from a
       # dropped file, an update asked and cancelled then replaced, three
@@ -3276,13 +3298,22 @@ if(TARGET oa-game)
   # The built-in registry descriptors, beside the fonts
   # (cmake/OaRegistries.cmake).
   oa_copy_registries(oa-game "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>")
-  # The engine ships no language packs. Builds before 0.8 copied zh-Hans into
-  # the languages folder beside the game, and the game reads a pack there as
-  # the packager's, so a build folder that held one would still offer it.
-  # The folder is removed after each link.
+  # The engine ships no language packs. It does ship the interface
+  # catalogue, languages/interface.tdf, the engine's own words in German,
+  # French, Spanish and Italian. The game reads that file with every other
+  # catalogue file in the languages folder beside the fonts, the same reader
+  # a pack's interface.tdf uses. Builds before 0.8 copied zh-Hans into that
+  # folder, and the game reads a pack there as the packager's, so the folder
+  # is cleared after each link and only the catalogue is put back.
+  set(oa_interface_catalogue "${CMAKE_CURRENT_SOURCE_DIR}/languages/interface.tdf")
+  set_property(TARGET oa-game APPEND PROPERTY LINK_DEPENDS "${oa_interface_catalogue}")
   add_custom_command(TARGET oa-game POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E rm -rf
       "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>/languages"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>/languages"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${oa_interface_catalogue}"
+      "$<GENEX_EVAL:$<TARGET_PROPERTY:oa-game,OA_GAME_FILES_DIR>>/languages/interface.tdf"
     VERBATIM)
 endif()
 file(GLOB oa_notice_licenses CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/licenses/*")

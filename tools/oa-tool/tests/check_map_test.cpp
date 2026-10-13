@@ -387,9 +387,11 @@ void fixture_cases() {
     );
 
     const std::vector<std::string> expected_names = {
-        "check",   "ok",      "problems", "warnings", "file",     "kind",          "id",
-        "name",    "version", "revision", "size",     "sha256",   "unpacked_size", "files",
-        "summary", "author",  "homepage", "tags",     "requires", "packaging",     "maps",
+        "check",    "ok",        "problems",      "warnings",       "file",
+        "kind",     "id",        "name",          "version",        "revision",
+        "size",     "sha256",    "unpacked_size", "files",          "summary",
+        "author",   "homepage",  "tags",          "supportedGames", "requiredExpansions",
+        "requires", "packaging", "maps",
     };
 
     const auto check_json = [&](const fs::path& pack, std::vector<std::string> extra) {

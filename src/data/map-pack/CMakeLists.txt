@@ -8,7 +8,7 @@ add_library(oa-data-map-pack src/manifest.cpp src/write.cpp src/map_name.cpp)
 add_library(oa::data::map_pack ALIAS oa-data-map-pack)
 target_include_directories(oa-data-map-pack PUBLIC include)
 target_compile_features(oa-data-map-pack PUBLIC cxx_std_20)
-target_link_libraries(oa-data-map-pack PRIVATE oa-formats-oamod oa-options)
+target_link_libraries(oa-data-map-pack PRIVATE oa-formats-oamod oa-data-content-bundles oa-options)
 
 if(BUILD_TESTING)
   # Manifests read and refused by rule, names split and fitted, and a
