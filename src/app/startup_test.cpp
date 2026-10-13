@@ -448,6 +448,7 @@ struct ValueCase {
 const std::vector<ValueCase>& value_cases() {
     static const std::vector<ValueCase> cases{
         {"--game-dir", "ta", {}},
+        {"--content", "totala", {}},
         {"--archive", "totala1.hpi", {}},
         {"--mod", "mods/x/oamod.yaml", {}},
         {"--mod-dir", "mods/x", {}},
@@ -1249,6 +1250,26 @@ int main() {
         "--mod-dir takes a mod folder"
     );
     expect(parse({"--base-game"}).base_game, "--base-game plays without the remembered mod");
+    expect(
+        parse({"--content", "totala:campaign,core-contingency"}).content ==
+            "totala:campaign,core-contingency",
+        "--content names a base game and its expansions for the run"
+    );
+    expect(parse({"--content", "totala"}).content == "totala", "--content names a base game alone");
+    expect(
+        rejection({"--content", "totala:ridge"}) == "--content names an unknown expansion: ridge",
+        "--content refuses an unknown expansion"
+    );
+    expect(
+        rejection({"--content", "campaign"}) ==
+            "--content names an expansion as the base game: campaign",
+        "--content refuses an expansion as the base game"
+    );
+    expect(
+        rejection({"--content", "totala-demo:music"}) ==
+            "--content: music does not extend totala-demo",
+        "--content refuses an expansion the base game does not take"
+    );
     expect(
         rejection({"--base-game", "--mod-dir", "mods/x"}) ==
             "--base-game and --mod-dir cannot be used together",

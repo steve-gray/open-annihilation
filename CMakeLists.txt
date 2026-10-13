@@ -285,18 +285,20 @@ target_include_directories(oa-app-headers INTERFACE src/app/include)
 target_compile_definitions(oa-app-headers INTERFACE "OA_SELF_CHECKS=$<BOOL:${OA_SELF_CHECKS}>")
 # app.hpp and render_policy.hpp include the engine settings' header,
 # runtime.hpp the gamepad controls' model, game_directory.hpp the found
-# installs' header, and extension.hpp the UI kit's headers and the
-# registrations of Settings pages, kit screens, notices and prompts.
+# installs' header and the content choice, and extension.hpp the UI kit's
+# headers and the registrations of Settings pages, kit screens, notices and
+# prompts.
 target_link_libraries(oa-app-headers INTERFACE oa-base-sha256 oa-data-languages oa-data-limits
   oa-data-mod-profile oa-ui-engine-settings oa-ui-pad-controls oa-platform-game-installs
-  oa-ui-kit oa-ui-screen-registry)
+  oa-ui-kit oa-ui-screen-registry oa-data-content-bundles)
 # oa-game's command line, which the option tests parse without a running app.
 add_library(oa-app-game-options src/app/startup.cpp)
 add_library(oa::app::game_options ALIAS oa-app-game-options)
 target_link_libraries(oa-app-game-options PUBLIC oa-app-headers)
 target_link_libraries(oa-app-game-options PUBLIC oa-ui-frontend-renderer oa-ui-frontend-state oa-sim-scenario
   oa-ui-screen-registry oa-app-command-line oa-platform-preferences oa-app-mod-profile
-  PRIVATE oa-app-package-install oa-platform-job-pool oa-platform-display-modes oa-options)
+  PRIVATE oa-app-package-install oa-platform-job-pool oa-platform-display-modes oa-options
+  oa-data-content-bundles)
 # oa-game's game folder: --game-dir, the remembered folder, a folder found
 # where Steam, Heroic or Lutris put it, or the folder dialog's choice, the
 # installation checks, and the installer of the Total Annihilation demo
@@ -304,7 +306,8 @@ target_link_libraries(oa-app-game-options PUBLIC oa-ui-frontend-renderer oa-ui-f
 add_library(oa-app-game-directory src/app/game_directory.cpp src/app/demo_installer.cpp)
 add_library(oa::app::game_directory ALIAS oa-app-game-directory)
 target_link_libraries(oa-app-game-directory PUBLIC oa-app-headers oa-base-sha256 oa-platform-preferences
-  oa-app-mod-profile oa-platform-game-installs PRIVATE oa-formats-hpi oa-formats-pe oa-platform-shims oa-options)
+  oa-app-mod-profile oa-platform-game-installs oa-data-content-bundles
+  PRIVATE oa-formats-hpi oa-formats-pe oa-platform-shims oa-options)
 # oa-game's mod profile: a folder's oamod.yaml found and resolved with the
 # settings it binds, the mod folders a game folder offers, the layout and
 # discovery a profile sets, the --mod and --print-profile options, and the

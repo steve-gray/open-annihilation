@@ -64,6 +64,7 @@
 #include "oa/ui/frontend/resource_palette.hpp"
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
+#include "oa/data/content_choice.hpp"
 #include "oa/ui/pad_controls.hpp"
 #include "oa/app/acceleration_status.hpp"
 #include "oa/app/content/downloads.hpp"
@@ -5046,6 +5047,44 @@ class Runtime final : public menu::Host,
     ///
     /// @return the locks
     [[nodiscard]] oa::ui::engine_settings::Locks engine_settings_locks() const;
+
+    /// Returns the base game and expansions this run plays.
+    ///
+    /// `--content` names them for the run. Otherwise they are the preferences,
+    /// or totala with every copied expansion when no base game is stored.
+    /// Copied bundles are the ones wholly present in the game folder. The
+    /// files mounted now are unchanged: the choice takes effect at the next
+    /// mount.
+    ///
+    /// @return the choice
+    [[nodiscard]] oa::data::content_bundles::ContentChoice content_choice() const;
+
+    /// Turns one expansion on or off and stores the choice when it changes.
+    ///
+    /// The on and off rules are the content choice's. A match refuses it, and
+    /// so does a run `--content` named. A mod whose required expansion goes
+    /// off is forgotten, and the content note is set; the sentence is chosen
+    /// later. The mounted files stay until the next mount.
+    ///
+    /// @param bundle_id the expansion
+    /// @param on true to turn it on, false to turn it off
+    /// @param required the expansions the remembered mod needs; empty when it
+    ///     needs none
+    /// @return what the change did
+    [[nodiscard]] oa::data::content_bundles::ContentChangeResult turn_content_expansion(
+        std::string_view bundle_id, bool on, std::span<const std::string_view> required
+    );
+
+    /// Chooses a base game, turns on every copied expansion of it, and stores
+    /// that choice.
+    ///
+    /// A remembered mod is cleared. A match refuses it, and so does a run
+    /// `--content` named. The mounted files stay until the next mount.
+    ///
+    /// @param bundle_id the base game
+    /// @return what the change did
+    [[nodiscard]] oa::data::content_bundles::ContentChangeResult
+    choose_content_base_game(std::string_view bundle_id);
 
     /// Returns what the run knows now of whether the graphics card could
     /// scale its frames: the setting and the flags, the environment's

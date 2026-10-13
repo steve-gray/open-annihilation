@@ -5,6 +5,7 @@
 #include "oa/app/app.hpp"
 #include "oa/app/extension.hpp"
 #include "oa/app/game_directory.hpp"
+#include "oa/data/content_choice.hpp"
 #include "oa/app/hook_call.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/inbox.hpp"
@@ -1172,6 +1173,10 @@ take_recording_option(std::string_view argument, ArgumentCursor& cursor, Options
 /// @return true when the option is one of these
 [[nodiscard]] bool
 take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& options) {
+    if (argument == "--content") {
+        options.content = std::string(option_value(cursor));
+        return true;
+    }
     return take_flag_option(argument, options) || take_folder_option(argument, cursor, options) ||
            take_frame_option(argument, cursor, options) ||
            take_match_option(argument, cursor, options) ||
@@ -1229,7 +1234,8 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
             std::cout
                 << "usage: open-annihilation [--game-dir PATH | --choose-game-dir] "
                    "[--archive PATH]... "
-                   "[--mod FILE] [--mod-dir PATH | --base-game] [--print-profile] "
+                   "[--mod FILE] [--mod-dir PATH | --base-game] "
+                   "[--content GAME[:EXPANSION,...]] [--print-profile] "
                    "[--accept-unimplemented-hacks] "
                    "[--skip-intro] [--first-run] [--frames N] [--headless-check] "
                    "[--snapshot PATH.ppm] [--preferences-file PATH] [--data-dir PATH] "
@@ -1532,6 +1538,12 @@ take_engine_option(std::string_view argument, ArgumentCursor& cursor, Options& o
             "--choose-game-dir opens a dialog, which headless, check, benchmark, --frames and "
             "--snapshot runs never show"
         );
+    if (!result.content.empty()) {
+        const oa::data::content_bundles::ContentChoice named =
+            oa::data::content_bundles::parse_content_argument(result.content);
+        if (!named.error.empty())
+            throw std::runtime_error(named.error);
+    }
     return result;
 }
 

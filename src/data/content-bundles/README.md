@@ -25,6 +25,11 @@ checks. It does not repeat the installer's size, hash or resource.
 - `match_file` finds a file by a source path and its size, without regard
   to ASCII case. `known_hash` checks a SHA-256 against the file's known
   values.
+- `oa/data/content_choice.hpp` is the player's choice. `present_bundles`
+  says which bundles a set of files contains. `resolve_content_choice`
+  reads a stored base game and expansion list, or `--content`.
+  `turn_content_expansion` and `choose_content_base_game` apply the on/off
+  rules. `parse_content_argument` reads `GAME[:EXPANSION,...]`.
 - `installers`, `find_installer` and `known_installer_hash` are the three
   Commander Pack installers, recognised by size and SHA-256.
 - `table_fault` is empty when every dependency names a real bundle and
@@ -55,10 +60,16 @@ checks a known hash and a different one, and checks that the table's own
 dependencies hold. The demo archive's size and hash are the ones
 `demo_1997` checks.
 
+`data-content-choice` turns an expansion on and off, chooses a base game,
+clears a mod whose required expansion went off, reads a player with no
+stored base game as totala with every copied expansion that can be on, and
+reads `--content`.
+
 ## Limitations
 
 A file whose hash is not one listed here is still a copy of that file when
 its name and size match; callers decide what to say about it. The table
 does not say where a bundle is installed, and it does not read an
 installer. Music is an expansion like the others; callers that compare
-rules leave it out themselves.
+rules leave it out themselves. The choice is not mounted here, and the
+note token `required-expansion` is not the sentence the player reads.

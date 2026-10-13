@@ -5,10 +5,13 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/formats/hpi.hpp"
 #include "oa/platform/files.hpp"
+#include "oa/ui/engine_settings.hpp"
+
 #include <cctype>
 #include <iostream>
 #include <stdexcept>
 #include <system_error>
+#include <utility>
 
 namespace oa::app {
 namespace {
@@ -785,6 +788,100 @@ void remember_mod_directory(oa::platform::preferences::Values& values, const fs:
     }
     values[std::string(mod_directory_preference)] =
         path_to_utf8(fs::absolute(folder).lexically_normal());
+}
+
+std::vector<std::string> copied_content_bundles(const fs::path& folder) {
+    std::vector<std::string> ids;
+    if (folder.empty())
+        return ids;
+    std::error_code error;
+    if (!fs::is_directory(folder, error) || error)
+        return ids;
+    std::vector<std::pair<std::string, uint64_t>> owned;
+    const fs::recursive_directory_iterator end;
+    for (fs::recursive_directory_iterator cursor(
+             folder, fs::directory_options::skip_permission_denied, error
+         );
+         !error && cursor != end;
+         cursor.increment(error)) {
+        if (!cursor->is_regular_file(error) || error) {
+            error.clear();
+            continue;
+        }
+        const fs::path relative = cursor->path().lexically_relative(folder);
+        if (relative.empty() || *relative.begin() == "..")
+            continue;
+        std::error_code size_error;
+        const auto bytes = cursor->file_size(size_error);
+        if (!size_error) {
+            const auto spelling = relative.generic_u8string();
+            owned.emplace_back(
+                std::string(spelling.begin(), spelling.end()), static_cast<uint64_t>(bytes)
+            );
+        }
+        error.clear();
+    }
+    std::vector<oa::data::content_bundles::SourceFile> sources;
+    sources.reserve(owned.size());
+    for (const std::pair<std::string, uint64_t>& entry : owned)
+        sources.push_back({entry.first, entry.second});
+    for (const std::string_view id : oa::data::content_bundles::present_bundles(sources))
+        ids.emplace_back(id);
+    return ids;
+}
+
+oa::data::content_bundles::ContentChoice content_choice_from_preferences(
+    const oa::platform::preferences::Values& values,
+    std::span<const std::string_view> copied,
+    std::string_view command_line
+) {
+    namespace bundles = oa::data::content_bundles;
+    namespace settings = oa::ui::engine_settings;
+    bundles::StoredContent stored;
+    std::string base_text;
+    std::string expansions_stored;
+    const auto base = values.find(std::string(settings::key::base_game));
+    if (base != values.end()) {
+        base_text = base->second;
+        stored.base_game = base_text;
+        const auto expansions =
+            values.find(std::string(settings::key::expansions_prefix) + base_text);
+        if (expansions != values.end()) {
+            expansions_stored = expansions->second;
+            stored.expansions = expansions_stored;
+        }
+    }
+    return bundles::resolve_content_choice(stored, copied, command_line);
+}
+
+void remember_content_choice(
+    oa::platform::preferences::Values& values,
+    const oa::data::content_bundles::ContentChoice& choice
+) {
+    namespace settings = oa::ui::engine_settings;
+    values[std::string(settings::key::base_game)] = choice.base_game;
+    values[std::string(settings::key::expansions_prefix) + choice.base_game] =
+        oa::data::content_bundles::expansions_text(choice.expansions);
+}
+
+bool store_content_change(
+    oa::platform::preferences::Values& values,
+    const oa::data::content_bundles::ContentChangeResult& result
+) {
+    namespace bundles = oa::data::content_bundles;
+    namespace settings = oa::ui::engine_settings;
+    if (!result.applied)
+        return false;
+    remember_content_choice(values, result.choice);
+    if (result.mod_cleared == bundles::ModClearReason::none)
+        return true;
+    remember_mod_directory(values, {});
+    values.erase(std::string(settings::key::picked_mod_directory));
+    if (result.mod_cleared == bundles::ModClearReason::required_expansion_off) {
+        values[std::string(settings::key::content_note)] =
+            std::string(bundles::required_expansion_note);
+    }
+    return true;
 }
 
 std::optional<GameDirectory>
