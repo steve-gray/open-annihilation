@@ -168,6 +168,7 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | --- | --- | --- |
 | `open-annihilation.path-search-nodes` | path nodes a game tick, 1333 to 10664 | 1333 |
 | `open-annihilation.wheel-zoom` | 0 or 1 | 1 |
+| `open-annihilation.middle-click-pan` | 0 or 1 | 1 |
 | `open-annihilation.max-zoom-out` | `automatic`, `whole-map`, `1/32`, `1/16`, `1/8`, `1/4` or `1/2`; any other text reads as `automatic` | `automatic` |
 | `open-annihilation.max-zoom-in` | `1`, `2`, `3` or `4` times the game's scale; any other text reads as `4` | `4` |
 | `open-annihilation.view-past-map-edge` | `off`, or `25` or `50` percent of the battlefield past the map's edges; any other text reads as `50` | `50` |

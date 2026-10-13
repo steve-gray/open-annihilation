@@ -276,6 +276,10 @@ void format_general_page_name(char* out, std::size_t size, const char* side_pref
     std::snprintf(out, size, "%sGEN.GUI", side_prefix != nullptr ? side_prefix : "");
 }
 
+void format_idle_page_name(char* out, std::size_t size, const char* side_prefix) {
+    std::snprintf(out, size, "%sMAIN2.GUI", side_prefix != nullptr ? side_prefix : "");
+}
+
 void disable_page_buttons(
     const PanelControls& controls, const UnitDef& def, const char* side_prefix
 ) {

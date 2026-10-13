@@ -83,6 +83,7 @@ void defaults_play_as_without_the_settings() {
     const auto defaults = settings::default_settings({});
     CHECK(defaults.path_search_nodes == settings::base_path_search_nodes);
     CHECK(defaults.wheel_zoom);
+    CHECK(defaults.middle_click_pan);
     CHECK(!defaults.escape_opens_menu);
     CHECK(!defaults.switch_alt);
     CHECK(defaults.unit_limit == settings::default_unit_limit);
@@ -416,6 +417,7 @@ void absent_keys_and_values_that_are_not_numbers_give_the_defaults() {
     for (const std::string_view key :
          {settings::key::path_search_nodes,
           settings::key::wheel_zoom,
+          settings::key::middle_click_pan,
           settings::key::escape_opens_menu,
           settings::key::unit_limit,
           settings::key::max_frame_rate,
@@ -446,6 +448,8 @@ void stored_values_are_read_and_clamped_into_their_ranges() {
     CHECK(!read_one(settings::key::wheel_zoom, "0").wheel_zoom);
     CHECK(read_one(settings::key::wheel_zoom, "1").wheel_zoom);
     CHECK(!read_one(settings::key::wheel_zoom, "-1").wheel_zoom);
+    CHECK(!read_one(settings::key::middle_click_pan, "0").middle_click_pan);
+    CHECK(read_one(settings::key::middle_click_pan, "1").middle_click_pan);
     CHECK(read_one(settings::key::escape_opens_menu, "1").escape_opens_menu);
     CHECK(read_one(settings::key::escape_opens_menu, "7").escape_opens_menu);
     CHECK(!settings::read_settings(
@@ -502,6 +506,7 @@ settings::EngineSettings changed_settings() {
     settings::EngineSettings chosen{};
     chosen.path_search_nodes = 4 * settings::base_path_search_nodes;
     chosen.wheel_zoom = false;
+    chosen.middle_click_pan = false;
     chosen.escape_opens_menu = true;
     chosen.unit_limit = 1000;
     chosen.max_frame_rate = 60;
@@ -528,9 +533,10 @@ void only_changed_settings_are_written() {
 
     const auto chosen = changed_settings();
     settings::write_settings(values, defaults, chosen, defaults, false);
-    CHECK(values.size() == 17);
+    CHECK(values.size() == 18);
     CHECK(values.at(std::string{settings::key::path_search_nodes}) == "5332");
     CHECK(values.at(std::string{settings::key::wheel_zoom}) == "0");
+    CHECK(values.at(std::string{settings::key::middle_click_pan}) == "0");
     CHECK(values.at(std::string{settings::key::escape_opens_menu}) == "1");
     CHECK(values.at(std::string{settings::key::unit_limit}) == "1000");
     CHECK(values.at(std::string{settings::key::max_frame_rate}) == "60");

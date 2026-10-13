@@ -44,3 +44,16 @@ the window while it should hold. The flick is the approach: the movement
 toward an edge over the last tenth of a second, including the movement
 before the pointer reached the edge. Arriving at about 2500 points a
 second lets it go. A slow arrival stays held and the view scrolls.
+
+## Panning
+
+A middle click on the battlefield starts a pan. A small mark stays where
+you clicked, and the view scrolls from that mark towards the pointer. Close
+to the mark the view stays still. Further away it speeds up, up to the
+game's Scroll speed, and the pointer shows the way. Another mouse button, a
+turn of the wheel, any key or leaving the window stops the pan, and that
+press or key does nothing else. A middle press that moves before you
+release it pans while you hold it and stops when you let go.
+
+It does not start while the allied whiteboard is in use, in the menus, or
+on the panels. Settings > Controls, **Middle-click pans**, turns it off.

@@ -43,6 +43,8 @@ inline constexpr std::string_view max_zoom_in = "open-annihilation.max-zoom-in";
 inline constexpr std::string_view view_past_map_edge = "open-annihilation.view-past-map-edge";
 /// "sticky" or "free" (EngineSettings::window_edge).
 inline constexpr std::string_view window_edge = "open-annihilation.window-edge";
+/// 1 or 0 (EngineSettings::middle_click_pan).
+inline constexpr std::string_view middle_click_pan = "open-annihilation.middle-click-pan";
 /// 1 or 0 (EngineSettings::escape_opens_menu).
 inline constexpr std::string_view escape_opens_menu = "open-annihilation.escape-opens-menu";
 /// Units per player, decimal (EngineSettings::unit_limit).
@@ -867,6 +869,8 @@ struct EngineSettings {
     ZoomInLimit max_zoom_in{ZoomInLimit::four_times};
     /// How much of the battlefield the view may show past the map's edges.
     ViewPastMapEdge view_past_map_edge{ViewPastMapEdge::one_half};
+    /// A middle click pans the view towards the pointer until another press.
+    bool middle_click_pan{true};
     bool escape_opens_menu{}; ///< Escape with nothing to cancel opens the game menu
     bool switch_alt{};        ///< 3.1c's SwitchAlt: a number key alone selects its group
     /// Whether a window holds the pointer on its edges while a match's

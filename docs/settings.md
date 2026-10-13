@@ -176,6 +176,16 @@ Each of these takes effect at once.
   follow goes on, and the view follows the unit again as it comes back.
   Choose Off or 25% to keep the black past the map out of a view zoomed
   far out.
+- **Middle-click pans**, On by default. A middle click on the battlefield
+  leaves a small mark where you clicked and scrolls the view from that mark
+  towards the pointer. The view stays still until the pointer is a short way
+  from the mark, then moves faster the further the pointer goes, up to the
+  Scroll speed. The pointer shows the direction. Another click, a turn of
+  the wheel, a key or leaving the window stops the pan, and that press or
+  key does nothing else. Holding the middle button and dragging does the
+  same until you let go. It does not start while the allied whiteboard is
+  in use, in the menus, or on a panel. Turn it off to keep the middle
+  button as it was.
 - **Select groups without Alt**, Off by default, as 3.1c plays. Off, Alt
   and a number select that group of units, and a number alone turns the
   selected unit's menu to that page. On, a number alone selects its group,

@@ -67,12 +67,13 @@ struct Expected {
 // choices are those of a dialog of the engine's settings opened over the
 // defaults: Language offers System default and the built-in languages.
 // clang-format off
-constexpr std::array<Expected, 78> kExpected{{
+constexpr std::array<Expected, 79> kExpected{{
     {Setting::path_search, RowKind::slider, "Pathfinding cycles", 1, 1, 8, 0, 0, false, Lock::in_game, &Locks::path_search},
     {Setting::wheel_zoom, RowKind::toggle, "Mouse wheel zoom", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::max_zoom_out, RowKind::choice, "Maximum zoom out", 1, 1, 7, 200, 0, false, Lock::none, nullptr},
     {Setting::max_zoom_in, RowKind::choice, "Maximum zoom in", 1, 1, 4, 200, 0, false, Lock::none, nullptr},
     {Setting::view_past_map_edge, RowKind::levels, "View past the map's edge", 1, 1, 3, 34, 3, false, Lock::none, nullptr},
+    {Setting::middle_click_pan, RowKind::toggle, "Middle-click pans", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::escape_opens_menu, RowKind::toggle, "Escape opens the game menu", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::switch_alt, RowKind::toggle, "Select groups without Alt", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::window_edge, RowKind::levels, "Window edge", 1, 1, 2, 48, 2, false, Lock::none, nullptr},
@@ -595,10 +596,31 @@ void tab_follows_the_dialogs_focus_order() {
     const settings::Dialog controls =
         engine_dialog_of({}, settings::Page::controls, true, true, true);
     OA_CHECK(
-        tab_order(controls) ==
-        (std::vector<int32_t>{16, 17, 18, 19, 20, 21, 12, 13,
-                              14, 0,  1,  2,  3,  4,  5,  6,
-                              8,  9,  11, 10, 7,  settings::close_x_control})
+        tab_order(controls) == (std::vector<int32_t>{
+                                   16,
+                                   17,
+                                   18,
+                                   19,
+                                   20,
+                                   21,
+                                   22,
+                                   12,
+                                   13,
+                                   14,
+                                   0,
+                                   1,
+                                   2,
+                                   3,
+                                   4,
+                                   5,
+                                   6,
+                                   8,
+                                   9,
+                                   11,
+                                   10,
+                                   7,
+                                   settings::close_x_control
+                               })
     );
     // Graphics: After zoom, locked while units are drawn whole, takes none.
     settings::Dialog graphics = controls;

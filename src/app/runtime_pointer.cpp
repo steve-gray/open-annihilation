@@ -847,4 +847,132 @@ bool Runtime::gadget_command_available(const oa::ui::gui_layout::Gadget& gadget)
     return true;
 }
 
+bool Runtime::middle_pan_take(const SDL_Event& event) {
+    const bool button_up = event.type == SDL_EVENT_MOUSE_BUTTON_UP;
+    const bool swallow_up = button_up && middle_pan_swallow_button_ != 0 &&
+                            event.button.button == middle_pan_swallow_button_;
+    const bool live =
+        screen_ == Screen::match && match_ != nullptr && !match_paused_ && !match_finished_;
+    if (!live) {
+        if (middle_pan_.phase != middle_pan::Phase::idle || middle_pan_swallow_button_ != 0)
+            middle_pan_ = {};
+        middle_pan_swallow_button_ = 0;
+        return swallow_up;
+    }
+    // The release of the press that ended the pan gives no order. A left
+    // order is given when the button comes up.
+    if (swallow_up) {
+        middle_pan_swallow_button_ = 0;
+        return true;
+    }
+
+    float x = 0.0F;
+    float y = 0.0F;
+    middle_pan::Gesture gesture = middle_pan::Gesture::other;
+    bool button_down = false;
+    uint8_t button = 0;
+    switch (event.type) {
+    case SDL_EVENT_MOUSE_MOTION:
+        if (middle_pan_.phase == middle_pan::Phase::idle)
+            return false;
+        gesture = middle_pan::Gesture::move;
+        x = event.motion.x;
+        y = event.motion.y;
+        break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        button_down = true;
+        button = event.button.button;
+        x = event.button.x;
+        y = event.button.y;
+        gesture = button == SDL_BUTTON_MIDDLE ? middle_pan::Gesture::middle_down
+                                              : middle_pan::Gesture::other;
+        break;
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        if (event.button.button != SDL_BUTTON_MIDDLE)
+            return false;
+        gesture = middle_pan::Gesture::middle_up;
+        x = event.button.x;
+        y = event.button.y;
+        break;
+    case SDL_EVENT_MOUSE_WHEEL:
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+        gesture = middle_pan::Gesture::other;
+        break;
+    default:
+        return false;
+    }
+    if (middle_pan_.phase == middle_pan::Phase::idle && gesture != middle_pan::Gesture::middle_down)
+        return false;
+
+    const bool enabled = engine_settings().middle_click_pan;
+    const bool can_start = battlefield_contains(x, y) && !megamap_open_ && !hovered_ &&
+                           !placed_hud_covers(x, y) && !radar_contains(x, y);
+    const auto result = middle_pan::apply(middle_pan_, gesture, x, y, enabled, can_start);
+    middle_pan_ = result.state;
+    if (button_down && result.swallow) {
+        const bool starting =
+            button == SDL_BUTTON_MIDDLE && result.state.phase != middle_pan::Phase::idle;
+        if (!starting)
+            middle_pan_swallow_button_ = button;
+    }
+    if (event.type == SDL_EVENT_KEY_DOWN && result.swallow)
+        middle_pan_drop_text_ = true;
+    // The pointer moving still hovers. Losing focus is not a press to consume.
+    if (event.type == SDL_EVENT_MOUSE_MOTION || event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
+        return false;
+    return result.swallow;
+}
+
+bool Runtime::middle_pan_shows_direction() const {
+    if (middle_pan_.phase == middle_pan::Phase::idle)
+        return false;
+    const float dx = match_pointer_x_ - middle_pan_.anchor_x;
+    const float dy = match_pointer_y_ - middle_pan_.anchor_y;
+    return dx * dx + dy * dy > 1.0F;
+}
+
+void Runtime::draw_middle_pan_marks() {
+    if (middle_pan_.phase == middle_pan::Phase::idle || screen_ != Screen::match)
+        return;
+    const auto stamp = [&](int x, int y, int width, int height, uint8_t index) {
+        const auto at = canvas_paint(x, y);
+        fill_hud_rect(at.x, at.y, width, height, index);
+    };
+    const auto plus = [&](int x, int y, int arm, uint8_t index) {
+        const int span = arm * 2 + 1;
+        stamp(x - arm, y, span, 1, index);
+        stamp(x, y - arm, 1, span, index);
+    };
+    const int anchor_x = static_cast<int>(std::lround(middle_pan_.anchor_x));
+    const int anchor_y = static_cast<int>(std::lround(middle_pan_.anchor_y));
+    plus(anchor_x, anchor_y, 5, 0);
+    plus(anchor_x, anchor_y, 4, 255);
+    if (!middle_pan_shows_direction())
+        return;
+    const float dx = match_pointer_x_ - middle_pan_.anchor_x;
+    const float dy = match_pointer_y_ - middle_pan_.anchor_y;
+    constexpr double kEighth = 3.141592653589793 / 4.0;
+    int sector = static_cast<int>(
+        std::lround(std::atan2(static_cast<double>(dy), static_cast<double>(dx)) / kEighth)
+    );
+    sector = (sector % 8 + 8) % 8;
+    constexpr int kDirX[8] = {1, 1, 0, -1, -1, -1, 0, 1};
+    constexpr int kDirY[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+    const int dir_x = kDirX[sector];
+    const int dir_y = kDirY[sector];
+    const int tip_x = static_cast<int>(std::lround(match_pointer_x_));
+    const int tip_y = static_cast<int>(std::lround(match_pointer_y_));
+    const auto arrow = [&](uint8_t index, int spread) {
+        for (int step = 0; step <= 8; ++step)
+            stamp(tip_x - dir_x * step, tip_y - dir_y * step, spread, spread, index);
+        const int wing_x = tip_x - dir_x * 2;
+        const int wing_y = tip_y - dir_y * 2;
+        stamp(wing_x + dir_y * 3, wing_y - dir_x * 3, spread, spread, index);
+        stamp(wing_x - dir_y * 3, wing_y + dir_x * 3, spread, spread, index);
+    };
+    arrow(0, 3);
+    arrow(255, 1);
+}
+
 } // namespace oa::app

@@ -893,6 +893,11 @@ if(BUILD_TESTING)
   add_executable(oa-app-sticky-edge-test src/app/sticky_edge_test.cpp src/app/sticky_edge.cpp)
   target_link_libraries(oa-app-sticky-edge-test PRIVATE oa-app-headers oa-test-support oa-options)
   add_test(NAME app-sticky-edge COMMAND oa-app-sticky-edge-test)
+  # A middle click's pan: its states, the dead zone and the top speed, and
+  # the setting off leaving a press alone.
+  add_executable(oa-app-middle-pan-test src/app/middle_pan_test.cpp src/app/middle_pan.cpp)
+  target_link_libraries(oa-app-middle-pan-test PRIVATE oa-app-headers oa-options)
+  add_test(NAME app-middle-pan COMMAND oa-app-middle-pan-test)
   # The +stats overlay's panel: its rows, columns, notes and graph laid out
   # over texts of known widths and kept in place whatever the figures, its
   # place and scale on windows of every size, the height of each frame's
@@ -987,7 +992,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/screen_mode.cpp src/app/runtime_screen_size.cpp
   src/app/game_directory_dialog.cpp src/app/runtime.cpp
   src/app/runtime_builtin_screens.cpp
-  src/app/runtime_camera.cpp src/app/runtime_campaign.cpp
+  src/app/runtime_camera.cpp src/app/middle_pan.cpp src/app/runtime_campaign.cpp
   src/app/runtime_console.cpp src/app/runtime_console_options.cpp src/app/runtime_console_debug.cpp
   src/app/runtime_console_sound.cpp src/app/runtime_console_display.cpp
   src/app/runtime_console_units.cpp
@@ -1256,7 +1261,7 @@ if(OA_BUILD_PLATFORM)
     add_test(NAME native-version COMMAND oa-game --version)
     set_tests_properties(native-version PROPERTIES
       PASS_REGULAR_EXPRESSION
-        "^Open Annihilation [0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)? \\([a-z0-9.-]+ [A-Za-z0-9_]+, ([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|unknown)\\)\n?$"
+        "^Open Annihilation [0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)? \\([a-z0-9._-]+ [A-Za-z0-9_]+, ([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|unknown)\\)\n?$"
       TIMEOUT 60)
     # The native checks run oa-game over the installation OA_GAME_DIR names;
     # without one they are not added.
@@ -3113,7 +3118,7 @@ if(BUILD_TESTING)
   add_test(NAME tools-oa-tool-version COMMAND oa-tool --version)
   set_tests_properties(tools-oa-tool-version PROPERTIES
     PASS_REGULAR_EXPRESSION
-      "^Open Annihilation [0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)? \\([a-z0-9.-]+ [A-Za-z0-9_]+, ([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|unknown)\\)\n?$"
+      "^Open Annihilation [0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)? \\([a-z0-9._-]+ [A-Za-z0-9_]+, ([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|unknown)\\)\n?$"
     TIMEOUT 60)
 endif()
 # The Steam Deck's artwork and files for the Steam Deck package.
