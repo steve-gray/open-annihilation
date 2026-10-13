@@ -38,6 +38,7 @@
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/layout.hpp"
 #include "oa/ui/kit/text.hpp"
+#include "oa/ui/library/game_icon.hpp"
 #include "oa/ui/library/library.hpp"
 #include "oa/ui/library/screen.hpp"
 #include "screen_fixture.hpp"
@@ -488,6 +489,7 @@ void dress_active_choice(lib::Library& library) {
         "cavedog-units",
         "cavedog-tilesets",
     };
+    library.inputs.base_game_badge = lib::bundled_game_icon();
     lib::refresh(library, std::move(library.inputs));
     library.content.base_game = "totala";
     library.content.expansions = {

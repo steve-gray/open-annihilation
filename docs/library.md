@@ -43,12 +43,17 @@ The Library opens on the main menu, from:
   the main menu, a 48-pixel square left of the **Settings** button and its
   gears (the same size, a quarter of a side apart, 12 pixels in from the
   frame). It opens on the [Active](#the-active-tab) tab. Its bottom-right
-  corner shows how many mods the Mods tab lists under All (every mod the
-  registries list, plus your own, without the No Mod row): `7`, `123`,
-  or `999+` above 999. While the catalogues are still being read and that
+  corner shows how many packages you have added: mods, map packs, language
+  packs and downloaded expansions. The base game and a language the game
+  holds itself are left out, and a map pack counts once: `7`, `123`, or
+  `999+` above 999. While the catalogues are still being read and that
   number is not final, a small spinner turns there instead, and stops once
-  the list is in. While updates you can install wait, the button also wears
-  an amber dot in its top right corner, from the moment OA finds them: you
+  the list is in. The button's text says the same count, "Library · 1
+  package" or "Library · N packages", and "Library · N packages · M updates"
+  while updates wait. While the count is not final the package count is
+  left out. The welcome's Library mark says what the number counts. While
+  updates you can install wait, the button also wears an amber dot in its
+  top right corner, from the moment OA finds them: you
   need not open the Library to learn of them, and its **Updates** tab lists
   them;
 - **MORE IN THE LIBRARY…** in Settings › Language, which opens it on
@@ -98,8 +103,10 @@ under them, so the maps pane keeps a row.
 - **BASE GAME**: the game you play, and its version ("Total Annihilation",
   "3.1c", or "Demo"). Its badge is Total Annihilation's own icon, taken
   from the program in the game folder that describes itself as Total
-  Annihilation, and drawn centred in the square. When that program is
-  missing or its icon cannot be read, the letters "TA" stay. A source the
+  Annihilation, and drawn centred in the square. When that program cannot
+  be read, the Library draws the icon it ships, the same one for Total
+  Annihilation and the demo, including on the chooser. The letters "TA"
+  stay only when that picture cannot be drawn. A source the
   host knows is named on the version line ("3.1c · from GOG for macOS").
   A file check the host knows is the next line: "All files match", or
   "1 file differs", or "2 files differ". **CHANGE…** sits at the bottom
@@ -109,9 +116,11 @@ under them, so the maps pane keeps a row.
 - **EXPANSIONS**: one pill for each expansion of that base game. A pill
   that is on is filled. One that is copied and off is plain, in the
   expansion's name. One that is not copied, and that a registry offers,
-  keeps the expansion's name and shows the same download arrow as a mod
-  or a map row. That press downloads and installs it, with the same
-  progress, errors and **CANCEL** as any other package. When the copy is
+  keeps the expansion's name and carries the download arrow at the right,
+  inside the chip. The whole chip is the press. It downloads and installs
+  the expansion, with the same progress and errors as any other package,
+  and pressing it again cancels a download that is in the queue or tries
+  again after a failure. When the copy is
   in the game's folder the pill turns on. The choice applies when the
   Library closes, as any other expansion change does, and the expansion
   is not mounted while the Library stays open. One that no registry
@@ -194,11 +203,11 @@ is one line. On the largest the maps stand in two columns when you have
 more than one. The tab has no catalogue search and no filters. The base,
 expansions, mod and language labels and each map's title line take no
 press, except the title of a map whose pack holds only that map: that
-title is the link to the pack. **CHANGE…**, each expansion pill, a
-download arrow beside an expansion a registry offers, **UNLOAD
-MOD**, each map's link to its pack while that link shows, and the maps
-search do take a press. Tab and the arrows reach them. The expansions
-hint wraps onto as many lines as it needs.
+title is the link to the pack. **CHANGE…**, each expansion pill (the
+download arrow sits inside a pill a registry offers, and that pill is
+the press), **UNLOAD MOD**, each map's link to its pack while that link
+shows, and the maps search do take a press. Tab and the arrows reach
+them. The expansions hint wraps onto as many lines as it needs.
 
 On a regular or large window the four tiles stay where they are. The maps
 pane runs from under the **MAPS** heading to the bottom of the window,
@@ -226,11 +235,16 @@ each other. The other tabs are where packages are got, updated and played.
 ## Tabs and states
 
 The tabs are **Active**, **Mods**, **Maps**, **Languages**, **Updates**
-and **Registries** ("Lang", "Upd" and "Reg" in the Compact layout). Each
-tab after Active shows how many it lists under All, before a search or a
-tag, in brackets after its title and in that title's own font and colour:
-"Mods (11)", "Maps (2)", "Languages (2)", "Updates (2)", "Registries (2)".
-The short names keep the brackets ("Upd (2)"). Active has no count.
+and **Registries**. Each tab after Active shows how many it lists under
+All, before a search or a tag, in brackets after its title and in that
+title's own font and colour: "Mods (11)", "Maps (2)", "Languages (2)",
+"Updates (2)", "Registries (2)". The full names are used when they fit
+the strip. The short names ("Lang", "Upd", "Reg", with the brackets, as
+"Upd (2)") are used only when they do not. Compact always uses the short
+names. On a regular or large window, Active and Registries give the tabs
+the whole row, so the full names fit there. A catalogue tab shares that
+row with the search, and keeps the short names when the full ones would
+run into the field. Active has no count.
 Updates counts the updates you can install, as the OA button's dot does.
 Registries counts the registries listed. Registries is last, and it is
 where registries are added, checked and turned off

@@ -441,8 +441,10 @@ kit::OaButtonMark Runtime::EngineSettingsMenuHost::library_mark(Runtime& runtime
     LibraryHost& shown = runtime.library_host();
     if (!shown.refreshed)
         shown.rebuild(runtime);
-    // The Mods tab's count: every mod it lists, Base Game left out.
-    const std::size_t mods = oa::ui::library::tab_count(shown.model, oa::ui::library::Tab::mods);
+    // Every package the player has added: mods, map packs, language packs
+    // and downloaded expansions. The base game and the built-in languages
+    // are left out, and a map pack counts once.
+    const std::size_t packages = oa::ui::library::added_package_count(shown.model.inputs);
     kit::OaButtonMark mark;
     mark.dot = runtime.library_update_count() > 0;
     // A fetch that has not yet produced a list has no number to show. Once
@@ -454,7 +456,7 @@ kit::OaButtonMark Runtime::EngineSettingsMenuHost::library_mark(Runtime& runtime
         return mark;
     }
     mark.corner = kit::OaButtonCorner::count;
-    mark.count = mods;
+    mark.count = packages;
     return mark;
 }
 
@@ -477,7 +479,7 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
         button_look(host.settings_hovered, host.settings_pressed, covered)
     );
     // The dot stays in the top right while updates can be installed. The
-    // bottom right is the mod count, or the spinner while it is not final.
+    // bottom right is the package count, or the spinner while it is not final.
     // The icon itself, from the shipped square, at this picture's size: no
     // panel and no bevel, clear corners left as the menu. A larger window
     // draws that icon again from a source at least that large
@@ -499,7 +501,7 @@ void Runtime::EngineSettingsMenuHost::button_draw(ScreenContext* context, void*)
         );
     };
     draw_icon(rect, true, library_state, library_badge);
-    // The Settings button wears neither the dot nor the mod count.
+    // The Settings button wears neither the dot nor the package count.
     draw_icon(beside, false, settings_state, {});
     host.keep_button_drawn(*context->surface, library_state, library_badge, settings_state);
 }

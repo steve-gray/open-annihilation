@@ -3,10 +3,11 @@
 
 // --check-library: the Library over a feed of made-up packages, with no
 // network. With no update waiting the main menu's OA button draws its count
-// of the fixture's four mods and opens the Library on Active, which reads
-// the mod played, the language in use and the installed maps, and whose
-// CLOSE goes back; with two it wears its dot, says "Library · 4 mods · 2
-// updates" to automation and opens the Library on Active again, whose
+// of the fixture's added packages (two mods and one map pack) and opens the
+// Library on Active, which reads the mod played, the language in use and
+// the installed maps, and whose CLOSE goes back; with two it wears its
+// dot, says "Library · 3 packages · 2 updates" to automation and opens the
+// Library on Active again, whose
 // Updates tab opens on its Updates filter with UPDATE ALL over the list.
 // GET and CANCEL reach the feed, OPEN FOLDER and HOMEPAGE the recorded
 // openers, ROLL BACK asks the Roll Back Mod question over the Library and
@@ -862,7 +863,9 @@ void Runtime::check_library() {
             "library_registry_built_in does not answer as the feed's registries say" + on
         );
 
-        // 1. With no update waiting, the button wears the mod count and no dot.
+        // 1. With no update waiting, the button wears the package count and no dot.
+        // Two installed mods and one map pack: three packages. A map pack
+        // alone counts as one.
         require(library_update_count() == 0, "an update waits in the fixture without one" + on);
         {
             const auto [shown, plain] = button_frames();
@@ -876,9 +879,32 @@ void Runtime::check_library() {
             );
             const std::optional<AutomationControl> quiet = named("oa.button");
             require(
-                quiet.has_value() && quiet->text == "Library · 4 mods",
-                "automation does not list oa.button as \"Library · 4 mods\"" + on
+                quiet.has_value() && quiet->text == "Library · 3 packages",
+                "automation does not list oa.button as \"Library · 3 packages\"" + on
             );
+        }
+        if (width == kCanvasWidth) {
+            library::Inputs maps_only = fixture.inputs;
+            maps_only.listings.clear();
+            maps_only.installed.clear();
+            maps_only.updates.clear();
+            maps_only.queue.clear();
+            maps_only.playing_mod.reset();
+            maps_only.language = {};
+            maps_only.content = {};
+            maps_only.map_packs = {
+                {"Fixture Isles", {{"Isle Hop", 4, "16x16"}, {"Long Strait", 2, "20x12"}}},
+            };
+            fixture.inputs = std::move(maps_only);
+            ++fixture.generation;
+            run_frame(running);
+            require(running, "a frame ended the run");
+            const std::optional<AutomationControl> maps = named("oa.button");
+            require(
+                maps.has_value() && maps->text == "Library · 1 package",
+                "a map pack alone does not count as 1 package" + on
+            );
+            feed_changes(false);
         }
 
         // 2. Releasing the press opens the Library on Active, whose lines
@@ -945,20 +971,21 @@ void Runtime::check_library() {
             ++fixture.generation;
             run_frame(running);
             require(running, "a frame ended the run");
-            const std::optional<AutomationControl> arrow =
-                named("oa.library.active.expansion.cavedog-units.get");
+            const std::optional<AutomationControl> offered =
+                named("oa.library.active.expansion.cavedog-units");
             const std::optional<AutomationControl> tactics =
                 named("oa.library.active.expansion.battle-tactics");
             require(
-                arrow.has_value() && arrow->text == "GET" && arrow->enabled,
-                "the offered expansion shows no download arrow" + on
+                offered.has_value() && offered->text == "Cavedog units" && offered->enabled &&
+                    !named("oa.library.active.expansion.cavedog-units.get").has_value(),
+                "the offered expansion's chip is not the download press" + on
             );
             require(
                 tactics.has_value() && tactics->text.find("ADD FROM") != std::string::npos,
                 "an expansion no registry offers does not read ADD FROM" + on
             );
             const std::size_t asked = fixture.enqueued.size();
-            click_named("oa.library.active.expansion.cavedog-units.get");
+            click_named("oa.library.active.expansion.cavedog-units");
             require(
                 fixture.enqueued.size() == asked + 1 &&
                     fixture.enqueued.back().registry == kBuiltIn &&
@@ -981,7 +1008,7 @@ void Runtime::check_library() {
             run_frame(running);
             require(running, "a frame ended the run");
             const std::optional<AutomationControl> cancel =
-                named("oa.library.active.expansion.cavedog-units.cancel");
+                named("oa.library.active.expansion.cavedog-units");
             const std::optional<AutomationControl> queue = named("oa.library.queue");
             require(
                 cancel.has_value() && cancel->enabled &&
@@ -991,7 +1018,7 @@ void Runtime::check_library() {
                 "the expansion's download does not show its progress" + on
             );
             const std::size_t cancelled = fixture.cancelled.size();
-            click_named("oa.library.active.expansion.cavedog-units.cancel");
+            click_named("oa.library.active.expansion.cavedog-units");
             require(
                 fixture.cancelled.size() == cancelled + 1 &&
                     fixture.cancelled.back().registry == kBuiltIn &&
@@ -1013,10 +1040,11 @@ void Runtime::check_library() {
             run_frame(running);
             require(running, "a frame ended the run");
             require(
-                named("oa.library.active.expansion.cavedog-units.get").has_value(),
-                "cancelling the expansion's download did not bring the arrow back" + on
+                named("oa.library.active.expansion.cavedog-units").has_value() &&
+                    !named("oa.library.active.expansion.cavedog-units.cancel").has_value(),
+                "cancelling the expansion's download did not bring the chip back" + on
             );
-            click_named("oa.library.active.expansion.cavedog-units.get");
+            click_named("oa.library.active.expansion.cavedog-units");
             library::QueueItem installed;
             installed.registry = std::string(kBuiltIn);
             installed.kind = library::Kind::mod;
@@ -1082,8 +1110,8 @@ void Runtime::check_library() {
         }
         const std::optional<AutomationControl> button = named("oa.button");
         require(
-            button.has_value() && button->text == "Library · 4 mods · 2 updates",
-            "automation does not list oa.button as \"Library · 4 mods · 2 updates\"" + on
+            button.has_value() && button->text == "Library · 3 packages · 2 updates",
+            "automation does not list oa.button as \"Library · 3 packages · 2 updates\"" + on
         );
         press_button();
         require(
