@@ -563,6 +563,11 @@ int Runtime::run() {
             flush_preferences();
             return 0;
         }
+        if (options_.check_setup_window) {
+            check_setup_window();
+            flush_preferences();
+            return 0;
+        }
         if (options_.check_text_fit) {
             check_text_fit();
             flush_preferences();

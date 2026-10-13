@@ -681,9 +681,14 @@ struct TailRequest {
 /// @param[out] digest its SHA-256
 /// @param[out] size how many bytes were hashed
 /// @param[out] modified its modification time, seconds since 1970
-/// @return true when the file was hashed
+/// @param stop when not null and set, hashing stops between chunks
+/// @return true when the file was hashed; false when it could not be read or was stopped
 [[nodiscard]] bool hash_whole_file(
-    const fs::path& path, oa::base::sha256::Digest& digest, uint64_t& size, int64_t& modified
+    const fs::path& path,
+    oa::base::sha256::Digest& digest,
+    uint64_t& size,
+    int64_t& modified,
+    const std::atomic<bool>* stop
 ) {
     std::error_code failure;
     if (!fs::is_regular_file(path, failure))
@@ -698,6 +703,8 @@ struct TailRequest {
     std::vector<uint8_t> buffer(64 * 1024);
     uint64_t got = 0;
     while (true) {
+        if (stop != nullptr && stop->load())
+            return false;
         const std::size_t read = std::fread(buffer.data(), 1, buffer.size(), input.file);
         if (read > 0) {
             oa::base::sha256::update(hasher, std::span<const uint8_t>(buffer.data(), read));
@@ -2056,10 +2063,32 @@ std::string content_match_line(uint32_t files_differ) {
     );
 }
 
-ContentCheck
-check_managed_content(const fs::path& user_folder, std::span<const bundles::Bundle> table) {
+ContentCheck check_managed_content(
+    const fs::path& user_folder,
+    std::span<const bundles::Bundle> table,
+    ContentCheckProgress on_progress,
+    void* progress_context,
+    const std::atomic<bool>* stop
+) {
     const std::span<const bundles::Bundle> known = table.empty() ? bundles::bundles() : table;
     ContentCheck check;
+    uint32_t files_total = 0;
+    for (const bundles::Bundle& bundle : known) {
+        const fs::path folder = bundle_folder(user_folder, bundle);
+        const fs::path record_path = folder / std::string(content_record_name);
+        const ContentRecord loaded = read_content_record(record_path, nullptr);
+        if (!loaded.present || !loaded.valid || loaded.files.empty() ||
+            loaded.bundle_id != bundle.id)
+            continue;
+        const uint32_t count = narrow_count(bundle.files.size());
+        if (files_total > std::numeric_limits<uint32_t>::max() - count)
+            files_total = std::numeric_limits<uint32_t>::max();
+        else
+            files_total += count;
+    }
+    uint32_t files_done = 0;
+    if (on_progress != nullptr && !on_progress(0, files_total, progress_context))
+        return check;
     for (const bundles::Bundle& bundle : known) {
         const fs::path folder = bundle_folder(user_folder, bundle);
         const fs::path record_path = folder / std::string(content_record_name);
@@ -2074,7 +2103,20 @@ check_managed_content(const fs::path& user_folder, std::span<const bundles::Bund
         reported.kind = bundle.kind;
         reported.file_count = narrow_count(bundle.files.size());
         bool wrote = false;
+        // A file the check was stopped during is not a difference: the answer
+        // so far is not a finished check, and the next start reads that file.
+        const auto considered = [&]() -> bool {
+            if (files_done < files_total)
+                ++files_done;
+            if (stop != nullptr && stop->load())
+                return false;
+            if (on_progress != nullptr && !on_progress(files_done, files_total, progress_context))
+                return false;
+            return true;
+        };
         for (const bundles::ContentFile& file : bundle.files) {
+            if (stop != nullptr && stop->load())
+                return check;
             const std::size_t index = recorded_index(record, file.copy_name);
             const bool recorded = index < record.files.size();
             const fs::path dest = stored_path(folder, file.copy_name);
@@ -2090,6 +2132,8 @@ check_managed_content(const fs::path& user_folder, std::span<const bundles::Bund
             // a changed or damaged track is still named.
             if (never_held && bundle.id == "music" && !regular) {
                 count_up(reported.files_not_in_source);
+                if (!considered())
+                    return check;
                 continue;
             }
             const bool unchanged = recorded && timed && !never_held &&
@@ -2103,7 +2147,7 @@ check_managed_content(const fs::path& user_folder, std::span<const bundles::Bund
             } else if (regular) {
                 uint64_t hashed_size = 0;
                 int64_t hashed_time = 0;
-                if (hash_whole_file(dest, digest, hashed_size, hashed_time)) {
+                if (hash_whole_file(dest, digest, hashed_size, hashed_time, stop)) {
                     have_digest = true;
                     count_up(check.files_hashed);
                     ContentRecordFile updated;
@@ -2117,6 +2161,8 @@ check_managed_content(const fs::path& user_folder, std::span<const bundles::Bund
                     else
                         record.files.push_back(std::move(updated));
                     wrote = true;
+                } else if (stop != nullptr && stop->load()) {
+                    return check;
                 }
             }
             const bool differs = !have_digest || !bundles::known_hash(file, digest);
@@ -2124,12 +2170,14 @@ check_managed_content(const fs::path& user_folder, std::span<const bundles::Bund
                 record.files[index].not_in_source = false;
                 wrote = true;
             }
-            if (!differs)
-                continue;
-            count_up(reported.files_differ);
-            ContentFileDifference difference;
-            difference.copy_name = std::string(file.copy_name);
-            reported.differing.push_back(std::move(difference));
+            if (differs) {
+                count_up(reported.files_differ);
+                ContentFileDifference difference;
+                difference.copy_name = std::string(file.copy_name);
+                reported.differing.push_back(std::move(difference));
+            }
+            if (!considered())
+                return check;
         }
         // A record that cannot be stored is hashed again next start. This
         // start's answer stands either way.

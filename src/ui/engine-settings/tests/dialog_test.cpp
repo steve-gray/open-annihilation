@@ -134,20 +134,21 @@ using settings::Page;
 using settings::Setting;
 
 /// The engine's sections, in the order the list shows them.
-constexpr std::array<Page, 8> kPages{
+constexpr std::array<Page, 9> kPages{
     Page::controls,
     Page::common_tweaks,
     Page::language,
     Page::graphics,
     Page::user_interface,
     Page::downloads,
+    Page::game_content,
     Page::system,
     Page::developer,
 };
 
 /// The engine's sections while the game has touch controls: Touch between
 /// User Interface and Downloads.
-constexpr std::array<Page, 9> kTouchPages{
+constexpr std::array<Page, 10> kTouchPages{
     Page::controls,
     Page::common_tweaks,
     Page::language,
@@ -155,13 +156,14 @@ constexpr std::array<Page, 9> kTouchPages{
     Page::user_interface,
     Page::touch,
     Page::downloads,
+    Page::game_content,
     Page::system,
     Page::developer,
 };
 
 /// The engine's sections in the main menu's dialog of a game that brings
 /// game files in: Game files between User Interface and Downloads.
-constexpr std::array<Page, 9> kGameFilesPages{
+constexpr std::array<Page, 10> kGameFilesPages{
     Page::controls,
     Page::common_tweaks,
     Page::language,
@@ -169,12 +171,13 @@ constexpr std::array<Page, 9> kGameFilesPages{
     Page::user_interface,
     Page::game_files,
     Page::downloads,
+    Page::game_content,
     Page::system,
     Page::developer,
 };
 
 /// The engine's sections with Touch and Game files both listed.
-constexpr std::array<Page, 10> kTouchGameFilesPages{
+constexpr std::array<Page, 11> kTouchGameFilesPages{
     Page::controls,
     Page::common_tweaks,
     Page::language,
@@ -183,13 +186,14 @@ constexpr std::array<Page, 10> kTouchGameFilesPages{
     Page::touch,
     Page::game_files,
     Page::downloads,
+    Page::game_content,
     Page::system,
     Page::developer,
 };
 
 /// The engine's sections once a gamepad has sent input: Controller between
 /// User Interface and Downloads.
-constexpr std::array<Page, 9> kControllerPages{
+constexpr std::array<Page, 10> kControllerPages{
     Page::controls,
     Page::common_tweaks,
     Page::language,
@@ -197,13 +201,14 @@ constexpr std::array<Page, 9> kControllerPages{
     Page::user_interface,
     Page::controller,
     Page::downloads,
+    Page::game_content,
     Page::system,
     Page::developer,
 };
 
 /// The engine's sections with Touch and Controller listed, Controller after
 /// Touch.
-constexpr std::array<Page, 10> kTouchControllerPages{
+constexpr std::array<Page, 11> kTouchControllerPages{
     Page::controls,
     Page::common_tweaks,
     Page::language,
@@ -212,13 +217,14 @@ constexpr std::array<Page, 10> kTouchControllerPages{
     Page::touch,
     Page::controller,
     Page::downloads,
+    Page::game_content,
     Page::system,
     Page::developer,
 };
 
 /// The engine's sections with all three listed: Touch, Controller, then
-/// Game files, then Downloads, then System.
-constexpr std::array<Page, 11> kAllPages{
+/// Game files, then Downloads, then Game Content, then System.
+constexpr std::array<Page, 12> kAllPages{
     Page::controls,
     Page::common_tweaks,
     Page::language,
@@ -228,6 +234,7 @@ constexpr std::array<Page, 11> kAllPages{
     Page::controller,
     Page::game_files,
     Page::downloads,
+    Page::game_content,
     Page::system,
     Page::developer,
 };
@@ -572,8 +579,11 @@ void every_part_lies_inside_the_dialog_and_apart() {
                 // Downloads' rows come from the offer, which this dialog leaves
                 // empty, and it is not the main menu: the check and the
                 // downloaded files, no install ID and no link to the Library.
-                const std::size_t row_count =
-                    page == Page::downloads ? 2 : settings::page_settings(page).size();
+                // Game Content with nothing listed is the sentence and three buttons.
+                const std::size_t row_count = page == Page::downloads ? 2
+                                              : page == Page::game_content
+                                                  ? 4
+                                                  : settings::page_settings(page).size();
                 CHECK(rows.rows.size() == row_count);
                 const auto open = geometry::open_rows(dialog);
                 CHECK(
@@ -594,7 +604,7 @@ void every_part_lies_inside_the_dialog_and_apart() {
                         CHECK(
                             (row.hint_is_status && row.lock != Lock::none) ||
                             row.setting == Setting::file_type_registration ||
-                            row.setting == Setting::file_types_note
+                            row.setting == Setting::file_types_note || row.content >= 0
                         );
                         continue;
                     }
@@ -626,13 +636,15 @@ void each_section_shows_its_rows() {
     CHECK(std::equal(engine.begin(), engine.end(), kPages.begin(), kPages.end()));
     // Each entry's number is its place in the list with Touch and
     // Controller, which keep their numbers listed or not: Developer is 7,
-    // Downloads is 9 and System is 10.
+    // Downloads is 9, System is 10 and Game Content is 11.
     for (std::size_t index = 0; index < kPages.size(); ++index) {
         int32_t expected = static_cast<int32_t>(index);
         if (kPages[index] == Page::downloads)
             expected = 9;
         else if (kPages[index] == Page::system)
             expected = 10;
+        else if (kPages[index] == Page::game_content)
+            expected = 11;
         else if (kPages[index] == Page::developer)
             expected = 7;
         CHECK(settings::page_control(kPages[index]) == expected);
@@ -2211,6 +2223,7 @@ void the_focus_moves_round_every_control() {
         settings::page_control(Page::graphics),
         settings::page_control(Page::user_interface),
         settings::page_control(Page::downloads),
+        settings::page_control(Page::game_content),
         settings::page_control(Page::system),
         settings::page_control(Page::developer),
     };
@@ -2224,6 +2237,8 @@ void the_focus_moves_round_every_control() {
     CHECK(dialog.focused == expected.back());
     CHECK(settings::dialog_key(dialog, DialogKey::back_tab) == DialogAction::redraw);
     CHECK(dialog.focused == settings::page_control(Page::system));
+    CHECK(settings::dialog_key(dialog, DialogKey::back_tab) == DialogAction::redraw);
+    CHECK(dialog.focused == settings::page_control(Page::game_content));
     CHECK(settings::dialog_key(dialog, DialogKey::back_tab) == DialogAction::redraw);
     CHECK(dialog.focused == settings::page_control(Page::downloads));
     CHECK(settings::dialog_key(dialog, DialogKey::back_tab) == DialogAction::redraw);
@@ -2563,8 +2578,8 @@ void control_numbers_put_the_rows_after_every_fixed_control() {
     // Each entry is its place in the list with Touch and Controller,
     // whether or not the dialog lists them: the five sections before Touch
     // are 0 to 4, Touch 5 and Controller 6. Developer is 7, Game files 8,
-    // Downloads 9 and System 10.
-    for (std::size_t index = 0; index + 3 < kTouchControllerPages.size(); ++index)
+    // Downloads 9, System 10 and Game Content 11.
+    for (std::size_t index = 0; index + 4 < kTouchControllerPages.size(); ++index)
         CHECK(settings::page_control(kTouchControllerPages[index]) == static_cast<int32_t>(index));
     CHECK(settings::page_control(Page::touch) == 5);
     CHECK(settings::page_control(Page::controller) == 6);
@@ -2572,20 +2587,21 @@ void control_numbers_put_the_rows_after_every_fixed_control() {
     CHECK(settings::page_control(Page::game_files) == 8);
     CHECK(settings::page_control(Page::downloads) == 9);
     CHECK(settings::page_control(Page::system) == 10);
-    CHECK(settings::most_listed_pages == 11);
-    CHECK(settings::page_count == 17);
-    CHECK(settings::restore_control == 11);
-    CHECK(settings::cancel_control == 12);
-    CHECK(settings::ok_control == 13);
-    CHECK(settings::scroll_bar_control == 14);
-    CHECK(settings::first_row_control == 15);
+    CHECK(settings::page_control(Page::game_content) == 11);
+    CHECK(settings::most_listed_pages == 12);
+    CHECK(settings::page_count == 18);
+    CHECK(settings::restore_control == 12);
+    CHECK(settings::cancel_control == 13);
+    CHECK(settings::ok_control == 14);
+    CHECK(settings::scroll_bar_control == 15);
+    CHECK(settings::first_row_control == 16);
     // Developer's three rows come first, Enable Developer Mode, Show
     // performance statistics and UI kit gallery, then its footer's switch
     // and button, then its list's rows.
-    CHECK(settings::developer_mode_control == 15);
-    CHECK(settings::active_only_control == 18);
-    CHECK(settings::restore_profile_control == 19);
-    CHECK(settings::first_hack_list_control == 20);
+    CHECK(settings::developer_mode_control == 16);
+    CHECK(settings::active_only_control == 19);
+    CHECK(settings::restore_profile_control == 20);
+    CHECK(settings::first_hack_list_control == 21);
 
     // Every row's number comes after every fixed control's, and each is its own.
     Scrolling all(nine_rows());
@@ -4954,16 +4970,17 @@ void the_kit_gallery_row_moves_only_developers_list() {
     // digests, as the dialog laid them out without it. A digest that differs
     // is printed, so that a change meant to move these parts can pin them
     // again.
-    const std::array<std::pair<Page, uint64_t>, 9> kBefore{{
-        {Page::controls, 0x51ad7b4e8226447b},
-        {Page::common_tweaks, 0xba9a9282f99db4c6},
-        {Page::language, 0x70513178fa2b66e7},
-        {Page::graphics, 0xbf34350a06276ecf},
-        {Page::user_interface, 0xea88ed76bd132e42},
-        {Page::touch, 0xcfa0c7754c78c1a9},
-        {Page::controller, 0xb40af55af62d3cd9},
-        {Page::game_files, 0xccc244f44eaa409e},
-        {Page::downloads, 0x2482ea3feca0238a},
+    const std::array<std::pair<Page, uint64_t>, 10> kBefore{{
+        {Page::controls, 0xc9b50dd61f00f98a},
+        {Page::common_tweaks, 0x834556760a9d2417},
+        {Page::language, 0xa7351a7ba3a3fcbe},
+        {Page::graphics, 0xd03cbfe3c82dbe49},
+        {Page::user_interface, 0x1bedfda1543e7ecf},
+        {Page::touch, 0x08b231fbeece3bdd},
+        {Page::controller, 0x64b3e4bf52e43679},
+        {Page::game_files, 0x405310d8fb1d4566},
+        {Page::downloads, 0xd624c36706853e0f},
+        {Page::game_content, 0xca5b59b5ad5d7527},
     }};
     for (const auto& [page, before] : kBefore) {
         const settings::Dialog other = opened_with_controller(page, true, true, true);
@@ -6610,8 +6627,8 @@ std::vector<int32_t> entries_walked(settings::Dialog& dialog) {
 }
 
 void touch_is_listed_only_with_touch_controls() {
-    // Without touch controls the engine's settings list their eight sections,
-    // with Touch nine; a mod's options list their five either way.
+    // Without touch controls the engine's settings list their nine sections,
+    // with Touch ten; a mod's options list their five either way.
     const auto engine = settings::dialog_pages(settings::DialogKind::engine);
     CHECK(std::equal(engine.begin(), engine.end(), kPages.begin(), kPages.end()));
     const auto touch = settings::dialog_pages(settings::DialogKind::engine, true);
@@ -7750,9 +7767,9 @@ void controller_is_listed_only_once_a_gamepad_sent_input() {
     CHECK(all.size() == settings::most_listed_pages);
     const auto files = settings::dialog_pages(settings::DialogKind::engine, false, true, true);
     CHECK(
-        files.size() == 10 && files[4] == Page::user_interface && files[5] == Page::controller &&
-        files[6] == Page::game_files && files[7] == Page::downloads && files[8] == Page::system &&
-        files[9] == Page::developer
+        files.size() == 11 && files[4] == Page::user_interface && files[5] == Page::controller &&
+        files[6] == Page::game_files && files[7] == Page::downloads &&
+        files[8] == Page::game_content && files[9] == Page::system && files[10] == Page::developer
     );
     const auto mods = settings::dialog_pages(settings::DialogKind::mod_options, true, true, true);
     CHECK(std::equal(mods.begin(), mods.end(), kModPages.begin(), kModPages.end()));
@@ -7765,13 +7782,21 @@ void controller_is_listed_only_once_a_gamepad_sent_input() {
     CHECK(geometry::list_item(Page::controller, false, false, true).y == 141);
     CHECK(geometry::list_item(Page::touch, true, false, true).y == 141);
     CHECK(geometry::list_item(Page::controller, true, false, true).y == 162);
-    CHECK(geometry::list_item(Page::game_files, true, true, true).y == 183);
+    CHECK(geometry::list_item(Page::game_files, true, true, true).y == 176);
     CHECK(geometry::list_item(Page::game_files, false, true, true).y == 162);
     CHECK(geometry::list_item(Page::developer, true, true, true).y == 262);
     CHECK(
         geometry::list_item(Page::game_files, true, true, true).y + geometry::list_item_height <
         geometry::list_divider().y
     );
+    // The fullest compact list ends on the divider. A gap would cross it.
+    for (const Page page : kAllPages) {
+        if (page == Page::developer)
+            continue;
+        const auto entry = geometry::list_item(page, true, true, true);
+        CHECK(entry.y + entry.height <= geometry::list_divider().y);
+        CHECK(!overlap(entry, geometry::list_divider()));
+    }
 
     // Each section's entry keeps its number with or without Controller
     // listed; a dialog without it has no entry numbered as Controller.
@@ -8786,6 +8811,7 @@ void the_arrows_move_by_geometry() {
         settings::page_control(Page::graphics),
         settings::page_control(Page::user_interface),
         settings::page_control(Page::downloads),
+        settings::page_control(Page::game_content),
         settings::page_control(Page::system),
         settings::page_control(Page::developer),
         settings::close_x_control,
@@ -9359,10 +9385,10 @@ void registered_pages_list_under_their_owners_and_write_on_ok() {
     const auto developer = std::find(texts.begin(), texts.end(), "Developer");
     CHECK(developer != texts.end());
     const std::vector<std::string> tail(developer + 1, texts.end());
-    // The owners and their pages stay in order under Developer. System takes
-    // one more row above Developer, so Beta, which used to be the last that
-    // fit, is cut until the list scrolls.
-    CHECK((tail == std::vector<std::string>{"Alpha", "One", "Two"}));
+    // The owners and their pages stay in order under Developer. Game Content
+    // takes one more row above Developer, so Two, which used to be the last
+    // that fit, is cut until the list scrolls.
+    CHECK((tail == std::vector<std::string>{"Alpha", "One"}));
     listed.nav_scroll = 100000;
     const auto scrolled = nav_texts(listed);
     const auto scrolled_developer = std::find(scrolled.begin(), scrolled.end(), "Developer");
@@ -9666,6 +9692,56 @@ void the_header_close_mark_closes_as_cancel_does() {
     }
 }
 
+void game_content_lists_each_bundle_and_three_actions() {
+    settings::Dialog dialog = opened(Page::game_content);
+    settings::GameContentRow base;
+    base.id = "totala";
+    base.name = "Total Annihilation";
+    base.size = "188 MB";
+    base.check = "All files match";
+    settings::GameContentRow expansion;
+    expansion.id = "core-contingency";
+    expansion.name = "Core Contingency";
+    expansion.size = "42 MB";
+    expansion.check = "1 file differs";
+    expansion.warn = true;
+    dialog.game_content.push_back(std::move(base));
+    dialog.game_content.push_back(std::move(expansion));
+    CHECK(geometry::open_rows(dialog).rows.rows.size() == 6);
+    dialog.scroll[static_cast<std::size_t>(Page::game_content)] = 100000;
+    const auto parts = settings::dialog_layout(dialog);
+    CHECK(find_part(parts, "Total Annihilation", settings::no_control) != nullptr);
+    CHECK(find_part(parts, "Core Contingency", settings::no_control) != nullptr);
+    CHECK(find_part(parts, "188 MB · All files match", settings::no_control) != nullptr);
+    CHECK(find_part(parts, "42 MB · 1 file differs", settings::no_control) != nullptr);
+    const auto press = [&dialog](std::string_view caption) {
+        const auto laid = settings::dialog_layout(dialog);
+        const settings::LayoutPart* part = find_part(laid, caption, settings::no_control);
+        CHECK(part != nullptr);
+        if (part == nullptr)
+            return DialogAction::none;
+        return click(dialog, centre(part->rect));
+    };
+    CHECK(press("Check again") == DialogAction::check_content);
+    CHECK(press("Copy again from…") == DialogAction::copy_content_again);
+    CHECK(press("Open folder") == DialogAction::open_content_folder);
+
+    dialog.game_content[0].copying = true;
+    dialog.game_content[0].bar_done = 400;
+    dialog.game_content[0].bar_whole = 1000;
+    dialog.game_content[0].check = "2 of 5 · 40%";
+    const auto copying = settings::dialog_layout(dialog);
+    CHECK(find_part(copying, "Cancel", settings::no_control) != nullptr);
+    CHECK(find_part(copying, "2 of 5 · 40%", settings::no_control) != nullptr);
+    const oa::ui::kit::DisplayList drawn = geometry::dialog_list(dialog, nullptr);
+    bool bar = false;
+    for (const oa::ui::kit::Item& item : drawn.items)
+        if (item.role == oa::ui::kit::Role::progress)
+            bar = true;
+    CHECK(bar);
+    CHECK(press("Cancel") == DialogAction::cancel_content_copy);
+}
+
 int main(int argc, char** argv) {
     if (oa::test::game_data_requested(argc, argv))
         fonts_load_and_every_text_fits_its_place();
@@ -9675,6 +9751,7 @@ int main(int argc, char** argv) {
         the_oa_mark_alone_shows_the_icon_or_the_button_mark();
         every_part_lies_inside_the_dialog_and_apart();
         each_section_shows_its_rows();
+        game_content_lists_each_bundle_and_three_actions();
         a_click_on_an_entry_shows_its_section();
         every_control_is_pressed_where_it_is_drawn();
         switches_take_a_click_on_either_half_and_keys();

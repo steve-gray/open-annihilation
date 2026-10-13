@@ -651,6 +651,8 @@ struct Row {
     Setting setting{}; ///< what it changes
     /// Its place among Downloads' rows, from 0; -1 for every other section's row.
     int16_t downloads{-1};
+    /// Its place among Game Content's rows, from 0; -1 for every other section's row.
+    int16_t content{-1};
     int32_t control{no_control}; ///< its control's number
     Lock lock{};                 ///< why it cannot be changed now
     bool hint_is_status{};       ///< its hint lines are its status, which a lock never fades

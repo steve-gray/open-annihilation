@@ -28,6 +28,7 @@ using oa::ui::first_run::Model;
 using oa::ui::first_run::PackState;
 using oa::ui::first_run::Session;
 using oa::ui::first_run::Step;
+using oa::ui::first_run::Walk;
 
 bool meets(const oa::ui::kit::Rect& left, const oa::ui::kit::Rect& right) {
     if (left.width <= 0 || left.height <= 0 || right.width <= 0 || right.height <= 0)
@@ -88,6 +89,8 @@ void check_gate() {
     OA_CHECK(oa::ui::first_run::hold_reason(Hold::fark) == "fark");
     OA_CHECK(oa::ui::first_run::hold_reason(Hold::show).empty());
     OA_CHECK(oa::ui::first_run::step_named("language") == Step::language);
+    OA_CHECK(oa::ui::first_run::step_named("game") == Step::game);
+    OA_CHECK(oa::ui::first_run::step_named("copying") == Step::copying);
     OA_CHECK(oa::ui::first_run::step_named("online") == Step::online);
     OA_CHECK(oa::ui::first_run::step_named("buttons") == Step::buttons);
     OA_CHECK(!oa::ui::first_run::step_named("language-notice"));
@@ -272,6 +275,20 @@ void check_lookup() {
     expect_line(
         oa::ui::first_run::lay_out(buttons, frame, nullptr), "THE MAIN MENU · 3 OF 3", false
     );
+    Session setup;
+    setup.model.walk = Walk::setup;
+    setup.model.step = Step::language;
+    expect_line(oa::ui::first_run::lay_out(setup, frame, nullptr), "LANGUAGE · 1 OF 5", true);
+    setup.model.step = Step::game;
+    expect_line(oa::ui::first_run::lay_out(setup, frame, nullptr), "THE GAME · 2 OF 5", true);
+    setup.model.step = Step::copying;
+    expect_line(oa::ui::first_run::lay_out(setup, frame, nullptr), "COPYING · 3 OF 5", true);
+    setup.model.step = Step::online;
+    expect_line(oa::ui::first_run::lay_out(setup, frame, nullptr), "ONLINE · 4 OF 5", true);
+    setup.model.step = Step::buttons;
+    setup.model.library_button = {100, 16, 48, 48};
+    setup.model.settings_button = {160, 16, 48, 48};
+    expect_line(oa::ui::first_run::lay_out(setup, frame, nullptr), "THE MAIN MENU · 5 OF 5", false);
 
     Model english;
     const std::string plain = oa::ui::first_run::sample_words(english);
