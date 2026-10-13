@@ -1282,8 +1282,9 @@ void lay_copying(
     std::vector<kit::ControlId> order;
     add_chrome(scene, order, session, width, height, false, true, nullptr);
     const Band band = content_band(width, height);
-    const bool narrow = frame.size_class == kit::SizeClass::compact || band.width < 520;
-    int32_t column = narrow ? band.width : std::min(band.width, int32_t{640});
+    // The column is the game step's: Settings' width, centred in the band.
+    const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
+    const int32_t column = std::min(band.width, metrics.dialog_width);
     const int32_t left = band.left + std::max((band.width - column) / 2, int32_t{0});
     const CopyView& copy = session.model.copy;
 
