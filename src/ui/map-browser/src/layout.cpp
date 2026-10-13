@@ -52,21 +52,21 @@ std::string filled(
             text.append(pattern, at, std::string::npos);
             break;
         }
-        const std::size_t close = pattern.find('}', open);
-        if (close == std::string::npos) {
+        const std::size_t closing = pattern.find('}', open);
+        if (closing == std::string::npos) {
             text.append(pattern, at, std::string::npos);
             break;
         }
         text.append(pattern, at, open - at);
-        const std::string_view name(pattern.data() + open + 1, close - open - 1);
+        const std::string_view name(pattern.data() + open + 1, closing - open - 1);
         const auto found = std::find_if(values.begin(), values.end(), [&](const auto& value) {
             return value.first == name;
         });
         if (found != values.end())
             text += found->second;
         else
-            text.append(pattern, open, close - open + 1);
-        at = close + 1;
+            text.append(pattern, open, closing - open + 1);
+        at = closing + 1;
     }
     return text;
 }
