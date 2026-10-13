@@ -14,8 +14,10 @@
 #include "render_state.hpp"
 #include "window_pixels.hpp"
 
+#include "oa/app/content_copy.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/game_files_hooks.hpp"
+#include "oa/app/user_folder.hpp"
 #include "oa/platform/preferences.hpp"
 #include "oa/ui/engine_settings.hpp"
 
@@ -348,6 +350,7 @@ struct GameFilesScreen::State {
     void fill_first_run();
     void fill_manage();
     void fill_ready(const game_files::RunSnapshot& snapshot);
+    void mirror_committed_game();
     void set_step(view::Step step);
     void show_problem(view::Problem problem, std::string detail = {}, std::string file = {});
     void release_sources();
@@ -1407,8 +1410,55 @@ void GameFilesScreen::State::take_checked(const game_files::RunSnapshot& snapsho
     }
     old_folder_ = commit.old_folder;
     fill_ready(snapshot);
+    mirror_committed_game();
     model.banner = view::Banner::none;
     set_step(view::Step::ready_to_play);
+}
+
+void GameFilesScreen::State::mirror_committed_game() {
+    // The check's own copy stays in the staged folder. A player's import is
+    // written into the managed folders, and the staged folder is removed
+    // only after that copy finishes, so the game is not kept twice.
+    if (request_.check.pass != nullptr)
+        return;
+    fs::path user;
+    try {
+        const fs::path preferences = preference_file(request_.preferences_file);
+        std::error_code error;
+        const oa::platform::preferences::Values values =
+            fs::exists(preferences, error) ? oa::platform::preferences::load(preferences)
+                                           : oa::platform::preferences::Values{};
+        std::string note;
+        user = own_user_folder(
+            request_.user_folder, request_.preferences_file, preferences, values, note
+        );
+    } catch (const std::exception& error) {
+        log_import(std::string("the managed copy was not written: ") + error.what());
+        return;
+    }
+    if (user.empty())
+        return;
+    try {
+        const auto table = oa::data::content_bundles::bundles();
+        FolderContentSource source(request_.paths.game_folder, table);
+        CopyRequest copy;
+        copy.user_folder = std::move(user);
+        copy.bundles = table;
+        copy.news = &std::cerr;
+        const CopyResult result = copy_content(source, copy);
+        if (result.status != CopyStatus::finished) {
+            log_import("the managed copy was not written: " + result.error);
+            return;
+        }
+        std::error_code failure;
+        fs::remove_all(request_.paths.game_folder, failure);
+        if (failure)
+            log_import("the staged game folder could not be removed: " + failure.message());
+        else
+            log_import("the staged game folder was removed after the managed copy");
+    } catch (const std::exception& error) {
+        log_import(std::string("the managed copy was not written: ") + error.what());
+    }
 }
 
 void GameFilesScreen::State::fill_ready(const game_files::RunSnapshot& snapshot) {

@@ -22,7 +22,10 @@
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/service.hpp"
 #include "oa/app/content/settings.hpp"
+#include "oa/app/content_copy.hpp"
+#include "oa/app/setup_before_game.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/ui/first_run/first_run.hpp"
 #include "oa/netgame/presence.hpp"
 #include "oa/app/view_rules.hpp"
 #include "oa/data/registry/descriptor.hpp"
@@ -60,11 +63,13 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -206,6 +211,404 @@ void tell_install_switches(
         return content::CheckForUpdates::never;
     }
     return content::CheckForUpdates::automatically;
+}
+
+/// Replaces `{token}` once.
+void replace_token(std::string& text, std::string_view token, std::string_view value) {
+    const auto at = text.find(token);
+    if (at != std::string::npos)
+        text.replace(at, token.size(), value);
+}
+
+/// "Checking… N%". The check's thread only counts files; this writes the line.
+std::string checking_line(uint32_t done, uint32_t total) {
+    std::string text{oa::data::languages::interface_text("Checking… {percent}%")};
+    const uint32_t percent =
+        total == 0 ? 0 : static_cast<uint32_t>((static_cast<uint64_t>(done) * 100ULL) / total);
+    replace_token(text, "{percent}", std::to_string(percent));
+    return text;
+}
+
+/// "{done} of {total} · N%", the copy's file line.
+std::string files_progress_line(uint32_t done, uint32_t total) {
+    std::string text{oa::data::languages::interface_text("{done} of {total} · {percent}%")};
+    const uint32_t percent =
+        total == 0 ? 0 : static_cast<uint32_t>((static_cast<uint64_t>(done) * 100ULL) / total);
+    replace_token(text, "{done}", std::to_string(done));
+    replace_token(text, "{total}", std::to_string(total));
+    replace_token(text, "{percent}", std::to_string(percent));
+    return text;
+}
+
+/// The check Game Content starts. It hashes off the UI thread.
+struct ContentCheckJob {
+    ~ContentCheckJob() {
+        stop.store(true);
+        if (worker.joinable())
+            worker.join();
+    }
+
+    std::mutex mutex{};
+    std::atomic<bool> stop{false};
+    std::atomic<bool> exited{true};
+    std::thread worker{};
+    uint64_t generation{0};        ///< bumped to discard a check that was stopped
+    uint64_t worker_generation{0}; ///< the generation the running thread serves
+    bool running{false};
+    bool restart{false}; ///< start again once the thread has left
+    bool changed{false};
+    bool result_ready{false};
+    uint32_t done{0};
+    uint32_t total{0};
+    ContentCheck result{};
+    fs::path folder{};
+};
+
+ContentCheckJob& content_check_job() {
+    static ContentCheckJob job;
+    return job;
+}
+
+/// A copy Game Content started. The copying step's worker does the bytes.
+struct ContentCopyWatch {
+    bool active{false}; ///< a copy this dialog started has not finished
+    bool awake{false};  ///< the screen saver was turned off for that copy
+    fs::path folder{};
+    std::vector<settings::GameContentRow> before{}; ///< the rows before the bytes moved
+};
+
+ContentCopyWatch& content_copy_watch() {
+    static ContentCopyWatch watch;
+    return watch;
+}
+
+/// The check's progress. It runs on the check's thread and only stores counts.
+bool on_settings_check(uint32_t done, uint32_t total, void* context) {
+    if (context == nullptr)
+        return false;
+    auto* job = static_cast<ContentCheckJob*>(context);
+    const std::lock_guard<std::mutex> lock(job->mutex);
+    if (job->stop.load() || job->generation != job->worker_generation)
+        return false;
+    job->done = done;
+    job->total = total;
+    job->changed = true;
+    return true;
+}
+
+/// Starts a check. The caller has joined any thread that was still running.
+void launch_content_check(const fs::path& folder) {
+    ContentCheckJob& job = content_check_job();
+    if (folder.empty() || job.worker.joinable())
+        return;
+    job.stop.store(false);
+    job.exited.store(false);
+    uint64_t generation = 0;
+    {
+        const std::lock_guard<std::mutex> lock(job.mutex);
+        ++job.generation;
+        generation = job.generation;
+        job.worker_generation = generation;
+        job.running = true;
+        job.restart = false;
+        job.result_ready = false;
+        job.changed = true;
+        job.done = 0;
+        job.total = 0;
+        job.folder = folder;
+        job.result = {};
+    }
+    job.worker = std::thread([generation, folder] {
+        ContentCheckJob& held = content_check_job();
+        ContentCheck check;
+        bool threw = false;
+        try {
+            check = check_managed_content(
+                folder, oa::data::content_bundles::bundles(), on_settings_check, &held, &held.stop
+            );
+        } catch (const std::exception&) {
+            threw = true;
+        }
+        {
+            const std::lock_guard<std::mutex> lock(held.mutex);
+            if (!threw && held.generation == generation && !held.stop.load()) {
+                held.result = std::move(check);
+                held.result_ready = true;
+            }
+            held.running = false;
+            held.changed = true;
+        }
+        held.exited.store(true);
+    });
+}
+
+/// Asks a running check to stop. A restart waits until that thread has left,
+/// so this does not join it.
+void halt_content_check(bool restart_after, const fs::path& folder) {
+    ContentCheckJob& job = content_check_job();
+    job.stop.store(true);
+    const std::lock_guard<std::mutex> lock(job.mutex);
+    job.restart = restart_after && !folder.empty();
+    if (!folder.empty())
+        job.folder = folder;
+    ++job.generation;
+    job.result_ready = false;
+    job.result = {};
+    job.done = 0;
+    job.total = 0;
+    job.changed = true;
+}
+
+/// Joins a check that has left, then starts one that was asked for again.
+void service_content_check() {
+    ContentCheckJob& job = content_check_job();
+    if (job.exited.load() && job.worker.joinable())
+        job.worker.join();
+    bool start = false;
+    fs::path folder;
+    {
+        const std::lock_guard<std::mutex> lock(job.mutex);
+        if (!job.worker.joinable() && job.restart && !content_copy_watch().active) {
+            start = true;
+            folder = job.folder;
+            job.restart = false;
+        }
+    }
+    if (start)
+        launch_content_check(folder);
+}
+
+/// Starts a check, or asks the running one to start again when it leaves.
+void request_content_check(const fs::path& folder) {
+    if (folder.empty() || content_copy_watch().active)
+        return;
+    ContentCheckJob& job = content_check_job();
+    if (job.worker.joinable() && !job.exited.load()) {
+        halt_content_check(true, folder);
+        return;
+    }
+    if (job.worker.joinable())
+        job.worker.join();
+    launch_content_check(folder);
+}
+
+/// Stops a copy and a check and waits for both. The dialog is closing, so the
+/// wait is the time until the next chunk.
+void finish_content_workers() {
+    setup_request_cancel();
+    ContentCheckJob& job = content_check_job();
+    job.stop.store(true);
+    {
+        const std::lock_guard<std::mutex> lock(job.mutex);
+        job.restart = false;
+        ++job.generation;
+        job.result_ready = false;
+    }
+    setup_stop_join();
+    if (job.worker.joinable())
+        job.worker.join();
+    setup_release_located();
+    ContentCopyWatch& watch = content_copy_watch();
+    if (watch.awake)
+        SDL_EnableScreenSaver();
+    watch = {};
+}
+
+/// Lists every bundle with its size. An empty folder says nothing is copied.
+/// A folder that has a copy says the check is starting, and does not hash.
+void lay_game_content(settings::Dialog& dialog, const fs::path& user_folder) {
+    const auto table = oa::data::content_bundles::bundles();
+    const bool look = !user_folder.empty();
+    const std::string waiting = checking_line(0, 0);
+    dialog.game_content.clear();
+    dialog.game_content.reserve(table.size());
+    for (const auto& bundle : table) {
+        settings::GameContentRow row;
+        row.id = std::string(bundle.id);
+        row.name = std::string(bundle.english_name);
+        uint64_t bytes = 0;
+        for (const auto& file : bundle.files)
+            bytes += file.size;
+        row.size = settings::download_size_text(bytes);
+        row.checking = look;
+        row.check = look ? waiting : std::string(oa::data::languages::interface_text("not added"));
+        dialog.game_content.push_back(std::move(row));
+    }
+}
+
+/// Writes a finished check onto the rows. `found` is not kept.
+void paint_check_result(settings::Dialog& dialog, const ContentCheck& check) {
+    for (settings::GameContentRow& row : dialog.game_content) {
+        const ContentBundleCheck* found = nullptr;
+        for (const ContentBundleCheck& checked : check.bundles) {
+            if (checked.id == row.id) {
+                found = &checked;
+                break;
+            }
+        }
+        row.checking = false;
+        row.copying = false;
+        row.bar_done = -1;
+        row.bar_whole = 1;
+        if (found == nullptr) {
+            row.check = std::string(oa::data::languages::interface_text("not added"));
+            row.warn = false;
+        } else {
+            row.check = content_bundle_line(*found);
+            row.warn = found->files_differ > 0;
+        }
+    }
+}
+
+/// Writes the check's percent onto every row.
+void paint_checking(settings::Dialog& dialog, uint32_t done, uint32_t total) {
+    const std::string line = checking_line(done, total);
+    for (settings::GameContentRow& row : dialog.game_content) {
+        row.checking = true;
+        row.copying = false;
+        row.warn = false;
+        row.bar_done = -1;
+        row.bar_whole = 1;
+        row.check = line;
+    }
+}
+
+/// The bundle of this name, or -1.
+int find_copy_bundle(
+    const std::vector<oa::ui::first_run::CopyBundle>& bundles, std::string_view name
+) {
+    for (int index = 0; index < static_cast<int>(bundles.size()); ++index) {
+        if (bundles[static_cast<std::size_t>(index)].name == name)
+            return index;
+    }
+    return -1;
+}
+
+/// Writes a copy's progress, its check, or "Copied" after a check that was
+/// stopped once the bytes had landed.
+void paint_copy(
+    settings::Dialog& dialog,
+    const oa::ui::first_run::CopyView& view,
+    const std::vector<settings::GameContentRow>& before
+) {
+    dialog.game_content = before;
+    if (view.hashing) {
+        paint_checking(dialog, view.check_done, view.check_total);
+        // The bytes have landed. Cancel stays on the row that was copying, so
+        // the check can be stopped without closing Settings.
+        for (settings::GameContentRow& row : dialog.game_content) {
+            const int index = find_copy_bundle(view.bundles, row.name);
+            if (index < 0)
+                continue;
+            if (view.bundles[static_cast<std::size_t>(index)].phase ==
+                oa::ui::first_run::CopyPhase::copying)
+                row.copying = true;
+        }
+        return;
+    }
+    const bool landed = view.bytes_landed && !view.running && !view.checked;
+    for (settings::GameContentRow& row : dialog.game_content) {
+        const int index = find_copy_bundle(view.bundles, row.name);
+        row.copying = false;
+        row.checking = false;
+        row.bar_done = -1;
+        row.bar_whole = 1;
+        if (index < 0)
+            continue;
+        const oa::ui::first_run::CopyBundle& bundle = view.bundles[static_cast<std::size_t>(index)];
+        if (view.checked) {
+            if (bundle.phase == oa::ui::first_run::CopyPhase::waiting) {
+                row.check = std::string(oa::data::languages::interface_text("not added"));
+                row.warn = false;
+            } else {
+                row.check = bundle.amount.empty()
+                                ? std::string(oa::data::languages::interface_text("Copied"))
+                                : bundle.amount;
+                row.warn = bundle.phase == oa::ui::first_run::CopyPhase::differ;
+            }
+            continue;
+        }
+        if (landed && bundle.phase != oa::ui::first_run::CopyPhase::waiting) {
+            row.check = view.verdict.empty()
+                            ? std::string(oa::data::languages::interface_text("Copied"))
+                            : view.verdict;
+            row.warn = !view.verdict.empty();
+            continue;
+        }
+        if (bundle.phase != oa::ui::first_run::CopyPhase::copying)
+            continue;
+        row.copying = true;
+        row.warn = false;
+        row.bar_done = bundle.done;
+        row.bar_whole = bundle.whole > 0 ? bundle.whole : 1;
+        row.check = view.overall.empty() ? files_progress_line(0, 0) : view.overall;
+    }
+}
+
+/// True when two row lists would draw differently.
+bool content_rows_differ(
+    const std::vector<settings::GameContentRow>& left,
+    const std::vector<settings::GameContentRow>& right
+) {
+    if (left.size() != right.size())
+        return true;
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        const settings::GameContentRow& a = left[index];
+        const settings::GameContentRow& b = right[index];
+        if (a.check != b.check || a.warn != b.warn || a.copying != b.copying ||
+            a.checking != b.checking || a.bar_done != b.bar_done || a.bar_whole != b.bar_whole)
+            return true;
+    }
+    return false;
+}
+
+/// True when a row was still being checked.
+bool rows_checking(const std::vector<settings::GameContentRow>& rows) {
+    for (const settings::GameContentRow& row : rows)
+        if (row.checking)
+            return true;
+    return false;
+}
+
+/// Asks for a place and starts the copy on the copying step's thread.
+/// The dialog keeps drawing. A second copy while one is running is ignored.
+///
+/// @param[in,out] dialog the dialog
+/// @param window the window the picker is attached to
+/// @param user_folder the player's folder
+void start_game_content_copy(
+    settings::Dialog& dialog, SDL_Window* window, const fs::path& user_folder
+) {
+    ContentCopyWatch& watch = content_copy_watch();
+    if (watch.active || user_folder.empty())
+        return;
+    const bool was_checking = rows_checking(dialog.game_content);
+    halt_content_check(false, user_folder);
+    oa::ui::first_run::Model model;
+    if (!setup_locate_source(window, user_folder, model)) {
+        setup_release_located();
+        if (was_checking)
+            halt_content_check(true, user_folder);
+        return;
+    }
+    watch.before = dialog.game_content;
+    for (settings::GameContentRow& row : watch.before) {
+        row.copying = false;
+        row.bar_done = -1;
+    }
+    watch.folder = user_folder;
+    if (!setup_begin_copy(user_folder, model)) {
+        setup_release_located();
+        watch.before.clear();
+        if (was_checking)
+            halt_content_check(true, user_folder);
+        return;
+    }
+    watch.active = true;
+    if (!watch.awake) {
+        SDL_DisableScreenSaver();
+        watch.awake = true;
+    }
 }
 
 } // namespace
@@ -1258,6 +1661,8 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
             dialog, preference_values_, content_service(), downloads, content_downloads_folder()
         );
     }
+    lay_game_content(dialog, user_folder_);
+    request_content_check(user_folder_);
     // Your files shows the player's own folder.
     dialog.user_folder = path_to_utf8(user_folder_);
     // The languages whose packs turn Unicode chat on.
@@ -1466,6 +1871,66 @@ settings::Dialog* Runtime::engine_settings_dialog() {
     return &*engine_settings_->dialog;
 }
 
+bool Runtime::refresh_game_content(settings::Dialog& dialog) {
+    service_content_check();
+    ContentCopyWatch& watch = content_copy_watch();
+    if (watch.active) {
+        oa::ui::first_run::CopyView view;
+        static_cast<void>(setup_pull_copy(view));
+        const bool cancelled_bytes =
+            !view.running && !view.hashing && !view.bytes_landed && !view.checked;
+        if (cancelled_bytes) {
+            if (!view.verdict.empty())
+                std::ignore = settings::set_folder_notice(dialog, view.verdict);
+            dialog.game_content = watch.before;
+        } else {
+            paint_copy(dialog, view, watch.before);
+        }
+        if (!view.running && !view.hashing) {
+            const bool resume = cancelled_bytes && rows_checking(watch.before);
+            const fs::path folder = watch.folder;
+            setup_stop_join();
+            setup_release_located();
+            if (watch.awake)
+                SDL_EnableScreenSaver();
+            watch = {};
+            if (resume)
+                request_content_check(folder);
+        }
+        // A match draws the dialog only when this says so, so the bar moves
+        // on the frames the copy is running.
+        return true;
+    }
+    ContentCheckJob& job = content_check_job();
+    bool apply = false;
+    bool running = false;
+    uint32_t done = 0;
+    uint32_t total = 0;
+    ContentCheck result;
+    {
+        const std::lock_guard<std::mutex> lock(job.mutex);
+        running = job.running || !job.exited.load();
+        done = job.done;
+        total = job.total;
+        if (job.result_ready) {
+            apply = true;
+            result = std::move(job.result);
+            job.result_ready = false;
+            running = false;
+        }
+    }
+    if (apply) {
+        const std::vector<settings::GameContentRow> saved = dialog.game_content;
+        paint_check_result(dialog, result);
+        return content_rows_differ(saved, dialog.game_content);
+    }
+    if (running) {
+        paint_checking(dialog, done, total);
+        return true;
+    }
+    return false;
+}
+
 bool Runtime::take_engine_settings_action(settings::DialogAction action) {
     auto* dialog = engine_settings_dialog();
     if (dialog == nullptr)
@@ -1524,6 +1989,7 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         }
         return false;
     case settings::DialogAction::accepted: {
+        finish_content_workers();
         if (dialog->kind == settings::DialogKind::mod_options) {
             view_rules::apply_dialog_options(
                 dialog->chosen.mod_options, ui_rules(), view_settings_
@@ -1614,6 +2080,7 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         return true;
     }
     case settings::DialogAction::cancelled: {
+        finish_content_workers();
         if (dialog->kind == settings::DialogKind::mod_options) {
             view_rules::apply_dialog_options(
                 dialog->opened.mod_options, ui_rules(), view_settings_
@@ -1643,6 +2110,28 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // under it; Escape and its CLOSE come back to Developer.
         oa_layer().open_gallery();
         return false;
+    case settings::DialogAction::check_content:
+        // A copy is already reading the files. The check waits for it.
+        if (content_copy_watch().active)
+            return false;
+        paint_checking(*dialog, 0, 0);
+        request_content_check(user_folder_);
+        return false;
+    case settings::DialogAction::copy_content_again:
+        start_game_content_copy(*dialog, sdl_.window, user_folder_);
+        return false;
+    case settings::DialogAction::cancel_content_copy:
+        // Stop between chunks. The dialog keeps drawing, and the bytes already
+        // in the managed folders stay.
+        if (content_copy_watch().active)
+            setup_request_cancel();
+        return false;
+    case settings::DialogAction::open_content_folder: {
+        const fs::path folder = user_folder_ / std::string(managed_games_folder);
+        const FolderOpening opening = open_player_folder(folder);
+        std::ignore = settings::set_folder_notice(*dialog, opening.opened ? "" : opening.reason);
+        return false;
+    }
     case settings::DialogAction::reset_install_id: {
         // A new ID is stored at once. Cancel does not put the old one back.
         // Nothing is made when the generator cannot be read, and the dialog

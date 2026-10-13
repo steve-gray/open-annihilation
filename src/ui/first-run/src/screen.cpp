@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The three first-run steps: their layout, their keys and pointer, and their drawing.
+// The first-run steps: their layout, their keys and pointer, and their drawing.
 // Words are looked up as the screen is laid out. On the language step a built-in
 // or installed language in the middle is read from the same catalogue, and the
 // language the game shows stays as it was until the player chooses.
@@ -11,6 +11,8 @@
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/components.hpp"
+#include "oa/ui/kit/components_more.hpp"
+#include "oa/ui/kit/controls.hpp"
 #include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
@@ -382,6 +384,19 @@ std::string facts_text(const Card& card, const oa::data::languages::Language* la
 /// @param next_enabled Next takes a press
 /// @param language the language the language step is speaking; null on the other steps
 /// @return the look
+/// The page word beside the title: Setup before the game is mounted, Welcome after.
+///
+/// @param session the session
+/// @param language the language the language step is speaking; null otherwise
+/// @return the word
+std::string page_word(const Session& session, const oa::data::languages::Language* language) {
+    const bool setup_page =
+        session.model.walk == Walk::setup &&
+        (session.model.step == Step::language || session.model.step == Step::game ||
+         session.model.step == Step::copying);
+    return show(setup_page ? "Setup" : "Welcome", language);
+}
+
 kit::SetupChromeLook chrome_look(
     const Session& session,
     int32_t width,
@@ -393,19 +408,45 @@ kit::SetupChromeLook chrome_look(
     kit::SetupChromeLook look;
     look.width = width;
     look.height = height;
-    look.page = show("Welcome", language);
-    // Each call copies before the next, so a view into the catalogue is not kept.
-    look.step_name = session.model.step == Step::online ? std::string(interface_text("ONLINE"))
-                                                        : show("WELCOME", language);
+    look.page = page_word(session, language);
+    const StepPlace place = step_place(session.model.step, session.model.walk);
+    look.step_name = show(place.name, language);
     look.step_pattern = language != nullptr ? show(kit::step_line_pattern, language)
                                             : std::string(interface_text(kit::step_line_pattern));
-    look.step_index = session.model.step == Step::online ? 2 : 1;
-    look.step_count = 3;
+    look.step_index = place.index;
+    look.step_count = place.count;
     look.skip = show("Skip setup", language);
     look.back = show("Back", language);
     look.next = show("Next", language);
+    look.skip_enabled = true;
     look.back_enabled = back_enabled;
     look.next_enabled = next_enabled;
+    const Step step = session.model.step;
+    if (step == Step::game) {
+        look.skip = show("Quit", language);
+        look.skip_enabled = true;
+        look.back_enabled = true;
+        look.next = show("Copy the game", language);
+        look.next_enabled =
+            session.model.source >= 0 &&
+            session.model.source < static_cast<int32_t>(session.model.sources.size());
+    } else if (step == Step::copying) {
+        look.skip = show("Cancel", language);
+        look.back_enabled = false;
+        if (session.model.copy.checked) {
+            look.skip_enabled = false;
+            look.next = show("Continue", language);
+            look.next_enabled = true;
+        } else if (session.model.copy.paused) {
+            look.skip_enabled = true;
+            look.next = show("Continue", language);
+            look.next_enabled = true;
+        } else {
+            look.skip_enabled = true;
+            look.next = show("Pause", language);
+            look.next_enabled = session.model.copy.running;
+        }
+    }
     return look;
 }
 
@@ -983,6 +1024,308 @@ void lay_online(
     scene.list.tab_order = std::move(order);
 }
 
+/// The short badge a source row shows.
+///
+/// @param mark the kind of place
+/// @return the badge
+std::string_view source_badge(SourceMark mark) noexcept {
+    switch (mark) {
+    case SourceMark::gog:
+        return "GOG";
+    case SourceMark::package:
+        return "PKG";
+    case SourceMark::demo:
+        return "DEMO";
+    case SourceMark::disc:
+        return "DISC";
+    case SourceMark::folder:
+        return "FOLDER";
+    }
+    return "FOLDER";
+}
+
+/// Lays the game step out: the sources that were found, and Locate another.
+///
+/// @param[in,out] scene the scene
+/// @param session the session
+/// @param frame the room
+/// @param fonts the fonts
+void lay_game(
+    Scene& scene, const Session& session, const kit::Frame& frame, const kit::Fonts* fonts
+) {
+    const int32_t width = frame.area.width;
+    const int32_t height = frame.area.height;
+    std::vector<kit::ControlId> order;
+    add_chrome(scene, order, session, width, height, true, true, nullptr);
+    const Band band = content_band(width, height);
+    const bool narrow = frame.size_class == kit::SizeClass::compact || band.width < 520;
+    int32_t column = band.width;
+    if (!narrow)
+        column = std::min(band.width, int32_t{640});
+    const int32_t left = band.left + std::max((band.width - column) / 2, int32_t{0});
+
+    int32_t row = band.top;
+    constexpr int32_t kTitle = 36;
+    scene.title_text = show("Where is Total Annihilation?");
+    scene.title = {left, row, column, kTitle};
+    row += kTitle + 4;
+    row = add_paragraph(
+        scene.list,
+        fonts,
+        left,
+        row,
+        column,
+        show("OA copies the game once. The installation is left as it is."),
+        kit::FontRole::small,
+        kit::colour::hint
+    );
+    row += 10;
+
+    const int32_t card_height = kit::choice_card_height();
+    const auto count = static_cast<int32_t>(session.model.sources.size());
+    for (int32_t index = 0; index < count; ++index) {
+        const GameSource& source = session.model.sources[static_cast<std::size_t>(index)];
+        std::string hint = std::string(source_badge(source.mark));
+        if (!source.detail.empty()) {
+            hint += " · ";
+            hint += source.detail;
+        }
+        if (!source.status.empty()) {
+            hint += " · ";
+            hint += source.status;
+        }
+        kit::ChoiceCardLook card;
+        card.title = source.title;
+        card.hint = std::move(hint);
+        card.chosen = session.model.source == index;
+        const kit::Rect rect{left, row, column, card_height};
+        const kit::ControlId id = source_id + index;
+        kit::add_choice_card(
+            scene.list, rect, card, id, control_name(Step::game, "source." + std::to_string(index))
+        );
+        order.insert(order.begin(), id);
+        row += card_height + 4;
+        int32_t chip_x = left + 8;
+        for (const SourceChip& chip : source.chips) {
+            if (chip.name.empty())
+                continue;
+            kit::PillLook pill;
+            pill.text = chip.held ? chip.name : show("no {name}");
+            if (!chip.held) {
+                const std::string token = "{name}";
+                const auto at = pill.text.find(token);
+                if (at != std::string::npos)
+                    pill.text.replace(at, token.size(), chip.name);
+            }
+            pill.state = chip.held ? kit::PillState::active : kit::PillState::inactive;
+            const int32_t pill_w = std::min(
+                std::max(static_cast<int32_t>(pill.text.size()) * 7 + 16, int32_t{48}),
+                std::max(column - 16, int32_t{48})
+            );
+            if (chip_x + pill_w > left + column)
+                break;
+            kit::add_pill(
+                scene.list, {chip_x, row, pill_w, kit::pill_height()}, pill, kit::no_control, {}
+            );
+            chip_x += pill_w + 6;
+        }
+        if (!source.chips.empty())
+            row += kit::pill_height() + 2;
+        if (!source.footnote.empty()) {
+            row = add_paragraph(
+                scene.list,
+                fonts,
+                left + 8,
+                row,
+                std::max(column - 16, int32_t{1}),
+                source.footnote,
+                kit::FontRole::small,
+                kit::colour::quiet
+            );
+        }
+        row += 8;
+    }
+
+    const int32_t button_height = kit::compact_metrics.button_height;
+    const kit::Rect locate_rect{left, row, std::min(column, int32_t{220}), button_height};
+    add_button(
+        scene.list,
+        order,
+        locate_rect,
+        locate_id,
+        control_name(Step::game, "locate"),
+        show("Locate another…"),
+        true,
+        kit::ButtonStyle::plain
+    );
+    row += button_height + 8;
+    add_paragraph(
+        scene.list,
+        fonts,
+        left,
+        row,
+        column,
+        show("Copies go to Documents › Open Annihilation"),
+        kit::FontRole::small,
+        kit::colour::quiet,
+        kit::Align::centre
+    );
+    if (session.model.controller) {
+        add_paragraph(
+            scene.list,
+            fonts,
+            left,
+            band.top + band.height - kit::compact_metrics.small_line,
+            column,
+            show("A continues. B goes back."),
+            kit::FontRole::small,
+            kit::colour::hint,
+            kit::Align::centre
+        );
+    }
+    scene.list.tab_order = std::move(order);
+}
+
+/// Lays the copying step out: the overall bar, one row a bundle, and the check.
+///
+/// @param[in,out] scene the scene
+/// @param session the session
+/// @param frame the room
+/// @param fonts the fonts
+void lay_copying(
+    Scene& scene, const Session& session, const kit::Frame& frame, const kit::Fonts* fonts
+) {
+    const int32_t width = frame.area.width;
+    const int32_t height = frame.area.height;
+    std::vector<kit::ControlId> order;
+    add_chrome(scene, order, session, width, height, false, true, nullptr);
+    const Band band = content_band(width, height);
+    const bool narrow = frame.size_class == kit::SizeClass::compact || band.width < 520;
+    int32_t column = narrow ? band.width : std::min(band.width, int32_t{640});
+    const int32_t left = band.left + std::max((band.width - column) / 2, int32_t{0});
+    const CopyView& copy = session.model.copy;
+
+    int32_t row = band.top;
+    constexpr int32_t kTitle = 36;
+    scene.title_text = show("Copying Total Annihilation");
+    scene.title = {left, row, column, kTitle};
+    row += kTitle + 4;
+    std::string subtitle;
+    if (copy.checked && !copy.verdict.empty())
+        subtitle = copy.verdict;
+    else if (!copy.from.empty()) {
+        subtitle = show("From {place}…");
+        const std::string token = "{place}";
+        const auto at = subtitle.find(token);
+        if (at != std::string::npos)
+            subtitle.replace(at, token.size(), copy.from);
+        subtitle += " ";
+        subtitle += show("Nothing is installed and your files are not changed.");
+    } else {
+        subtitle = show("Nothing is installed and your files are not changed.");
+    }
+    row = add_paragraph(
+        scene.list, fonts, left, row, column, subtitle, kit::FontRole::small, kit::colour::hint
+    );
+    row += 8;
+    if (!copy.overall.empty()) {
+        add_text(
+            scene.list,
+            {left, row, column, kit::compact_metrics.regular_line},
+            copy.overall,
+            kit::FontRole::regular,
+            kit::colour::text
+        );
+        row += kit::compact_metrics.regular_line;
+    }
+    if (!copy.remaining.empty()) {
+        add_text(
+            scene.list,
+            {left, row, column, kit::compact_metrics.small_line},
+            copy.remaining,
+            kit::FontRole::small,
+            kit::colour::quiet
+        );
+        row += kit::compact_metrics.small_line;
+    }
+    row += 4;
+    kit::add_progress(scene.list, {left, row, column, 8}, copy.done, copy.whole);
+    row += 16;
+
+    for (const CopyBundle& bundle : copy.bundles) {
+        add_text(
+            scene.list,
+            {left, row, column, kit::compact_metrics.regular_line},
+            bundle.name,
+            kit::FontRole::regular,
+            kit::colour::text
+        );
+        row += kit::compact_metrics.regular_line;
+        if (!bundle.file.empty()) {
+            add_text(
+                scene.list,
+                {left, row, column, kit::compact_metrics.small_line},
+                bundle.file,
+                kit::FontRole::small,
+                kit::colour::hint
+            );
+            row += kit::compact_metrics.small_line;
+        }
+        kit::add_progress(
+            scene.list, {left, row, std::max(column / 2, int32_t{80}), 6}, bundle.done, bundle.whole
+        );
+        row += 8;
+        if (!bundle.amount.empty()) {
+            add_text(
+                scene.list,
+                {left, row, column, kit::compact_metrics.small_line},
+                bundle.amount,
+                kit::FontRole::small,
+                kit::colour::quiet
+            );
+            row += kit::compact_metrics.small_line;
+        }
+        row += 8;
+    }
+
+    add_paragraph(
+        scene.list,
+        fonts,
+        left,
+        std::max(row, band.top + band.height - kit::compact_metrics.small_line * 3),
+        column,
+        show("If OA stops, the copy carries on from here next time."),
+        kit::FontRole::small,
+        kit::colour::quiet,
+        kit::Align::centre
+    );
+    if (session.model.controller) {
+        add_paragraph(
+            scene.list,
+            fonts,
+            left,
+            band.top + band.height - kit::compact_metrics.small_line,
+            column,
+            show("A continues. B goes back."),
+            kit::FontRole::small,
+            kit::colour::hint,
+            kit::Align::centre
+        );
+    }
+    add_text(
+        scene.list,
+        {left,
+         band.top + band.height - kit::compact_metrics.small_line * 2,
+         column,
+         kit::compact_metrics.small_line},
+        show("To Documents › Open Annihilation › Games and Expansions"),
+        kit::FontRole::small,
+        kit::colour::quiet,
+        kit::Align::centre
+    );
+    scene.list.tab_order = std::move(order);
+}
+
 /// How tall a coach card is for a body.
 ///
 /// @param fonts the fonts; null estimates
@@ -1007,11 +1350,12 @@ void lay_buttons(
     const int32_t width = frame.area.width;
     const int32_t height = frame.area.height;
     const kit::Rect room{0, 0, width, height};
+    const StepPlace place = step_place(session.model.step, session.model.walk);
     kit::StepLook step;
-    step.name = std::string(interface_text("THE MAIN MENU"));
+    step.name = std::string(interface_text(place.name));
     step.pattern = std::string(interface_text(kit::step_line_pattern));
-    step.index = 3;
-    step.count = 3;
+    step.index = place.index;
+    step.count = place.count;
     const std::string kicker = kit::step_line(step);
     const std::string heading = show("Two buttons for everything Open Annihilation adds");
     const std::string paragraph = show(
@@ -1181,15 +1525,27 @@ Outcome activate(Session& session, const Scene& scene, kit::ControlId id) {
         return outcome;
     switch (id) {
     case skip_id:
-        outcome.ask = Ask::skip;
+        if (session.model.step == Step::game)
+            outcome.ask = Ask::quit;
+        else if (session.model.step == Step::copying)
+            outcome.ask = Ask::cancel_copy;
+        else
+            outcome.ask = Ask::skip;
         return outcome;
     case back_id:
-        if (session.model.step != Step::language)
+        if (session.model.step != Step::language && session.model.step != Step::copying)
             outcome.ask = Ask::back;
         return outcome;
     case next_id:
     case start_id:
-        outcome.ask = Ask::advance;
+        if (session.model.step == Step::copying && session.model.copy.running &&
+            !session.model.copy.checked)
+            outcome.ask = Ask::pause_copy;
+        else
+            outcome.ask = Ask::advance;
+        return outcome;
+    case locate_id:
+        outcome.ask = Ask::locate;
         return outcome;
     case on_id:
         session.model.online_on = true;
@@ -1220,7 +1576,18 @@ Outcome activate(Session& session, const Scene& scene, kit::ControlId id) {
     default:
         break;
     }
-    if (id >= card_id) {
+    if (id >= source_id) {
+        const int32_t index = id - source_id;
+        if (index < 0 || index >= static_cast<int32_t>(session.model.sources.size()))
+            return outcome;
+        if (session.model.source != index) {
+            session.model.source = index;
+            session.interaction.focused = id;
+            outcome.redraw = true;
+        }
+        return outcome;
+    }
+    if (id >= card_id && id < source_id) {
         const int32_t index = id - card_id;
         if (index < 0 || index >= session.carousel.count)
             return outcome;
@@ -1339,10 +1706,14 @@ void ensure_focus(Session& session, const kit::DisplayList& list) {
     kit::ControlId wanted = next_id;
     if (session.model.step == Step::language)
         wanted = card_id + session.carousel.selected;
+    else if (session.model.step == Step::game)
+        wanted = session.model.source >= 0 ? source_id + session.model.source : locate_id;
     else if (session.model.step == Step::online)
         wanted = session.model.online_on ? on_id : off_id;
-    else
+    else if (session.model.step == Step::buttons)
         wanted = start_id;
+    else
+        wanted = next_id;
     if (kit::control_of(list, wanted) == nullptr && !list.tab_order.empty())
         wanted = list.tab_order.front();
     session.interaction.focused = wanted;
@@ -1357,6 +1728,12 @@ Scene lay_out(const Session& session, const kit::Frame& frame, const kit::Fonts*
     switch (session.model.step) {
     case Step::language:
         lay_language(scene, session, frame, fonts);
+        break;
+    case Step::game:
+        lay_game(scene, session, frame, fonts);
+        break;
+    case Step::copying:
+        lay_copying(scene, session, frame, fonts);
         break;
     case Step::online:
         lay_online(scene, session, frame, fonts);
@@ -1426,9 +1803,22 @@ Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
         return outcome;
     }
     if (pressed == kit::Key::escape) {
-        if (session.model.step != Step::language)
+        if (session.model.step == Step::copying && !session.model.copy.checked)
+            outcome.ask = Ask::cancel_copy;
+        else if (session.model.step != Step::language && session.model.step != Step::copying)
             outcome.ask = Ask::back;
         return outcome;
+    }
+    if (session.model.step == Step::game &&
+        (pressed == kit::Key::up || pressed == kit::Key::down || pressed == kit::Key::left ||
+         pressed == kit::Key::right)) {
+        const int32_t count = static_cast<int32_t>(session.model.sources.size());
+        if (count > 0) {
+            const int32_t index = session.model.source < 0 ? 0 : session.model.source;
+            const int32_t next = kit::choice_step(index, count, pressed);
+            if (next != session.model.source)
+                return activate(session, scene, source_id + next);
+        }
     }
     const kit::ControlId focused = session.interaction.focused;
     const bool on_choice = focused == on_id || focused == off_id;
@@ -1442,7 +1832,9 @@ Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
     }
     const kit::KeyOutcome taken = kit::key(session.interaction, scene.list, pressed);
     if (taken.result == kit::KeyResult::cancel) {
-        if (session.model.step != Step::language)
+        if (session.model.step == Step::copying && !session.model.copy.checked)
+            outcome.ask = Ask::cancel_copy;
+        else if (session.model.step != Step::language && session.model.step != Step::copying)
             outcome.ask = Ask::back;
         return outcome;
     }

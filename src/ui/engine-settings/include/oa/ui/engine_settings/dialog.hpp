@@ -87,12 +87,17 @@ enum class Page : uint8_t {
     game_files,
     /// Downloads: when catalogues are checked, each registry's install ID
     /// and the downloaded files. On the main menu a link opens the Library
-    /// on Registries. Listed after Game files and before System.
+    /// on Registries. Listed after Game files and before Game Content.
     downloads,
     /// System: the player's own folder, and, where the game registers file
-    /// types at run time, a switch for each. Listed after Downloads and
+    /// types at run time, a switch for each. Listed after Game Content and
     /// before Developer.
     system,
+    /// Game Content: each copied bundle, its size and its check, and the
+    /// buttons that check again, copy again or open the games folder.
+    /// Listed after Downloads and before System. Its number follows System's
+    /// so System stays 10.
+    game_content,
     mod_keys,   ///< the mod's keys
     mod_patrol, ///< what patrolling builders do
     mod_guard,  ///< what guarding builders do
@@ -104,12 +109,12 @@ enum class Page : uint8_t {
 };
 
 /// The number of sections, of every kind of dialog, counting Downloads,
-/// System and the registered page.
-inline constexpr std::size_t page_count = 17;
-/// The most sections a dialog lists: the engine's settings' eleven with
-/// Touch, Controller and Game files, eight without them; a mod's options have
+/// Game Content, System and the registered page.
+inline constexpr std::size_t page_count = 18;
+/// The most sections a dialog lists: the engine's settings' twelve with
+/// Touch, Controller and Game files, nine without them; a mod's options have
 /// five.
-inline constexpr std::size_t most_listed_pages = 11;
+inline constexpr std::size_t most_listed_pages = 12;
 /// Windows and Linux register the four file types at run time, and macOS
 /// chooses whether this copy is the default opener of each, so System lists
 /// a switch for each. iOS takes the types from the app and has no way to
@@ -144,10 +149,10 @@ enum class DialogKind : uint8_t {
 /// @param controller a gamepad has sent input in this run
 ///     (Dialog::controller), so that the engine's settings list Controller
 ///     after Touch and before Game files and Developer
-/// @return eight sections for the engine's settings (Controls, Common
-///     Tweaks, Language & Text, Graphics, User Interface, Downloads, System
-///     and Developer), one more for each of Touch, Controller and Game files
-///     listed, eleven with all three; five
+/// @return nine sections for the engine's settings (Controls, Common
+///     Tweaks, Language & Text, Graphics, User Interface, Downloads, Game
+///     Content, System and Developer), one more for each of Touch, Controller
+///     and Game files listed, twelve with all three; five
 ///     for a mod's options and one for Language & Text alone, whatever the
 ///     others say
 [[nodiscard]] std::span<const Page> dialog_pages(
@@ -372,7 +377,7 @@ inline constexpr int32_t first_registered_nav_control = -10000;
 /// Returns the control of a section's entry in the list: its place among
 /// its kind of dialog's sections, each section counted whether or not it is
 /// listed, so that Touch is 5, Controller 6, Developer 7, Game files 8,
-/// Downloads 9 and System 10 in every dialog of the engine's settings, and a dialog
+/// Downloads 9, System 10 and Game Content 11 in every dialog of the engine's settings, and a dialog
 /// without Touch has no control 5, one without Controller no control 6.
 /// The registered page has no entry of this form; its entries are
 /// registered_nav_control.
@@ -538,6 +543,18 @@ enum class DialogAction : uint8_t {
     /// SHOW on Developer's UI kit gallery: the host opens the gallery over
     /// the dialog, which stays open under it
     show_gallery,
+    /// CHECK AGAIN on Game Content: the host checks the copy again and the
+    /// dialog stays open
+    check_content,
+    /// COPY AGAIN FROM… on Game Content: the host asks for a place and copies
+    /// from it, and the dialog stays open
+    copy_content_again,
+    /// OPEN FOLDER on Game Content: open the Games folder in the system's
+    /// file manager. The dialog stays open.
+    open_content_folder,
+    /// CANCEL on the bundle being copied: stop that copy. What was already
+    /// in the managed folders stays. The dialog stays open.
+    cancel_content_copy,
 };
 
 /// One of the Library's tabs, as the dialog asks the host to open it
@@ -672,6 +689,20 @@ struct AvailableLanguage {
     uint64_t bytes,
     bool downloads_on
 );
+
+/// One bundle on Game Content. The host fills the words; the page shows them
+/// as they are, so a product name is not looked up again.
+struct GameContentRow {
+    std::string id;       ///< the bundle's id, a row word such as totala
+    std::string name;     ///< the name shown, as the table writes it
+    std::string size;     ///< the size, already as the page shows it
+    std::string check;    ///< the check, already in the language shown
+    bool warn{};          ///< the check names files that differ
+    bool copying{};       ///< this bundle is being copied; the row offers Cancel
+    bool checking{};      ///< a check is running; `check` is its progress
+    int32_t bar_done{-1}; ///< the bar's filled part; -1 draws no bar
+    int32_t bar_whole{1}; ///< the bar's whole
+};
 
 /// One registry's install ID, as Downloads shows it. The host fills this
 /// from the registries that use an install ID, built-in first, and never
@@ -909,6 +940,10 @@ struct Dialog {
     /// SHOW AGAIN was pressed. OK forgets that the welcome setup is done, so
     /// it shows at the next main menu. Cancel leaves the preference.
     bool welcome_again{};
+    /// Each bundle Game Content lists, in the table's order. The host fills
+    /// it as the dialog opens and when CHECK AGAIN returns. Empty still shows
+    /// the sentence and the three buttons.
+    std::vector<GameContentRow> game_content;
 };
 
 /// Returns every standard hack as Developer Mode shows it: as the profile

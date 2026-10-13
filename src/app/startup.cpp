@@ -310,6 +310,7 @@ void check_game_files_options(Options& options) {
         {options.check_language_registry, "--check-language-registry"},
         {options.check_language_notice, "--check-language-notice"},
         {options.check_first_run, "--check-first-run"},
+        {options.check_setup_window, "--check-setup-window"},
         {options.check_text_fit, "--check-text-fit"},
         {options.check_folder_chooser, "--check-folder-chooser"},
         {options.check_patrol_reclaim, "--check-patrol-reclaim"},
@@ -525,6 +526,7 @@ void check_director_options(Options& options) {
         {options.check_language_registry, "--check-language-registry"},
         {options.check_language_notice, "--check-language-notice"},
         {options.check_first_run, "--check-first-run"},
+        {options.check_setup_window, "--check-setup-window"},
         {options.check_text_fit, "--check-text-fit"},
         {options.check_folder_chooser, "--check-folder-chooser"},
         {options.check_patrol_reclaim, "--check-patrol-reclaim"},
@@ -603,6 +605,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_language_registry, "--check-language-registry"},
             {options.check_language_notice, "--check-language-notice"},
             {options.check_first_run, "--check-first-run"},
+            {options.check_setup_window, "--check-setup-window"},
             {options.check_text_fit, "--check-text-fit"},
             {options.check_folder_chooser, "--check-folder-chooser"},
             {options.check_patrol_reclaim, "--check-patrol-reclaim"},
@@ -807,6 +810,7 @@ constexpr FlagOption kFlagOptions[] = {
     {"--check-language-registry", &Options::check_language_registry},
     {"--check-language-notice", &Options::check_language_notice},
     {"--check-first-run", &Options::check_first_run},
+    {"--check-setup-window", &Options::check_setup_window},
     {"--check-text-fit", &Options::check_text_fit},
     {"--check-folder-chooser", &Options::check_folder_chooser},
     {"--check-patrol-reclaim", &Options::check_patrol_reclaim},
@@ -1344,7 +1348,8 @@ void write_startup_line(std::string_view text) {
                      "[--check-unit-language TAG] "
                      "[--check-language-switch] "
                      "[--check-language-registry] "
-                     "[--check-language-notice] [--check-first-run] [--check-text-fit] "
+                     "[--check-language-notice] [--check-first-run] [--check-setup-window] "
+                     "[--check-text-fit] "
                      "[--check-folder-chooser] "
                      "[--check-patrol-reclaim] [--check-reclaim-cursor] [--check-build-preview] "
                      "[--check-megamap-clicks] [--check-radar-orders] "
@@ -1536,14 +1541,15 @@ void write_startup_line(std::string_view text) {
         result.check_side_column || result.check_match_bars || !result.check_unit_pages.empty() ||
         result.check_kill_board || !result.check_unit_language.empty() ||
         result.check_language_switch || result.check_language_registry ||
-        result.check_language_notice || result.check_first_run || result.check_text_fit ||
-        result.check_folder_chooser || result.check_patrol_reclaim || result.check_reclaim_cursor ||
-        result.check_build_preview || result.check_pointer_interfaces ||
-        result.check_megamap_clicks || result.check_radar_orders || result.check_touch_controls ||
-        result.check_pad_controls || result.check_running_while_inactive ||
-        result.check_director_view || result.check_director_render || result.check_interpolation ||
-        result.check_unit_playout || result.check_paused_save || result.check_simulation_hash ||
-        result.check_map_packs || result.check_map_browser || result.check_map_pack_lists;
+        result.check_language_notice || result.check_first_run || result.check_setup_window ||
+        result.check_text_fit || result.check_folder_chooser || result.check_patrol_reclaim ||
+        result.check_reclaim_cursor || result.check_build_preview ||
+        result.check_pointer_interfaces || result.check_megamap_clicks ||
+        result.check_radar_orders || result.check_touch_controls || result.check_pad_controls ||
+        result.check_running_while_inactive || result.check_director_view ||
+        result.check_director_render || result.check_interpolation || result.check_unit_playout ||
+        result.check_paused_save || result.check_simulation_hash || result.check_map_packs ||
+        result.check_map_browser || result.check_map_pack_lists;
     // A capture and a showcase need the application's own loop and window,
     // which checks and benchmarks do not run.
     const bool check_run = result.fixed_clock || result.check_navigation ||

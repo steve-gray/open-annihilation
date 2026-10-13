@@ -1044,6 +1044,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_view_rules.cpp src/app/runtime_game_text.cpp src/app/runtime_language.cpp
   src/app/runtime_language_notice.cpp
   src/app/runtime_first_run.cpp
+  src/app/setup_before_game.cpp
   src/app/language_packs.cpp
   src/app/runtime_picture_captions.cpp
   src/app/runtime_renderer.cpp
@@ -1770,6 +1771,25 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_first_run_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED first-run-clean)
+      # The pre-game window: an empty player folder, Deutsch, the check's
+      # install copied into Games and Expansions, then online features on the
+      # menu. --game-dir is what the menu plays. Each run starts from a clean
+      # folder.
+      set(oa_setup_window_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/setup-window")
+      file(MAKE_DIRECTORY "${oa_setup_window_dir}")
+      add_test(NAME setup-window-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_setup_window_dir}/Open Annihilation" "${oa_setup_window_dir}/data"
+        "${oa_setup_window_dir}/setup-window.conf")
+      set_tests_properties(setup-window-clean PROPERTIES FIXTURES_SETUP setup-window-clean)
+      add_test(NAME native-setup-window COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --first-run --check-setup-window
+        --preferences-file "${oa_setup_window_dir}/setup-window.conf"
+        --user-folder "${oa_setup_window_dir}/Open Annihilation"
+        --data-dir "${oa_setup_window_dir}/data")
+      set_tests_properties(native-setup-window PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_setup_window_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+        FIXTURES_REQUIRED setup-window-clean)
       # The locator, driven with Tab onto the fixture install and then the
       # choose key. It leaves before a match. Each run starts from a clean
       # folder.
