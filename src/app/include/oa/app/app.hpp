@@ -492,6 +492,10 @@ struct Options {
     // Walks the first-run setup over the main menu: a built-in language, a
     // pack that fails and then retries, Skip setup, and both online choices.
     bool check_first_run = false;
+    // Opens every Open Annihilation screen in English, German, French,
+    // Spanish, Italian and Simplified Chinese, at 640x480 and 1280x720, and
+    // fails when any text is wider than its box or crosses another text.
+    bool check_text_fit = false;
     // Opens the locator on --game-dir's parent, moves onto that folder with
     // Tab and chooses it. With --snapshot, writes that PNG and a Deck PNG.
     bool check_folder_chooser = false;

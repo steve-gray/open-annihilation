@@ -120,6 +120,7 @@ inline constexpr std::string_view interface_words[] = {
     "OFF",
     "OK",
     "ON",
+    "OPEN ANNIHILATION",
     "Open Annihilation could not read {file}. Connect it again and tap Continue. What was copied "
     "is kept.",
     "Open Annihilation could not read {file}: {why}. Connect it again and tap Continue. What was "

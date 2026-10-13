@@ -2,14 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The kinds of package the game installs, and the names and folder reads
-// each kind shares: oamod, oamap and oalang.
+// each kind shares: oamod, oamap, oalang and expansion.
 
 #include "files.hpp"
 
+#include "oa/app/content_copy.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oalang.hpp"
 #include "oa/app/package_install/oamap.hpp"
 #include "oa/app/package_install/oamod.hpp"
+#include "oa/app/package_install/oaexp.hpp"
 #include "oa/app/package_install/origin.hpp"
 #include "oa/app/package_install/prompts.hpp"
 #include "oa/app/user_folder.hpp"
@@ -72,6 +74,15 @@ constexpr KindPrompts kLanguagePrompts{
     .refused = &oalang::refused_prompt,
 };
 
+constexpr KindPrompts kExpansionPrompts{
+    .installing = &oaexp::installing_prompt,
+    .question = &oaexp::question_prompt,
+    .installed = &oaexp::installed_prompt,
+    .updated = &oaexp::updated_prompt,
+    .refusal_text = &oaexp::refusal_text,
+    .refused = &oaexp::refused_prompt,
+};
+
 constexpr PackageKind kKinds[] = {
     {
         .name = "oamod",
@@ -114,6 +125,20 @@ constexpr PackageKind kKinds[] = {
         .plan = &oalang::plan_install,
         .check_staged = &oalang::check_staged,
         .prompts = &kLanguagePrompts,
+    },
+    {
+        .name = "expansion",
+        .extension = oaexp::oaexp_extension,
+        .manifest = oaexp::manifest_file_name,
+        .manifest_most_bytes = oa::formats::oamod::max_input_bytes,
+        .root_folder = managed_expansions_folder,
+        .prefix = ".oaexp-",
+        .read_manifest = &oaexp::read_manifest,
+        .read_installed = &oaexp::read_installed,
+        .read_backup = &oaexp::read_backup,
+        .plan = &oaexp::plan_install,
+        .check_staged = nullptr,
+        .prompts = &kExpansionPrompts,
     },
 };
 

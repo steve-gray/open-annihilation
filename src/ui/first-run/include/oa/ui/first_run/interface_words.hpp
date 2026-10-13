@@ -14,10 +14,10 @@ namespace oa::ui::first_run {
 /// (oa/data/languages/interface_text.hpp). oa-tool sorts the modules'
 /// lists together and keeps one of each text.
 inline constexpr std::string_view interface_words[] = {
-    "A random 128-bit number, made the first time you download from a registry, not when the "
-    "game starts. Each registry that asks has its own. Core Prime asks for one. It is sent "
-    "only when asking that registry for a download. Turning it off forgets it, and downloads "
-    "from that registry stop. Built-in languages and files you open keep working.",
+    "A random 128-bit number, made the first time you download from a registry, not when the game "
+    "starts. Each registry that asks has its own. Core Prime asks for one. It is sent only when "
+    "asking that registry for a download. Turning it off forgets it, and downloads from that "
+    "registry stop. Built-in languages and files you open keep working.",
     "A random install ID, one per registry, is sent only when downloading from that registry.",
     "Active",
     "Back",
@@ -28,9 +28,9 @@ inline constexpr std::string_view interface_words[] = {
     "Checking…",
     "Choose your language.",
     "Couldn't download",
+    "Downloading",
     "Downloads are off, so language packs stay offline.",
     "Downloads, updates and a number only you hold",
-    "Downloading",
     "Get",
     "Get language packs, mods and map packs from Core Prime.",
     "Get, update and switch mods, map packs and languages. The number is how many mods you have.",
@@ -42,18 +42,19 @@ inline constexpr std::string_view interface_words[] = {
     "ONLINE",
     "ONLINE FEATURES",
     "Offline",
+    "Open Annihilation",
     "Open Annihilation's own settings: controls, graphics, the interface's size, downloads and "
     "your files.",
-    "Other languages download from Core Prime. The first download makes a random install ID, "
-    "which the next step explains.",
+    "Other languages download from Core Prime. The first download makes a random install ID, which "
+    "the next step explains.",
     "Previous",
     "Retry",
     "Settings",
     "Skip setup",
     "Start playing",
     "THE MAIN MENU",
-    "The Library is where you get mods, map packs and languages. Settings is where you change "
-    "how Open Annihilation looks and plays. Everything else on this menu is the game's own.",
+    "The Library is where you get mods, map packs and languages. Settings is where you change how "
+    "Open Annihilation looks and plays. Everything else on this menu is the game's own.",
     "The catalogue could not be read, so language packs stay offline.",
     "Turn on online features",
     "Two buttons for everything Open Annihilation adds",
@@ -61,8 +62,8 @@ inline constexpr std::string_view interface_words[] = {
     "Welcome",
     "Welcome to Open Annihilation",
     "Your install ID",
-    "{step} · {index} OF {count}",
     "of",
+    "{step} · {index} OF {count}",
 };
 
 } // namespace oa::ui::first_run

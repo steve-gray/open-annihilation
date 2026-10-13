@@ -52,13 +52,13 @@ accepts, including one with a query. The descriptor's `catalogue`,
 
 | Member | Required | Rule |
 |---|---|---|
-| `kind` | yes | `oamod`, `oamap` or `oalang`. |
+| `kind` | yes | `oamod`, `oamap`, `oalang` or `expansion`. |
 | `id` | yes | The package key. No key contains `@`. |
 | `name` | yes | 1 to 64 bytes. |
 | `release` | yes | A whole number from 1 to 2147483647. |
 | `size` | yes | A whole number of bytes from 1 to 4294967296. |
 | `sha256` | yes | 64 lower-case hex digits. |
-| `file` | yes | A catalogue reference whose last segment is `<sha256>.<kind>`. |
+| `file` | yes | A catalogue reference whose last segment is `<sha256>.<kind>`, or `<sha256>.oaexp` for an expansion. |
 
 A mod or map-pack key is lower-case kebab-case of 1 to 64 bytes. A language
 key is a language tag of 2 to 35 bytes: a first part of letters (`A-Z` or
@@ -69,12 +69,13 @@ the catalogue's folder. It is at most 512 bytes. It has no scheme, no `//`,
 no `.` or `..` segment, no empty segment, and no `\`, `%`, `?`, `#`, `:`,
 space, control character or byte above 0x7E. OA resolves it against the host
 that served the catalogue. The last segment of `file` MUST be the lower-case
-hex digest, a dot, and the kind. A registry SHOULD put the file at
-`/v1/p/<sha256>.<kind>`.
+hex digest, a dot, and the kind, except an expansion, whose last segment is
+`<sha256>.oaexp`. A registry SHOULD put the file at
+`/v1/p/<sha256>.<kind>`, and an expansion at `/v1/p/<sha256>.oaexp`.
 
 | Member | Required | Rule |
 |---|---|---|
-| `version` | mods only | 1 to 32 bytes. Optional for a map pack or a language pack. |
+| `version` | mods and expansions | 1 to 32 bytes. Optional for a map pack or a language pack. |
 | `revision` | mods only | A whole number from 1 to 65535. If any other kind names it, the same rule applies. |
 | `publisher`, `author` | no | 1 to 64 bytes when present. |
 | `summary` | no | 0 to 200 bytes. |
@@ -154,6 +155,17 @@ ignored.
 
 The manifest inside the package is described by
 [languages.md](../languages.md).
+
+## Expansions
+
+An expansion (`expansion`) MUST name `version` and `extends`. `id` is a
+built-in expansion id. `extends` is that expansion's base games, in the
+built-in order, and the list is not empty. A missing list is refused the
+same way a different list is. The file's last segment is `<sha256>.oaexp`.
+`name` is the ordinary catalogue name, 1 to 64 bytes. The manifest inside
+the package requires the expansion's English name; the catalogue entry does
+not. `revision` stays optional. The manifest inside the package is
+described by the [OAEXP standard](../expansions/oaexp-standard.md).
 
 ## Sequence, expiry and how OA keeps a catalogue
 

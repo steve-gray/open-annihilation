@@ -145,6 +145,16 @@ class ScriptInstance {
     /// @return False when the interpreter failed the step, which is noted.
     bool tick(uint32_t elapsed);
 
+    /// Returns the turn one axis of a piece is adding each tick.
+    ///
+    /// The turn is in angle words, 65536 a full turn, and negative the other
+    /// way. It is the rate the piece is turning at now.
+    ///
+    /// @param piece Piece index.
+    /// @param axis Axis 0..2.
+    /// @return The turn per tick, or 0 when the piece or axis is outside the script.
+    [[nodiscard]] int32_t piece_turn_speed(uint32_t piece, uint32_t axis) const noexcept;
+
     /// Returns the interpreter.
     sim::script_vm::Vm& vm() noexcept { return vm_; }
 

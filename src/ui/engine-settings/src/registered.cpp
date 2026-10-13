@@ -110,8 +110,8 @@ int32_t registered_nav_index(const Dialog& dialog, int32_t control) noexcept {
     return index;
 }
 
-NavLayout layout_registered_nav(const Dialog& dialog) {
-    const geometry::Sizes& sized = geometry::sizes_of(dialog);
+NavLayout layout_registered_nav(const Dialog& dialog, const geometry::Sizes* sizes) {
+    const geometry::Sizes& sized = sizes != nullptr ? *sizes : geometry::sizes_of(dialog);
     NavLayout layout;
     layout.area = {
         geometry::edge,
@@ -257,9 +257,9 @@ wheel_registered_nav(Dialog& dialog, int32_t x, int32_t y, float notches) {
     return DialogAction::redraw;
 }
 
-RegisteredContent registered_content(const Dialog& dialog) {
+RegisteredContent registered_content(const Dialog& dialog, const geometry::Sizes* sizes) {
     RegisteredContent content;
-    const geometry::Sizes& sized = geometry::sizes_of(dialog);
+    const geometry::Sizes& sized = sizes != nullptr ? *sizes : geometry::sizes_of(dialog);
     content.scroll.view = sized.view;
     const RegisteredPage* page = open_page(dialog);
     if (page == nullptr)
@@ -302,8 +302,10 @@ std::string registered_heading(const Dialog& dialog) {
     return {};
 }
 
-void append_registered_nav(const Dialog& dialog, std::vector<LayoutPart>& parts) {
-    const NavLayout layout = layout_registered_nav(dialog);
+void append_registered_nav(
+    const Dialog& dialog, std::vector<LayoutPart>& parts, const geometry::Sizes* sizes
+) {
+    const NavLayout layout = layout_registered_nav(dialog, sizes);
     const int32_t scroll = std::clamp(dialog.nav_scroll, int32_t{0}, layout.limit);
     for (const NavPiece& piece : layout.pieces) {
         geometry::SourceRect rect = piece.rect;
@@ -332,9 +334,11 @@ void append_registered_nav(const Dialog& dialog, std::vector<LayoutPart>& parts)
     }
 }
 
-void append_registered_content(const Dialog& dialog, std::vector<LayoutPart>& parts) {
-    const RegisteredContent content = registered_content(dialog);
-    const geometry::Sizes& sized = geometry::sizes_of(dialog);
+void append_registered_content(
+    const Dialog& dialog, std::vector<LayoutPart>& parts, const geometry::Sizes* sizes
+) {
+    const RegisteredContent content = registered_content(dialog, sizes);
+    const geometry::Sizes& sized = sizes != nullptr ? *sizes : geometry::sizes_of(dialog);
     const auto keep = [&](LayoutPart part) {
         if (wholly_in(part.rect, sized.view))
             parts.push_back(std::move(part));

@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// pack: a folder with one manifest becomes a .oamod, a .oalang or a .oamap.
+// pack: a folder with one manifest becomes a .oamod, a .oalang, a .oamap or
+// a .oaexp.
 // A mod or a language is written here. A map is handed to pack_map. The
 // manifest is written first, then every other file in byte order of its
 // path, stored or deflated by a fixed rule, with the writer's fixed times.
@@ -11,6 +12,7 @@
 
 #include "arguments.hpp"
 #include "command.hpp"
+#include "expansion.hpp"
 #include "pack_map.hpp"
 #include "pack_names.hpp"
 
@@ -685,6 +687,7 @@ int pack_folder(
     std::string mod_name;
     std::string language_name;
     std::string map_name;
+    std::string expansion_name;
     for (const Item& item : items) {
         if (item.folder || item.name.find('/') != std::string::npos)
             continue;
@@ -694,12 +697,18 @@ int pack_folder(
             language_name = item.name;
         else if (same_ascii(item.name, "oamap.yaml"))
             map_name = item.name;
+        else if (same_ascii(item.name, "oaexp.yaml"))
+            expansion_name = item.name;
     }
-    const int manifests =
-        (mod_name.empty() ? 0 : 1) + (language_name.empty() ? 0 : 1) + (map_name.empty() ? 0 : 1);
+    const int manifests = (mod_name.empty() ? 0 : 1) + (language_name.empty() ? 0 : 1) +
+                          (map_name.empty() ? 0 : 1) + (expansion_name.empty() ? 0 : 1);
     if (manifests == 0)
-        throw Failure("the folder holds no oamod.yaml or language.yaml or oamap.yaml");
+        throw Failure(
+            "the folder holds no oamod.yaml or language.yaml or oamap.yaml or oaexp.yaml"
+        );
     if (manifests > 1) {
+        if (!expansion_name.empty())
+            throw Failure("the folder holds more than one manifest");
         if (!mod_name.empty() && !language_name.empty() && map_name.empty())
             throw Failure("the folder holds both oamod.yaml and language.yaml");
         if (!mod_name.empty() && language_name.empty() && !map_name.empty())
@@ -707,6 +716,13 @@ int pack_folder(
         if (mod_name.empty() && !language_name.empty() && !map_name.empty())
             throw Failure("the folder holds both language.yaml and oamap.yaml");
         throw Failure("the folder holds oamod.yaml, language.yaml and oamap.yaml");
+    }
+    if (!expansion_name.empty()) {
+        if (game_dir.has_value()) {
+            report_usage(output, "--game-dir is not for an expansion");
+            return exit_usage;
+        }
+        return pack_expansion(folder, nullptr, out_path, force, output);
     }
     if (!map_name.empty()) {
         PackMapRequest request;

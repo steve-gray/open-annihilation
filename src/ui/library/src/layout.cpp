@@ -4404,11 +4404,20 @@ add_registries_content(Building& building, const kit::Rect& view, int32_t width,
             registry.refreshing ? uint16_t{0} : registry_check_ms(*building.state, registry.id);
         const bool show_mark = registry.refreshing || check_ms > 0;
         int32_t cluster = inner_right;
-        cluster -= metrics.switch_width;
+        // The same growth as a settings switch: both halves hold the wider
+        // caption, and the class's switch stays when the words already fit.
+        const int32_t off_width =
+            width_of(building, kit::FontRole::small, shown(library.text, words::registry_off));
+        const int32_t on_width =
+            width_of(building, kit::FontRole::small, shown(library.text, words::registry_on));
+        constexpr int32_t switch_pad = 4;
+        const int32_t switch_columns =
+            std::max(metrics.switch_width, (std::max(off_width, on_width) + switch_pad) * 2 + 2);
+        cluster -= switch_columns;
         const kit::Rect toggle{
             cluster,
             band_top,
-            metrics.switch_width,
+            switch_columns,
             metrics.regular_line,
         };
         cluster -= metrics.button_gap;

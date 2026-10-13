@@ -630,7 +630,7 @@ check and the install-ID switch can still change.
 
 ## System
 
-![The System section: the Open Annihilation folder's path, then File Type Registration with a switch for mod packages, map packs, language packs and registry files.](images/settings/system.png)
+![The top of the System section in a game: Your files with the folder path, Welcome setup locked ("Choose from the main menu."), and the top of File Type Registration.](images/settings/system.png)
 
 System is where the game sits on your computer: your own folder, and which
 of the game's file types this copy opens.

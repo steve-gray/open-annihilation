@@ -1,15 +1,18 @@
 # Packages
 
-A registry serves three kinds of package. Each is a zip archive. OA installs
-a mod into `Mods/<id>`, a map pack into `Maps/<id>`, and a language pack into
-`Languages/<tag>`, using the id or tag inside the manifest, whatever the
-file is called.
+A registry serves four kinds of package. Each is a zip archive. OA installs
+a mod into `Mods/<id>`, a map pack into `Maps/<id>`, a language pack into
+`Languages/<tag>`, and an expansion into `Expansions/<game>/<id>`, using the
+id or tag inside the manifest, whatever the file is called. `<game>` is the
+first base game the expansion extends. The folder name `expansions` is the
+name the game uses today.
 
 | Kind | Manifest | Standard |
 |---|---|---|
 | `oamod` | `oamod.yaml`, at most 256 KiB | [OAMOD standard](../mods/oamod-standard.md) |
 | `oamap` | `oamap.yaml`, at most 256 KiB | [OAMAP standard](../maps/oamap-standard.md) |
 | `oalang` | `language.yaml`, at most 256 KiB | [Languages](../languages.md) |
+| `.oaexp` | `oaexp.yaml`, at most 256 KiB | [OAEXP standard](../expansions/oaexp-standard.md) |
 
 The catalogue entry for a package is [catalogue.md](catalogue.md). The file
 the catalogue names is the zip.
@@ -25,8 +28,8 @@ picture at `/v1/i/<sha256>.png`, on the host that serves the catalogue.
 of the picture.
 
 OA requires the catalogue's `file` to be a reference whose last segment is
-`<sha256>.<kind>`. A relative reference with that last segment is also
-accepted. A picture in the catalogue only has to be a reference ending
+`<sha256>.<kind>`. An expansion's last segment is `<sha256>.oaexp`. A
+relative reference with that last segment is also accepted. A picture in the catalogue only has to be a reference ending
 `.png`. OA does not check that a picture's file name is a hash. It does
 check that the package file's last segment is the digest.
 
@@ -57,6 +60,14 @@ is missing, too large or not UTF-8, or its table does not parse.
 Before a package is offered for use, OA has checked those limits, the hacks
 the catalogue names, and, for a map, whether it fits.
 
+An expansion is checked against the built-in table before anything is
+written. Each file must be that expansion's file by name, size and SHA-256.
+The copy lands in `Expansions/<game>/<id>` with a `.oa-content` record. The
+source is `registry <id>` when the package came from a registry, and the
+package file's path when the player opened the file. The generic installer
+does not unpack an expansion, and the folder does not hold an
+`.oa-origin.yaml`.
+
 ## The origin record
 
 When OA installs a package it writes `.oa-origin.yaml` at the top of the
@@ -73,20 +84,21 @@ made by hand; that is not an error.
 
 ## `oa-tool pack` and `oa-tool check`
 
-`oa-tool pack FOLDER` writes a `.oamod`, a `.oalang` or a `.oamap`. The
-folder's top holds one manifest, `oamod.yaml`, `language.yaml` or
-`oamap.yaml`. The manifest is written first, then every other file in byte
-order of its path, with fixed times. A file whose extension, without regard
-to case, is `png`, `jpg`, `jpeg`, `gif`, `ogg`, `mp3`, `zip`, `gz`, `bz2`,
-`xz`, `7z`, `oamod`, `oalang` or `oamap`, and an empty file, is stored.
-Every other file is deflated. The same files give the same bytes on any
+`oa-tool pack FOLDER` writes a `.oamod`, a `.oalang`, a `.oamap` or a
+`.oaexp`. The folder's top holds one manifest, `oamod.yaml`, `language.yaml`,
+`oamap.yaml` or `oaexp.yaml`. The manifest is written first, then every
+other file in byte order of its path, with fixed times. A file whose
+extension, without regard to case, is `png`, `jpg`, `jpeg`, `gif`, `ogg`,
+`mp3`, `zip`, `gz`, `bz2`, `xz`, `7z`, `oamod`, `oalang` or `oamap`, and an
+empty file, is stored. Every other file is deflated. An expansion is
+different: every file is stored. The same files give the same bytes on any
 machine with the same zlib.
 
 `--out FILE` names the package. Without it, the name comes from the manifest
 and is written in the current folder. `--force` replaces an existing file.
 A folder the installer would refuse is not packed. A map pack needs
 `--game-dir DIR` for the game's palette, which previews use. `--game-dir`
-on a mod or a language pack is a usage error.
+on a mod, a language pack or an expansion is a usage error.
 
 `oa-tool check FILE` runs the same checks an install runs before it writes,
 and reports whether that install would accept the file. `--json` prints one
@@ -98,7 +110,10 @@ JSON object. The keys, in order, are `check`, `ok`, `problems`, `warnings`,
   `full_hash`, `hacks`, `packaging`;
 - a language pack: `language` in place of those;
 - a map pack: `summary`, `author`, `homepage`, `tags`, `requires`,
-  `packaging`, then `maps`.
+  `packaging`, then `maps`;
+- an expansion: `extends`, `needs` and `author`.
+
+An expansion does not take `--game-dir`.
 
 A key the package does not have is left out. `revision` is null when a
 language pack has no packaging revision. A map pack needs `--game-dir`, the
