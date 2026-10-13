@@ -26,7 +26,7 @@ target_include_directories(oa-tool-commands SYSTEM PRIVATE
   ${PROJECT_SOURCE_DIR}/third_party/monocypher)
 target_compile_features(oa-tool-commands PUBLIC cxx_std_20)
 target_link_libraries(oa-tool-commands
-  PRIVATE oa-options oa-app-package-install oa-app-game-directory oa-data-languages
+  PRIVATE oa-options oa-app-package-install oa-app-game-directory oa-data-content-bundles oa-data-languages
     oa-data-map-pack oa-data-map-fit oa-formats-oamod oa-formats-json oa-formats-ota oa-formats-tnt
     oa-formats-zip oa-base-sha256 oa-base-text oa-platform-shims oa-base-signing oa-data-catalogue
     oa-data-registry oa-platform-random oa-app-content oa-netgame-http oa-formats-url

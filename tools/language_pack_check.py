@@ -49,8 +49,8 @@ LICENCE = "SPDX-License-Identifier: GPL-3.0-only"
 
 MANIFEST_KEYS = {
     "oalang", "tag", "name", "english-name", "word", "version", "locales",
-    "fallbacks", "text", "unicode", "homepage", "tags", "requires",
-    "fonts", "warmup", "packaging",
+    "fallbacks", "text", "unicode", "homepage", "tags", "supportedGames",
+    "requiredExpansions", "requires", "fonts", "warmup", "packaging",
 }
 """The keys a manifest may hold."""
 
@@ -265,9 +265,14 @@ def check_manifest(pack: Path, report: Report) -> dict:
         report.fail("language.yaml's requires is not a mapping")
         requires = None
     elif isinstance(requires, dict):
-        for key in requires:
-            if key != "engine":
-                report.fail("language.yaml's requires takes engine only")
+        for key, value in requires.items():
+            if key == "engine":
+                continue
+            if key == "base":
+                if value != "ta-3.1c":
+                    report.fail("language.yaml's requires.base must be ta-3.1c")
+                continue
+            report.fail("language.yaml's requires takes engine and base")
     for problem in oamod_yaml.package_key_problems(values, requires if isinstance(requires, dict) else None):
         report.fail(f"language.yaml {problem}")
     check_fonts(pack, values, report)

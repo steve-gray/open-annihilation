@@ -306,7 +306,7 @@ void package_keys_are_read_and_checked() {
     OA_CHECK(refused("oalang: 1\ntag: zh-Hans\nword: Chinese\ntags: [Not-Kebab]\n"));
     OA_CHECK(refused("oalang: 1\ntag: zh-Hans\nword: Chinese\ntags: []\n"));
     OA_CHECK(refused("oalang: 1\ntag: zh-Hans\nword: Chinese\nrequires: {engine: \">= 1.2\"}\n"));
-    OA_CHECK(refused("oalang: 1\ntag: zh-Hans\nword: Chinese\nrequires: {base: ta-3.1c}\n"));
+    OA_CHECK(refused("oalang: 1\ntag: zh-Hans\nword: Chinese\nrequires: {base: other}\n"));
 
     languages::PackManifest unmet;
     OA_CHECK(
@@ -319,6 +319,94 @@ void package_keys_are_read_and_checked() {
         )
     );
     OA_CHECK(unmet.requires_engine == ">= 9999.0.0");
+}
+
+/// supportedGames defaults to every base game, and requires.base reads as totala.
+void content_needs_are_read() {
+    languages::PackManifest minimal;
+    std::string error;
+    OA_CHECK(
+        languages::read_manifest(
+            bytes_of("oalang: 1\ntag: zh-Hans\nword: Chinese\n"), minimal, &error
+        )
+    );
+    OA_CHECK(error.empty());
+    OA_CHECK(minimal.supported_games == (std::vector<std::string>{"totala", "totala-demo"}));
+    OA_CHECK(minimal.required_expansions.empty());
+    OA_CHECK(minimal.requires_base.empty());
+
+    languages::PackManifest named;
+    OA_CHECK(
+        languages::read_manifest(
+            bytes_of(
+                "oalang: 1\n"
+                "tag: zh-Hans\n"
+                "word: Chinese\n"
+                "supportedGames: [\"totala\", \"totala-demo\"]\n"
+                "requiredExpansions: [\"music\"]\n"
+            ),
+            named,
+            &error
+        )
+    );
+    OA_CHECK(named.supported_games == (std::vector<std::string>{"totala", "totala-demo"}));
+    OA_CHECK(named.required_expansions == std::vector<std::string>{"music"});
+
+    languages::PackManifest legacy;
+    OA_CHECK(
+        languages::read_manifest(
+            bytes_of("oalang: 1\ntag: zh-Hans\nword: Chinese\nrequires: {base: ta-3.1c}\n"),
+            legacy,
+            &error
+        )
+    );
+    OA_CHECK(legacy.supported_games == std::vector<std::string>{"totala"});
+    OA_CHECK(legacy.requires_base == "ta-3.1c");
+
+    languages::PackManifest both;
+    OA_CHECK(
+        languages::read_manifest(
+            bytes_of(
+                "oalang: 1\n"
+                "tag: zh-Hans\n"
+                "word: Chinese\n"
+                "supportedGames: [\"totala-demo\"]\n"
+                "requires: {base: ta-3.1c}\n"
+            ),
+            both,
+            &error
+        )
+    );
+    OA_CHECK(both.supported_games == std::vector<std::string>{"totala-demo"});
+    OA_CHECK(both.requires_base == "ta-3.1c");
+
+    const auto refused = [](std::string_view text) {
+        languages::PackManifest kept;
+        kept.tag = "kept";
+        std::string failure;
+        const bool read = languages::read_manifest(bytes_of(text), kept, &failure);
+        OA_CHECK(kept.tag == "kept");
+        return !read ? failure : std::string{};
+    };
+    const std::string unknown =
+        refused("oalang: 1\ntag: zh-Hans\nword: Chinese\nsupportedGames: [\"no-such\"]\n");
+    OA_CHECK(unknown.find("no-such") != std::string::npos);
+    OA_CHECK(unknown.find("is not a base game") != std::string::npos);
+    const std::string extends = refused(
+        "oalang: 1\ntag: zh-Hans\nword: Chinese\n"
+        "supportedGames: [\"totala-demo\"]\n"
+        "requiredExpansions: [\"core-contingency\"]\n"
+    );
+    OA_CHECK(extends.find("core-contingency") != std::string::npos);
+    OA_CHECK(extends.find("extends none") != std::string::npos);
+    OA_CHECK(
+        refused("oalang: 1\ntag: zh-Hans\nword: Chinese\nrequires: {base: totala}\n")
+            .find("ta-3.1c") != std::string::npos
+    );
+    OA_CHECK(
+        refused("oalang: 1\ntag: zh-Hans\nword: Chinese\nsupportedGames: []\n")
+            .find("at least one") != std::string::npos
+    );
 }
 
 /// The game's own texts: a mod's pack first, then the game data in the
@@ -480,6 +568,7 @@ int main(int argc, char** argv) {
     pseudo_pack_reads_whole();
     manifests_are_refused_by_rule();
     package_keys_are_read_and_checked();
+    content_needs_are_read();
     game_texts_are_looked_up_through_the_layers();
     unit_texts_are_looked_up_through_the_layers();
     unit_texts_check_the_english_they_translate();

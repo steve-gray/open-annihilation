@@ -15,6 +15,9 @@
 
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/base/sha256.hpp"
+#include "oa/data/content_bundles.hpp"
+#include "oa/data/languages/language_pack.hpp"
+#include "oa/data/map_pack/manifest.hpp"
 #include "oa/data/mod_profile.hpp"
 #include "oa/data/mod_profile/registry.hpp"
 #include "oa/formats/oamod.hpp"
@@ -71,6 +74,12 @@ struct LanguageFields {
     std::optional<std::vector<std::string>> fallbacks{};
     std::optional<bool> unicode{};
     std::optional<int64_t> revision{}; ///< packaging.revision, when it is a whole number
+    /// True when the manifest was read, so the game lists below are filled in.
+    bool games_known{false};
+    /// Base games the pack's text is for. Every base game when the key is omitted.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty when the manifest names none.
+    std::vector<std::string> required_expansions{};
 };
 
 /// A file opened for a positioned read.
@@ -322,6 +331,12 @@ LanguageFields read_language(std::span<const uint8_t> manifest) {
             oamod_format::integer_value(revision->number, value))
             fields.revision = value;
     }
+    oa::data::languages::PackManifest pack;
+    if (oa::data::languages::read_manifest(manifest, pack)) {
+        fields.games_known = true;
+        fields.supported_games = std::move(pack.supported_games);
+        fields.required_expansions = std::move(pack.required_expansions);
+    }
     return fields;
 }
 
@@ -338,6 +353,22 @@ void write_oalang_identity(const LanguageFields& fields, json::JsonWriter& write
         writer.integer(*fields.revision);
     else
         writer.null();
+}
+
+/// Writes supportedGames and requiredExpansions, including an empty expansion list.
+///
+/// @param[in,out] writer the object
+/// @param games the base games
+/// @param expansions the expansions
+void write_game_lists(
+    json::JsonWriter& writer,
+    const std::vector<std::string>& games,
+    const std::vector<std::string>& expansions
+) {
+    writer.key("supportedGames");
+    write_strings(writer, games);
+    writer.key("requiredExpansions");
+    write_strings(writer, expansions);
 }
 
 /// Writes a language pack's language object.
@@ -397,6 +428,117 @@ std::optional<mod_profile::Resolution> catalogue_resolution(const install::Packa
     if (!resolved.resolution)
         return std::nullopt;
     return std::move(*resolved.resolution);
+}
+
+/// The note for a manifest that still writes requires.base.
+constexpr std::string_view legacy_base_note =
+    "requires.base: ta-3.1c reads as supportedGames: [totala]; write supportedGames instead";
+
+/// The last part of a path, after / or \.
+///
+/// @param path the path
+/// @return the file name
+std::string_view last_path_name(std::string_view path) {
+    const std::size_t slash = path.find_last_of("/\\");
+    if (slash == std::string_view::npos)
+        return path;
+    return path.substr(slash + 1);
+}
+
+/// Compares two file names, ASCII case folded.
+///
+/// @param left one name
+/// @param right the other
+/// @return true when they are the same name
+bool same_file_name(std::string_view left, std::string_view right) {
+    if (left.size() != right.size())
+        return false;
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        unsigned char first = static_cast<unsigned char>(left[index]);
+        unsigned char second = static_cast<unsigned char>(right[index]);
+        if (first >= 'A' && first <= 'Z')
+            first = static_cast<unsigned char>(first - 'A' + 'a');
+        if (second >= 'A' && second <= 'Z')
+            second = static_cast<unsigned char>(second - 'A' + 'a');
+        if (first != second)
+            return false;
+    }
+    return true;
+}
+
+/// The expansion whose archive this name is, compared on the file name only.
+///
+/// @param written the name as the manifest writes it
+/// @return the expansion's id; empty when the name is not an expansion archive
+std::string expansion_for_archive(std::string_view written) {
+    const std::string_view name = last_path_name(written);
+    if (name.empty())
+        return {};
+    namespace bundles = oa::data::content_bundles;
+    for (const bundles::Bundle& bundle : bundles::bundles()) {
+        if (bundle.kind != bundles::Kind::expansion)
+            continue;
+        for (const bundles::ContentFile& file : bundle.files) {
+            if (same_file_name(last_path_name(file.copy_name), name))
+                return std::string{bundle.id};
+            for (const std::string_view source : file.source_names) {
+                if (same_file_name(last_path_name(source), name))
+                    return std::string{bundle.id};
+            }
+        }
+    }
+    return {};
+}
+
+/// Appends suggestions about the old base key and expansion archives.
+///
+/// A suggestion stays a warning. It does not refuse a package the installer accepts.
+///
+/// @param package the opened package
+/// @param kind the package's kind
+/// @param[in,out] warnings the report's warnings
+void append_content_notes(
+    const install::Package& package,
+    const install::PackageKind& kind,
+    std::vector<std::string>& warnings
+) {
+    if (kind.name == "oamod") {
+        const std::optional<mod_profile::Resolution> resolved = catalogue_resolution(package);
+        if (!resolved)
+            return;
+        const mod_profile::Value* required =
+            mod_profile::find_member(resolved->effective, "requires");
+        const mod_profile::Value* base =
+            required != nullptr ? mod_profile::find_member(*required, "base") : nullptr;
+        if (base != nullptr && base->kind == mod_profile::ValueKind::string && !base->text.empty())
+            warnings.emplace_back(legacy_base_note);
+        for (const std::string& archive : resolved->profile.layout.installation_archives) {
+            const std::string expansion = expansion_for_archive(archive);
+            if (expansion.empty())
+                continue;
+            warnings.push_back(
+                "layout.installation-archives: " + archive + " is an archive of " + expansion +
+                "; declare requiredExpansions: [" + expansion + "] instead"
+            );
+        }
+        return;
+    }
+    const std::vector<uint8_t> manifest = read_packaged_manifest(package);
+    if (kind.name == "oamap") {
+        oa::data::map_pack::Manifest read;
+        std::vector<oa::data::map_pack::Problem> problems;
+        if (oa::data::map_pack::read_manifest(
+                manifest, oa::data::map_pack::ManifestUse::package, read, problems
+            ) &&
+            !read.requires_base.empty())
+            warnings.emplace_back(legacy_base_note);
+        return;
+    }
+    if (kind.name == "oalang") {
+        oa::data::languages::PackManifest read;
+        if (oa::data::languages::read_manifest(manifest, read) && !read.requires_base.empty())
+            warnings.emplace_back(legacy_base_note);
+    }
 }
 
 /// Writes requires.base and requires.engine when the profile has them.
@@ -615,6 +757,8 @@ int report(
                 problems.push_back(line);
     } else {
         warnings = package->warnings;
+        if (kind != nullptr)
+            append_content_notes(*package, *kind, warnings);
     }
 
     LanguageFields language{};
@@ -684,9 +828,11 @@ int report(
         writer.integer(static_cast<int64_t>(package->files.size()));
         if (kind != nullptr && kind->name == "oamod")
             describe_oamod(*package, writer);
-        else if (oalang && language.read)
+        else if (oalang && language.read) {
+            if (language.games_known)
+                write_game_lists(writer, language.supported_games, language.required_expansions);
             write_oalang_language(language, writer);
-        else if (oamap)
+        } else if (oamap)
             copy_object_members(writer, facts.text());
     }
     writer.end_object();
@@ -721,6 +867,7 @@ void describe_oamod(const install::Package& package, json::JsonWriter& writer) {
         writer.key("tags");
         write_strings(writer, profile.tags);
     }
+    write_game_lists(writer, profile.supported_games, profile.required_expansions);
     write_text(writer, "author", profile.author.name);
     write_requires(effective, profile.requires_engine, writer);
     write_text(writer, "sim_hash", hex_text(profile.sim_hash));
@@ -760,6 +907,8 @@ void describe_oalang(std::span<const uint8_t> manifest, json::JsonWriter& writer
     if (!fields.read)
         return;
     write_oalang_identity(fields, writer);
+    if (fields.games_known)
+        write_game_lists(writer, fields.supported_games, fields.required_expansions);
     write_oalang_language(fields, writer);
 }
 

@@ -156,6 +156,8 @@ optional.
 | `description` | One line about the mod, a string of at most 120 characters with no line break or other control character. | `description: "Larger armies and renamed data directories."` |
 | `homepage` | The mod's site: an `http` or `https` address of 1 to 256 bytes, the scheme in either case, with no space or control character. The Library links to it. | `homepage: "https://example.org/example-mod"` |
 | `tags` | One to eight tags the Library files the mod under. Each is 1 to 32 bytes of lower-case words of `a`-`z` and `0`-`9` joined by single hyphens, and none is repeated. An empty list is refused: leave the key out instead. | `tags: [balance, ai]` |
+| `supportedGames` | The base games the mod runs with, `totala` and `totala-demo`, in the order written. Leaving the key out means `[totala]`. An empty list is refused. At most 16 ids, none repeated. | `supportedGames: [totala, totala-demo]` |
+| `requiredExpansions` | Expansions that must be on, such as `core-contingency`, in the order written. Leaving the key out, or writing `[]`, means none. Each one must extend a game in `supportedGames`. At most 16 ids, none repeated. | `requiredExpansions: [core-contingency]` |
 | `requires` | The base game, the registry catalogue and the Open Annihilation the profile runs on. `base` must be `ta-3.1c` and `catalogue` must be `1`. `engine` is a requirement such as `">= 0.8.0"`, quoted. | `requires: {base: ta-3.1c, catalogue: 1, engine: ">= 0.8.0"}` |
 | `author` | Who made the mod: `name`, and optionally `email` | `author: {name: A. Modder}` |
 | `packaging` | Who packaged the profile and the mod's files, when, and how often since: `revision`, `date` and `packager` | `packaging: {revision: 1, date: 2026-10-04, packager: P. Packer}` |
@@ -168,6 +170,13 @@ optional.
 | `settings` | Bindings of parameters to the mod's INI or registry settings, and `registry-seeds` | `limits.effects.queue: {ini: Preferences/SfxLimit}` |
 | `strings` | Replacement engine texts by name | `status: {nanolathing: Building}` |
 | `media` | Front-end movie names | `movies: {intro: ""}` |
+
+`supportedGames` and `requiredExpansions` name built-in bundles, compared
+exactly. A required expansion must extend at least one supported game.
+`requires.base: ta-3.1c` still reads. When `supportedGames` is omitted, that
+old key means `[totala]`; when both are written, `supportedGames` is the
+list and `requires.base` stays `ta-3.1c`. `oa-tool check` suggests writing
+`supportedGames` instead of `requires.base`.
 
 `identity`, `layout`, `limits`, `hacks`, `data-keys`, `strings`, `media` and
 `settings` must each be a mapping when present.
@@ -184,7 +193,8 @@ optional.
 
 They describe the package, not the rules: they enter the full hash, never
 the sim hash ([11](#11-the-resolved-profile-and-its-hashes)). `homepage`,
-`tags` and `requires`, including `requires.engine`, do the same. A date written
+`tags`, `supportedGames`, `requiredExpansions` and `requires`, including
+`requires.engine`, do the same. A date written
 plainly, `date: 2026-10-04`, is a string, as [3.3](#33-strict-yaml-rules)
 says.
 
@@ -306,6 +316,10 @@ on:
 - a `homepage` that is not an http or https address of 1 to 256 bytes, or
   a `tags` list that is empty, longer than eight, or holds a tag that is
   not lower-case kebab-case or that repeats;
+- a `supportedGames` or `requiredExpansions` value that is not a list of
+  ids, is empty when it is `supportedGames`, holds more than 16 ids, repeats
+  an id, names an id that is not a base game or an expansion, or names an
+  expansion that extends none of the supported games;
 - a missing `author` or `packaging` block, a missing `author.name`,
   `packaging.revision`, `packaging.date` or `packaging.packager`, a
   malformed e-mail address, or a date that is not a calendar day;
@@ -746,8 +760,13 @@ the same data. The mount order is loose files, the revision archive, the
 `ccx` group, the `ufo` group, the installation archives in the order written,
 at most ten archives of the `hpi` group, then the disc's archives. With no
 installation archives that slot mounts nothing, which is how an install that
-does not name any is mounted. A mod's own archive of the `hpi` group still
-mounts with that group, after the named installation archives.
+does not name any is mounted. A name that is an expansion's archive, such
+as `ccdata.ccx`, is still a valid installation archive. `oa-tool check`
+suggests declaring that expansion in `requiredExpansions` instead. Base-game
+files such as `rev31.gp3`, `totala1.hpi`, `totala2.hpi` and `TADemo.hpi`
+are not expansions, and the check does not suggest one for them. A mod's
+own archive of the `hpi` group still mounts with that group, after the
+named installation archives.
 
 Each installation-archive name is a file name of 1 to 64 characters: no
 slash, backslash or colon, and not `.` or `..`. Names are matched without
@@ -1017,8 +1036,10 @@ window in eight and the second on the others, each named as below the
 
 Resolution gives the **effective profile**: every value the profile sets,
 resolved in the order of [5.3](#53-resolution-order). It holds `oamod`,
-`id`, `name`, `version`, `description`, `homepage`, `tags`, `requires`,
-`author` and `packaging` as written; every identity, layout,
+`id`, `name`, `version`, `description`, `homepage`, `tags`,
+`supportedGames`, `requiredExpansions`, `requires`,
+`author` and `packaging` as written, and it does not fill in a key the
+profile left out; every identity, layout,
 string and media value, written or at its baseline; every limit, with each
 parameter; every hack that is on, with each parameter; the script
 extensions with their fidelity; the data-key bindings; and the settings
@@ -1035,7 +1056,8 @@ change it, so two profiles that mean the same thing hash the same.
   values, every limit and every hack whose entry is sim scope with its
   sim-scope parameters, the script extensions and their fidelity, and the
   sim-scope data keys. It leaves out `id`, `name`, `version`,
-  `description`, `homepage`, `tags`, `requires`, `author`, `packaging`, the settings block,
+  `description`, `homepage`, `tags`, `supportedGames`, `requiredExpansions`,
+  `requires`, `author`, `packaging`, the settings block,
   strings, media, the visual
   hacks and every view value.
 

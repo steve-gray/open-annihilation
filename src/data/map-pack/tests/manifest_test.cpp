@@ -255,6 +255,8 @@ void test_design_example() {
     OA_CHECK(manifest.packaging.packager == "oa-tool 0.8");
     OA_CHECK(manifest.requires_base == "ta-3.1c");
     OA_CHECK(manifest.requires_engine == ">= 0.8.0");
+    OA_CHECK(manifest.supported_games == std::vector<std::string>{"totala"});
+    OA_CHECK(manifest.required_expansions.empty());
     OA_CHECK(manifest.maps.size() == 2);
 
     const MapEntry& isle = manifest.maps[0];
@@ -773,6 +775,123 @@ maps:
     expect_refused(over, ManifestUse::source, "maps", "stem: \"m0\"");
 }
 
+/// A short source header, so a content-needs case only adds the keys it cares about.
+///
+/// @return the header, with no supportedGames and no requires
+std::string source_header() {
+    return R"(oamap: 1
+id: "archipelago"
+name: "Archipelago Pack"
+version: "1"
+author: {name: "Core Prime"}
+packaging: {revision: 1, date: "2026-11-01", packager: "oa-tool 0.8"}
+maps:
+  - stem: "isle"
+)";
+}
+
+/// supportedGames and requiredExpansions are read, written when they are not the default, and refused by id.
+void test_content_needs() {
+    Manifest omitted;
+    if (read_ok(source_header(), ManifestUse::source, omitted)) {
+        OA_CHECK(omitted.supported_games == std::vector<std::string>{"totala"});
+        OA_CHECK(omitted.required_expansions.empty());
+    }
+    const std::string written = pack::write_manifest(omitted);
+    OA_CHECK(written.find("supportedGames") == std::string::npos);
+    OA_CHECK(written.find("requiredExpansions") == std::string::npos);
+
+    const std::string named = R"(oamap: 1
+id: "archipelago"
+name: "Archipelago Pack"
+version: "1"
+supportedGames:
+  - "totala-demo"
+  - "totala"
+requiredExpansions:
+  - "music"
+author: {name: "Core Prime"}
+packaging: {revision: 1, date: "2026-11-01", packager: "oa-tool 0.8"}
+maps:
+  - stem: "isle"
+)";
+    Manifest manifest;
+    if (read_ok(named, ManifestUse::source, manifest)) {
+        OA_CHECK(manifest.supported_games == (std::vector<std::string>{"totala-demo", "totala"}));
+        OA_CHECK(manifest.required_expansions == std::vector<std::string>{"music"});
+        const std::string again = pack::write_manifest(manifest);
+        OA_CHECK(again.find("supportedGames:") != std::string::npos);
+        OA_CHECK(again.find("\"totala-demo\"") != std::string::npos);
+        OA_CHECK(again.find("requiredExpansions:") != std::string::npos);
+        OA_CHECK(again.find("\"music\"") != std::string::npos);
+        Manifest round;
+        if (read_ok(again, ManifestUse::source, round)) {
+            OA_CHECK(round.supported_games == manifest.supported_games);
+            OA_CHECK(round.required_expansions == manifest.required_expansions);
+        }
+    }
+
+    const std::string empty_expansions = R"(oamap: 1
+id: "archipelago"
+name: "Archipelago Pack"
+version: "1"
+requiredExpansions: []
+author: {name: "Core Prime"}
+packaging: {revision: 1, date: "2026-11-01", packager: "oa-tool 0.8"}
+maps:
+  - stem: "isle"
+)";
+    Manifest none;
+    if (read_ok(empty_expansions, ManifestUse::source, none))
+        OA_CHECK(none.required_expansions.empty());
+
+    const std::string unknown = R"(oamap: 1
+id: "archipelago"
+name: "Archipelago Pack"
+version: "1"
+supportedGames: ["no-such"]
+author: {name: "Core Prime"}
+packaging: {revision: 1, date: "2026-11-01", packager: "oa-tool 0.8"}
+maps:
+  - stem: "isle"
+)";
+    expect_refused(unknown, ManifestUse::source, "supportedGames[0]", "supportedGames:");
+    const std::string wrong_kind = R"(oamap: 1
+id: "archipelago"
+name: "Archipelago Pack"
+version: "1"
+requiredExpansions: ["totala"]
+author: {name: "Core Prime"}
+packaging: {revision: 1, date: "2026-11-01", packager: "oa-tool 0.8"}
+maps:
+  - stem: "isle"
+)";
+    expect_refused(wrong_kind, ManifestUse::source, "requiredExpansions[0]", "requiredExpansions:");
+    const std::string extends = R"(oamap: 1
+id: "archipelago"
+name: "Archipelago Pack"
+version: "1"
+supportedGames: ["totala-demo"]
+requiredExpansions: ["core-contingency"]
+author: {name: "Core Prime"}
+packaging: {revision: 1, date: "2026-11-01", packager: "oa-tool 0.8"}
+maps:
+  - stem: "isle"
+)";
+    expect_refused(extends, ManifestUse::source, "requiredExpansions[0]", "requiredExpansions:");
+    const std::string empty_games = R"(oamap: 1
+id: "archipelago"
+name: "Archipelago Pack"
+version: "1"
+supportedGames: []
+author: {name: "Core Prime"}
+packaging: {revision: 1, date: "2026-11-01", packager: "oa-tool 0.8"}
+maps:
+  - stem: "isle"
+)";
+    expect_refused(empty_games, ManifestUse::source, "supportedGames", "supportedGames:");
+}
+
 } // namespace
 
 int main() {
@@ -784,5 +903,6 @@ int main() {
     test_split_and_fit();
     test_describe();
     test_map_count();
+    test_content_needs();
     return oa::test::check_exit_status();
 }

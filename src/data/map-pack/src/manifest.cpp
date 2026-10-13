@@ -5,6 +5,7 @@
 
 #include "oa/data/map_pack/map_name.hpp"
 #include "oa/formats/oamod.hpp"
+#include "oa/formats/oamod/content_needs.hpp"
 #include "oa/formats/oamod/package_keys.hpp"
 
 #include <array>
@@ -18,7 +19,7 @@ namespace {
 namespace oamod = oa::formats::oamod;
 
 /// The top-level keys a manifest may hold, in the order they are written.
-constexpr std::array<std::string_view, 11> manifest_keys{
+constexpr std::array<std::string_view, 13> manifest_keys{
     "oamap",
     "id",
     "name",
@@ -26,6 +27,8 @@ constexpr std::array<std::string_view, 11> manifest_keys{
     "description",
     "homepage",
     "tags",
+    "supportedGames",
+    "requiredExpansions",
     "author",
     "packaging",
     "requires",
@@ -954,6 +957,16 @@ void read_document_manifest(
     manifest.homepage = std::move(keys.homepage);
     manifest.tags = std::move(keys.tags);
     manifest.requires_engine = std::move(keys.requires_engine);
+
+    oamod::ContentNeeds needs;
+    std::vector<oamod::KeyProblem> need_problems;
+    oamod::read_content_needs(
+        root, requires_block, oamod::GamesWhenOmitted::totala, needs, need_problems
+    );
+    for (const oamod::KeyProblem& problem : need_problems)
+        add_problem(problems, problem.position, problem.path, problem.message);
+    manifest.supported_games = std::move(needs.supported_games);
+    manifest.required_expansions = std::move(needs.required_expansions);
 
     const oamod::Node* maps = oamod::find_entry(root, "maps");
     // A folder may leave the index out. The packer then writes one entry per map.

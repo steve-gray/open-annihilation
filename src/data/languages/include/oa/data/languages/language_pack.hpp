@@ -118,6 +118,13 @@ struct PackManifest {
     /// The engine requirement as written; empty when the manifest has none.
     /// Reading the pack does not refuse one this build does not meet.
     std::string requires_engine{};
+    /// Base games the pack's text is for. Every base game when supportedGames
+    /// is omitted, or totala when requires.base is ta-3.1c and the key is omitted.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty when the manifest names none.
+    std::vector<std::string> required_expansions{};
+    /// requires.base when it is ta-3.1c; empty when the manifest names no base.
+    std::string requires_base{};
     /// Font files in the pack's fonts folder, in the order written; empty
     /// when the manifest names none.
     std::vector<PackFont> fonts{};
@@ -134,9 +141,11 @@ struct PackManifest {
 /// oalang, tag and word are required, and oalang must be
 /// pack_format_version; name, english-name, version, locales, fallbacks,
 /// text (needs: game-fonts or modern-fonts), unicode, homepage, tags,
-/// requires (an engine requirement only), fonts, warmup and packaging are
-/// optional. homepage, tags and requires.engine follow the shared
-/// package-key rules. An engine requirement this build does not meet is
+/// supportedGames, requiredExpansions, requires (engine, and base when it
+/// is ta-3.1c), fonts, warmup and packaging are optional. homepage, tags
+/// and requires.engine follow the shared package-key rules. An omitted
+/// supportedGames means every base game, unless requires.base is ta-3.1c,
+/// which then reads as totala. An engine requirement this build does not meet is
 /// still read. fonts names at most most_pack_fonts files in the pack's
 /// fonts folder, each with a role of ideographs or letters. warmup names a
 /// text file in the pack's folder. packaging gives a revision from 1 to

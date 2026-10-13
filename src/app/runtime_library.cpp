@@ -1362,6 +1362,8 @@ library::Inputs Runtime::library_inputs() {
         if (package.author != kUnknownAuthor)
             shown.author = package.author;
         shown.description = package.description;
+        shown.supported_games = package.supported_games;
+        shown.required_expansions = package.required_expansions;
         shown.registry = listed ? match.registry : std::string{};
         shown.release = listed ? match.release : 0;
         shown.rules = package.rules;
@@ -1597,6 +1599,8 @@ library::Inputs Runtime::library_inputs() {
             pack_folders.push_back(map.folder);
             library::InstalledMaps added;
             added.name = map.pack_name;
+            added.supported_games = map.supported_games;
+            added.required_expansions = map.required_expansions;
             for (std::size_t matched = 0; matched < installed.size() && matched < matches.size();
                  ++matched) {
                 if (matches[matched].provenance == content::Provenance::own)

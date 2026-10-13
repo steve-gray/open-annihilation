@@ -349,6 +349,8 @@ std::vector<InstalledPackage> list_installed(const fs::path& user_folder) {
             package.revision = held.revision;
             package.author = held.author;
             package.description = held.description;
+            package.supported_games = held.supported_games;
+            package.required_expansions = held.required_expansions;
             package.origin = install::read_origin(entry->path());
             if (kind.read_backup != nullptr) {
                 if (const std::optional<install::InstalledPackage> backup =
