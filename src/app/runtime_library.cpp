@@ -2181,8 +2181,19 @@ struct Runtime::LibraryScreen final : LayerScreen {
             );
             return;
         }
+        // The copy is in the player's folder. A rebuild reads that, and drops
+        // a chooser whose choice is not stored yet, so the chooser is opened
+        // again on the game just copied. The files stay as they are until the
+        // Library closes.
         host.rebuild(runtime_);
-        library::refresh_base_chooser(host.model);
+        if (!host.model.chooser.open) {
+            const library::BaseOpen opened = library::open_base_chooser(host.model);
+            if (opened.opened) {
+                host.state.interaction.focused = opened.focus;
+                host.state.interaction.focus_shown = opened.focus != kit::no_control;
+            }
+        }
+        library::mark_base_game(host.model, id);
         const library::BaseUse used = library::use_marked_base_game(host.model);
         if (used.kind == library::BaseUseKind::needs_source)
             library::note_base_copy_problem(host.model, library::words::base_copy_failed);
