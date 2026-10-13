@@ -8,7 +8,11 @@
 // view and the row after; focus by geometry and Tab in the declared order;
 // and what a press, a tap, the keys, typing and the wheel do.
 #include "oa/formats/fnt.hpp"
+#include "oa/formats/png.hpp"
+#include "oa/platform/text_font.hpp"
+#include "oa/present/game_text.hpp"
 #include "oa/test/check.hpp"
+#include "oa/test/game_assets.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/controls.hpp"
@@ -23,9 +27,14 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <ios>
+#include <memory>
 #include <optional>
-#include <set>
+#include <system_error>
 #include <stdint.h>
 #include <string>
 #include <string_view>
@@ -43,6 +52,8 @@ namespace kit = oa::ui::kit;
 namespace mb = oa::ui::map_browser;
 namespace renderer = oa::ui::frontend_renderer;
 namespace previews = oa::ui::map_previews;
+namespace png = oa::formats::png;
+namespace text_font = oa::platform::text_font;
 
 /// The synthetic font of the settings pixel test, for both roles.
 ///
@@ -91,12 +102,13 @@ std::array<ClassFrame, 3> frames() {
     }};
 }
 
-/// Returns a browser of many maps: forty base maps, two installed, one of
-/// which does not fit, and three online, two of whose names give one word.
+/// Returns a browser of many maps: forty game maps, one mod map, two
+/// installed, one of which does not fit, and three online, two of whose
+/// names give one word.
 ///
 /// @return the browser, its filters applied
 mb::Browser many_maps() {
-    std::vector<mb::MapCard> base;
+    std::vector<mb::MapCard> game;
     for (int32_t index = 0; index < 40; ++index) {
         mb::MapCard card;
         card.name = "Base Map " + std::to_string(100 + index);
@@ -104,8 +116,21 @@ mb::Browser many_maps() {
         card.players = 2 + index % 9;
         card.size = std::to_string(8 + index % 25) + " x " + std::to_string(8 + index % 20);
         card.preview_key = card.name;
-        base.push_back(std::move(card));
+        if (index % 3 == 1)
+            card.source_name = "Core Contingency";
+        else if (index % 3 == 2)
+            card.source_name = "Battle Tactics";
+        else
+            card.source_name = "TA 3.1c";
+        game.push_back(std::move(card));
     }
+    std::vector<mb::MapCard> mod(1);
+    mod[0].name = "ridge_valley";
+    mod[0].title = "Ridge Valley";
+    mod[0].source_name = "Ridge";
+    mod[0].players = 3;
+    mod[0].size = "14 x 14";
+    mod[0].preview_key = mod[0].name;
     std::vector<mb::MapCard> installed(2);
     installed[0].name = "check_isle@oa-check-isles";
     installed[0].title = "Check Isle";
@@ -122,20 +147,24 @@ mb::Browser many_maps() {
     std::vector<mb::MapCard> online(3);
     online[0].name = "isle_of_ashes@archipelago";
     online[0].title = "Isle of Ashes";
+    online[0].pack_name = "Archipelago Pack";
     online[0].players = 4;
     online[0].size = "16x16";
     online[0].download_bytes = 2400000;
     online[0].preview_key = "http://127.0.0.1:9/v1/i/one.png";
     online[1].name = "a_b@twins";
     online[1].title = "Twin One";
+    online[1].pack_name = "Twin Pack";
     online[1].players = 4;
     online[1].size = "16x16";
     online[2].name = "a-b@twins";
     online[2].title = "Twin Two";
+    online[2].pack_name = "Twin Pack";
     online[2].players = 4;
     online[2].size = "16x16";
     mb::Browser browser;
-    browser.cards = mb::merge_cards(std::move(base), std::move(installed), std::move(online));
+    browser.cards =
+        mb::merge_cards(std::move(game), std::move(mod), std::move(installed), std::move(online));
     browser.mod_name = "Ridge";
     mb::apply_filters(browser);
     return browser;
@@ -204,12 +233,26 @@ kit::Rect visible_part(const kit::Rect& rect, const kit::Rect& clip) {
     return kit::intersect(rect, clip);
 }
 
-/// Presses and releases the pointer at a control's centre, or taps it.
+/// Returns where a named control or one of its parts lies.
+///
+/// @param list the display list
+/// @param name the control's name, or a part's (`maps-players.4`)
+/// @return the rectangle a press reaches; empty when nothing has the name
+kit::Rect named_rect(const kit::DisplayList& list, std::string_view name) {
+    if (const kit::Control* control = named(list, name))
+        return visible_part(control->rect, control->clip);
+    for (const kit::AutomationEntry& entry : kit::automation_parts(list, {}))
+        if (entry.name == name)
+            return entry.rect;
+    return {};
+}
+
+/// Presses and releases the pointer at a control's centre, or a part's, or taps it.
 ///
 /// @param browser the browser
 /// @param state the screen's state
 /// @param list the display list
-/// @param name the control's name
+/// @param name the control's name, or a part's
 /// @param reach a finger's reach; 0 for a mouse
 /// @return what the release asked for
 mb::ScreenResult press(
@@ -219,11 +262,10 @@ mb::ScreenResult press(
     std::string_view name,
     int32_t reach = 0
 ) {
-    const kit::Control* control = named(list, name);
-    OA_CHECK(control != nullptr);
-    if (control == nullptr)
+    const kit::Rect shown = named_rect(list, name);
+    OA_CHECK(shown.width > 0 && shown.height > 0);
+    if (shown.width <= 0 || shown.height <= 0)
         return {};
-    const kit::Rect shown = visible_part(control->rect, control->clip);
     const kit::Point at{shown.x + shown.width / 2, shown.y + shown.height / 2};
     std::ignore = mb::browser_pointer(browser, state, list, mb::PointerKind::move, 0, at, reach);
     std::ignore = mb::browser_pointer(browser, state, list, mb::PointerKind::down, 1, at, reach);
@@ -302,22 +344,29 @@ void nothing_outside_the_window() {
 }
 
 void names_and_buttons() {
-    const std::array<std::string_view, 15> listed{
+    const std::array<std::string_view, 11> listed{
         mb::name_filter_all,
-        mb::name_filter_base,
-        mb::name_filter_installed,
-        mb::name_filter_online,
-        mb::name_players_2,
-        mb::name_players_3,
-        mb::name_players_4,
-        mb::name_players_many,
-        mb::name_size_small,
-        mb::name_size_medium,
-        mb::name_size_large,
+        mb::name_filter_game,
+        mb::name_filter_mod,
+        mb::name_filter_downloads,
+        mb::name_players,
+        mb::name_sizes,
         mb::name_search,
         mb::name_cancel,
         mb::name_select,
+        mb::name_close,
         "maps-card-isle-of-ashes-archipelago",
+    };
+    const std::array<std::string_view, 9> parts{
+        "maps-players.any",
+        "maps-players.2",
+        "maps-players.3",
+        "maps-players.4",
+        "maps-players.5-10",
+        "maps-size.any",
+        "maps-size.s",
+        "maps-size.m",
+        "maps-size.l",
     };
     for (const ClassFrame& each : frames()) {
         const mb::Browser browser = many_maps();
@@ -330,6 +379,22 @@ void names_and_buttons() {
                 );
             OA_CHECK(named(list, name) != nullptr);
         }
+        for (const std::string_view part : parts) {
+            if (named_rect(list, part).width <= 0)
+                std::fprintf(
+                    stderr, "no part is named %.*s\n", static_cast<int>(part.size()), part.data()
+                );
+            OA_CHECK(named_rect(list, part).width > 0);
+        }
+        // The pills name the source and how many maps it holds.
+        const kit::Control* all_pill = named(list, mb::name_filter_all);
+        const kit::Control* game_pill = named(list, mb::name_filter_game);
+        const kit::Control* mod_pill = named(list, mb::name_filter_mod);
+        const kit::Control* downloads_pill = named(list, mb::name_filter_downloads);
+        OA_CHECK(all_pill != nullptr && all_pill->text == "All (46)");
+        OA_CHECK(game_pill != nullptr && game_pill->text == "Game (40)");
+        OA_CHECK(mod_pill != nullptr && mod_pill->text == "Mod (1)");
+        OA_CHECK(downloads_pill != nullptr && downloads_pill->text == "Downloads (5)");
         // Two maps whose names give one word: the second in grid order takes -2.
         const kit::Control* one = named(list, "maps-card-a-b-twins");
         const kit::Control* two = named(list, "maps-card-a-b-twins-2");
@@ -420,18 +485,13 @@ void focus_moves_by_geometry() {
 }
 
 void tab_follows_the_declared_order() {
-    const std::array<std::string_view, 12> bar_order{
+    const std::array<std::string_view, 7> bar_order{
         mb::name_filter_all,
-        mb::name_filter_base,
-        mb::name_filter_installed,
-        mb::name_filter_online,
-        mb::name_players_2,
-        mb::name_players_3,
-        mb::name_players_4,
-        mb::name_players_many,
-        mb::name_size_small,
-        mb::name_size_medium,
-        mb::name_size_large,
+        mb::name_filter_game,
+        mb::name_filter_mod,
+        mb::name_filter_downloads,
+        mb::name_players,
+        mb::name_sizes,
         mb::name_search,
     };
     for (const ClassFrame& each : frames()) {
@@ -444,7 +504,7 @@ void tab_follows_the_declared_order() {
         browser.selected = isle;
         mb::ScreenState state;
         std::vector<std::string> walked;
-        for (int32_t step = 0; step < 15; ++step) {
+        for (int32_t step = 0; step < 11; ++step) {
             const kit::DisplayList list = laid_out(browser, state, each.frame);
             std::ignore = mb::browser_key(browser, state, list, kit::Key::tab);
             const kit::DisplayList after = laid_out(browser, state, each.frame);
@@ -453,11 +513,14 @@ void tab_follows_the_declared_order() {
         }
         for (std::size_t index = 0; index < bar_order.size(); ++index)
             OA_CHECK(walked[index] == bar_order[index]);
-        OA_CHECK(walked[12] == "maps-card-isle-of-ashes-archipelago");
-        OA_CHECK(walked[13] == mb::name_cancel);
-        OA_CHECK(walked[14] == mb::name_select);
-        // Shift+Tab from Cancel goes back to the grid at the selected card.
+        OA_CHECK(walked[7] == "maps-card-isle-of-ashes-archipelago");
+        OA_CHECK(walked[8] == mb::name_cancel);
+        OA_CHECK(walked[9] == mb::name_select);
+        OA_CHECK(walked[10] == mb::name_close);
+        // Shift+Tab from the close mark goes back to the grid at the selected card.
         kit::DisplayList list = laid_out(browser, state, each.frame);
+        std::ignore = mb::browser_key(browser, state, list, kit::Key::back_tab);
+        list = laid_out(browser, state, each.frame);
         std::ignore = mb::browser_key(browser, state, list, kit::Key::back_tab);
         list = laid_out(browser, state, each.frame);
         std::ignore = mb::browser_key(browser, state, list, kit::Key::back_tab);
@@ -474,29 +537,48 @@ void pointer_and_keys() {
     mb::ScreenState state;
     kit::DisplayList list = laid_out(browser, state, frame);
 
-    // A source chip filters; a players chip and a size chip narrow it.
-    std::ignore = press(browser, state, list, mb::name_filter_installed);
-    OA_CHECK(browser.filters.source == mb::Filters::Source::installed);
-    OA_CHECK(browser.shown.size() == 2);
+    // Downloads holds the installed packs and the online packs together.
+    std::ignore = press(browser, state, list, mb::name_filter_downloads);
+    OA_CHECK(browser.filters.source == mb::Filters::Source::downloads);
+    OA_CHECK(browser.shown.size() == 5);
     list = laid_out(browser, state, frame);
-    const kit::Control* chip = named(list, mb::name_filter_installed);
+    const kit::Control* chip = named(list, mb::name_filter_downloads);
     OA_CHECK(chip != nullptr && chip->checked);
     std::ignore = press(browser, state, list, mb::name_filter_all);
     list = laid_out(browser, state, frame);
-    std::ignore = press(browser, state, list, mb::name_players_4);
-    OA_CHECK(browser.filters.players == std::set<int32_t>{4});
+    std::ignore = press(browser, state, list, "maps-players.4");
+    OA_CHECK(browser.filters.players && *browser.filters.players == 4);
     list = laid_out(browser, state, frame);
-    std::ignore = press(browser, state, list, mb::name_size_medium);
-    OA_CHECK(browser.filters.sizes == std::set<char>{'M'});
+    std::ignore = press(browser, state, list, "maps-size.m");
+    OA_CHECK(browser.filters.size && *browser.filters.size == 'M');
     for (const std::size_t index : browser.shown) {
         OA_CHECK(browser.cards[index].players == 4);
         OA_CHECK(mb::size_letter(browser.cards[index].size) == 'M');
     }
+    // Any clears a selector. The segment already chosen stays chosen.
     list = laid_out(browser, state, frame);
-    std::ignore = press(browser, state, list, mb::name_players_4);
+    std::ignore = press(browser, state, list, "maps-players.4");
+    OA_CHECK(browser.filters.players && *browser.filters.players == 4);
+    std::ignore = press(browser, state, list, "maps-players.any");
     list = laid_out(browser, state, frame);
-    std::ignore = press(browser, state, list, mb::name_size_medium);
-    OA_CHECK(browser.filters.players.empty() && browser.filters.sizes.empty());
+    std::ignore = press(browser, state, list, "maps-size.any");
+    OA_CHECK(!browser.filters.players && !browser.filters.size);
+    // Left and Right step the focused strip, and stop at the ends. Enter and
+    // Space on it leave the choice and do not accept the dialog.
+    list = laid_out(browser, state, frame);
+    state.interaction.focused = kit::control_named(list, mb::name_players);
+    state.interaction.focus_shown = true;
+    mb::ScreenResult stepped = mb::browser_key(browser, state, list, kit::Key::left);
+    OA_CHECK(stepped.action == mb::BrowserAction::none && !browser.filters.players);
+    stepped = mb::browser_key(browser, state, list, kit::Key::right);
+    OA_CHECK(browser.filters.players && *browser.filters.players == 2);
+    list = laid_out(browser, state, frame);
+    stepped = mb::browser_key(browser, state, list, kit::Key::left);
+    OA_CHECK(!browser.filters.players);
+    stepped = mb::browser_key(browser, state, list, kit::Key::enter);
+    OA_CHECK(stepped.action == mb::BrowserAction::none && !browser.filters.players);
+    stepped = mb::browser_key(browser, state, list, kit::Key::space);
+    OA_CHECK(stepped.action == mb::BrowserAction::none && !browser.filters.players);
 
     // Typing in the search filters as it goes.
     list = laid_out(browser, state, frame);
@@ -540,7 +622,7 @@ void pointer_and_keys() {
     // A tap on a map that does not fit selects it, and acts on nothing.
     state.search = {};
     browser.filters.query.clear();
-    browser.filters.source = mb::Filters::Source::installed;
+    browser.filters.source = mb::Filters::Source::downloads;
     mb::apply_filters(browser);
     list = laid_out(browser, state, frame);
     result = press(browser, state, list, "maps-card-check-clash-oa-check-clash", 8);
@@ -576,6 +658,8 @@ void pointer_and_keys() {
     result = mb::browser_key(browser, state, list, kit::Key::escape);
     OA_CHECK(result.action == mb::BrowserAction::cancel);
     result = press(browser, state, list, mb::name_cancel);
+    OA_CHECK(result.action == mb::BrowserAction::cancel);
+    result = press(browser, state, list, mb::name_close);
     OA_CHECK(result.action == mb::BrowserAction::cancel);
 }
 
@@ -621,7 +705,8 @@ void card_reads_the_largest_count() {
     map.size = "13 x 13";
     map.players = 10;
     map.player_counts = {2, 4};
-    map.origin = mb::MapCard::Origin::base;
+    map.origin = mb::MapCard::Origin::game;
+    map.source_name = "TA 3.1c";
     mb::Browser browser;
     browser.cards = {map};
     browser.selected = 0;
@@ -632,7 +717,7 @@ void card_reads_the_largest_count() {
     for (const kit::Item& item : list.items) {
         if (const auto* look = std::get_if<kit::CardLook>(&item.look))
             subtitle = look->title == "Acid Foursome" && look->subtitle == "4 · 13×13";
-        if (item.role == kit::Role::text && item.text == "Base game · 4 players · 13×13")
+        if (item.role == kit::Role::text && item.text == "TA 3.1c · 4 players · 13×13")
             details = true;
     }
     OA_CHECK(subtitle);
@@ -678,7 +763,204 @@ void header_and_footer_words() {
     );
 }
 
+/// Draws a line in the modern fonts, as the game does for the characters
+/// its fonts lack.
+///
+/// @param context the font stack
+/// @param text the line, in UTF-8
+/// @param face the game font it stands in for
+/// @param scale screen pixels to a game pixel
+/// @param size the text size, in percent
+/// @return the line's mask; null when the fonts cannot draw it
+std::shared_ptr<const oa::present::TextMask> draw_modern(
+    void* context, std::string_view text, oa::present::TextFace face, int32_t scale, int32_t size
+) {
+    auto& stack = *static_cast<text_font::FontStack*>(context);
+    if (text.empty() || text.size() > text_font::max_text_bytes)
+        return nullptr;
+    const bool label = face == oa::present::TextFace::label;
+    const int32_t face_pixels =
+        face == oa::present::TextFace::message  ? text_font::message_log_pixel_size
+        : face == oa::present::TextFace::status ? text_font::status_readout_pixel_size
+                                                : text_font::label_pixel_size;
+    text_font::Style style;
+    style.pixel_size = std::clamp(
+        oa::present::face_pixel_size(face_pixels, scale, size),
+        int32_t{1},
+        text_font::max_pixel_size
+    );
+    style.weight = label ? text_font::Weight::regular : text_font::Weight::bold;
+    style.rendering = text_font::Rendering::mono;
+    const auto drawn = stack.draw(text, style);
+    const auto placements = stack.layout(text, style);
+    const auto characters = text_font::decode_utf8(text);
+    if (!drawn || !placements || !characters)
+        return nullptr;
+    auto mask = std::make_shared<oa::present::TextMask>();
+    mask->width = drawn->width;
+    mask->height = drawn->height;
+    mask->baseline = drawn->baseline;
+    mask->origin = drawn->origin;
+    mask->advance = drawn->advance;
+    mask->alpha = drawn->alpha;
+    std::size_t placed = 0;
+    int32_t pen = 0;
+    for (const char32_t character : *characters) {
+        if (!text_font::is_invisible(character) && placed < placements->size()) {
+            const auto& placement = (*placements)[placed++];
+            pen = placement.pen + placement.advance;
+        }
+        mask->character_ends.push_back(pen);
+    }
+    return mask;
+}
+
+/// A browser whose first rows show a map from each place: the base game,
+/// two expansions, a mod, an installed pack, a pack offered online, and a
+/// download whose pack is named for the map.
+///
+/// @return the browser, one online map selected
+mb::Browser picture_browser() {
+    auto made =
+        [](std::string_view name, std::string_view title, int32_t players, std::string_view size) {
+            mb::MapCard card;
+            card.name = std::string(name);
+            card.title = std::string(title);
+            card.players = players;
+            card.size = std::string(size);
+            return card;
+        };
+    std::vector<mb::MapCard> game{
+        made("Acid Foursome", "Acid Foursome", 4, "13 x 13"),
+        made("Coast To Coast", "Coast to Coast", 2, "20 x 20"),
+        made("Big Wars", "Big Wars", 8, "32 x 32"),
+    };
+    game[0].source_name = "TA 3.1c";
+    game[1].source_name = "Core Contingency";
+    game[2].source_name = "Battle Tactics";
+    std::vector<mb::MapCard> mod{made("ridge_valley", "Ridge Valley", 3, "14 x 14")};
+    mod[0].source_name = "Ridge";
+    std::vector<mb::MapCard> installed{
+        made("tidewater@lowlands", "Tidewater", 4, "24x24"),
+        made("dune", "Dune", 2, "10x10"),
+    };
+    installed[0].pack_name = "Lowlands";
+    installed[1].pack_name = "Dune";
+    std::vector<mb::MapCard> online{
+        made("isle_of_ashes@archipelago", "Isle of Ashes", 4, "16x16"),
+        made("black_shoals@archipelago", "Black Shoals", 6, "12x12"),
+    };
+    online[0].pack_name = "Archipelago Pack";
+    online[0].pack_version = "1.2";
+    online[0].registry_name = "Example Maps";
+    online[0].download_bytes = 2400000;
+    online[1].pack_name = "Archipelago Pack";
+    mb::Browser browser;
+    browser.cards =
+        mb::merge_cards(std::move(game), std::move(mod), std::move(installed), std::move(online));
+    browser.mod_name = "Ridge";
+    mb::apply_filters(browser);
+    for (std::size_t index = 0; index < browser.cards.size(); ++index)
+        if (browser.cards[index].name == "isle_of_ashes@archipelago")
+            browser.selected = index;
+    return browser;
+}
+
+/// Writes one size class's browser as a PNG of the dialog.
+///
+/// @param directory where the file goes
+/// @param file_name the file's name
+/// @param frame the frame
+/// @param fonts the game's fonts
+/// @return true when the file was written
+bool write_picture(
+    const std::filesystem::path& directory,
+    std::string_view file_name,
+    const kit::Frame& frame,
+    const kit::Fonts& fonts
+) {
+    const mb::Browser browser = picture_browser();
+    const kit::DisplayList list = mb::browser_layout(browser, {}, frame, fonts, {});
+    const kit::Point window = mb::window_size(frame);
+    renderer::Surface surface;
+    surface.width = static_cast<uint32_t>(window.x);
+    surface.height = static_cast<uint32_t>(window.y);
+    surface.rgb.assign(
+        static_cast<std::size_t>(window.x) * static_cast<std::size_t>(window.y) * 3,
+        static_cast<uint8_t>(0)
+    );
+    kit::Canvas canvas;
+    canvas.surface = &surface;
+    canvas.placement = {0, 0, 1, {}};
+    canvas.fonts = &fonts;
+    mb::draw_browser(canvas, list, window);
+    png::Header header;
+    header.width = surface.width;
+    header.height = surface.height;
+    header.bit_depth = 8;
+    header.color_type = png::ColorType::rgb;
+    std::vector<uint8_t> file;
+    if (!png::write(png::Image{header, {}, surface.rgb}, &file))
+        return false;
+    const std::filesystem::path path = directory / std::string(file_name);
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    output.write(
+        reinterpret_cast<const char*>(file.data()), static_cast<std::streamsize>(file.size())
+    );
+    return static_cast<bool>(output);
+}
+
+/// Writes the three size classes and returns 0, or 1 when a picture failed.
+/// A missing game directory ends the process as a skipped test.
+///
+/// @param directory where the pictures go
+/// @return 0 when all three were written
+int write_pictures(const std::filesystem::path& directory) {
+    oa::AssetStore assets = oa::test::require_game_assets("the map browser's pictures");
+    const kit::Fonts fonts = kit::load_game_fonts(assets);
+    const std::unique_ptr<text_font::FontStack> modern =
+        text_font::FontStack::open(text_font::bundled_font_directory());
+    if (modern) {
+        oa::present::GameTextHooks hooks;
+        hooks.context = modern.get();
+        hooks.draw = draw_modern;
+        oa::present::set_game_text_hooks(hooks);
+    }
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    if (error) {
+        std::fprintf(stderr, "map browser: cannot make %s\n", directory.string().c_str());
+        oa::present::set_game_text_hooks({});
+        return 1;
+    }
+    const std::array<std::pair<std::string_view, kit::Frame>, 3> shots{{
+        {"map-browser-compact.png", frames()[0].frame},
+        {"map-browser-regular.png", frames()[1].frame},
+        {"map-browser-large.png", frames()[2].frame},
+    }};
+    int failed = 0;
+    for (const auto& [file_name, frame] : shots) {
+        if (!write_picture(directory, file_name, frame, fonts)) {
+            std::fprintf(
+                stderr,
+                "map browser: cannot write %.*s\n",
+                static_cast<int>(file_name.size()),
+                file_name.data()
+            );
+            ++failed;
+        }
+    }
+    oa::present::set_game_text_hooks({});
+    return failed == 0 ? 0 : 1;
+}
+
 } // namespace
+
+int write_map_browser_frames(const char* directory) {
+    if (directory == nullptr || directory[0] == '\0')
+        return 1;
+    return write_pictures(std::filesystem::path(directory));
+}
 
 void layout_tests() {
     columns_at_each_class();

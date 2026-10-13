@@ -120,11 +120,12 @@ void end_mission_enter(Panel& panel, EndMissionContext& context) noexcept;
 /// @return What the caller does next.
 EndMissionAction end_mission_on_click(Panel& panel, EndMissionContext& context) noexcept;
 
-/// Runs the end-game frontend state that opens ENDMSN.GUI.
+/// Runs the end-game frontend state that opens ENDMSN.GUI on the way back.
 ///
 /// Sets up the panel (end_mission_enter), lays out the score rows and shows
-/// the button set, then enters application mode 7 with the stat bars
-/// counting again.
+/// the button set, then enters application mode 7 with the stat bars and
+/// numbers already at their finals. The count-up runs only on the first
+/// arrival from the mission.
 ///
 /// @param[in,out] panel The loaded ENDMSN.GUI.
 /// @param[in,out] context Campaign, finished game, frontend state and host.

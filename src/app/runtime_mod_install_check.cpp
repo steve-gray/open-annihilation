@@ -572,8 +572,8 @@ void Runtime::check_mod_install() {
         return soft_restart_requested();
     };
     const auto play_example = [&] {
-        return options_.game_folders.size() > 1 &&
-               kept_path(options_.game_folders.front()) == kept_path(folder) &&
+        return !options_.layered_mod_folder.empty() &&
+               kept_path(options_.layered_mod_folder) == kept_path(folder) &&
                mod_profile() != nullptr && mod_profile()->id == kModId;
     };
 
@@ -584,7 +584,7 @@ void Runtime::check_mod_install() {
             !play_example(),
             "an earlier run of the check that stopped left its mod chosen; start it again"
         );
-        if (options_.game_folders.size() > 1) {
+        if (!options_.layered_mod_folder.empty()) {
             preference_values_.erase(std::string(settings::key::mod_directory));
             preferences_dirty_ = true;
         }

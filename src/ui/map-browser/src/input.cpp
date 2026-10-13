@@ -7,8 +7,10 @@
 // is to do comes back as a ScreenResult.
 #include "screen_controls.hpp"
 
+#include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/looks.hpp"
 #include "oa/ui/kit/theme.hpp"
 #include "oa/ui/map_browser/model.hpp"
 #include "oa/ui/map_browser/screen.hpp"
@@ -20,6 +22,7 @@
 #include <stdint.h>
 #include <string_view>
 #include <tuple>
+#include <variant>
 #include <vector>
 
 namespace oa::ui::map_browser {
@@ -190,17 +193,85 @@ kit::ControlId tab_target(
     return stops[next];
 }
 
-/// Carries out a control's press: a chip turns on or off, the search takes
-/// the focus, a card is selected or, already selected, acts as the primary
-/// button, and Cancel and the primary button ask the host.
+/// Returns the look of a players or size strip.
+///
+/// @param list the display list
+/// @param id the strip
+/// @return the look; null when the list does not draw that strip
+const kit::LevelsLook* strip_look(const kit::DisplayList& list, kit::ControlId id) noexcept {
+    for (const kit::Item& item : list.items)
+        if (item.control == id && item.role == kit::Role::levels)
+            if (const auto* look = std::get_if<kit::LevelsLook>(&item.look))
+                return look;
+    return nullptr;
+}
+
+/// Chooses one segment of a players or size strip. The segment already
+/// chosen stays chosen. Any clears the selector.
+///
+/// @param[in,out] browser the browser
+/// @param[in,out] state the screen's state
+/// @param id the strip
+/// @param index the segment, from 0
+/// @return a redraw; nothing when the choice did not change or the id is not a strip
+ScreenResult
+choose_segment(Browser& browser, ScreenState& state, kit::ControlId id, std::size_t index) {
+    Filters& filters = browser.filters;
+    if (id == ids::players) {
+        const std::optional<int32_t> was = filters.players;
+        ids::choose_players(filters, index);
+        if (filters.players == was)
+            return {};
+    } else if (id == ids::sizes) {
+        const std::optional<char> was = filters.size;
+        ids::choose_size(filters, index);
+        if (filters.size == was)
+            return {};
+    } else {
+        return {};
+    }
+    filters_changed(browser, state);
+    return redrawn();
+}
+
+/// Steps a strip's choice by one segment, stopping at either end.
+///
+/// @param[in,out] browser the browser
+/// @param[in,out] state the screen's state
+/// @param id the strip
+/// @param step -1 toward Any, or +1 toward the last segment
+/// @return what the host is to do
+ScreenResult step_strip(Browser& browser, ScreenState& state, kit::ControlId id, int32_t step) {
+    const std::size_t count =
+        id == ids::players ? ids::player_levels.size() : ids::size_levels.size();
+    const int32_t current = static_cast<int32_t>(
+        id == ids::players ? ids::players_index(browser.filters) : ids::size_index(browser.filters)
+    );
+    const int32_t next = std::clamp(current + step, int32_t{0}, static_cast<int32_t>(count) - 1);
+    return choose_segment(browser, state, id, static_cast<std::size_t>(next));
+}
+
+/// Carries out a control's press: a source pill is chosen, a strip's segment
+/// under the pointer is chosen (or the strip is stepped when a key says so),
+/// the search takes the focus, a card is selected or, already selected, acts
+/// as the primary button, and Cancel, the close mark and the primary button
+/// ask the host. Space or Enter on a strip, which arrive with no point and
+/// no step, leave its choice as it is.
 ///
 /// @param[in,out] browser the browser
 /// @param[in,out] state the screen's state
 /// @param list the display list
 /// @param id the control pressed
+/// @param at the pointer, when a press carried one; none for a key
+/// @param step how a Left or Right key steps a strip; 0 for a press
 /// @return what the host is to do
 ScreenResult
-act(Browser& browser, ScreenState& state, const kit::DisplayList& list, kit::ControlId id) {
+act(Browser& browser,
+    ScreenState& state,
+    const kit::DisplayList& list,
+    kit::ControlId id,
+    std::optional<kit::Point> at,
+    int32_t step) {
     Filters& filters = browser.filters;
     if (id >= ids::first_source &&
         id < ids::first_source + static_cast<kit::ControlId>(ids::sources.size())) {
@@ -208,28 +279,25 @@ act(Browser& browser, ScreenState& state, const kit::DisplayList& list, kit::Con
         filters_changed(browser, state);
         return redrawn();
     }
-    if (id >= ids::first_players &&
-        id < ids::first_players + static_cast<kit::ControlId>(ids::players.size())) {
-        const int32_t chip = ids::players[static_cast<std::size_t>(id - ids::first_players)];
-        if (filters.players.erase(chip) == 0)
-            filters.players.insert(chip);
-        filters_changed(browser, state);
-        return redrawn();
-    }
-    if (id >= ids::first_size &&
-        id < ids::first_size + static_cast<kit::ControlId>(ids::sizes.size())) {
-        const char letter = ids::sizes[static_cast<std::size_t>(id - ids::first_size)];
-        if (filters.sizes.erase(letter) == 0)
-            filters.sizes.insert(letter);
-        filters_changed(browser, state);
-        return redrawn();
+    if (id == ids::players || id == ids::sizes) {
+        if (step != 0)
+            return step_strip(browser, state, id, step);
+        if (!at)
+            return {};
+        const kit::Control* control = kit::control_of(list, id);
+        const kit::LevelsLook* look = strip_look(list, id);
+        if (control == nullptr || look == nullptr || look->captions.empty())
+            return {};
+        const std::size_t index =
+            kit::level_at(control->rect, look->captions.size(), look->level_width, at->x);
+        return choose_segment(browser, state, id, index);
     }
     if (id == ids::search) {
         state.interaction.focused = ids::search;
         state.interaction.focus_shown = true;
         return redrawn();
     }
-    if (id == ids::cancel)
+    if (id == ids::cancel || id == ids::close)
         return asking(BrowserAction::cancel);
     if (id == ids::primary)
         return primary_action(browser).enabled ? asking(BrowserAction::choose) : ScreenResult{};
@@ -342,7 +410,7 @@ ScreenResult browser_pointer(
         }
         const kit::PointerOutcome outcome = kit::pointer_up(interaction, list, at);
         if (outcome.result == kit::PointerResult::activated)
-            return act(browser, state, list, outcome.control);
+            return act(browser, state, list, outcome.control, at, 0);
         return outcome.result == kit::PointerResult::none ? ScreenResult{} : redrawn();
     }
     }
@@ -369,8 +437,12 @@ browser_key(Browser& browser, ScreenState& state, const kit::DisplayList& list, 
         return redrawn();
     }
     case kit::Key::space:
-        // A space typed into the search arrives as text.
+        // A space typed into the search arrives as text. On a strip it
+        // leaves the choice as it is.
         if (on_search)
+            return {};
+        if (interaction.focus_shown &&
+            (interaction.focused == ids::players || interaction.focused == ids::sizes))
             return {};
         break;
     case kit::Key::enter:
@@ -382,6 +454,9 @@ browser_key(Browser& browser, ScreenState& state, const kit::DisplayList& list, 
             reveal(state, list, entry);
             return redrawn();
         }
+        if (interaction.focus_shown &&
+            (interaction.focused == ids::players || interaction.focused == ids::sizes))
+            return {};
         break;
     case kit::Key::page_up:
     case kit::Key::page_down: {
@@ -418,7 +493,19 @@ browser_key(Browser& browser, ScreenState& state, const kit::DisplayList& list, 
             search_changed(browser, state);
             return redrawn();
         }
-        return act(browser, state, list, outcome.control);
+        if (outcome.control == ids::players || outcome.control == ids::sizes) {
+            if (pressed == kit::Key::left || pressed == kit::Key::right)
+                return act(
+                    browser,
+                    state,
+                    list,
+                    outcome.control,
+                    std::nullopt,
+                    pressed == kit::Key::left ? -1 : 1
+                );
+            return {};
+        }
+        return act(browser, state, list, outcome.control, std::nullopt, 0);
     case kit::KeyResult::scroll:
         return {};
     case kit::KeyResult::accept:

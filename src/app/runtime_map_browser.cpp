@@ -8,7 +8,8 @@
 // the picker. Pressing it opens the map browser (map-browser), modal over a
 // backdrop, its cards built from the runtime's data: the base maps the start
 // scan found, the installed map packs, and the map packs the catalogues
-// offer. Select moves the picker's selection to the chosen map; Download and
+// offer, each labelled with the bundle, the mod or the pack it comes from.
+// Select moves the picker's selection to the chosen map; Download and
 // select first queues its pack for download as the Library's GET does, shows
 // the download's progress, and selects the map once it is installed; Cancel
 // changes nothing. The player still chooses the map with the picker's own
@@ -21,9 +22,13 @@
 #include "oa/app/content/downloads.hpp"
 #include "oa/app/content/pictures.hpp"
 #include "oa/app/content/service.hpp"
+#include "oa/app/content_copy.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/package_install/origin.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/data/content_bundles.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
+#include "oa/formats/hpi.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -52,6 +57,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <system_error>
 #include <ios>
 #include <iostream>
 #include <map>
@@ -196,6 +202,185 @@ bool read_whole_file(const fs::path& file, uintmax_t most, std::vector<uint8_t>&
     bytes.assign(static_cast<std::size_t>(size), 0);
     in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     return static_cast<std::size_t>(in.gcount()) == bytes.size();
+}
+
+namespace bundles = oa::data::content_bundles;
+
+/// The catalogue key the base game's overlay shows. Other bundles show the
+/// table's English name as given.
+constexpr std::string_view base_overlay = "TA 3.1c";
+
+/// Returns the overlay a bundle's maps show.
+///
+/// @param bundle the bundle
+/// @return "TA 3.1c" for the base game, otherwise its English name
+std::string bundle_overlay(const bundles::Bundle& bundle) {
+    if (bundle.id == bundles::default_base_game_id)
+        return std::string(base_overlay);
+    return std::string(bundle.english_name);
+}
+
+/// Returns the overlay of the base game being played.
+///
+/// @param base_game the base game's id; empty when none is known
+/// @return "TA 3.1c" when that is the base game, or none is known; otherwise
+///     the base game's English name
+std::string playing_base_overlay(std::string_view base_game) {
+    if (base_game.empty() || base_game == bundles::default_base_game_id)
+        return std::string(base_overlay);
+    if (const bundles::Bundle* bundle = bundles::find_bundle(base_game))
+        return bundle_overlay(*bundle);
+    return std::string(base_overlay);
+}
+
+/// Returns a path as lower-case UTF-8 with '/' between its parts.
+///
+/// @param path the path
+/// @return the folded text
+std::string folded_path(const fs::path& path) {
+    std::string text = path_to_utf8(path);
+    for (char& letter : text) {
+        if (letter == '\\')
+            letter = '/';
+        else if (letter >= 'A' && letter <= 'Z')
+            letter = static_cast<char>(letter - 'A' + 'a');
+    }
+    return text;
+}
+
+/// Tells whether a file sits in a folder or in a folder inside it.
+///
+/// The comparison ignores ASCII case and treats '\\' as '/'. A path that
+/// cannot be made absolute matches nothing.
+///
+/// @param file the file
+/// @param folder the folder
+/// @return true when the file is in the folder
+bool path_is_under(const fs::path& file, const fs::path& folder) {
+    if (file.empty() || folder.empty())
+        return false;
+    std::error_code error;
+    const fs::path canon_file = fs::weakly_canonical(file, error);
+    if (error)
+        return false;
+    error.clear();
+    const fs::path canon_folder = fs::weakly_canonical(folder, error);
+    if (error)
+        return false;
+    std::string child = folded_path(canon_file);
+    std::string parent = folded_path(canon_folder);
+    while (parent.size() > 1 && parent.back() == '/')
+        parent.pop_back();
+    if (parent.empty() || child.size() < parent.size())
+        return false;
+    if (child.compare(0, parent.size(), parent) != 0)
+        return false;
+    return child.size() == parent.size() || child[parent.size()] == '/';
+}
+
+/// Returns the last part of a content path.
+///
+/// @param path a path with '/' or '\\'
+/// @return the file name
+std::string_view last_component(std::string_view path) noexcept {
+    const std::size_t slash = path.find_last_of("/\\");
+    if (slash == std::string_view::npos)
+        return path;
+    return path.substr(slash + 1);
+}
+
+/// Returns the bundle whose archive has this file name, from the whole table.
+///
+/// @param archive_name the archive's file name
+/// @return the bundle; null when no bundle lists that archive
+const bundles::Bundle* bundle_for_archive(std::string_view archive_name) {
+    if (archive_name.empty())
+        return nullptr;
+    for (const bundles::Bundle& bundle : bundles::bundles()) {
+        for (const bundles::ContentFile& file : bundle.files) {
+            if (same_archive_file_name(archive_name, last_component(file.copy_name)))
+                return &bundle;
+            for (const std::string_view source_path : file.source_names)
+                if (same_archive_file_name(archive_name, last_component(source_path)))
+                    return &bundle;
+        }
+    }
+    return nullptr;
+}
+
+/// Returns the bundle whose folder holds a file. The longest folder wins,
+/// so an expansion stored beside the base game is not labelled as the base.
+///
+/// @param file the file
+/// @param user the player's folder
+/// @return the bundle; null when the file is in no bundle folder
+const bundles::Bundle* bundle_holding_path(const fs::path& file, const fs::path& user) {
+    const bundles::Bundle* found = nullptr;
+    std::size_t longest = 0;
+    for (const bundles::Bundle& bundle : bundles::bundles()) {
+        const fs::path folder = bundle_folder(user, bundle);
+        if (!path_is_under(file, folder))
+            continue;
+        std::error_code error;
+        const fs::path canon = fs::weakly_canonical(folder, error);
+        const std::size_t length = error ? std::size_t{0} : folded_path(canon).size();
+        if (length > longest) {
+            found = &bundle;
+            longest = length;
+        }
+    }
+    return found;
+}
+
+/// Splits the scanned maps into the game's and the mod's. A map whose file
+/// sits in the mod's folder is the mod's, even when its archive is a
+/// bundle's. Otherwise the archive's file name names the bundle, and a file
+/// in a bundle's folder names that bundle. Anything else, including a map
+/// whose file cannot be found, stays in the list labelled with the base
+/// game being played. No map is dropped.
+///
+/// @param assets the mounted files
+/// @param mod_label the mod's name; empty when no mod plays
+/// @param mod_plays whether a mod plays
+/// @param mod_folder the mod's folder; unused when no mod plays
+/// @param user the player's folder
+/// @param base_game the base game's id
+/// @param played the scanned maps
+/// @param[out] game the game's maps
+/// @param[out] from_mod the mod's maps
+void classify_played_maps(
+    const oa::AssetStore& assets,
+    const std::string& mod_label,
+    bool mod_plays,
+    const fs::path& mod_folder,
+    const fs::path& user,
+    std::string_view base_game,
+    std::vector<mb::MapCard> played,
+    std::vector<mb::MapCard>& game,
+    std::vector<mb::MapCard>& from_mod
+) {
+    const std::string base_label = playing_base_overlay(base_game);
+    for (mb::MapCard& card : played) {
+        oa::Provider found;
+        try {
+            found = assets.provider("maps/" + card.name + ".ota");
+        } catch (const std::exception&) {
+            found = {};
+        }
+        const bool placed = found.kind != oa::ProviderKind::none && !found.path.empty();
+        if (mod_plays && placed && path_is_under(found.path, mod_folder)) {
+            card.source_name = mod_label;
+            from_mod.push_back(std::move(card));
+            continue;
+        }
+        const bundles::Bundle* bundle = nullptr;
+        if (placed && found.kind == oa::ProviderKind::archive)
+            bundle = bundle_for_archive(path_to_utf8(found.path.filename()));
+        if (bundle == nullptr && placed)
+            bundle = bundle_holding_path(found.path, user);
+        card.source_name = bundle != nullptr ? bundle_overlay(*bundle) : base_label;
+        game.push_back(std::move(card));
+    }
 }
 
 /// One online map's pack: where to download it from, and its picture.
@@ -615,8 +800,26 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
         if (snapshot)
             for (const content::RegistryView& registry : snapshot->registries)
                 registry_names[registry.registry.descriptor.id] = registry.registry.descriptor.name;
+        std::vector<mb::MapCard> game;
+        std::vector<mb::MapCard> from_mod;
+        const bool mod_plays = runtime_.plays_mod();
+        const fs::path mod_folder = mod_plays ? runtime_.played_mod_folder() : fs::path{};
+        classify_played_maps(
+            runtime_.assets_,
+            model_.mod_name,
+            mod_plays,
+            mod_folder,
+            runtime_.user_folder(),
+            runtime_.played_map_target().base_game,
+            base_cards(),
+            game,
+            from_mod
+        );
         model_.cards = mb::merge_cards(
-            base_cards(), installed_cards(registry_names), online_cards(snapshot.get())
+            std::move(game),
+            std::move(from_mod),
+            installed_cards(registry_names),
+            online_cards(snapshot.get())
         );
         model_.selected.reset();
         if (was_selected)
@@ -865,7 +1068,8 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
         request.key = card.preview_key;
         request.map = card.name;
         switch (card.origin) {
-        case mb::MapCard::Origin::base:
+        case mb::MapCard::Origin::game:
+        case mb::MapCard::Origin::mod:
             request.source = previews::PreviewSource::base;
             break;
         case mb::MapCard::Origin::installed: {

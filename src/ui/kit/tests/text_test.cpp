@@ -956,6 +956,40 @@ int short_line(void* context, int pixel_size, bool bold) {
     return pixel_size - 20;
 }
 
+/// Checks the fit record: a text wider than its box, and a text whose ink
+/// crosses another, are named; a text that fits and stays clear is not, and
+/// a new frame drops what the last one kept.
+void a_text_wider_than_its_box_or_across_another_is_recorded() {
+    kit::set_text_fit_screen("language");
+    kit::begin_text_fit_frame();
+    kit::note_text_fit("fits", 40, 0, 0, 80, 12, 0);
+    OA_CHECK(kit::text_fit_records().empty());
+    kit::note_text_fit("Benutzeroberfläche", 126, 0, 20, 116, 12, 0);
+    OA_CHECK(kit::text_fit_records().size() == 1);
+    const kit::TextFitRecord& wider = kit::text_fit_records().front();
+    OA_CHECK(wider.screen == "language");
+    OA_CHECK(wider.text == "Benutzeroberfläche");
+    OA_CHECK(wider.wider);
+    OA_CHECK(!wider.across);
+    OA_CHECK(wider.text_width == 126 && wider.box_width == 116);
+    // The next line starts where the wide one ends, so the edges meet and it is clear.
+    kit::note_text_fit("beside", 40, 126, 20, 40, 12, 126);
+    OA_CHECK(kit::text_fit_records().size() == 1);
+    // This one sits on the wide one's ink.
+    kit::note_text_fit("across", 40, 100, 20, 80, 12, 100);
+    OA_CHECK(kit::text_fit_records().size() == 2);
+    OA_CHECK(kit::text_fit_records().back().across);
+    OA_CHECK(!kit::text_fit_records().back().wider);
+    // A new paint keeps the records and forgets the ink, so the same place is clear.
+    kit::text_fit_begin_paint();
+    kit::note_text_fit("again", 40, 100, 20, 80, 12, 100);
+    OA_CHECK(kit::text_fit_records().size() == 2);
+    kit::begin_text_fit_frame();
+    OA_CHECK(kit::text_fit_records().empty());
+    kit::note_text_fit("", 20, 0, 0, 4, 12, 0);
+    OA_CHECK(kit::text_fit_records().empty());
+}
+
 /// Checks the modern fonts' measure: the hooks when they are set, an estimate when not, and
 /// an empty line measured as nothing without asking the hook.
 void the_measure_uses_its_hooks() {
@@ -989,5 +1023,6 @@ int main() {
     fit_matches_the_screens_copies();
     a_path_breaks_after_a_separator();
     the_measure_uses_its_hooks();
+    a_text_wider_than_its_box_or_across_another_is_recorded();
     return oa::test::check_exit_status();
 }

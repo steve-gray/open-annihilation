@@ -221,13 +221,18 @@ model_render::ModelRef presented_unit(MatchModels& models, uint16_t slot) {
                 motion.current,
                 presentation.fraction,
                 motion.record,
-                motion.instance
+                motion.instance,
+                presentation.batch
             );
         else if (pose && motion.pieces_moved)
             // Placed on its playout, its pieces move between their ticks
             // however far its records moved it.
             blend_unit_pieces(
-                motion.previous, motion.current, presentation.fraction, motion.instance
+                motion.previous,
+                motion.current,
+                presentation.fraction,
+                motion.instance,
+                presentation.batch
             );
         if (pose) {
             motion.record.position = pose->position;
@@ -488,6 +493,24 @@ build_preview_bands(const model_render::ModelRef& model, uint32_t pulse_tick, bo
     return bands;
 }
 
+/// Writes each piece's turn per tick into `turns`, three words a piece in
+/// xy, xz, yz order. A unit with no script leaves them zero. Script axis 0
+/// is the yz word, axis 1 the xz word and axis 2 the xy word.
+void piece_turn_words(oa::sim::match_runtime::UnitInstance& instance, std::vector<int32_t>& turns) {
+    const auto count = instance.model().pieces().size();
+    turns.assign(count * 3, 0);
+    auto* script = instance.script();
+    if (script == nullptr)
+        return;
+    for (std::size_t piece = 0; piece < count; ++piece) {
+        const auto at = piece * 3;
+        const auto index = static_cast<uint32_t>(piece);
+        turns[at] = script->piece_turn_speed(index, 2);
+        turns[at + 1] = script->piece_turn_speed(index, 1);
+        turns[at + 2] = script->piece_turn_speed(index, 0);
+    }
+}
+
 } // namespace
 
 unit_playout::FrameTime
@@ -566,6 +589,7 @@ void observe_match_tick(MatchModels& models, oa::sim::match_runtime::Match& matc
     const uint32_t slots = world.record.unit_slot_count;
     if (presentation.units.size() < slots)
         presentation.units.resize(slots);
+    std::vector<int32_t> turns;
     for (uint32_t slot = 1; slot < slots; ++slot) {
         auto& motion = presentation.units[slot];
         const oa::Unit& record = world.record.units[slot];
@@ -576,8 +600,9 @@ void observe_match_tick(MatchModels& models, oa::sim::match_runtime::Match& matc
                 forget_unit(motion);
             continue;
         }
+        piece_turn_words(*runtime->instance, turns);
         observe_unit(
-            motion, tick, runtime->instance_generation, record, runtime->instance->model()
+            motion, tick, runtime->instance_generation, record, runtime->instance->model(), turns
         );
     }
     observe_shots(presentation.shots, tick, match.projectiles());

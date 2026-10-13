@@ -108,14 +108,17 @@ inline constexpr int32_t hint_line_height = oa::ui::kit::compact_metrics.small_l
 /// tall as a hint line: one line's letters, outline and shadow then keep
 /// clear of the next's.
 inline constexpr int32_t tall_hint_line_gap = 3;
-/// The most lines a hint takes.
+/// The most lines a hint takes before it is wrapped to the box.
 inline constexpr std::size_t most_hint_lines = 2;
 /// The most lines a notice row's text takes under its label: Controller's
-/// Steam Input notice.
+/// Steam Input notice, before a wider script wraps it further.
 inline constexpr std::size_t most_notice_lines = 4;
-/// The most lines under any row's label: a hint's, or a notice's.
-inline constexpr std::size_t most_row_lines =
-    most_notice_lines > most_hint_lines ? most_notice_lines : most_hint_lines;
+/// The most lines a wrapped hint or notice keeps under its label. A whole
+/// text in another language can take more lines than the two a Compact
+/// English hint was broken into.
+inline constexpr std::size_t most_wrapped_lines = 12;
+/// The most lines stored under any row's label.
+inline constexpr std::size_t most_row_lines = most_wrapped_lines;
 /// The rows between the last hint line and a slider.
 inline constexpr int32_t slider_gap = 4;
 /// A slider line's height: the track with its knob and stops, and the value.
@@ -1025,6 +1028,13 @@ section_settings(Page page, const SectionHooks* section, const RowContext& conte
 /// A text's width in a font of the dialog, in source pixels.
 using TextWidth = std::function<int32_t(std::string_view)>;
 
+/// Returns a text's width at estimated_character_width a character, as the
+/// rows are placed where no font measures their words.
+///
+/// @param text the text, in UTF-8
+/// @return the width, in source pixels
+[[nodiscard]] int32_t estimated_width(std::string_view text);
+
 /// Returns a setting's row as the dialog shows it, read from its row spec:
 /// the spec's view, with the lock the dialog puts on the row, whether its
 /// hint lines are its status, a switch a language sets showing On, and each
@@ -1037,9 +1047,16 @@ using TextWidth = std::function<int32_t(std::string_view)>;
 /// @param lock the row's lock (section_lock)
 /// @param status its hint lines are its status (section_hint_is_status)
 /// @param small_width a text's width in the small font
+/// @param content_width the section's width; a real font wraps a hint to it
 /// @return the row's view
 [[nodiscard]] oa::ui::kit::RowView row_view(
-    const Dialog& dialog, Setting setting, Lock lock, bool status, const TextWidth& small_width
+    const Dialog& dialog,
+    Setting setting,
+    Lock lock,
+    bool status,
+    const TextWidth& small_width,
+    int32_t content_width,
+    const TextWidth* regular_width = nullptr
 );
 
 /// Places a section's rows at its top, through the kit's placement of their
@@ -1055,6 +1072,7 @@ using TextWidth = std::function<int32_t(std::string_view)>;
 /// @param small_width a text's width in the small font, for a folder's path
 /// @param[out] placed the kit's placement of the rows, their views with
 ///     them; may be null
+/// @param sizes the sizes the rows are placed in; null for the class's own
 /// @return the rows
 [[nodiscard]] Rows place_section(
     const Dialog& dialog,
@@ -1062,7 +1080,9 @@ using TextWidth = std::function<int32_t(std::string_view)>;
     const Locks& locks,
     const SectionHooks* section,
     const TextWidth& small_width,
-    oa::ui::kit::PlacedRows* placed = nullptr
+    oa::ui::kit::PlacedRows* placed = nullptr,
+    const Sizes* sizes = nullptr,
+    const TextWidth* regular_width = nullptr
 );
 
 /// Places the rows of a section; Developer's own, over its list, with
@@ -1119,12 +1139,30 @@ void scroll_rows(Rows& rows, int32_t by) noexcept;
 /// @return the locks
 [[nodiscard]] Locks shown_locks(const Dialog& dialog) noexcept;
 
+/// The dialog's sizes, widened for the font in use where a section name or a
+/// footer button is wider than the box the class gives it. An estimated
+/// measure, or no measure, keeps the class's sizes.
+///
+/// @param dialog the dialog
+/// @param regular a text's width in the regular font; null to estimate
+/// @param small a text's width in the small font; null to estimate
+/// @return the sizes
+[[nodiscard]] Sizes
+fitted_sizes(const Dialog& dialog, const TextWidth* regular, const TextWidth* small);
+
 /// Places the open section's rows once, at its offset clamped to its limit,
 /// with the locks shown_locks gives.
 ///
 /// @param dialog the dialog
+/// @param small_width a text's width in the small font; null to estimate
+/// @param sizes the sizes the rows are placed in; null for the class's own
 /// @return its rows, offset, limit and content height
-[[nodiscard]] ScrolledRows open_rows(const Dialog& dialog);
+[[nodiscard]] ScrolledRows open_rows(
+    const Dialog& dialog,
+    const TextWidth* small_width = nullptr,
+    const Sizes* sizes = nullptr,
+    const TextWidth* regular_width = nullptr
+);
 
 /// Tells whether a row of Developer's list takes a press and the focus:
 /// every header, which opens and closes, and a parameter's control while it
@@ -1174,8 +1212,20 @@ inline constexpr int32_t first_menu_item_control = no_control - 1;
 ///
 /// @param dialog the dialog
 /// @param scroll the rows the list is scrolled by from its top; not clamped
+/// @param switch_columns a measured Off/On switch; 0 keeps the class's switch
+/// @param small_width a text's width in the small font; null keeps the class's boxes
+/// @param regular_width a text's width in the regular font; null keeps an area
+///     name beside its count
+/// @param sizes the dialog's sizes; null uses the class's own
 /// @return the list
-[[nodiscard]] List place_list(const Dialog& dialog, int32_t scroll = 0);
+[[nodiscard]] List place_list(
+    const Dialog& dialog,
+    int32_t scroll = 0,
+    int32_t switch_columns = 0,
+    const TextWidth* small_width = nullptr,
+    const TextWidth* regular_width = nullptr,
+    const Sizes* sizes = nullptr
+);
 
 /// Returns where Developer's list scrolls: its size class's
 /// (Sizes::developer_scroll), whose top is the row under the class's
@@ -1187,7 +1237,12 @@ inline constexpr int32_t first_menu_item_control = no_control - 1;
 ///
 /// @param dialog the dialog, on Developer
 /// @return the view, the well, the margin and the page step
-[[nodiscard]] ScrollArea developer_list_scroll(const Dialog& dialog);
+[[nodiscard]] ScrollArea developer_list_scroll(
+    const Dialog& dialog,
+    const TextWidth* small_width = nullptr,
+    const Sizes* sizes = nullptr,
+    const TextWidth* regular_width = nullptr
+);
 
 /// Moves a placed list up, every part of every row with it.
 ///

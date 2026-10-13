@@ -480,6 +480,17 @@ class Vm {
     /// @return false past the static table
     [[nodiscard]] bool set_static(std::size_t index, int32_t value) noexcept;
 
+    /// Returns the turn one axis of a piece is adding each tick.
+    ///
+    /// The turn is in angle words, 65536 a full turn, and negative the other
+    /// way. It is the rate after this tick's change of speed, which is the
+    /// turn the axis took in the tick when the scheduler stepped one tick.
+    ///
+    /// @param piece piece index
+    /// @param axis axis 0..2
+    /// @return the turn per tick, or 0 when the piece or axis is outside the script
+    [[nodiscard]] int32_t turn_speed(uint32_t piece, uint32_t axis) const noexcept;
+
   private:
 
     struct StoredContext {

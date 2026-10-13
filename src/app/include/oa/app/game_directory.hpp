@@ -79,6 +79,9 @@ struct GameInstall {
     /// overlay, the mod folder, then the inspected folder; empty when the
     /// folder does not exist.
     std::vector<fs::path> folders;
+    /// The mod folder layered over the inspected folder; empty when none.
+    /// An overlay is not this folder, and neither is an expansion bundle.
+    fs::path mod_folder{};
     /// The mod profile the folders play with; null for base 3.1c.
     std::shared_ptr<const data::mod_profile::ModProfile> profile;
     /// Why the mod profile cannot be used, one line each; any makes the
@@ -300,9 +303,13 @@ struct GameDirectory {
     std::vector<std::string> profile_warnings;
     /// Where the folder was found, for GameDirectorySource::found.
     std::optional<FoundInstall> found_from{};
-    /// True when `folders` begins with a mod folder. Expansion bundles are
-    /// not a mod folder.
+    /// True when `mod_folder` names a mod folder layered over the game.
+    /// Expansion bundles in `folders` do not set this.
     bool mod_layered = false;
+    /// The mod folder layered over the game; empty when this mount plays no
+    /// mod. The same folder `mod_layered` reports. An expansion bundle is
+    /// never stored here, including when it is the first of `folders`.
+    fs::path mod_folder{};
 };
 
 /// Resolves the game folder.
@@ -412,9 +419,9 @@ void remember_mod_directory(oa::platform::preferences::Values& values, const fs:
 
 /// Lists the base games and expansions wholly present in a folder.
 ///
-/// A player's folder, or one bundle folder inside it (`games/<id>` or
-/// `expansions/<base>/<id>`), is read from the `.oa-content` records of
-/// `games/` and `expansions/`. A record counts when it names that bundle and
+/// A player's folder, or one bundle folder inside it (`Games/<id>` or
+/// `Expansions/<base>/<id>`), is read from the `.oa-content` records of
+/// `Games/` and `Expansions/`. A record counts when it names that bundle and
 /// lists every one of its files. The game files are not walked. Any other
 /// folder is walked: each regular file is matched by its path relative to the
 /// folder and its size, and a bundle is copied when every one of its files
@@ -427,7 +434,7 @@ void remember_mod_directory(oa::platform::preferences::Values& values, const fs:
 
 /// What a composed mount is built from: the player's folder and the choice.
 struct ManagedMount {
-    /// The player's folder, which holds `games/` and `expansions/`.
+    /// The player's folder, which holds `Games/` and `Expansions/`.
     fs::path user_folder{};
     /// `--content`, or empty to use the preferences.
     std::string_view content{};

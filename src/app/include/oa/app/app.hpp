@@ -297,8 +297,16 @@ struct Options {
     /// with the next mount.
     std::string content{};
     // The folders loose files come from, highest precedence first: the mod
-    // folder, then game_dir. main() fills it; empty means game_dir alone.
+    // folder when one is layered, then each expansion bundle, then the base
+    // game. main() fills it; empty means game_dir alone. How many there are
+    // does not say that a mod is playing: that is layered_mod_folder.
     std::vector<fs::path> game_folders;
+    /// The mod folder layered over the game for this start; empty when no
+    /// mod plays. main() sets it from the resolved game directory, including
+    /// a mod folder a named --game-dir layers. An expansion bundle is never
+    /// this folder. The Library, Settings, presence and the played mod read
+    /// this.
+    fs::path layered_mod_folder;
     // The mod profile the game plays, resolved from --mod or the folders'
     // own oamod.yaml before any archive is mounted: its limits size the
     // game's tables and its rules reach every match. Null for base 3.1c.
@@ -484,6 +492,10 @@ struct Options {
     // Walks the first-run setup over the main menu: a built-in language, a
     // pack that fails and then retries, Skip setup, and both online choices.
     bool check_first_run = false;
+    // Opens every Open Annihilation screen in English, German, French,
+    // Spanish, Italian and Simplified Chinese, at 640x480 and 1280x720, and
+    // fails when any text is wider than its box or crosses another text.
+    bool check_text_fit = false;
     // Opens the locator on --game-dir's parent, moves onto that folder with
     // Tab and chooses it. With --snapshot, writes that PNG and a Deck PNG.
     bool check_folder_chooser = false;
