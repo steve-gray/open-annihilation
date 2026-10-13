@@ -389,22 +389,13 @@ class ChooserScreen {
         tick_pads();
         refresh_viewport();
         if (options_.check_text_fit)
-            kit::set_text_fit_screen(
-                model_.view == chooser::View::browse ? "folder-chooser/browse"
-                                                     : "folder-chooser/list"
-            );
+            kit::set_text_fit_screen("folder-chooser/locator");
         repaint();
         present();
-        // The text-fit check paints the list, then the browser, and leaves.
-        // A quit queued before the first paint would skip the frame.
-        if (options_.check_text_fit) {
-            if (model_.view == chooser::View::list) {
-                browse_to(start_folder());
-                dirty_ = true;
-                return;
-            }
+        // The text-fit check paints the locator once and leaves. A quit
+        // queued before the first paint would skip the frame.
+        if (options_.check_text_fit)
             finish(false);
-        }
     }
 
     /// Returns how long the loop may wait for an event.

@@ -1040,7 +1040,10 @@ void Runtime::check_engine_settings_dialog() {
     expect("Native pixel density On");
     require(
         native_density_window() == dense &&
-            shows_text(settings::dialog_layout(*dialog), "Applies from the next start."),
+            shows_text(
+                settings::dialog_layout(*dialog),
+                "The display's own pixel density (Retina on a Mac). Applies from the next start."
+            ),
         "Native pixel density On changed the open window, or does not say when it applies"
     );
     // Explosion flash: Reduced is the level the next frame draws.

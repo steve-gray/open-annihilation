@@ -32,7 +32,6 @@ inline constexpr std::string_view interface_words[] = {
     "AVAILABLE TO DOWNLOAD",
     "After zoom",
     "All files match",
-    "Applies from the next start.",
     "Attack Wave Size",
     "Auto",
     "Automatic",
