@@ -79,6 +79,9 @@ struct GameInstall {
     /// overlay, the mod folder, then the inspected folder; empty when the
     /// folder does not exist.
     std::vector<fs::path> folders;
+    /// The mod folder layered over the inspected folder; empty when none.
+    /// An overlay is not this folder, and neither is an expansion bundle.
+    fs::path mod_folder{};
     /// The mod profile the folders play with; null for base 3.1c.
     std::shared_ptr<const data::mod_profile::ModProfile> profile;
     /// Why the mod profile cannot be used, one line each; any makes the
@@ -300,9 +303,13 @@ struct GameDirectory {
     std::vector<std::string> profile_warnings;
     /// Where the folder was found, for GameDirectorySource::found.
     std::optional<FoundInstall> found_from{};
-    /// True when `folders` begins with a mod folder. Expansion bundles are
-    /// not a mod folder.
+    /// True when `mod_folder` names a mod folder layered over the game.
+    /// Expansion bundles in `folders` do not set this.
     bool mod_layered = false;
+    /// The mod folder layered over the game; empty when this mount plays no
+    /// mod. The same folder `mod_layered` reports. An expansion bundle is
+    /// never stored here, including when it is the first of `folders`.
+    fs::path mod_folder{};
 };
 
 /// Resolves the game folder.

@@ -178,7 +178,7 @@ resolved(const fs::path& folder, GameInstall&& install, GameDirectorySource sour
     auto folders = std::move(install.folders);
     if (folders.empty())
         folders.push_back(installation);
-    return GameDirectory{
+    GameDirectory directory{
         folder,
         std::move(install.archives),
         source,
@@ -188,6 +188,9 @@ resolved(const fs::path& folder, GameInstall&& install, GameDirectorySource sour
         std::move(install.profile),
         std::move(install.profile_warnings)
     };
+    directory.mod_folder = std::move(install.mod_folder);
+    directory.mod_layered = !directory.mod_folder.empty();
+    return directory;
 }
 
 /// Reports that the in-engine chooser should open: the usable folders found, the remembered
@@ -568,6 +571,7 @@ GameInstall inspect_game_install(
             );
             return install;
         }
+        install.mod_folder = mod.folder;
         install.folders.push_back(mod.folder);
     }
     install.folders.push_back(root);
@@ -1034,7 +1038,8 @@ std::optional<GameDirectory> compose_managed_content(
     directory.folders = std::move(install.folders);
     directory.profile = std::move(install.profile);
     directory.profile_warnings = std::move(install.profile_warnings);
-    directory.mod_layered = !mod.empty();
+    directory.mod_folder = std::move(mod);
+    directory.mod_layered = !directory.mod_folder.empty();
     return directory;
 }
 
