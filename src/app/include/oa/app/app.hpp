@@ -519,8 +519,9 @@ struct Options {
     /// --check-content-copy PATH: copies a small fixture into PATH, standing in
     /// for Documents, and checks that copy. The run does nothing else.
     fs::path check_content_copy{};
-    /// --check-installer FILE: lists the bundles in a disk image and each
-    /// file's size and SHA-256. The run does nothing else.
+    /// --check-installer FILE: reads a recognised Windows installer or the
+    /// disk image for older Macs, lists the bundles it holds and every file's
+    /// SHA-256. The run does nothing else.
     fs::path check_installer{};
     /// --no-game-files-screen: with no usable game folder, the notice with its look-again
     /// button instead of the Game files screen, where the platform offers both.

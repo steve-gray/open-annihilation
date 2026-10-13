@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The game's own copy of a base game and its expansions. Files are read from
-// a source (a folder today; an installer through the same reader later) and
-// written under the player's folder, in games/<bundle> and
+// a source (a folder, or a Windows installer) and written under the player's
+// folder, in games/<bundle> and
 // expansions/<base>/<bundle>. Each bundle folder holds a .oa-content record
 // of where the files came from and each file's size, modification time and
 // SHA-256. The source is only read. Each start checks a copied bundle against
@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <iosfwd>
 #include <limits>
+#include <memory>
 #include <span>
 #include <stdint.h>
 #include <string>
@@ -193,12 +194,17 @@ class ContentSource {
     /// @param[out] error why it could not be resolved; may be null
     /// @return true when `resolved` is a file that can be read
     [[nodiscard]] virtual bool
-    locate(std::string_view name, std::filesystem::path& resolved, std::string* error);
+    locate(std::string_view name, std::filesystem::path& resolved, std::string* error) {
+        (void)name;
+        (void)resolved;
+        (void)error;
+        return false;
+    }
 
     /// Returns the directory the files are read from, when they are on disk.
     ///
     /// @return that directory, or empty when the source has none
-    [[nodiscard]] virtual std::filesystem::path disk_root() const;
+    [[nodiscard]] virtual std::filesystem::path disk_root() const { return {}; }
 };
 
 /// A folder of game files. Names match without regard to ASCII case, and a
@@ -236,6 +242,60 @@ class FolderContentSource final : public ContentSource {
     std::filesystem::path root_;
     std::span<const oa::data::content_bundles::Bundle> bundles_{};
     bool opened_{};
+};
+
+/// A Windows installer. Names are the installed paths, and streaming one file
+/// reads it out of the installer. The installer itself is only read.
+class WindowsInstallerSource final : public ContentSource {
+  public:
+
+    /// Takes the installer the player named. Every installed file is listed;
+    /// the copy matches that listing against `bundles`.
+    ///
+    /// @param file the installer
+    /// @param bundles the bundles a file of the right name and size belongs to.
+    ///        Not kept: matching reads the table again when the copy runs.
+    WindowsInstallerSource(
+        std::filesystem::path file, std::span<const oa::data::content_bundles::Bundle> bundles
+    );
+
+    /// Closes the installer.
+    ~WindowsInstallerSource() override;
+
+    WindowsInstallerSource(const WindowsInstallerSource&) = delete;
+    WindowsInstallerSource& operator=(const WindowsInstallerSource&) = delete;
+    WindowsInstallerSource(WindowsInstallerSource&&) = delete;
+    WindowsInstallerSource& operator=(WindowsInstallerSource&&) = delete;
+
+    /// The installer the player named, as the copy's record keeps it.
+    [[nodiscard]] std::string origin() const override;
+    /// Recognises the installer and reads its file list.
+    ///
+    /// A file whose size and SHA-256 are not the Windows installer this game
+    /// knows fails with "This installer is not recognised." A file that is
+    /// that installer but cannot be read fails with "This installer could
+    /// not be read."
+    [[nodiscard]] bool open(std::string* error) override;
+    /// Lists the installed files.
+    [[nodiscard]] bool list(std::vector<ContentSourceFile>& files, std::string* error) override;
+    /// Writes one listed file from the installer to `request.destination`.
+    [[nodiscard]] bool
+    stream_file(const StreamRequest& request, StreamResult& result, std::string* error) override;
+
+    /// The SHA-256 of one listed file. The installer is only read, and nothing
+    /// is written.
+    ///
+    /// @param name the listed name
+    /// @param[out] digest the digest, when the file was read
+    /// @param[out] error why it could not be read; may be null
+    /// @return true when `digest` is the file's
+    [[nodiscard]] bool
+    hash_file(std::string_view name, oa::base::sha256::Digest& digest, std::string* error);
+
+  private:
+
+    struct State;
+    std::unique_ptr<State> state_;
 };
 
 /// One file recorded in a bundle folder.
@@ -482,9 +542,10 @@ struct ManagedCopyRequest {
 ///
 /// --game-dir leaves the installation where it is. An unattended start never
 /// copies. An attended start copies from `installation` when that is a
-/// directory of game files. The installation is only read. A start whose
-/// player folder could not be resolved skips the copy when somebody is
-/// watching, and refuses when nobody is.
+/// directory of game files, or a Windows installer this game recognises.
+/// The installation is only read. A start whose player folder could not be
+/// resolved skips the copy when somebody is watching, and refuses when nobody
+/// is.
 ///
 /// @param request what this start was given
 /// @throws std::runtime_error when an unattended start has no managed base
@@ -636,5 +697,23 @@ struct ContentNoticeCopy {
     const std::filesystem::path& user_folder,
     std::span<const oa::data::content_bundles::Bundle> table
 );
+
+/// Reads a Windows installer and prints the bundles it holds.
+///
+/// Each bundle with at least one file is printed, then every file of that
+/// bundle with its SHA-256, or that it is missing. The installer is only
+/// read. An installer this game does not recognise is refused.
+///
+/// @param file the installer
+/// @return 0 when every file of every found bundle matches, 1 otherwise
+[[nodiscard]] int run_windows_installer_check(const std::filesystem::path& file);
+
+/// --check-installer: checks a recognised installer with the reader of its
+/// kind, known by its size. A file of no known installer's size goes to the
+/// Windows check, which refuses it.
+///
+/// @param file the installer
+/// @return 0 when the check passed, 1 when it did not
+[[nodiscard]] int run_installer_check(const std::filesystem::path& file);
 
 } // namespace oa::app

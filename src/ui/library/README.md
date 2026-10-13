@@ -103,8 +103,8 @@ translator finds them together. Every word passes through `Library::text`
   played, the installed mod marked playing (its listing's name, badge and
   author when a registry lists it) or else `Inputs::playing_mod`, with its
   version ("Highland 0.4.0") and the release the tile states
-  ("0.4.0 (rev 1)"), or the base game ("Base Game", "Total Annihilation
-  3.1c", "No mod: the game as it was made"); the language in use, its name
+  ("0.4.0 (rev 1)"), or No Mod ("No Mod", "Total Annihilation as it was
+  made"); the language in use, its name
   in itself and in English, its pack, version, revision and coverage
   (`Inputs::language`: "Polski 1.0", "Coverage 92%") or the language the
   game holds itself ("English · built in", "Built in"); and each installed
@@ -262,14 +262,19 @@ app removes the folder (`Runtime::library_uninstall`,
   the Library in a frame's window (`window_size`: 480 by 324, 720 by 486 or
   960 by 600 points, never larger than the frame), from its top left corner:
   - **The Active tab**, at every class, shows under the tabs, with no
-    search and no filters, the headings MOD, LANGUAGE and MAPS over tiles.
-    The mod tile has a large badge, the name, the version and revision
-    and the author, with Playing as a pill on the title's line at the top
-    right, or Base Game with Total Annihilation's icon, from the program in
+    search and no filters. At every size the first row is BASE GAME and
+    LANGUAGE and the second is EXPANSIONS and MOD, then the MAPS heading.
+    The base-game tile has Total Annihilation's icon, from the program in
     the game folder that describes itself as Total Annihilation,
-    nearest-neighbour and centred in the badge square (the letters "3.1c"
-    when that program is missing or its icon cannot be read) and "No mod:
-    the game as it was made" and no pill.
+    nearest-neighbour and centred in the badge square (the letters "TA"
+    when that program is missing or its icon cannot be read), the name,
+    the version and, when the inputs name them, the source and the file
+    check, and CHANGE… (`library.active.change`) at the bottom right.
+    The expansions tile has one pill `library.active.expansion.<id>` for
+    each expansion of that game. The mod tile has a large badge, the name,
+    the version and revision and the author, with Playing as a pill on the
+    title's line at the top right, or No Mod with an em dash and "Total
+    Annihilation as it was made" and no pill.
     While a mod is played, UNLOAD MOD
     (`library.active.unload`, kind `button`, text "UNLOAD MOD") sits at the
     mod tile's bottom right. It is accent while it can act and plain while
@@ -290,16 +295,22 @@ app removes the folder (`Runtime::library_uninstall`,
     fitted in its square, centred, and the letterbox is the list's well
     colour. Badge, title and lines start
     at the top of the tile, with the same padding above them and below the
-    last line or the button. Compact stacks the mod and the language and
-    lists the maps on one line each; Regular and Large put the mod and the
-    language side by side, the titles on one line and the tiles the same
-    height; Large puts the maps in two columns of equal height when more
-    than one is installed. The mod label stops above UNLOAD MOD, the
+    last line or the button. The four tiles stand two by two at every size.
+    Compact lists the maps on one line each; Regular and Large put the
+    titles on one line and the tiles the same height; Large puts the maps
+    in two columns of equal height when more than one is installed. The mod label stops above UNLOAD MOD, the
     language label covers its tile, and each map's label covers its title
     line, or the players-and-size line when the title is the link, and on
     a small window the part of the line after the title when that title is
-    the link, so it does not meet the link. The maps pane scrolls on its
-    own when the maps are taller than the room under the heading. The labels take
+    the link, so it does not meet the link. On Regular and Large the maps
+    pane scrolls on its own when the maps are taller than the room under
+    the heading, and the wheel over a tile above the maps does not scroll
+    them. On Compact, when the tiles leave the maps fewer than four rows,
+    the page scrolls as one, the tiles then the maps, by the wheel, a
+    finger, the scroll bar, the page keys, Home, End and the right stick.
+    Once the maps are in view, four rows fit. Focusing a map link, or the
+    maps search, scrolls that control into view. The expansions hint wraps
+    onto as many lines as it needs. The labels take
     no press. UNLOAD MOD does, while it is enabled, and so does a map's
     link while its line shows; Tab and the arrows reach both. A pack of one map
     wears that map's minimap on every row and in the details. A pack of
@@ -483,8 +494,10 @@ app removes the folder (`Runtime::library_uninstall`,
     neither enabled nor focusable, whose text is the words shown (the From
     fact's long value, and the Rules fact's value whole, short at Compact
     and long at Regular and Large);
-  - on the Active tab the labels `library.active.mod` ("Highland 0.4.0",
-    or "No mod: the game as it was made"), `library.active.language`
+  - on the Active tab the labels `library.active.base` ("Total
+    Annihilation · 3.1c"), `library.active.expansions` ("EXPANSIONS · 5 OF
+    6 ON"), `library.active.mod` ("Highland 0.4.0", or "No Mod"),
+    `library.active.language`
     ("Polski 1.0") and `library.active.map.<n>`, from 1 in the order shown
     ("Ridgeline · 4 players · 16x16"), the link `library.active.from.<n>`
     ("From Core Map Pack", or the map's title when its pack holds that map
@@ -662,17 +675,22 @@ press, the header's close mark to the right of refresh asking what CLOSE
 asks, the wheel and a finger's drag, typing and Backspace, the
 filter drop-down with its counts, each tab keeping its filter, New's
 pill, and a press outside the drop-down, the tag pills, MORE ▾, and the
-Active tab with forty more maps: the mod and the language take no press
-and stay put, UNLOAD MOD asking what SWITCH OFF asks and greyed during a
-game, the maps pane scrolling by the wheel, a finger, its scroll bar, the
-page keys, Home, End and the right stick, and the maps search filtering
+Active tab with forty more maps: the four tiles take no press on their
+labels, and on Compact the page scrolls as one by the wheel, a finger, its
+scroll bar, the page keys, Home, End and the right stick until four map
+rows are in view, and focusing a partly shown map link scrolls it wholly
+into view. On Regular the maps pane scrolls on its own and the tiles stay
+put. CHANGE… and the expansion pills take a press,
+UNLOAD MOD asking what SWITCH OFF asks and greyed during a
+game, and the maps search filtering
 by map name and by pack name, counting the tiles that match and saying
 when nothing matches.
 
 `ui-library-draw-data` lays out and draws, in the installed game's fonts
 and the modern fonts beside the test, Compact in the 640x480 window,
 Regular in 1920x1080 and Large in 2560x1440 at 2x, Compact's details
-page, the Active tab at Compact, Regular and Large and with many maps at
+page, the Active tab at Compact, Regular and Large, Compact scrolled to
+its maps, and with many maps at
 Regular, the Updates tab at Compact and Large, the Registries tab at
 Compact, Regular and Large,
 Languages at Compact, and the Maps tab at Large for one map and for
@@ -697,7 +715,7 @@ Built in. `library-languages-zh-compact.png` is the same window with
 简体中文 installed and in use, on its details page.
 `oa-ui-library-draw-test --data --frames DIR` also writes
 `library-compact.png`, `library-regular.png`, `library-large.png`,
-`library-details-compact.png`, `library-active-compact.png`,
+`library-details-compact.png`, `library-active-compact.png`, `library-active-compact-maps.png`,
 `library-active-regular.png`, `library-active-large.png`,
 `library-active-many-regular.png`,
 `library-updates-compact.png`, `library-updates-large.png`,

@@ -300,8 +300,10 @@ void settle_base_game(const Library& library, Entry& entry) {
     entry.can_act = true;
     entry.state = mod_is_played(library) ? State::installed : State::playing;
     entry.badge = library.inputs.base_game_badge ? &*library.inputs.base_game_badge : nullptr;
-    entry.shown_name = std::string(shown(library.text, words::base_game_name));
-    entry.shown_summary = std::string(shown(library.text, words::base_game_summary));
+    entry.shown_name = std::string(shown(library.text, words::no_mod));
+    const ActiveContent face = active_content(library);
+    entry.shown_summary =
+        filled(library.text, words::active_as_made, {{"game", std::string(face.name)}});
 }
 
 /// Makes sure the base game entry is present, and settles it.
@@ -788,6 +790,7 @@ void refresh(Library& library, Inputs inputs) {
             break;
         }
     }
+    note_content(library);
     ensure_base_game(library);
     ensure_built_in_languages(library);
     recompute(library);
@@ -876,8 +879,7 @@ std::string_view entry_name(const Entry& entry) {
     if (is_built_in_language(entry.id))
         return entry.shown_name;
     if (is_base_game(entry.id))
-        return entry.shown_name.empty() ? words::base_game_name
-                                        : std::string_view(entry.shown_name);
+        return entry.shown_name.empty() ? words::no_mod : std::string_view(entry.shown_name);
     if (entry.listing != nullptr)
         return entry.listing->name;
     if (entry.installed != nullptr)
@@ -889,8 +891,7 @@ std::string_view entry_summary(const Entry& entry) {
     if (is_built_in_language(entry.id))
         return entry.shown_summary;
     if (is_base_game(entry.id))
-        return entry.shown_summary.empty() ? words::base_game_summary
-                                           : std::string_view(entry.shown_summary);
+        return entry.shown_summary;
     if (entry.listing != nullptr && !entry.listing->summary.empty())
         return entry.listing->summary;
     if (entry.installed != nullptr)
@@ -976,11 +977,10 @@ ActiveSetup active_setup(const Library& library) {
         setup.mod_state = std::string(shown(text, words::status_playing));
     }
     if (playing == nullptr && !inputs.playing_mod) {
-        setup.base_title = std::string(shown(text, words::active_base_game));
-        setup.base_look = std::string(shown(text, words::base_supported));
-        setup.mod_line = shown(text, words::active_no_mod);
-        if (inputs.base_game_badge)
-            setup.mod_badge = &*inputs.base_game_badge;
+        const ActiveContent face = active_content(library);
+        setup.base_title = std::string(shown(text, words::no_mod));
+        setup.base_look = filled(text, words::active_as_made, {{"game", face.name}});
+        setup.mod_line = shown(text, words::no_mod);
     } else if (setup.mod_version.empty()) {
         setup.mod_line = setup.mod_name;
     } else {

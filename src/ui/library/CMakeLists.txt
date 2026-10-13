@@ -3,14 +3,15 @@
 
 # The Library's model: every package the player can get or has installed,
 # built from plain inputs, with its tabs, filters, search, selection, details
-# and download queue lines, and its words (library.hpp, text.hpp). It draws
-# nothing and reads no file, clock or network. The update question asked
+# and download queue lines, the pending expansion choice (content.cpp), and
+# its words (library.hpp, text.hpp). It draws nothing and reads no file,
+# clock or network. The update question asked
 # before an update that may stop saved games loading (update_question.hpp),
 # the questions about the mod the game plays: SWITCH OFF's, PLAY NOW's
 # refusal and ROLL BACK's (mod_questions.hpp), and UNINSTALL's rules, its
 # question and its notices (uninstall.hpp).
 add_library(oa-ui-library src/library.cpp src/search.cpp src/text.cpp
-  src/update_question.cpp src/mod_questions.cpp src/uninstall.cpp)
+  src/content.cpp src/update_question.cpp src/mod_questions.cpp src/uninstall.cpp)
 # The Library's screens, made of the UI kit's components: their layout at
 # the three size classes, their drawing and their input (screen.hpp).
 target_sources(oa-ui-library PRIVATE src/layout.cpp src/draw.cpp src/input.cpp)
@@ -18,7 +19,7 @@ add_library(oa::ui::library ALIAS oa-ui-library)
 target_include_directories(oa-ui-library PUBLIC include)
 target_compile_features(oa-ui-library PUBLIC cxx_std_20)
 target_link_libraries(oa-ui-library PUBLIC oa-formats-oamod oa-base-sha256 oa-ui-kit PRIVATE
-  oa-data-mod-profile oa-data-languages oa-options)
+  oa-data-mod-profile oa-data-content-bundles oa-data-languages oa-options)
 
 if(BUILD_TESTING)
   # Entries and their states, blocking, registries, tabs, each tab's filter,

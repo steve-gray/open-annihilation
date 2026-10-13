@@ -141,21 +141,34 @@ std::optional<PaneScroll> details_scroll_of(const kit::DisplayList& list) {
     return scroll;
 }
 
-/// Returns the Active tab's maps scroll as the display list shows it.
+/// Returns the Active tab's scroll as the display list shows it. A map row's
+/// clip is the view. When no row is on screen yet, the scroll bar's clip is
+/// that same view, so the page can still be scrolled to the maps.
 ///
 /// @param list the display list
-/// @return the scroll; none while no map tile shows
+/// @return the scroll; none while nothing on the Active tab scrolls
 std::optional<PaneScroll> maps_scroll_of(const kit::DisplayList& list) {
-    const kit::Control* inside = nullptr;
-    for (const kit::Control& control : list.controls)
+    kit::Rect pane{};
+    bool found = false;
+    for (const kit::Control& control : list.controls) {
         if (control.group == controls::maps_group && control.clip.width > 0 &&
             control.clip.height > 0) {
-            inside = &control;
+            pane = control.clip;
+            found = true;
             break;
         }
-    if (inside == nullptr)
+    }
+    if (!found) {
+        for (const kit::Item& item : list.items) {
+            if (item.role != kit::Role::scroll_bar || item.clip.width <= 0 || item.clip.height <= 0)
+                continue;
+            pane = item.clip;
+            found = true;
+            break;
+        }
+    }
+    if (!found)
         return std::nullopt;
-    const kit::Rect pane = inside->clip;
     const std::optional<controls::Extent> extent = controls::clipped_extent(list, pane, 0);
     if (!extent)
         return std::nullopt;
@@ -241,10 +254,21 @@ void show_in_details(ScreenState& state, const kit::DisplayList& list, kit::Cont
 /// @param id the control
 void show_in_maps(ScreenState& state, const kit::DisplayList& list, kit::ControlId id) {
     const kit::Control* control = kit::control_of(list, id);
-    if (control == nullptr || control->group != controls::maps_group)
+    if (control == nullptr)
+        return;
+    const bool in_maps = control->group == controls::maps_group;
+    const bool search = id == controls::active_search;
+    if (!in_maps && !search)
         return;
     const std::optional<PaneScroll> scroll = maps_scroll_of(list);
     if (!scroll)
+        return;
+    // The search sits in the scrolled view only while the page scrolls as
+    // one. Above the maps pane it stays put, and focusing it leaves the
+    // pane's scroll as it is.
+    if (search &&
+        (control->clip.x != scroll->view.x || control->clip.y != scroll->view.y ||
+         control->clip.width != scroll->view.width || control->clip.height != scroll->view.height))
         return;
     const int32_t top = control->rect.y + scroll->offset - scroll->view.y;
     state.maps_scroll = offset_showing(
@@ -268,8 +292,9 @@ bool compact_list_shows(const kit::DisplayList& list) {
     return kit::control_of(list, controls::details) != nullptr;
 }
 
-/// Tells whether the Active tab shows: its mod's line is in the list. The
-/// maps under it scroll on their own; the mod and the language stay put.
+/// Tells whether the Active tab shows: its mod's line is in the list. Its
+/// maps scroll on their own, unless the tiles leave them fewer than four
+/// rows: then the page, tiles and maps, scrolls as one.
 ///
 /// @param list the display list
 /// @return true while it shows
@@ -287,7 +312,8 @@ bool registries_shows(const kit::DisplayList& list) {
 }
 
 /// Tells whether the page keys scroll the details: the details page or the
-/// Registries tab. The Active tab's page keys scroll its maps pane.
+/// Registries tab. The Active tab's page keys scroll its maps, or the whole
+/// page when that page scrolls as one.
 ///
 /// @param list the display list
 /// @return true while they do
@@ -822,6 +848,31 @@ ScreenResult activate(
     }
     if (controls::active_from_control(id))
         return open_map_pack(library, state, id);
+    if (controls::expansion_control(id)) {
+        const ActiveContent face = active_content(library);
+        const auto index = static_cast<std::size_t>(id - controls::first_expansion);
+        if (index >= face.pills.size() || !face.pills[index].enabled)
+            return {};
+        const std::string expansion_id = face.pills[index].id;
+        const ContentPress pressed = press_expansion(library, expansion_id);
+        ScreenResult answered;
+        answered.expansion = pressed.expansion;
+        switch (pressed.kind) {
+        case ContentPressKind::none:
+            return {};
+        case ContentPressKind::redraw:
+            answered.redraw = true;
+            return answered;
+        case ContentPressKind::ask:
+            answered.action = Action::ask_expansion_off;
+            answered.redraw = true;
+            return answered;
+        case ContentPressKind::add:
+            answered.action = Action::add_expansion;
+            return answered;
+        }
+        return {};
+    }
     ScreenResult result = redrawn();
     switch (id) {
     case controls::search:
@@ -854,6 +905,9 @@ ScreenResult activate(
     case controls::close:
     case controls::close_x:
         result.action = Action::close;
+        return result;
+    case controls::active_change:
+        result.action = Action::change_base_game;
         return result;
     case controls::active_unload:
         // The same action SWITCH OFF returns. The host asks switch_off_question
@@ -955,8 +1009,8 @@ std::optional<kit::ScrollArea> maps_bar_area(const kit::DisplayList& list) {
 
 /// Returns the pane a point lies in.
 ///
-/// On the Active tab only the maps pane and its scroll bar scroll. The mod
-/// and the language do not.
+/// On the Active tab the maps pane and its scroll bar scroll. When the page
+/// scrolls as one, that view is the whole page, so the tiles scroll too.
 ///
 /// @param library the model
 /// @param state the screen's state
@@ -1247,7 +1301,7 @@ library_key(Library& library, ScreenState& state, const kit::DisplayList& list, 
                               focus == controls::more_menu;
     // On the details page the page keys scroll its body, never the list it
     // hides; on the Registries tab they scroll those cards. The Active tab's
-    // page keys scroll its maps pane.
+    // page keys scroll its maps, or the whole page when that page scrolls.
     const bool in_details = body_scrolls(list) || (focus != kit::no_control && !on_list &&
                                                    focused_pane(state, list) == Pane::details);
 

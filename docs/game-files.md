@@ -119,7 +119,9 @@ replacements take effect from the next start of Open Annihilation, and
 - The copy being made, in `import/Total Annihilation` of the game's data
   folder (`--data-dir`, else the per-user data folder), with the import's
   state in `import/state`.
-- The demo's unpacked archive, in `demo-1997` of the data folder.
+- The demo, in `games/totala-demo` of the player's Open Annihilation folder.
+  An earlier unpack in `demo-1997` of the data folder is copied from once
+  and left there.
 
 ## For developers
 
@@ -152,9 +154,10 @@ from the bytes already written. `--game-dir` does not copy. A run that
 nobody is watching does not copy: it uses a managed base game already
 there, or it stops with a message. `--check-content-copy PATH` checks that
 copy against a small fixture, using PATH as the Documents folder, and does
-nothing else. `--check-installer FILE` lists the bundles found in the disk
-image for older Macs and each file's hash, and does not open a window.
-Mounting the composed folder is separate: the game still
+nothing else. `--check-installer FILE` reads a recognised Windows installer
+or the disk image for older Macs, lists the bundles it holds and every
+file's SHA-256, and does nothing else. Mounting the composed folder is
+separate: the game still
 plays from the installation folder.
 
 ### The check

@@ -129,7 +129,7 @@ int main() {
 
     std::ostringstream captured;
     std::streambuf* previous = std::cout.rdbuf(captured.rdbuf());
-    const int status = oa::app::run_installer_check(wrong);
+    const int status = oa::app::run_older_mac_installer_check(wrong);
     std::cout.rdbuf(previous);
     OA_CHECK(status == 1);
     OA_CHECK(captured.str().find("installer check: FAILED:") != std::string::npos);

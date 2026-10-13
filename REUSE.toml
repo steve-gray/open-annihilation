@@ -172,3 +172,9 @@ SPDX-License-Identifier = "GPL-3.0-only"
 path = "src/formats/udif/tests/data/**"
 SPDX-FileCopyrightText = "The Open Annihilation Authors; see COPYRIGHT"
 SPDX-License-Identifier = "GPL-3.0-only"
+
+# The small setup body the Windows-installer test reads. It holds no game data.
+[[annotations]]
+path = "src/formats/inno-setup/tests/data/**"
+SPDX-FileCopyrightText = "The Open Annihilation Authors; see COPYRIGHT"
+SPDX-License-Identifier = "GPL-3.0-only"

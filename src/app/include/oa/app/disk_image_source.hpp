@@ -108,6 +108,6 @@ class DiskImageContentSource final : public ContentSource {
 ///
 /// @param image the disk image
 /// @return 0 when every bundle file matches, 1 otherwise
-[[nodiscard]] int run_installer_check(const std::filesystem::path& image);
+[[nodiscard]] int run_older_mac_installer_check(const std::filesystem::path& image);
 
 } // namespace oa::app

@@ -581,7 +581,7 @@ bool DiskImageContentSource::stream_file(
     return true;
 }
 
-int run_installer_check(const fs::path& image) {
+int run_older_mac_installer_check(const fs::path& image) {
     std::cout << "installer check: " << path_to_utf8(image) << '\n';
     DiskImageContentSource source(image, bundles::bundles());
     SourceDescription described;

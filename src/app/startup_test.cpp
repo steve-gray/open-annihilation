@@ -491,7 +491,7 @@ const std::vector<ValueCase>& value_cases() {
         {"--game-files-copy-rate", "5", {"--check-game-files"}},
         {"--game-files-stop-after", "5", {"--check-game-files"}},
         {"--check-content-copy", "docs", {}},
-        {"--check-installer", "image.dmg", {}},
+        {"--check-installer", "setup.bin", {}},
         {"--generate-script", "game.rec", {}},
         {"--render-script", "game.oascript", {}},
         {"--output", "out", {"--render-script", "game.oascript"}},
