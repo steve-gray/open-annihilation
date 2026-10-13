@@ -8,7 +8,7 @@
 // preference round trip.
 // With --install it checks that the installation OA_GAME_DIR names is usable.
 #include "oa/app/game_directory.hpp"
-#include "oa/data/content_choice.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/formats/hpi.hpp"
 #include "oa/platform/files.hpp"
 #include "oa/platform/preferences.hpp"

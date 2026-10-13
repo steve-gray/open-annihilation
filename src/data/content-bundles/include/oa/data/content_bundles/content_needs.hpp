@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace oa::formats::oamod {
+namespace oa::data::content_bundles {
 
 /// Which base games a package runs with when it does not say.
 enum class GamesWhenOmitted : uint8_t {
@@ -56,11 +56,11 @@ struct ContentNeeds {
 /// @param[out] needs the lists that passed, and the defaults
 /// @param[in,out] problems one entry appended for each broken rule
 void read_content_needs(
-    const Node& root,
-    const Node* requires_block,
+    const formats::oamod::Node& root,
+    const formats::oamod::Node* requires_block,
     GamesWhenOmitted when_omitted,
     ContentNeeds& needs,
-    std::vector<KeyProblem>& problems
+    std::vector<formats::oamod::KeyProblem>& problems
 );
 
-} // namespace oa::formats::oamod
+} // namespace oa::data::content_bundles

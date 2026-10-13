@@ -10,7 +10,7 @@
 #include "oa/app/package_install/oamod.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/formats/oamod.hpp"
-#include "oa/formats/oamod/content_needs.hpp"
+#include "oa/data/content_bundles/content_needs.hpp"
 
 #include <cstdint>
 #include <exception>
@@ -228,10 +228,14 @@ InstalledPackage read_installed_mod(const fs::path& folder) {
             requires_node != nullptr && requires_node->kind == oamod_format::NodeKind::mapping
                 ? requires_node
                 : nullptr;
-        oamod_format::ContentNeeds needs;
+        oa::data::content_bundles::ContentNeeds needs;
         std::vector<oamod_format::KeyProblem> problems;
-        oamod_format::read_content_needs(
-            root, requires_block, oamod_format::GamesWhenOmitted::totala, needs, problems
+        oa::data::content_bundles::read_content_needs(
+            root,
+            requires_block,
+            oa::data::content_bundles::GamesWhenOmitted::totala,
+            needs,
+            problems
         );
         if (problems.empty()) {
             installed.supported_games = std::move(needs.supported_games);

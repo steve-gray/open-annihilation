@@ -5,7 +5,7 @@
 #include "oa/app/app.hpp"
 #include "oa/app/extension.hpp"
 #include "oa/app/game_directory.hpp"
-#include "oa/data/content_choice.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/app/hook_call.hpp"
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/inbox.hpp"
