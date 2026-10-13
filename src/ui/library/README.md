@@ -116,19 +116,26 @@ translator finds them together. Every word passes through `Library::text`
   names no key, the entry of the pack's name.
 - `entry_actions`, `facts`, `status_line`, `byline` and `playing_note`
   describe an entry:
-  - the buttons GET or UPDATE (CANCEL while queued, RETRY after a failure
-    that can be retried), PLAY NOW, or SWITCH OFF on the mod being played,
-    ROLL BACK, UNINSTALL, OPEN FOLDER and HOMEPAGE, each with whether it is
-    enabled: PLAY NOW, SWITCH OFF and ROLL BACK are off during a game, and
-    PLAY NOW and SWITCH OFF while `Inputs::mod_from_command_line` says
-    `--mod-dir` or `--base-game` chose the mod;
-  - the facts Installed, Latest, Author, Size, Base, Needs, Hacks, Rules,
+  - the buttons TURN ON first, when `content_lines` says one press would
+    turn on every required expansion that is off (it writes the Active
+    tab's draft, not the preferences), then GET or UPDATE (CANCEL while
+    queued, RETRY after a failure that can be retried), PLAY NOW, or
+    SWITCH OFF on the mod being played, ROLL BACK, UNINSTALL, OPEN FOLDER
+    and HOMEPAGE, each with whether it is enabled: PLAY NOW and USE NOW
+    are off when the package cannot run on the pending choice, PLAY NOW,
+    SWITCH OFF and ROLL BACK are off during a game, and PLAY NOW and
+    SWITCH OFF while `Inputs::mod_from_command_line` says `--mod-dir` or
+    `--base-game` chose the mod. GET stays on. A package that cannot run
+    stays in the list;
+  - the facts Installed, Latest, Author, Size, Base, Games, Needs, Hacks, Rules,
     Maps, Coverage and From, in a long and a short form. Installed and
     Latest are the installed copy's and the listing's version and revision
     (`release_text`: "4.8 (rev 3)", "1.0" for a revision of 0, "rev 3"
     without a version), and Author is the listing's author, else its
     publisher, else the installed manifest's (`Installed::author`); each is
-    left out when it has nothing to say. An update's Rules fact says in words whether
+    left out when it has nothing to say. Games and a second Needs name the
+    package's base games and required expansions when it declares them
+    (`content_lines`); the engine's Needs stays first. An update's Rules fact says in words whether
     it changes the game's rules and which saved games stop loading
     ("9c1f 4e0b → 51d2 07aa · changes the game's rules; saved games from
     revision 3 won't load under revision 4"), since a built-in registry's
@@ -237,7 +244,8 @@ app removes the folder (`Runtime::library_uninstall`,
   packs can't be uninstalled during a game.") and for any package with a
   queue item that has not failed or been installed ("It is in the download
   queue: CANCEL it before you uninstall it."). `details_note` adds that
-  reason after `playing_note`'s, as the note under the buttons.
+  reason after `playing_note`'s, and `turn_on_note`'s after that, as the
+  note under the buttons. `turn_on_note` is empty unless TURN ON is showing.
 - `uninstall_step(library, entry)` says what pressing it leads to: nothing
   while it is off, a notice for the mod being played
   (`Installed::playing`) and for a language pack the game shows its words

@@ -272,6 +272,79 @@ struct SampleRoom {
     }
 };
 
+/// A record that names bundles, with the sample's engine line and one sim hash.
+///
+/// @param hash the sim hash
+/// @param expansions the expansion ids
+/// @param base the base game
+/// @return the record
+ng::PresenceRecord bundled_record(
+    const ng::PresenceDigest& hash, std::vector<std::string> expansions, const char* base = "totala"
+) {
+    ng::PresenceRecord record;
+    record.engine = ng::PresenceEngine{"0.8.0", "Windows", "x64"};
+    record.sim_hash = hash;
+    record.bundles = ng::PresenceBundles{base, std::move(expansions), false};
+    record.language = "English";
+    return record;
+}
+
+// Bundles add Base game, Expansions, No Mod and Language, and name one
+// missing expansion. The Rules line stays the sim-hash comparison. A record
+// without bundles keeps Mod at line 2 and Rules at line 3.
+void the_card_names_the_content() {
+    const auto hash = filled_hash(0x44);
+    Room room(true, "Steve");
+    const int32_t kirby = room.seat(kGuestId, "Kirby", true);
+    auto host = bundled_record(
+        hash,
+        {"campaign", "core-contingency", "battle-tactics", "cavedog-units", "cavedog-tilesets"}
+    );
+    host.engine = ng::PresenceEngine{"0.8.0", "macOS", "arm64"};
+    room.own(encoded(host));
+    room.receive(
+        kGuestId,
+        encoded(bundled_record(
+            hash, {"campaign", "core-contingency", "cavedog-units", "cavedog-tilesets", "music"}
+        ))
+    );
+    const auto card = mp::presence_card(*room.lobby, kirby, {});
+    OA_CHECK(card.has_value());
+    if (!card)
+        return;
+    OA_CHECK(line_is(*card, 2, "Base game", "Total Annihilation 3.1c"));
+    OA_CHECK(line_is(
+        *card, 3, "Expansions", "Campaign, Core Contingency, Cavedog units, Cavedog tilesets"
+    ));
+    OA_CHECK(line_is(*card, 4, "Mod", "No Mod"));
+    OA_CHECK(line_is(*card, 5, "Language", "English"));
+    OA_CHECK(line_is(*card, 6, "Rules", "Same as the host's"));
+    OA_CHECK(mp::lobby_rules_differ_from_host(*room.lobby, kirby));
+    OA_CHECK(!mp::lobby_sim_hash_differs_from_host(*room.lobby, kirby));
+    OA_CHECK(
+        line_is(*card, 7, "", "Different from the host: no Battle Tactics.", mp::CardTone::amber)
+    );
+    OA_CHECK(line_is(
+        *card,
+        8,
+        "",
+        "The game cannot start until Kirby turns it on, or the host turns it off.",
+        mp::CardTone::amber
+    ));
+
+    const auto own = mp::presence_card(*room.lobby, 0, {});
+    OA_CHECK(own.has_value());
+    if (own) {
+        OA_CHECK(line_is(
+            *own,
+            3,
+            "Expansions",
+            "Campaign, Core Contingency, Battle Tactics, Cavedog units, Cavedog tilesets"
+        ));
+        OA_CHECK(own->lines.size() == 7);
+    }
+}
+
 // The design's sample: every line of Kirby's card, the amber Rules line
 // naming the host's revision, and the hacks.
 void the_sample_card_says_what_the_record_says() {
@@ -801,6 +874,7 @@ void taps_toggle_the_card() {
 } // namespace
 
 int main() {
+    the_card_names_the_content();
     the_sample_card_says_what_the_record_says();
     the_rules_line_compares_with_the_host();
     a_development_build_says_so();

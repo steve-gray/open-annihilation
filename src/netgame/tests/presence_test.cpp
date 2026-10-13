@@ -600,6 +600,108 @@ void the_content_field() {
     CHECK(decoded.engine == PresenceEngine("0.8.0", "Windows", "x64"));
 }
 
+PresenceRecord content_record(const char* base, std::vector<std::string> expansions, bool differs) {
+    PresenceRecord record;
+    record.engine = PresenceEngine{"0.8.0", "Linux", "x64"};
+    record.sim_hash = filled(0x11);
+    record.bundles = PresenceBundles{base, std::move(expansions), differs};
+    record.language = "English";
+    return record;
+}
+
+std::vector<uint8_t> encoded(const PresenceRecord& record) {
+    uint8_t out[presence_record_max_bytes];
+    std::size_t written = 0;
+    CHECK(encode_presence(record, out, sizeof out, &written) == WireError::ok);
+    return {out, out + written};
+}
+
+// The bundles and language fields round-trip, a broken bundles value is left
+// out, and music stays on the wire but is not part of the comparison or the
+// digest. A record without the field does not differ. The small golden
+// record, which has neither field, is covered above.
+void the_bundles_and_the_language() {
+    start_case("the_bundles_and_the_language");
+    const auto record = content_record("totala", {"campaign", "battle-tactics", "music"}, false);
+    const auto bytes = encoded(record);
+    PresenceRecord decoded;
+    CHECK(decode_presence(bytes.data(), bytes.size(), &decoded) == WireError::ok);
+    CHECK(decoded.bundles == record.bundles);
+    CHECK(decoded.language == "English");
+    CHECK(decoded.engine == record.engine);
+
+    PresenceRecord hostile = record;
+    hostile.bundles->expansions = {"music", "campaign"};
+    const auto hostile_bytes = encoded(hostile);
+    PresenceRecord kept;
+    CHECK(decode_presence(hostile_bytes.data(), hostile_bytes.size(), &kept) == WireError::ok);
+    CHECK(kept.bundles && kept.bundles->expansions.size() == 2);
+    const auto plain = content_record("totala", {"campaign"}, false);
+    const auto plain_bytes = encoded(plain);
+    CHECK(presence_content_match(hostile_bytes, plain_bytes) == PresenceContentMatch::same);
+    const auto other = encoded(content_record("totala", {"campaign", "core-contingency"}, false));
+    CHECK(presence_content_match(plain_bytes, other) == PresenceContentMatch::differs);
+    const auto demo = encoded(content_record("totala-demo", {"campaign"}, false));
+    CHECK(presence_content_match(plain_bytes, demo) == PresenceContentMatch::differs);
+    const auto flagged = encoded(content_record("totala", {"campaign"}, true));
+    CHECK(presence_content_match(plain_bytes, flagged) == PresenceContentMatch::differs);
+    const auto both_flagged = encoded(content_record("totala", {"campaign"}, true));
+    CHECK(presence_content_match(flagged, both_flagged) == PresenceContentMatch::differs);
+    PresenceRecord quiet = plain;
+    quiet.bundles.reset();
+    const auto quiet_bytes = encoded(quiet);
+    CHECK(presence_content_match(plain_bytes, quiet_bytes) == PresenceContentMatch::unknown);
+    CHECK(presence_content_match({}, plain_bytes) == PresenceContentMatch::unknown);
+
+    const auto gap = presence_content_gap(
+        content_record("totala", {"campaign", "music"}, false),
+        content_record("totala", {"campaign", "battle-tactics"}, true)
+    );
+    CHECK(gap.comparable && gap.hashes_differ && !gap.bases_differ);
+    CHECK(gap.missing.size() == 1 && gap.missing[0] == "battle-tactics");
+    CHECK(gap.extra.empty());
+
+    uint8_t identity[presence_content_identity_max_bytes];
+    std::size_t written = 0;
+    const auto swapped = content_record("totala", {"campaign", "battle-tactics"}, false);
+    const auto ordered = content_record("totala", {"battle-tactics", "campaign", "music"}, false);
+    CHECK(presence_content_identity(swapped, identity, sizeof identity, &written) == WireError::ok);
+    const std::string first(reinterpret_cast<const char*>(identity), written);
+    CHECK(presence_content_identity(ordered, identity, sizeof identity, &written) == WireError::ok);
+    const std::string second(reinterpret_cast<const char*>(identity), written);
+    // totala, battle-tactics, campaign, an extra zero, and the flag byte 0.
+    const char canonical[] = {'t', 'o', 't', 'a', 'l', 'a', 0,   'b', 'a', 't', 't',
+                              'l', 'e', '-', 't', 'a', 'c', 't', 'i', 'c', 's', 0,
+                              'c', 'a', 'm', 'p', 'a', 'i', 'g', 'n', 0,   0,   0};
+    CHECK(written == sizeof canonical);
+    CHECK(std::memcmp(identity, canonical, sizeof canonical) == 0);
+    CHECK(first == second);
+    CHECK(presence_content_identity(quiet, identity, sizeof identity, &written) == WireError::ok);
+    CHECK(written == 0);
+
+    Raw broken;
+    Value engine;
+    engine.str("0.8.0");
+    engine.str("Linux");
+    engine.str("x64");
+    broken.field(0x01, engine.bytes);
+    Value bad;
+    bad.u8(0);
+    bad.u8(3);
+    bad.raw("no", 2);
+    broken.field(0x31, bad.bytes);
+    broken.finish();
+    CHECK(decode_presence(broken.bytes.data(), broken.bytes.size(), &decoded) == WireError::ok);
+    CHECK(!decoded.bundles);
+    CHECK(decoded.engine == PresenceEngine("0.8.0", "Linux", "x64"));
+    CHECK(presence_content_match(broken.bytes, plain_bytes) == PresenceContentMatch::unknown);
+
+    PresenceRecord too_many = plain;
+    too_many.bundles->expansions.assign(presence_bundle_count_max + 1, "campaign");
+    uint8_t out[presence_record_max_bytes];
+    CHECK(encode_presence(too_many, out, sizeof out, &written) == WireError::bad_argument);
+}
+
 } // namespace
 
 int main() {
@@ -613,6 +715,7 @@ int main() {
     frames_split_a_lone_presence_record();
     only_oa_blocks_are_peers();
     the_content_field();
+    the_bundles_and_the_language();
     if (failures != 0) {
         std::fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

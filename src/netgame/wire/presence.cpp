@@ -19,6 +19,11 @@ constexpr uint8_t developer_mode_flag = 0x01;
 constexpr uint8_t content_fetches_flag = 0x01;
 /// The content field's value: one byte of flags.
 constexpr std::size_t content_value_bytes = 1;
+/// Bit 0 of the bundles flags: a chosen bundle differs from a known hash.
+/// Bits 1 to 7 are sent as 0 and ignored when read.
+constexpr uint8_t bundles_differ_flag = 0x01;
+/// The longest language name the language field carries.
+constexpr std::size_t language_text_max = 32;
 
 constexpr std::size_t digest_bytes = 32;
 constexpr std::size_t version_text_max = 32;
@@ -326,6 +331,185 @@ void write_content(uint8_t* out, std::size_t* used, const PresenceContent& conte
     put_u8(out, used, content.fetches ? content_fetches_flag : 0);
 }
 
+bool bundle_id_ok(std::string_view id) noexcept {
+    return string_in_rule(id, 1, presence_bundle_id_max, ByteKind::kebab);
+}
+
+bool bundles_ok(const PresenceBundles& bundles) noexcept {
+    if (!bundle_id_ok(bundles.base_game) || bundles.expansions.size() > presence_bundle_count_max)
+        return false;
+    for (const auto& id : bundles.expansions)
+        if (!bundle_id_ok(id))
+            return false;
+    return true;
+}
+
+std::size_t bundles_value_bytes(const PresenceBundles& bundles) noexcept {
+    std::size_t size = 1 + string_bytes(bundles.base_game) + 1;
+    for (const auto& id : bundles.expansions)
+        size += string_bytes(id);
+    return size;
+}
+
+bool language_ok(std::string_view language) noexcept {
+    return string_in_rule(language, 1, language_text_max, ByteKind::text);
+}
+
+void write_bundles(uint8_t* out, std::size_t* used, const PresenceBundles& bundles) noexcept {
+    put_u8(out, used, static_cast<uint8_t>(PresenceTag::bundles));
+    put_u16(out, used, static_cast<uint16_t>(bundles_value_bytes(bundles)));
+    put_u8(out, used, bundles.differs_from_known ? bundles_differ_flag : 0);
+    put_string(out, used, bundles.base_game);
+    put_u8(out, used, static_cast<uint8_t>(bundles.expansions.size()));
+    for (const auto& id : bundles.expansions)
+        put_string(out, used, id);
+}
+
+void write_language(uint8_t* out, std::size_t* used, std::string_view language) noexcept {
+    put_u8(out, used, static_cast<uint8_t>(PresenceTag::language));
+    put_u16(out, used, static_cast<uint16_t>(string_bytes(language)));
+    put_string(out, used, language);
+}
+
+bool read_bundles(Window window, PresenceBundles* out) {
+    PresenceBundles bundles;
+    uint8_t flags = 0;
+    uint8_t count = 0;
+    if (!window.u8(&flags) ||
+        !read_string(&window, 1, presence_bundle_id_max, ByteKind::kebab, &bundles.base_game) ||
+        !window.u8(&count) || count > presence_bundle_count_max)
+        return false;
+    bundles.differs_from_known = (flags & bundles_differ_flag) != 0;
+    bundles.expansions.reserve(count);
+    for (uint8_t index = 0; index < count; ++index) {
+        std::string id;
+        if (!read_string(&window, 1, presence_bundle_id_max, ByteKind::kebab, &id))
+            return false;
+        bundles.expansions.push_back(std::move(id));
+    }
+    if (window.size != 0)
+        return false;
+    *out = std::move(bundles);
+    return true;
+}
+
+bool read_language(Window window, std::string* out) {
+    std::string language;
+    if (!read_string(&window, 1, language_text_max, ByteKind::text, &language) || window.size != 0)
+        return false;
+    *out = std::move(language);
+    return true;
+}
+
+/// One bundles field, parsed without allocating. Music and duplicates are left out.
+struct BundleReading {
+    std::string_view base{};
+    std::string_view ids[presence_bundle_count_max]{};
+    uint8_t count{};
+    bool differs{};
+    bool present{};
+};
+
+bool take_bundle_id(const uint8_t*& cursor, const uint8_t* end, std::string_view* id) noexcept {
+    if (cursor >= end)
+        return false;
+    const auto length = static_cast<std::size_t>(*cursor);
+    ++cursor;
+    if (length < 1 || length > presence_bundle_id_max ||
+        static_cast<std::size_t>(end - cursor) < length)
+        return false;
+    const std::string_view text(reinterpret_cast<const char*>(cursor), length);
+    cursor += length;
+    if (!kebab_text(text, false))
+        return false;
+    *id = text;
+    return true;
+}
+
+bool read_bundle_value(std::span<const uint8_t> value, BundleReading* reading) noexcept {
+    if (value.empty())
+        return false;
+    const uint8_t* cursor = value.data();
+    const uint8_t* end = cursor + value.size();
+    const uint8_t flags = *cursor;
+    ++cursor;
+    std::string_view base;
+    if (!take_bundle_id(cursor, end, &base) || cursor >= end)
+        return false;
+    const auto count = *cursor;
+    ++cursor;
+    if (count > presence_bundle_count_max)
+        return false;
+    BundleReading parsed;
+    parsed.present = true;
+    parsed.differs = (flags & bundles_differ_flag) != 0;
+    parsed.base = base;
+    for (uint8_t index = 0; index < count; ++index) {
+        std::string_view id;
+        if (!take_bundle_id(cursor, end, &id))
+            return false;
+        if (id == presence_uncompared_expansion)
+            continue;
+        bool seen = false;
+        for (uint8_t have = 0; have < parsed.count; ++have)
+            if (parsed.ids[have] == id)
+                seen = true;
+        if (seen)
+            continue;
+        parsed.ids[parsed.count] = id;
+        ++parsed.count;
+    }
+    if (cursor != end)
+        return false;
+    *reading = parsed;
+    return true;
+}
+
+bool bundles_of(std::span<const uint8_t> record, BundleReading* reading) noexcept {
+    *reading = {};
+    if (record.empty())
+        return false;
+    std::span<const uint8_t> value;
+    if (!find_presence_field(record.data(), record.size(), PresenceTag::bundles, &value))
+        return false;
+    return read_bundle_value(value, reading);
+}
+
+/// The rule-changing expansions of a bundles statement, music and duplicates left out.
+bool rule_changing_ids(
+    const PresenceBundles& bundles, std::string_view* ids, uint8_t* count
+) noexcept {
+    *count = 0;
+    if (!bundle_id_ok(bundles.base_game))
+        return false;
+    for (const auto& id : bundles.expansions) {
+        if (id == presence_uncompared_expansion)
+            continue;
+        if (!bundle_id_ok(id))
+            return false;
+        bool seen = false;
+        for (uint8_t have = 0; have < *count; ++have)
+            if (ids[have] == id)
+                seen = true;
+        if (seen)
+            continue;
+        if (*count == presence_bundle_count_max)
+            return false;
+        ids[*count] = id;
+        ++*count;
+    }
+    for (uint8_t index = 1; index < *count; ++index) {
+        const std::string_view key = ids[index];
+        uint8_t place = index;
+        while (place > 0 && ids[place - 1] > key) {
+            ids[place] = ids[place - 1];
+            --place;
+        }
+        ids[place] = key;
+    }
+    return true;
+}
+
 void write_mod(uint8_t* out, std::size_t* used, const PresenceMod& mod) noexcept {
     put_u8(out, used, static_cast<uint8_t>(PresenceTag::mod));
     put_u16(out, used, static_cast<uint16_t>(mod_value_bytes(mod)));
@@ -493,6 +677,10 @@ WireError encode_presence(
         return WireError::bad_argument;
     if (record.map_pack && !map_pack_ok(*record.map_pack))
         return WireError::bad_argument;
+    if (record.bundles && !bundles_ok(*record.bundles))
+        return WireError::bad_argument;
+    if (record.language && !language_ok(*record.language))
+        return WireError::bad_argument;
 
     const auto limit = capacity < presence_record_max_bytes ? capacity : presence_record_max_bytes;
     std::size_t fixed = presence_record_header_bytes;
@@ -500,6 +688,10 @@ WireError encode_presence(
         fixed += presence_field_header_bytes + engine_value_bytes(*record.engine);
     if (record.content)
         fixed += presence_field_header_bytes + content_value_bytes;
+    if (record.bundles)
+        fixed += presence_field_header_bytes + bundles_value_bytes(*record.bundles);
+    if (record.language)
+        fixed += presence_field_header_bytes + string_bytes(*record.language);
     if (record.mod)
         fixed += presence_field_header_bytes + mod_value_bytes(*record.mod);
     if (record.mod_origin)
@@ -562,6 +754,10 @@ WireError encode_presence(
         write_engine(local, &used, *record.engine);
     if (record.content)
         write_content(local, &used, *record.content);
+    if (record.bundles)
+        write_bundles(local, &used, *record.bundles);
+    if (record.language)
+        write_language(local, &used, *record.language);
     if (record.mod)
         write_mod(local, &used, *record.mod);
     if (record.mod_origin)
@@ -623,6 +819,8 @@ WireError decode_presence(const uint8_t* record, std::size_t size, PresenceRecor
     bool saw_developer = false;
     bool saw_pack = false;
     bool saw_content = false;
+    bool saw_bundles = false;
+    bool saw_language = false;
     std::size_t at = presence_record_header_bytes;
     while (at < size) {
         assert(at + presence_field_header_bytes <= size);
@@ -696,6 +894,20 @@ WireError decode_presence(const uint8_t* record, std::size_t size, PresenceRecor
             // One byte of flags; a value of any other size is left out.
             if (value.size == content_value_bytes)
                 decoded.content = PresenceContent{(value.data[0] & content_fetches_flag) != 0};
+        } else if (tag == static_cast<uint8_t>(PresenceTag::bundles)) {
+            if (saw_bundles)
+                continue;
+            saw_bundles = true;
+            PresenceBundles bundles;
+            if (read_bundles(value, &bundles))
+                decoded.bundles = std::move(bundles);
+        } else if (tag == static_cast<uint8_t>(PresenceTag::language)) {
+            if (saw_language)
+                continue;
+            saw_language = true;
+            std::string language;
+            if (read_language(value, &language))
+                decoded.language = std::move(language);
         }
     }
     *out = std::move(decoded);
@@ -721,6 +933,109 @@ bool find_presence_field(
         at = start + value_size;
     }
     return false;
+}
+
+PresenceContentMatch presence_content_match(
+    std::span<const uint8_t> first_record, std::span<const uint8_t> second_record
+) noexcept {
+    BundleReading first;
+    BundleReading second;
+    if (!bundles_of(first_record, &first) || !bundles_of(second_record, &second))
+        return PresenceContentMatch::unknown;
+    if (first.differs || second.differs || first.base != second.base || first.count != second.count)
+        return PresenceContentMatch::differs;
+    for (uint8_t index = 0; index < first.count; ++index) {
+        bool found = false;
+        for (uint8_t other = 0; other < second.count; ++other)
+            if (second.ids[other] == first.ids[index])
+                found = true;
+        if (!found)
+            return PresenceContentMatch::differs;
+    }
+    return PresenceContentMatch::same;
+}
+
+namespace {
+
+void keep_rule_changing(const PresenceBundles& bundles, std::vector<std::string>* ids) {
+    for (const auto& id : bundles.expansions) {
+        if (id == presence_uncompared_expansion)
+            continue;
+        bool seen = false;
+        for (const auto& have : *ids)
+            if (have == id)
+                seen = true;
+        if (!seen)
+            ids->push_back(id);
+    }
+}
+
+} // namespace
+
+PresenceContentGap presence_content_gap(const PresenceRecord& player, const PresenceRecord& host) {
+    PresenceContentGap gap;
+    if (!player.bundles || !host.bundles)
+        return gap;
+    gap.comparable = true;
+    gap.hashes_differ = player.bundles->differs_from_known || host.bundles->differs_from_known;
+    gap.player_base = player.bundles->base_game;
+    gap.host_base = host.bundles->base_game;
+    gap.bases_differ = gap.player_base != gap.host_base;
+    std::vector<std::string> player_ids;
+    std::vector<std::string> host_ids;
+    keep_rule_changing(*player.bundles, &player_ids);
+    keep_rule_changing(*host.bundles, &host_ids);
+    for (const auto& id : host_ids) {
+        bool found = false;
+        for (const auto& have : player_ids)
+            if (have == id)
+                found = true;
+        if (!found)
+            gap.missing.push_back(id);
+    }
+    for (const auto& id : player_ids) {
+        bool found = false;
+        for (const auto& have : host_ids)
+            if (have == id)
+                found = true;
+        if (!found)
+            gap.extra.push_back(id);
+    }
+    return gap;
+}
+
+WireError presence_content_identity(
+    const PresenceRecord& record, uint8_t* out, std::size_t capacity, std::size_t* written
+) noexcept {
+    if (out == nullptr || written == nullptr)
+        return WireError::bad_argument;
+    *written = 0;
+    if (!record.bundles)
+        return WireError::ok;
+    std::string_view ids[presence_bundle_count_max];
+    uint8_t count = 0;
+    if (!rule_changing_ids(*record.bundles, ids, &count))
+        return WireError::bad_argument;
+    std::size_t need = record.bundles->base_game.size() + 1;
+    for (uint8_t index = 0; index < count; ++index)
+        need += ids[index].size() + 1;
+    need += 2;
+    if (need > capacity)
+        return WireError::buffer_too_small;
+    std::size_t used = 0;
+    const auto put = [&](std::string_view text) noexcept {
+        if (!text.empty())
+            std::memcpy(out + used, text.data(), text.size());
+        used += text.size();
+        out[used++] = 0;
+    };
+    put(record.bundles->base_game);
+    for (uint8_t index = 0; index < count; ++index)
+        put(ids[index]);
+    out[used++] = 0;
+    out[used++] = record.bundles->differs_from_known ? 1 : 0;
+    *written = used;
+    return WireError::ok;
 }
 
 std::optional<PresenceDigest> presence_sim_hash(const uint8_t* record, std::size_t size) noexcept {

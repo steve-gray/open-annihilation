@@ -548,7 +548,55 @@ inline constexpr uint32_t game_hack = 0x040;    ///< a game hack's id breaks its
 inline constexpr uint32_t view_hack = 0x080;    ///< a view hack's id breaks its rule
 inline constexpr uint32_t override_id = 0x100;  ///< an override's hack id breaks its rule
 inline constexpr uint32_t no_reserve = 0x200;   ///< the record leaves no room for a map pack
+inline constexpr uint32_t bundles = 0x400;      ///< the base game or an expansion breaks its rule
 } // namespace presence_problem
+
+/// The content and language a presence record adds to the facts.
+struct PresencePlayed {
+    bool announce_bundles = false;       ///< the managed copy is mounted and the choice is usable
+    std::string base_game;               ///< the base game's id
+    std::vector<std::string> expansions; ///< rule-changing expansions, music left out
+    bool differs_from_known = false;     ///< a chosen bundle's file is not a known hash
+    std::string language;                ///< the shown language's English name
+};
+
+/// Reads the content and language the presence record carries.
+///
+/// The runtime's public announcement already leaves music out, and names
+/// bundles only for a managed copy.
+///
+/// @param runtime the runtime
+/// @return what to add to the record
+PresencePlayed played_content(const Runtime& runtime) {
+    const Runtime::PresenceAnnouncement announced = runtime.presence_announcement();
+    PresencePlayed played;
+    played.announce_bundles = announced.announce_bundles;
+    played.base_game = announced.base_game;
+    played.expansions = announced.expansions;
+    played.differs_from_known = announced.differs_from_known;
+    played.language = announced.language;
+    return played;
+}
+
+/// The bytes follow_presence compares so a content or language change refreshes the record.
+///
+/// @param played the content and language
+/// @return the key
+std::string played_content_key(const PresencePlayed& played) {
+    std::string key;
+    key.push_back(played.announce_bundles ? '1' : '0');
+    key.push_back('\n');
+    key += played.base_game;
+    key.push_back('\n');
+    for (const auto& id : played.expansions) {
+        key += id;
+        key.push_back('\n');
+    }
+    key.push_back(played.differs_from_known ? '1' : '0');
+    key.push_back('\n');
+    key += played.language;
+    return key;
+}
 
 /// Tells whether every field of a record keeps the record's rules.
 ///
@@ -570,8 +618,11 @@ bool presence_keeps_rules(const oa::netgame::PresenceRecord& record) {
 ///
 /// @param facts what this machine is playing
 /// @param[in,out] reported the presence_problem bits already reported
+/// @param played the base game, expansions and language
 /// @return the record; empty only when nothing could be written
-std::vector<uint8_t> write_presence_record(const PresenceFacts& facts, uint32_t& reported) {
+std::vector<uint8_t> write_presence_record(
+    const PresenceFacts& facts, uint32_t& reported, const PresencePlayed& played
+) {
     namespace ng = oa::netgame;
     const auto report = [&](uint32_t problem, const char* what) {
         if ((reported & problem) != 0)
@@ -602,6 +653,22 @@ std::vector<uint8_t> write_presence_record(const PresenceFacts& facts, uint32_t&
     // Whether this machine can fetch content, so that the host's card and
     // a joiner's GET MAP can tell.
     record.content = ng::PresenceContent{facts.fetches_content};
+
+    if (played.announce_bundles) {
+        probe = {};
+        probe.bundles =
+            ng::PresenceBundles{played.base_game, played.expansions, played.differs_from_known};
+        if (presence_keeps_rules(probe))
+            record.bundles = std::move(probe.bundles);
+        else
+            report(presence_problem::bundles, "the base game or an expansion");
+    }
+    if (!played.language.empty()) {
+        probe = {};
+        probe.language = played.language;
+        if (presence_keeps_rules(probe))
+            record.language = std::move(probe.language);
+    }
 
     if (facts.mod) {
         const auto& mod = *facts.mod;
@@ -745,7 +812,9 @@ std::string local_time_text(const char* pattern) {
 /// Fills the integrity check's answers about this machine: a digest of the
 /// program line, and one of the profile's sim hash with the map, so two
 /// machines agree exactly when they run the same program on the same rules and
-/// map.
+/// map. A managed copy appends the canonical bytes of its base game and
+/// rule-changing expansions (presence_content_identity). With no bundles
+/// field the digest stays the sim hash and the map.
 ///
 /// @param[out] identity the identity
 /// @param runtime the runtime whose profile is read
@@ -762,6 +831,20 @@ void fill_integrity_identity(
     if (const auto* profile = runtime.mod_profile())
         oa::base::sha256::update(data, profile->sim_hash);
     oa::base::sha256::update(data, {reinterpret_cast<const uint8_t*>(map.data()), map.size()});
+    const auto played = played_content(runtime);
+    if (played.announce_bundles) {
+        oa::netgame::PresenceRecord content;
+        content.bundles = oa::netgame::PresenceBundles{
+            played.base_game, played.expansions, played.differs_from_known
+        };
+        uint8_t canonical[oa::netgame::presence_content_identity_max_bytes];
+        std::size_t canonical_bytes = 0;
+        if (oa::netgame::presence_content_identity(
+                content, canonical, sizeof canonical, &canonical_bytes
+            ) == oa::netgame::WireError::ok &&
+            canonical_bytes != 0)
+            oa::base::sha256::update(data, {canonical, canonical_bytes});
+    }
     const auto data_digest = oa::base::sha256::finish(data);
     std::memcpy(identity.game_data, data_digest.data(), sizeof identity.game_data);
 }
@@ -1986,10 +2069,13 @@ void NetworkPlay::follow_presence() {
     const bool first = !presence_taken_;
     presence_taken_ = true;
     auto facts = presence_facts(runtime_);
-    if (!first && facts == presence_facts_)
+    const auto played = played_content(runtime_);
+    const auto key = played_content_key(played);
+    if (!first && facts == presence_facts_ && key == presence_content_key_)
         return;
     presence_facts_ = std::move(facts);
-    auto record = write_presence_record(presence_facts_, presence_reported_);
+    presence_content_key_ = key;
+    auto record = write_presence_record(presence_facts_, presence_reported_, played);
     if (!first && record == bound_presence_record_)
         return;
     bound_presence_record_ = std::move(record);
