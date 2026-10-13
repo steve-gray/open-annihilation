@@ -111,7 +111,10 @@ the interface.
   given for, read from TDF files whose sections name the English text and
   whose keys are tags; `set_interface_language()` and `interface_text()`.
   `interface_text_in(english, language)` reads one text in a named language
-  from that same catalogue and leaves the language in use unchanged.
+  from that same catalogue and leaves the language in use unchanged. The
+  engine ships one catalogue file, `languages/interface.tdf`, with German,
+  French, Spanish and Italian; a pack's `interface.tdf` is added to the
+  same catalogue.
 - `oa/data/languages/language_pack.hpp`: language packs, a folder of texts
   for one language that adds to the game data's own translations entry by
   entry. `read_manifest()` reads `language.yaml` with the mod profiles'
