@@ -56,7 +56,7 @@ inline constexpr std::string_view interface_words[] = {
     "Checking… {percent}%",
     "{done} of {total} · {percent}%",
     "not added",
-    "Choose your Total Annihilation folder",
+    "Choose the Total Annihilation demo installer (1997).",
     "Custom",
     "D-pad down",
     "D-pad left",

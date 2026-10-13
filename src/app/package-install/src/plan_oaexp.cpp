@@ -22,6 +22,7 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <ratio>
 #include <span>
 #include <string>
 #include <string_view>
@@ -61,19 +62,29 @@ struct PieceWriter {
 
 /// Converts a file time to whole seconds since 1970.
 ///
+/// A clock that can convert straight to the system clock does. The Visual
+/// Studio file clock cannot: `to_utc` and then `utc_clock::to_sys` load the
+/// time zone database, and a missing database aborts the process. That clock
+/// counts 100 ns ticks from 1601-01-01, which is 11644473600 seconds before
+/// 1970. For a file written after 2018 its own conversion adds the 27 leap
+/// seconds a Windows file time skips and `to_sys` subtracts the leap seconds
+/// that have elapsed, the same 27, so the whole seconds are this difference.
+///
 /// @param time the file time
 /// @return the seconds
 template <typename Clock>
 int64_t seconds_of_clock(typename Clock::time_point time) {
-    const auto count = [](auto system_time) {
-        return std::chrono::floor<std::chrono::seconds>(system_time).time_since_epoch().count();
-    };
-    if constexpr (requires { Clock::to_sys(time); })
-        return static_cast<int64_t>(count(Clock::to_sys(time)));
-    else {
-        const auto utc = Clock::to_utc(time);
-        using Utc = typename decltype(utc)::clock;
-        return static_cast<int64_t>(count(Utc::to_sys(utc)));
+    if constexpr (requires { Clock::to_sys(time); }) {
+        return static_cast<int64_t>(
+            std::chrono::floor<std::chrono::seconds>(Clock::to_sys(time)).time_since_epoch().count()
+        );
+    } else {
+        static_assert(std::ratio_equal_v<typename Clock::period, std::ratio<1, 10'000'000>>);
+        using hundred_ns = std::chrono::duration<long long, std::ratio<1, 10'000'000>>;
+        // 11644473600 seconds, in 100 ns ticks: 1601-01-01 to 1970-01-01.
+        constexpr hundred_ns file_epoch_to_unix{0x19DB1DED53E8000LL};
+        const auto since_unix = time.time_since_epoch() - file_epoch_to_unix;
+        return static_cast<int64_t>(std::chrono::floor<std::chrono::seconds>(since_unix).count());
     }
 }
 

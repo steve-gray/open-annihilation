@@ -710,10 +710,12 @@ a gamepad. These tests need no game data:
 - `platform-game-installs` builds home folders in a temporary folder with
   Steam, Heroic, Lutris and Bottles installs, and checks the folders found
   and the readers of each library file; `ui-folder-chooser` checks what the
-  locator recognises, its places and rows, and choosing one with keys and
-  presses; `game-directory` checks resolution with found folders, which asks
-  with the locator when it is offered; `native-folder-chooser` drives that
-  screen with Tab and the choose key onto the fixture install.
+  locator recognises, the order of its rows, its name filter, its places and
+  rows, and choosing one with keys and presses; `game-directory` checks
+  resolution with found folders, which asks with the system's dialog when it
+  can open and with the locator in Game Mode, with no dialog, or when the
+  dialog cannot open; `native-folder-chooser` drives that screen with Tab
+  and the choose key onto the fixture install.
 
 Over the installation, `native-pad-controls` runs `--check-pad-controls` in
 a window of the dummy video driver at 1280x800, the Steam Deck's screen. The

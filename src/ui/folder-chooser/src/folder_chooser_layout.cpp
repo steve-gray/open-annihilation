@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The locator's layout in the Game files screen's look (folder_chooser.hpp).
-// A header, then a sidebar of places, the folder's rows (what each one is,
-// and its size) and the selection's panel, then the buttons or, on a Steam
+// A header that says what to choose, a line that says what qualifies, then a
+// sidebar of places, the folder's rows (an icon, a name and a size) and the
+// selection's panel, then a footer of the standard buttons or, on a Steam
 // Deck, the pad hints with the buttons. The rows scroll. Every control is at
 // least 44 points high. Parts are drawn in the focus order: places, up, the
 // filter, the rows, the system picker when it is offered, Cancel, then the
@@ -156,19 +157,19 @@ int32_t add_header(
     kit::icon_part(
         parts, {bar.x + pad, mid - badge / 2, badge, badge}, Glyph::oa, gf::text_colour, false
     );
-    const Lettering title{15.0f, true, gf::text_colour, kit::TextStyle::header};
+    const Lettering title{16.0f, true, gf::text_colour, kit::TextStyle::title};
     const int32_t title_x = bar.x + pad + badge + px(type, 10.0f);
-    add_text(
+    const int32_t title_room =
+        std::max<int32_t>(0, bar.x + bar.width - pad - bar.width / 3 - title_x);
+    kit::line_part(
         parts,
         type,
-        {title_x, bar.y + px(type, 8.0f)},
-        bar.width / 2,
-        tr("OPEN ANNIHILATION"),
-        title
-    );
-    const Lettering sub{12.0f, false, gf::dim_colour, kit::TextStyle::small};
-    add_text(
-        parts, type, {title_x, bar.y + px(type, 28.0f)}, bar.width / 2, tr("Locate the game"), sub
+        title_x,
+        mid,
+        title_room,
+        tr("Choose a folder or an installer"),
+        title,
+        TextFit::tight_left
     );
     if (!version.empty()) {
         const Lettering ver{12.0f, false, gf::dim_colour, kit::TextStyle::small};
@@ -202,7 +203,7 @@ void add_places(
     int32_t row_height
 ) {
     int32_t y = area.y;
-    const Lettering heading{11.0f, true, gf::dim_colour, kit::TextStyle::small};
+    const Lettering heading{12.0f, true, gf::dim_colour, kit::TextStyle::small};
     PlaceGroup previous = PlaceGroup::places;
     bool any = false;
     for (std::size_t index = 0; index < model.places.size(); ++index) {
@@ -243,40 +244,7 @@ void add_places(
     }
 }
 
-/// Where the name, the description and the size sit in a wide row.
-struct RowColumns {
-    int32_t name_x = 0;
-    int32_t name_room = 0;
-    int32_t what_x = 0;
-    int32_t what_room = 0;
-    int32_t size_right = 0;
-    int32_t size_room = 0;
-};
-
-/// Splits a wide row into name, description and size. The name may start
-/// after an icon; it still ends where the description column begins.
-///
-/// @param type the scale
-/// @param left the row's left
-/// @param width the row's width
-/// @param inset how far the name starts after `left`
-/// @return the three columns
-RowColumns row_columns(const kit::Typesetter& type, int32_t left, int32_t width, int32_t inset) {
-    const int32_t gap = px(type, 12.0f);
-    const int32_t pad = px(type, 10.0f);
-    const int32_t size_room = px(type, 72.0f);
-    const int32_t name_span = std::max<int32_t>(px(type, 96.0f), (width - size_room) * 42 / 100);
-    RowColumns columns;
-    columns.name_x = left + inset;
-    columns.name_room = std::max<int32_t>(0, left + name_span - columns.name_x);
-    columns.what_x = left + name_span + gap;
-    columns.size_room = size_room;
-    columns.size_right = left + width - pad;
-    columns.what_room = std::max<int32_t>(0, columns.size_right - size_room - gap - columns.what_x);
-    return columns;
-}
-
-/// Lays one folder row out: its name, what it is and its size.
+/// Lays one folder row out: an icon, the name and, when there is one, the size.
 ///
 /// @param parts the parts
 /// @param type the scale
@@ -284,68 +252,49 @@ RowColumns row_columns(const kit::Typesetter& type, int32_t left, int32_t width,
 /// @param entry the row
 /// @param index which row
 /// @param marked the side panel describes it
-/// @param wide the what and size columns show
 void add_entry(
     std::vector<kit::Item>& parts,
     const kit::Typesetter& type,
     const kit::Rect& box,
     const Entry& entry,
     uint16_t index,
-    bool marked,
-    bool wide
+    bool marked
 ) {
-    add_row(
-        parts,
-        box,
-        {TargetKind::entry, index},
-        marked,
-        entry.directory ? Glyph::folder : Glyph::file
-    );
+    // The row itself carries no mark. A selected row is a banner, and a banner draws its own
+    // mark; the icon part draws the folder or file for every row.
+    add_row(parts, box, {TargetKind::entry, index}, marked, Glyph::none);
     const int32_t pad = px(type, 10.0f);
     const int32_t icon = px(type, 18.0f);
-    const int32_t text_x = box.x + pad + icon;
-    const Lettering name{14.0f, true, gf::text_colour, kit::TextStyle::row_title};
-    const Lettering what{
-        12.0f,
-        false,
-        entry.recognised ? gf::green_colour : gf::dim_colour,
-        kit::TextStyle::row_detail
-    };
-    const Lettering size{12.0f, false, gf::dim_colour, kit::TextStyle::small};
-    if (!wide) {
-        add_text(
-            parts,
-            type,
-            {text_x, box.y + px(type, 4.0f)},
-            box.width - text_x - pad,
-            entry.name,
-            name
-        );
-        add_text(
-            parts,
-            type,
-            {text_x, box.y + box.height / 2},
-            box.width - text_x - pad,
-            entry.what,
-            what
-        );
-        return;
-    }
-    const RowColumns columns = row_columns(type, box.x, box.width, text_x - box.x);
     const int32_t mid = box.y + box.height / 2;
-    kit::line_part(
-        parts, type, columns.name_x, mid, columns.name_room, entry.name, name, TextFit::tight_left
+    kit::icon_part(
+        parts,
+        {box.x + pad, mid - icon / 2, icon, icon},
+        entry.directory ? Glyph::folder : Glyph::file,
+        marked ? gf::green_colour : gf::text_colour,
+        false
     );
+    const int32_t text_x = box.x + pad + icon + px(type, 8.0f);
+    const int32_t size_room = entry.size_label.empty() ? 0 : px(type, 72.0f);
+    const int32_t size_gap = size_room == 0 ? 0 : size_room + px(type, 8.0f);
+    const Lettering name{14.0f, true, gf::text_colour, kit::TextStyle::row_title};
     kit::line_part(
-        parts, type, columns.what_x, mid, columns.what_room, entry.what, what, TextFit::tight_left
+        parts,
+        type,
+        text_x,
+        mid,
+        std::max<int32_t>(0, box.x + box.width - pad - size_gap - text_x),
+        entry.name,
+        name,
+        TextFit::tight_left
     );
     if (!entry.size_label.empty()) {
+        const Lettering size{12.0f, false, gf::dim_colour, kit::TextStyle::small};
         kit::line_part(
             parts,
             type,
-            columns.size_right,
+            box.x + box.width - pad,
             mid,
-            columns.size_room,
+            size_room,
             entry.size_label,
             size,
             TextFit::tight_right
@@ -369,7 +318,7 @@ void add_detail(
     const int32_t pad = px(type, 12.0f);
     int32_t y = area.y + pad;
     const int32_t room = std::max<int32_t>(0, area.width - 2 * pad);
-    const Lettering kicker{11.0f, true, gf::dim_colour, kit::TextStyle::small};
+    const Lettering kicker{12.0f, true, gf::dim_colour, kit::TextStyle::small};
     y += add_text(parts, type, {area.x + pad, y}, room, tr("SELECTED"), kicker);
     y += px(type, 6.0f);
     const Entry* entry = nullptr;
@@ -381,14 +330,14 @@ void add_detail(
     y += add_text(parts, type, {area.x + pad, y}, room, heading, title, 2);
     y += px(type, 8.0f);
     if (entry != nullptr && !entry->account.empty()) {
-        const Lettering body{12.5f, false, gf::text_colour, kit::TextStyle::body};
+        const Lettering body{13.0f, false, gf::text_colour, kit::TextStyle::body};
         y += add_text(parts, type, {area.x + pad, y}, room, entry->account, body, 6);
         y += px(type, 8.0f);
     }
     if (entry != nullptr) {
         int32_t x = area.x + pad;
         const int32_t pill_h = px(type, 22.0f);
-        const Lettering pill{11.0f, false, gf::text_colour, kit::TextStyle::small};
+        const Lettering pill{12.0f, false, gf::text_colour, kit::TextStyle::small};
         for (const std::string& bundle : entry->bundles) {
             const int32_t text_size = kit::canvas_font(type, pill.points);
             const int32_t measured =
@@ -414,7 +363,7 @@ void add_detail(
         y += pill_h + px(type, 10.0f);
     }
     if (model.permission_note && y < area.y + area.height - pad) {
-        const Lettering note{11.0f, false, gf::dim_colour, kit::TextStyle::small};
+        const Lettering note{12.0f, false, gf::dim_colour, kit::TextStyle::small};
         add_text(
             parts,
             type,
@@ -472,7 +421,7 @@ int32_t add_footer(
     choose.enabled = model.can_choose;
     const std::array<kit::ButtonSpec, 1> trailing{choose};
     kit::ButtonRowSizes sizes{};
-    sizes.text = 12.5f;
+    sizes.text = 13.0f;
     sizes.pad = 14.0f;
     sizes.least_main = 150.0f;
     sizes.gap = 8.0f;
@@ -515,9 +464,22 @@ Layout lay_out(
                             compact_short_side_points;
     std::vector<kit::Item>& parts = layout.paint.list.items;
     const int32_t under_header = add_header(parts, type, safe, model.version);
-    int32_t top = under_header + px(type, 10.0f);
+    int32_t top = under_header + px(type, 8.0f);
+    {
+        const Lettering qualify{13.0f, false, gf::text_colour, kit::TextStyle::body};
+        const int32_t height = add_text(
+            parts,
+            type,
+            {safe.x + px(type, 16.0f), top},
+            safe.width - px(type, 32.0f),
+            tr("A folder that holds totala1.hpi, or a Commander Pack or the 1997 demo installer."),
+            qualify,
+            2
+        );
+        top += height + px(type, 8.0f);
+    }
     if (!model.notice.empty()) {
-        const Lettering notice{12.0f, false, gf::text_colour, kit::TextStyle::body};
+        const Lettering notice{13.0f, false, gf::text_colour, kit::TextStyle::body};
         const int32_t height = add_text(
             parts,
             type,
@@ -550,57 +512,59 @@ Layout lay_out(
     const int32_t row_height = px(type, model.deck ? deck_row_points : row_points);
     add_places(parts, type, side, model, std::max(row_height, px(type, row_points)));
 
+    // The list sits on a panel: the toolbar and the rows, not the sidebar. The
+    // contents sit inside the outline.
+    kit::plain_part(
+        parts,
+        Role::panel,
+        {rows_left, top, std::max<int32_t>(0, rows_width), content_height},
+        gf::line_colour
+    );
+    const int32_t list_pad = px(type, 8.0f);
+    const int32_t list_x = rows_left + list_pad;
+    const int32_t list_w = std::max<int32_t>(0, rows_width - 2 * list_pad);
+
     const int32_t tool = std::max(row_height, px(type, row_points));
     kit::ButtonSpec up{};
     up.label = tr("Up");
     up.control = control_id({TargetKind::up, 0});
     up.enabled = model.has_parent;
-    const int32_t up_width = std::min(px(type, 88.0f), rows_width / 4);
-    kit::button_part(parts, type, {rows_left, top, up_width, tool}, up, 12.5f);
-    const std::string filter_label = model.filter.empty() ? tr("Filter") : model.filter;
+    const int32_t up_width =
+        std::min(px(type, 88.0f), std::max<int32_t>(px(type, 44.0f), list_w / 4));
+    kit::button_part(parts, type, {list_x, top + list_pad, up_width, tool}, up, 13.0f);
+    const std::string filter_label =
+        model.filter.empty() ? tr("Filter") : tr("Filter") + ": " + model.filter;
     kit::ButtonSpec filter{};
     filter.label = filter_label;
     filter.control = control_id({TargetKind::filter, 0});
+    const int32_t filter_cap = model.filter.empty() ? px(type, 160.0f) : px(type, 280.0f);
+    const int32_t filter_share = model.filter.empty() ? list_w / 3 : list_w / 2;
     const int32_t filter_width =
-        std::min(px(type, 160.0f), std::max<int32_t>(px(type, 88.0f), rows_width / 3));
+        std::min(filter_cap, std::max<int32_t>(px(type, 88.0f), filter_share));
     kit::button_part(
-        parts, type, {rows_left + rows_width - filter_width, top, filter_width, tool}, filter, 12.5f
+        parts,
+        type,
+        {list_x + list_w - filter_width, top + list_pad, filter_width, tool},
+        filter,
+        13.0f
     );
-    const int32_t path_x = rows_left + up_width + px(type, 8.0f);
+    const int32_t path_x = list_x + up_width + px(type, 8.0f);
     const int32_t path_room =
-        std::max<int32_t>(0, rows_width - up_width - filter_width - px(type, 16.0f));
+        std::max<int32_t>(0, list_w - up_width - filter_width - px(type, 16.0f));
     const Lettering path_look{12.0f, false, gf::dim_colour, kit::TextStyle::small};
-    add_text(parts, type, {path_x, top + px(type, 14.0f)}, path_room, model.path, path_look);
+    add_text(
+        parts, type, {path_x, top + list_pad + px(type, 14.0f)}, path_room, model.path, path_look
+    );
 
-    const bool wide = rows_width >= px(type, 420.0f);
-    int32_t rows_top = top + tool + px(type, 6.0f);
-    if (wide) {
-        const Lettering column{11.0f, true, gf::dim_colour, kit::TextStyle::small};
-        const RowColumns columns = row_columns(type, rows_left, rows_width, 0);
-        add_text(parts, type, {columns.name_x, rows_top}, columns.name_room, tr("NAME"), column);
-        add_text(
-            parts, type, {columns.what_x, rows_top}, columns.what_room, tr("WHAT IT IS"), column
-        );
-        kit::line_part(
-            parts,
-            type,
-            columns.size_right,
-            rows_top + px(type, 8.0f),
-            columns.size_room,
-            tr("SIZE"),
-            column,
-            TextFit::tight_right
-        );
-        rows_top += px(type, 18.0f);
-    }
-    const int32_t rows_height = std::max<int32_t>(row_height, content_bottom - rows_top);
-    const kit::Rect rows_area{rows_left, rows_top, rows_width, rows_height};
+    const int32_t rows_top = top + list_pad + tool + px(type, 6.0f);
+    const int32_t rows_height = std::max<int32_t>(row_height, content_bottom - rows_top - list_pad);
+    const kit::Rect rows_area{list_x, rows_top, list_w, rows_height};
     std::vector<kit::Item> rows;
     if (model.entries.empty()) {
         const Lettering empty{13.0f, false, gf::dim_colour, kit::TextStyle::body};
-        add_text(
-            rows, type, {rows_left, px(type, 8.0f)}, rows_width, tr("No folders here."), empty
-        );
+        const std::string empty_words =
+            model.filter.empty() ? tr("No folders here.") : tr("No names match.");
+        add_text(rows, type, {list_x, px(type, 8.0f)}, list_w, empty_words, empty);
     }
     const int32_t entry_height = std::max(row_height, px(type, row_points));
     for (std::size_t index = 0; index < model.entries.size(); ++index) {
@@ -608,11 +572,10 @@ Layout lay_out(
         add_entry(
             rows,
             type,
-            {rows_left, static_cast<int32_t>(index) * entry_height, rows_width, entry_height},
+            {list_x, static_cast<int32_t>(index) * entry_height, list_w, entry_height},
             model.entries[index],
             static_cast<uint16_t>(index),
-            marked,
-            wide
+            marked
         );
     }
     const int32_t body = model.entries.empty()
@@ -633,9 +596,12 @@ Layout lay_out(
         const kit::Rect panel{rows_left + rows_width + gap, top, detail, content_height};
         add_detail(parts, type, panel, model);
     }
-    const kit::Rect footer{
-        safe.x + margin, content_bottom + px(type, 8.0f), safe.width - 2 * margin, footer_height
-    };
+    const int32_t footer_top = content_bottom + px(type, 8.0f);
+    const int32_t band_height = std::max<int32_t>(0, safe.y + safe.height - footer_top);
+    kit::plain_part(
+        parts, Role::footer_band, {safe.x, footer_top, safe.width, band_height}, gf::line_colour
+    );
+    const kit::Rect footer{safe.x + margin, footer_top, safe.width - 2 * margin, footer_height};
     add_footer(parts, type, footer, model, button_height);
 
     kit::list_part_controls(layout.paint.list);

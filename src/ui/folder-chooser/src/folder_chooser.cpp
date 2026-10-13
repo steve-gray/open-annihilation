@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <optional>
 #include <span>
+#include <string>
 
 namespace oa::ui::folder_chooser {
 
@@ -320,6 +321,43 @@ Outcome key(const Layout& layout, UiState& state, Key pressed) noexcept {
         return selection_of(shown);
     }
     return {};
+}
+
+namespace {
+
+/// Returns a name with A–Z folded to a–z. Every other byte stays as it is.
+///
+/// @param name the name
+/// @return the folded name
+std::string folded_ascii(std::string_view name) {
+    std::string folded(name);
+    for (char& character : folded) {
+        if (character >= 'A' && character <= 'Z')
+            character = static_cast<char>(character - 'A' + 'a');
+    }
+    return folded;
+}
+
+} // namespace
+
+bool entry_before(const Entry& a, const Entry& b) {
+    if (a.directory != b.directory)
+        return a.directory;
+    const std::string folded_a = folded_ascii(a.name);
+    const std::string folded_b = folded_ascii(b.name);
+    if (folded_a != folded_b)
+        return folded_a < folded_b;
+    return a.name < b.name;
+}
+
+void order_entries(std::vector<Entry>& entries) {
+    std::stable_sort(entries.begin(), entries.end(), entry_before);
+}
+
+bool name_matches(std::string_view name, std::string_view filter) {
+    if (filter.empty())
+        return true;
+    return folded_ascii(name).find(folded_ascii(filter)) != std::string::npos;
 }
 
 void scroll(const Layout& layout, UiState& state, int32_t points) noexcept {

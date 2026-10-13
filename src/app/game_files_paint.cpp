@@ -222,6 +222,14 @@ class LayoutPainter {
             );
             paint_text(item, Align::left);
             return;
+        case kit::Role::footer_band:
+            // The folder chooser's footer. The Game files screen lays out no band of this role.
+            painter_.fill_rect(box_of(item.rect), game_files_rgba(header_colour));
+            painter_.fill_rect(
+                Box{item.rect.x, item.rect.y, item.rect.width, whole_px(hairline_points)},
+                game_files_rgba(gf::line_colour)
+            );
+            return;
         case kit::Role::badge:
             paint_badge(area);
             return;
