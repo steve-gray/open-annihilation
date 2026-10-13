@@ -336,6 +336,8 @@ std::string_view label_of(settings::Setting setting) {
         return "Escape opens the game menu";
     case settings::Setting::switch_alt:
         return "Select groups without Alt";
+    case settings::Setting::window_edge:
+        return "Window edge";
     case settings::Setting::unit_limit:
         return "Unit limit";
     case settings::Setting::max_frame_rate:

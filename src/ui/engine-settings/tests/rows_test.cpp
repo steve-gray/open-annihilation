@@ -67,7 +67,7 @@ struct Expected {
 // choices are those of a dialog of the engine's settings opened over the
 // defaults: Language offers System default and the built-in languages.
 // clang-format off
-constexpr std::array<Expected, 78> kExpected{{
+constexpr std::array<Expected, 79> kExpected{{
     {Setting::path_search, RowKind::slider, "Pathfinding cycles", 1, 1, 8, 0, 0, false, Lock::in_game, &Locks::path_search},
     {Setting::wheel_zoom, RowKind::toggle, "Mouse wheel zoom", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::max_zoom_out, RowKind::choice, "Maximum zoom out", 1, 1, 7, 200, 0, false, Lock::none, nullptr},
@@ -76,6 +76,7 @@ constexpr std::array<Expected, 78> kExpected{{
     {Setting::middle_click_pan, RowKind::toggle, "Middle-click pans", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::escape_opens_menu, RowKind::toggle, "Escape opens the game menu", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::switch_alt, RowKind::toggle, "Select groups without Alt", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
+    {Setting::window_edge, RowKind::levels, "Window edge", 1, 1, 2, 48, 2, false, Lock::none, nullptr},
     {Setting::unit_limit, RowKind::slider, "Unit limit", 1, 1, 30, 0, 0, false, Lock::in_game, &Locks::unit_limit},
     {Setting::max_frame_rate, RowKind::slider, "Maximum frame rate", 1, 2, 19, 0, 0, false, Lock::none, &Locks::max_frame_rate},
     {Setting::anti_aliasing, RowKind::levels, "Enhanced anti-aliasing", 1, 1, 5, 23, 5, false, Lock::none, nullptr},
@@ -471,10 +472,11 @@ struct StoredChoice {
 };
 
 /// Every strip's and drop-down's setting, with its key.
-constexpr std::array<StoredChoice, 22> kStoredChoices{{
+constexpr std::array<StoredChoice, 23> kStoredChoices{{
     {Setting::max_zoom_out, settings::key::max_zoom_out},
     {Setting::max_zoom_in, settings::key::max_zoom_in},
     {Setting::view_past_map_edge, settings::key::view_past_map_edge},
+    {Setting::window_edge, settings::key::window_edge},
     {Setting::anti_aliasing, settings::key::anti_aliasing},
     {Setting::hardware_acceleration, settings::key::hardware_acceleration},
     {Setting::language, settings::key::language},
@@ -594,9 +596,31 @@ void tab_follows_the_dialogs_focus_order() {
     const settings::Dialog controls =
         engine_dialog_of({}, settings::Page::controls, true, true, true);
     OA_CHECK(
-        tab_order(controls) ==
-        (std::vector<int32_t>{16, 17, 18, 19, 20, 21, 12, 13, 14, 0, 1,
-                              2,  3,  4,  5,  6,  8,  9,  11, 10, 7, settings::close_x_control})
+        tab_order(controls) == (std::vector<int32_t>{
+                                   16,
+                                   17,
+                                   18,
+                                   19,
+                                   20,
+                                   21,
+                                   22,
+                                   12,
+                                   13,
+                                   14,
+                                   0,
+                                   1,
+                                   2,
+                                   3,
+                                   4,
+                                   5,
+                                   6,
+                                   8,
+                                   9,
+                                   11,
+                                   10,
+                                   7,
+                                   settings::close_x_control
+                               })
     );
     // Graphics: After zoom, locked while units are drawn whole, takes none.
     settings::Dialog graphics = controls;

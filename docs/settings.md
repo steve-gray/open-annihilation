@@ -193,6 +193,15 @@ Each of these takes effect at once.
   way. Turn it on if you are used to selecting groups with the number keys
   alone, as most strategy games do. It is 3.1c's own SwitchAlt option, so
   the console's `+switchalt` changes it too.
+- **Window edge**, Sticky or Free, Sticky by default. In a window, while a
+  match's battlefield shows and the window has the focus, Sticky holds the
+  pointer on the window's edges so it rests on the last pixel and the view
+  edge-scrolls, as it does in full screen. A firm push past the edge, or
+  arriving there fast, lets the pointer leave. It is held again once it has
+  come back into the window and moved in from the edges. Menus, the pause
+  screen and a window without the focus leave it free. Free leaves a
+  window's edge as the game did before. Full screen holds the pointer
+  either way.
 
 ## Engine Limits
 

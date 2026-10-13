@@ -1969,8 +1969,12 @@ hosts them on the OA layer.
   and Wayland confines it there, each following the window's size and
   display. Switching to another program (Alt+Tab, Command+Tab), a dialog of
   the system's taking the focus, or Alt+Enter to a window lets the pointer
-  go, and coming back to full screen with the focus holds it again; a window
-  never holds it. The window events that may change this
+  go, and coming back to full screen with the focus holds it again. A window
+  holds the pointer at its edges only while a match's battlefield shows, the window has the focus and the
+  pointer, and Window edge is Sticky (`sticky_edge.hpp`): the pointer rests on the last pixel and the view
+  edge-scrolls. On macOS, Windows and X11 it stays free and is put back on that pixel until a firm push
+  lets it go; on Wayland it is confined, and a quick approach lets it go. Menus, the pause screen, a window without the focus
+  and Window edge Free leave it free. The window events that may change this
   (`changes_pointer_bounds`) settle it in every event loop that takes
   Alt+Enter (the movies, a match loading and the game), and the window's own
   state settles it after the game drops pending input. The game lets the
@@ -2016,7 +2020,8 @@ hosts them on the OA layer.
   come back onto the display from off it, also with a usable area smaller
   than the display, and `--check-frontend-controls` presses Alt+Enter on a
   menu, over a message box and in a match, and checks that full screen
-  holds the pointer and a window lets it go, and that the window comes back
+  holds the pointer, that a window holds it at an edge while a match's battlefield shows until a firm
+  push lets it go, and that Window edge Free leaves it free, and that the window comes back
   at its own size, or onto its display when it started off it (the dummy
   driver's display is smaller than the game's first window).
   The Window frame setting hides a window's title bar and borders while a
