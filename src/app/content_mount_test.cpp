@@ -301,8 +301,8 @@ void check_composed_mount(const fs::path& scratch) {
         bool replaced = false;
         for (const fs::path& archive : layered->archives)
             if (path_to_utf8(archive.filename()) == "rev31.gp3") {
-                std::error_code failure;
-                replaced = fs::equivalent(archive.parent_path(), mod, failure);
+                std::error_code compare_failure;
+                replaced = fs::equivalent(archive.parent_path(), mod, compare_failure);
             }
         OA_CHECK(replaced);
         OA_CHECK(layered->mod_layered);
