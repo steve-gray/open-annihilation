@@ -412,16 +412,16 @@ installs::SetupSource rank_facts(
     return facts;
 }
 
-/// Tells whether a file's size is one of the installers this game knows.
+/// Tells whether a file's size and name are a published installer's.
 ///
-/// @param file the file; unused
+/// @param file the file
 /// @param size its size
 /// @param context unused
-/// @return true when the size is a known installer
+/// @return true when both match a known installer
 bool known_installer_file(const fs::path& file, uint64_t size, void* context) {
-    std::ignore = file;
     std::ignore = context;
-    return bundles::find_installer(size) != nullptr;
+    const bundles::Installer* installer = bundles::find_installer(size);
+    return installer != nullptr && is_published_installer_name(file, *installer);
 }
 
 /// Tells whether a token is already in a gathered list.
@@ -488,17 +488,10 @@ void gather_installer(
         kind = SourceKind::disc;
         mark = first_run::SourceMark::disc;
     }
-    std::unique_ptr<ContentSource> source;
     const std::span<const bundles::Bundle> table = bundles::bundles();
-    if (kind == SourceKind::macos)
-        source = std::make_unique<MacosInstallerSource>(file, table, true);
-    else if (kind == SourceKind::disc)
-        source = std::make_unique<DiskImageContentSource>(file, table, DiskImageOptions{true});
-    else
-        source = std::make_unique<WindowsInstallerSource>(file, table);
     SourceDescription described;
     std::string error;
-    if (!describe_source(*source, table, described, &error) || described.bundles.empty())
+    if (!describe_published_installer(file, described, &error) || described.bundles.empty())
         return;
     HeldSource held;
     held.row.token = token;

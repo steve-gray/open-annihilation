@@ -426,6 +426,42 @@ void check_search(const fs::path& temporary) {
     OA_CHECK(installs::find_candidates(many).size() == installs::most_candidates);
 }
 
+/// Names that cannot hold the game are left unopened. A wrapper whose name ends in .app is
+/// still walked, so a game under its drive_c is found.
+///
+/// @param temporary a folder this check owns
+void check_skipped_folders(const fs::path& temporary) {
+    OA_CHECK(installs::folder_cannot_hold_game("Library"));
+    OA_CHECK(installs::folder_cannot_hold_game("LIBRARY"));
+    OA_CHECK(installs::folder_cannot_hold_game("node_modules"));
+    OA_CHECK(installs::folder_cannot_hold_game(".git"));
+    OA_CHECK(installs::folder_cannot_hold_game("Caches"));
+    OA_CHECK(installs::folder_cannot_hold_game("$RECYCLE.BIN"));
+    OA_CHECK(installs::folder_cannot_hold_game("System Volume Information"));
+    OA_CHECK(installs::folder_cannot_hold_game("__MACOSX"));
+    OA_CHECK(!installs::folder_cannot_hold_game("Game.app"));
+    OA_CHECK(!installs::folder_cannot_hold_game("Downloads"));
+    OA_CHECK(!installs::folder_cannot_hold_game("Documents"));
+    OA_CHECK(!installs::folder_cannot_hold_game("Desktop"));
+    OA_CHECK(!installs::folder_cannot_hold_game("Applications"));
+    OA_CHECK(!installs::folder_cannot_hold_game("drive_c"));
+    OA_CHECK(!installs::folder_cannot_hold_game("windows"));
+    OA_CHECK(!installs::folder_cannot_hold_game("Total Annihilation"));
+
+    const fs::path parent = temporary / "skipped-prefixes";
+    const fs::path hidden = parent / "hidden" / "drive_c" / "Library" / "Total Annihilation";
+    const fs::path wrapper = parent / "wrapper" / "drive_c" / "Game.app" / "Contents" /
+                             "Resources" / "Total Annihilation";
+    make_game_folder(hidden);
+    make_game_folder(wrapper);
+    installs::SearchRoots roots;
+    roots.prefix_parents = {parent};
+    const std::vector<installs::Candidate> found = installs::find_candidates(roots);
+    OA_CHECK(found.size() == 1);
+    if (!found.empty())
+        OA_CHECK(found[0].folder == canonical_of(wrapper));
+}
+
 } // namespace
 
 /// The locator's places, from facts, with empty paths left out. No disk is read.
@@ -610,6 +646,7 @@ int main() {
          std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         check_search(temporary);
+        check_skipped_folders(temporary);
         check_setup_sources(temporary);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "check failed: %s\n", error.what());
