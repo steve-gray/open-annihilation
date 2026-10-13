@@ -460,11 +460,11 @@ void words() {
 } // namespace
 
 int main(int argc, char** argv) {
-    for (int index = 1; index < argc; ++index) {
-        const std::string_view argument = argv[index];
-        if (argument == "--frames" && index + 1 < argc)
-            return write_map_browser_frames(argv[++index]);
-        std::fprintf(stderr, "map browser: unexpected argument %s\n", argv[index]);
+    if (argc > 1) {
+        const std::string_view argument = argv[1];
+        if (argument == "--frames" && argc > 2)
+            return write_map_browser_frames(argv[2]);
+        std::fprintf(stderr, "map browser: unexpected argument %s\n", argv[1]);
         return 2;
     }
     merging();
