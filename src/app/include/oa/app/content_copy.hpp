@@ -12,6 +12,7 @@
 #pragma once
 
 #include "oa/data/content_bundles.hpp"
+#include "oa/data/content_bundles/record.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -36,7 +37,8 @@ inline constexpr std::string_view managed_games_folder = "games";
 /// The folder of expansions under the player's folder.
 inline constexpr std::string_view managed_expansions_folder = "expansions";
 /// The record written in a bundle folder.
-inline constexpr std::string_view content_record_name = ".oa-content";
+inline constexpr std::string_view content_record_name =
+    oa::data::content_bundles::content_record_name;
 
 /// How many bytes to require free before a copy.
 ///
@@ -298,41 +300,21 @@ class WindowsInstallerSource final : public ContentSource {
     std::unique_ptr<State> state_;
 };
 
-/// One file recorded in a bundle folder.
-struct ContentRecordFile {
-    /// The name it is stored under, relative to the bundle folder.
-    std::string copy_name;
-    /// Size in bytes.
-    uint64_t size{};
-    /// Modification time, seconds since 1970.
-    int64_t modified{};
-    /// SHA-256 of the bytes.
-    oa::base::sha256::Digest digest{};
-};
+/// One file recorded in a bundle folder. The format lives in
+/// `oa/data/content_bundles/record.hpp`.
+using ContentRecordFile = oa::data::content_bundles::ContentRecordFile;
 
 /// The .oa-content record of one bundle folder.
-struct ContentRecord {
-    /// True when the file exists.
-    bool present{};
-    /// True when the file is a record this reader understands.
-    bool valid{};
-    /// True when the file exists and could not be read.
-    bool io_error{};
-    /// The bundle id the record names.
-    std::string bundle_id;
-    /// The source the files were copied from, as the player named it.
-    std::string source;
-    /// The files recorded so far.
-    std::vector<ContentRecordFile> files;
-};
+using ContentRecord = oa::data::content_bundles::ContentRecord;
 
-/// Reads a bundle folder's record.
+/// Reads a bundle folder's record from the record file's path.
 ///
 /// A missing file is an empty record with present false. A file that is not
 /// a record is present and not valid, which a copy treats as empty. A file
-/// that cannot be read sets io_error.
+/// that cannot be read sets io_error. The bytes are read by
+/// `read_bundle_folder_record`.
 ///
-/// @param file the record's path
+/// @param file the record's path, `<bundle folder>/.oa-content`
 /// @param[out] error why it could not be read; may be null; unset otherwise
 /// @return the record
 [[nodiscard]] ContentRecord
