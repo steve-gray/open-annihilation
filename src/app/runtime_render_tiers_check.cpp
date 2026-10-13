@@ -26,6 +26,7 @@
 // the unit under the pointer the one drawn there.
 #include "oa/app/runtime.hpp"
 
+#include "engine_settings_menu_host.hpp"
 #include "frame_stats_panel.hpp"
 #include "full_fog.hpp"
 #include "full_presentation.hpp"
@@ -953,7 +954,14 @@ int Runtime::check_render_tiers() {
         if (whole &&
             (card.filter != policy::ScaleFilter::nearest || counts.prescale_draws != draws_before))
             fail("the main menu at a whole-number scale was drawn through a prescale target");
-        const auto source_rgb = gamma_of(surface_.rgb);
+        // A larger window draws the menu's buttons again in its own pixels,
+        // over a picture whose squares were put back to the menu under them.
+        // The card scales that picture. The button squares are then taken
+        // from the read-back, which holds them as the window drew them.
+        std::vector<uint8_t> punched;
+        if (!replace_menu_button_pixels(punched))
+            punched = surface_.rgb;
+        const auto source_rgb = gamma_of(std::move(punched));
         const wr::RgbSource source{
             source_rgb.data(), surface_.width, surface_.height, surface_.width
         };
@@ -968,6 +976,7 @@ int Runtime::check_render_tiers() {
             {0, 0, static_cast<int>(letterbox.w), static_cast<int>(letterbox.h)},
             target
         );
+        EngineSettingsMenuHost::copy_presented_menu_buttons(*this, read, reference, {});
         if (read.width != static_cast<uint32_t>(letterbox.w) ||
             read.height != static_cast<uint32_t>(letterbox.h))
             fail("the main menu's read-back is not its letterbox");
