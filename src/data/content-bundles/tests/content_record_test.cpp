@@ -116,12 +116,48 @@ void test_unknown_field() {
     OA_CHECK(read.files[0].modified == -5);
 }
 
+// A copy stores a record after each file. While the next file is still being
+// written, the record names only the files already stored. A bundle with no
+// file stored yet is the header alone; the copy does not write that file.
+void test_in_progress() {
+    const std::string text = "oa-content 1\n"
+                             "bundle totala\n"
+                             "source /games/Total Annihilation\n"
+                             "file rev31.gp3\n"
+                             "size 14\n"
+                             "modified 1600000000\n"
+                             "sha256 " +
+                             std::string(kHash) + "\n";
+    const ContentRecord read = parse_content_record(text);
+    OA_CHECK(read.valid);
+    OA_CHECK(read.bundle_id == "totala");
+    OA_CHECK(read.source == "/games/Total Annihilation");
+    OA_CHECK(read.files.size() == 1);
+    OA_CHECK(read.files[0].copy_name == "rev31.gp3");
+    OA_CHECK(read.files[0].size == 14);
+    OA_CHECK(read.files[0].modified == 1600000000);
+    const std::optional<std::string> again = format_content_record(read);
+    OA_CHECK(again.has_value());
+    OA_CHECK(*again == text);
+
+    const ContentRecord header = parse_content_record("oa-content 1\nbundle totala\nsource disc\n");
+    OA_CHECK(header.valid);
+    OA_CHECK(header.files.empty());
+    OA_CHECK(header.bundle_id == "totala");
+    OA_CHECK(header.source == "disc");
+}
+
 void test_folder() {
     const std::filesystem::path folder = oa::test::make_scratch_directory("G25-content-record");
     std::error_code failure;
     std::filesystem::remove_all(folder, failure);
     std::filesystem::create_directories(folder, failure);
     OA_CHECK(!failure);
+    const ContentRecord absent_tree =
+        read_bundle_folder_record(folder / "games" / "totala", nullptr);
+    OA_CHECK(!absent_tree.present);
+    OA_CHECK(!absent_tree.valid);
+    OA_CHECK(!absent_tree.io_error);
     const ContentRecord missing = read_bundle_folder_record(folder, nullptr);
     OA_CHECK(!missing.present);
     OA_CHECK(!missing.valid);
@@ -152,6 +188,7 @@ int main() {
     test_round_trip();
     test_malformed();
     test_unknown_field();
+    test_in_progress();
     test_folder();
-    return 0;
+    return oa::test::check_exit_status();
 }

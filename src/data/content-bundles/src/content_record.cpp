@@ -267,14 +267,17 @@ ContentRecord read_bundle_folder_record(const std::filesystem::path& folder, std
     const std::filesystem::path path = folder / std::string(content_record_name);
     std::error_code failure;
     const std::filesystem::file_status status = std::filesystem::status(path, failure);
+    // A path that is not there, including a bundle folder that has not been
+    // created yet, is a missing record. status reports that as an error.
+    if (failure == std::errc::no_such_file_or_directory || failure == std::errc::not_a_directory ||
+        (!failure && !std::filesystem::exists(status)))
+        return record;
     if (failure) {
         record.present = true;
         record.io_error = true;
         set_error(error, "the record could not be read");
         return record;
     }
-    if (!std::filesystem::exists(status))
-        return record;
     record.present = true;
     if (!std::filesystem::is_regular_file(status))
         return record;
