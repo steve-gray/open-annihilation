@@ -472,7 +472,8 @@ struct ConstructionResult {
 ///
 /// The builder pays for the step and health moves with the build fraction. A negative
 /// rate decays the frame: metal is refunded, and a frame decayed back to nothing is
-/// destroyed as a reclaim.
+/// destroyed as a reclaim. A non-negative rate raises the construction wake on the
+/// target before any of that, which is what holds an unfinished unit's decay off.
 ///
 /// A target without a type is not built.
 ///
@@ -483,8 +484,10 @@ struct ConstructionResult {
 /// @param host economy and completion services
 /// @return whether the step happened, whether it completed the target, its costs, and
 ///         whether the target had no type
-/// @quirk A zero or NaN fraction or rate returns without touching resources; the
-///        step keeps 53 bits, and a zero build time divides to infinity.
+/// @quirk A zero or NaN fraction or rate returns without touching resources. A
+///        non-negative rate, including a zero rate, still raises the construction
+///        wake before that return. The step keeps 53 bits, and a zero build time
+///        divides to infinity.
 [[nodiscard]] ConstructionResult
 apply_build_progress(Unit& builder, Unit& target, float rate, ConstructionHost& host);
 

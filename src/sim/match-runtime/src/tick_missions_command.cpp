@@ -12,6 +12,9 @@ namespace command {
 
 constexpr uint32_t be_carried_wait = 10;
 constexpr uint32_t queued_move_wait = 0x3c;
+// Opening wait, the wait after build progress, and the wait between decay
+// steps. A new frame with no progress waits the first, then the second,
+// before it decays. Later progress restarts only the second.
 constexpr uint32_t get_built_first_wait = 300;
 constexpr uint32_t get_built_wait = 0x1e;
 constexpr uint32_t get_built_decay_ticks = 0xb;
