@@ -280,6 +280,7 @@ inline constexpr std::string_view interface_words[] = {
     words::active_files_match,
     words::active_file_differs,
     words::active_files_differ,
+    words::music_tracks,
     words::active_version_source,
     words::active_turns_off,
     words::active_turns_on,

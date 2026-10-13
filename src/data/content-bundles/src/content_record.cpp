@@ -182,6 +182,14 @@ ContentRecord parse_content_record(std::string_view text) {
         const std::string_view name = field_name(line);
         if (name.empty())
             return record;
+        // Written after a file's sha256. Older readers skip the line and
+        // still read the file, size, time and hash.
+        if (line == "not-in-source") {
+            if (!files.empty())
+                files.back().not_in_source = true;
+            ++index;
+            continue;
+        }
         if (!known_field(name)) {
             ++index;
             continue;
@@ -256,6 +264,8 @@ std::optional<std::string> format_content_record(const ContentRecord& record) {
         std::string hash_line = "sha256 ";
         hash_line.append(hex.data(), hex.size());
         append_line(text, hash_line);
+        if (item.not_in_source)
+            append_line(text, "not-in-source");
     }
     return text;
 }

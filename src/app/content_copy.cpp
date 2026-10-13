@@ -841,6 +841,21 @@ struct PlannedFile {
     bool shareable{};
 };
 
+[[nodiscard]] bool duplicate_file(const fs::path& from, const fs::path& to, std::string* error) {
+    remove_file(to);
+    std::string share_error;
+    if (oa::platform::blocks_can_be_shared(from, to.parent_path()) &&
+        oa::platform::share_file_blocks(from, to, &share_error))
+        return true;
+    std::error_code failure;
+    fs::copy_file(from, to, fs::copy_options::overwrite_existing, failure);
+    if (failure) {
+        set_error(error, "a file could not be copied");
+        return false;
+    }
+    return true;
+}
+
 [[nodiscard]] bool remember_file(
     ContentRecord& record, const PlannedFile& planned, const oa::base::sha256::Digest& digest
 ) {
@@ -1254,6 +1269,12 @@ bool describe_source(
                 MissingContentFile missing;
                 missing.bundle_id = std::string(bundle.id);
                 missing.copy_name = std::string(file.copy_name);
+                for (std::size_t index = 0; index < listed.size(); ++index) {
+                    if (used[index] != 0 || !names_match(listed[index].name, file))
+                        continue;
+                    if (listed[index].size != file.size)
+                        missing.different_size = true;
+                }
                 described.missing.push_back(std::move(missing));
             }
         }
@@ -1561,6 +1582,115 @@ CopyResult copy_content(ContentSource& source, const CopyRequest& request) {
             progress.files_done = narrow_count(static_cast<std::size_t>(progress.files_done) + 1);
             progress.file_finished = true;
             notify(request, progress);
+        }
+        // A table file the source did not name can still be the bytes of
+        // another file in that bundle, when the size matches and the hash is
+        // one the table accepts for the missing name. Anything left over is
+        // recorded as not in the source, and no file is written for it.
+        for (const MissingContentFile& missing : described.missing) {
+            bool held = false;
+            for (const std::string& id : described.bundles) {
+                if (id == missing.bundle_id) {
+                    held = true;
+                    break;
+                }
+            }
+            if (!held || missing.different_size)
+                continue;
+            const bundles::Bundle* bundle = nullptr;
+            const bundles::ContentFile* table_file = nullptr;
+            for (const bundles::Bundle& candidate : request.bundles) {
+                if (candidate.id != missing.bundle_id)
+                    continue;
+                bundle = &candidate;
+                for (const bundles::ContentFile& file : candidate.files) {
+                    if (file.copy_name == missing.copy_name) {
+                        table_file = &file;
+                        break;
+                    }
+                }
+                break;
+            }
+            if (bundle == nullptr || table_file == nullptr || !safe_copy_name(missing.copy_name))
+                continue;
+            const fs::path record_path =
+                bundle_folder(request.user_folder, *bundle) / std::string(content_record_name);
+            ContentRecord record = read_content_record(record_path, &problem);
+            if (record.io_error) {
+                result.status = CopyStatus::failed;
+                result.error =
+                    player_error(problem.empty() ? "the record could not be read" : problem);
+                return result;
+            }
+            if (!record.valid || record.bundle_id != missing.bundle_id)
+                record.files.clear();
+            record.bundle_id = std::string(missing.bundle_id);
+            record.source = source.origin();
+            record.present = true;
+            record.valid = true;
+            const ContentRecordFile* donor = nullptr;
+            for (const ContentRecordFile& item : record.files) {
+                if (item.not_in_source || item.copy_name == missing.copy_name)
+                    continue;
+                if (item.size != table_file->size)
+                    continue;
+                if (!bundles::known_hash(*table_file, item.digest))
+                    continue;
+                donor = &item;
+                break;
+            }
+            const fs::path dest =
+                stored_path(bundle_folder(request.user_folder, *bundle), missing.copy_name);
+            if (donor != nullptr) {
+                const fs::path from =
+                    stored_path(bundle_folder(request.user_folder, *bundle), donor->copy_name);
+                std::error_code failure;
+                fs::create_directories(dest.parent_path(), failure);
+                if (failure || !duplicate_file(from, dest, &problem) ||
+                    !set_modified(dest, donor->modified, &problem)) {
+                    result.status = CopyStatus::failed;
+                    result.error =
+                        player_error(problem.empty() ? "a file could not be copied" : problem);
+                    return result;
+                }
+                ContentRecordFile stored;
+                stored.copy_name = std::string(missing.copy_name);
+                stored.size = donor->size;
+                stored.modified = donor->modified;
+                stored.digest = donor->digest;
+                bool replaced = false;
+                for (ContentRecordFile& item : record.files) {
+                    if (item.copy_name == stored.copy_name) {
+                        item = stored;
+                        replaced = true;
+                        break;
+                    }
+                }
+                if (!replaced)
+                    record.files.push_back(std::move(stored));
+                result.files_copied =
+                    narrow_count(static_cast<std::size_t>(result.files_copied) + 1);
+            } else {
+                ContentRecordFile stored;
+                stored.copy_name = std::string(missing.copy_name);
+                stored.not_in_source = true;
+                bool replaced = false;
+                for (ContentRecordFile& item : record.files) {
+                    if (item.copy_name == stored.copy_name) {
+                        item.not_in_source = true;
+                        replaced = true;
+                        break;
+                    }
+                }
+                if (!replaced)
+                    record.files.push_back(std::move(stored));
+            }
+            if (!write_content_record(record_path, record, &problem)) {
+                result.status = CopyStatus::failed;
+                result.error =
+                    player_error(problem.empty() ? "the record could not be written" : problem);
+                return result;
+            }
         }
         if (told)
             say_line(request.news, "Copied the game into Open Annihilation.");
@@ -1894,6 +2024,26 @@ ContentNoticeCopy content_file_notice(const ContentCheck& check) {
     return copy;
 }
 
+std::string content_tracks_line(uint32_t held, uint32_t total) {
+    const std::string_view pattern =
+        oa::data::languages::interface_text("{held} of {total} tracks");
+    return replace_token(
+        replace_token(pattern, "{held}", std::to_string(held)), "{total}", std::to_string(total)
+    );
+}
+
+std::string content_bundle_line(const ContentBundleCheck& bundle) {
+    if (bundle.files_differ > 0)
+        return differ_count_line(bundle.files_differ, bundle.file_count);
+    if (bundle.id == "music" && bundle.files_not_in_source > 0 &&
+        bundle.files_not_in_source <= bundle.file_count) {
+        return content_tracks_line(
+            bundle.file_count - bundle.files_not_in_source, bundle.file_count
+        );
+    }
+    return content_match_line(0);
+}
+
 std::string content_match_line(uint32_t files_differ) {
     if (files_differ == 0)
         return std::string(oa::data::languages::interface_text("All files match"));
@@ -1934,7 +2084,15 @@ check_managed_content(const fs::path& user_folder, std::span<const bundles::Bund
             const bool sized = regular && !failure;
             const auto stamp = sized ? fs::last_write_time(dest, failure) : fs::file_time_type{};
             const bool timed = sized && !failure;
-            const bool unchanged = recorded && timed &&
+            const bool never_held = recorded && record.files[index].not_in_source;
+            // A music file the source never held is not a difference while it
+            // is still absent. A file that is present is checked as usual, so
+            // a changed or damaged track is still named.
+            if (never_held && bundle.id == "music" && !regular) {
+                count_up(reported.files_not_in_source);
+                continue;
+            }
+            const bool unchanged = recorded && timed && !never_held &&
                                    narrow_size(disk_bytes) == record.files[index].size &&
                                    modified_seconds(stamp) == record.files[index].modified;
             oa::base::sha256::Digest digest{};
@@ -1953,6 +2111,7 @@ check_managed_content(const fs::path& user_folder, std::span<const bundles::Bund
                     updated.size = hashed_size;
                     updated.modified = hashed_time;
                     updated.digest = digest;
+                    updated.not_in_source = never_held;
                     if (recorded)
                         record.files[index] = std::move(updated);
                     else
@@ -1961,6 +2120,10 @@ check_managed_content(const fs::path& user_folder, std::span<const bundles::Bund
                 }
             }
             const bool differs = !have_digest || !bundles::known_hash(file, digest);
+            if (never_held && bundle.id == "music" && regular && !differs && recorded) {
+                record.files[index].not_in_source = false;
+                wrote = true;
+            }
             if (!differs)
                 continue;
             count_up(reported.files_differ);

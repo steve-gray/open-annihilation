@@ -1652,6 +1652,26 @@ library::Inputs Runtime::library_inputs() {
     inputs.content.locked = choice.command_line;
     inputs.content.enabled = choice.expansions;
     inputs.content.copied = copied_content_bundles(options_.game_dir);
+    if (const oa::data::content_bundles::Bundle* music =
+            oa::data::content_bundles::find_bundle("music")) {
+        const oa::app::ContentRecord music_record = oa::app::read_content_record(
+            oa::app::bundle_folder(options_.game_dir, *music) /
+                std::string(oa::app::content_record_name),
+            nullptr
+        );
+        if (music_record.valid && music_record.bundle_id == music->id) {
+            int32_t absent = 0;
+            for (const oa::app::ContentRecordFile& item : music_record.files) {
+                if (item.not_in_source)
+                    ++absent;
+            }
+            const auto track_count = static_cast<int32_t>(music->files.size());
+            if (absent > 0 && absent <= track_count) {
+                inputs.content.music_track_count = track_count;
+                inputs.content.music_tracks = track_count - absent;
+            }
+        }
+    }
     if (inputs.playing_mod) {
         if (const oa::data::mod_profile::ModProfile* profile = mod_profile())
             inputs.content.mod_required = profile->required_expansions;

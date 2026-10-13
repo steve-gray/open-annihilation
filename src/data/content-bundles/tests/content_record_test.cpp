@@ -114,6 +114,47 @@ void test_unknown_field() {
     OA_CHECK(read.files[0].copy_name == "rev31.gp3");
     OA_CHECK(read.files[0].size == 42);
     OA_CHECK(read.files[0].modified == -5);
+    OA_CHECK(!read.files[0].not_in_source);
+}
+
+// "not-in-source" follows a file the source did not hold. A record from
+// before that line reads the file as held, and a reader that skips an
+// unknown line still has the size and the hash.
+void test_not_in_source() {
+    const std::string held = "oa-content 1\n"
+                             "bundle music\n"
+                             "source disc\n"
+                             "file music/9.mp3\n"
+                             "size 4\n"
+                             "modified 3\n"
+                             "sha256 " +
+                             std::string(kHash) + "\n";
+    const ContentRecord older = parse_content_record(held);
+    OA_CHECK(older.valid);
+    OA_CHECK(older.files.size() == 1);
+    OA_CHECK(!older.files[0].not_in_source);
+    const std::optional<std::string> held_again = format_content_record(older);
+    OA_CHECK(held_again.has_value());
+    OA_CHECK(held_again->find("not-in-source") == std::string::npos);
+
+    ContentRecord record = older;
+    ContentRecordFile absent;
+    absent.copy_name = "music/13.mp3";
+    absent.size = 0;
+    absent.modified = 0;
+    absent.digest = *oa::base::sha256::parse_hex(kHash);
+    absent.not_in_source = true;
+    record.files.push_back(absent);
+    const std::optional<std::string> text = format_content_record(record);
+    OA_CHECK(text.has_value());
+    OA_CHECK(text->find("not-in-source\n") != std::string::npos);
+    const ContentRecord read = parse_content_record(*text);
+    OA_CHECK(read.valid);
+    OA_CHECK(read.files.size() == 2);
+    OA_CHECK(!read.files[0].not_in_source);
+    OA_CHECK(read.files[1].copy_name == "music/13.mp3");
+    OA_CHECK(read.files[1].not_in_source);
+    OA_CHECK(read.files[1].digest == absent.digest);
 }
 
 // A copy stores a record after each file. While the next file is still being
@@ -188,6 +229,7 @@ int main() {
     test_round_trip();
     test_malformed();
     test_unknown_field();
+    test_not_in_source();
     test_in_progress();
     test_folder();
     return oa::test::check_exit_status();

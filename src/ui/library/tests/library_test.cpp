@@ -2715,6 +2715,22 @@ void test_base_chooser() {
     OA_CHECK(asked.content.unload_mod);
     OA_CHECK(!asked.content.pending_base);
     OA_CHECK(asked.content.clear_reason == lib::PendingClear::required_expansion_off);
+
+    lib::Inputs short_music;
+    short_music.content.base_id = "totala";
+    short_music.content.copied = {"music"};
+    short_music.content.music_tracks = 17;
+    short_music.content.music_track_count = 18;
+    lib::Library music_library;
+    lib::refresh(music_library, std::move(short_music));
+    bool music_pill = false;
+    for (const lib::ExpansionPill& pill : lib::active_content(music_library).pills) {
+        if (pill.id != "music")
+            continue;
+        music_pill = true;
+        OA_CHECK(pill.text == "17 of 18 tracks");
+    }
+    OA_CHECK(music_pill);
 }
 
 /// Returns a button of an action, or null.
