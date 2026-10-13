@@ -94,22 +94,22 @@ std::vector<std::string> contingency_map_stems(const fs::path& user_folder) {
     std::vector<std::string> stems;
     const oa::data::content_bundles::Bundle* bundle =
         oa::data::content_bundles::find_bundle("core-contingency");
-    if (bundle == nullptr || bundle->files.empty())
+    if (bundle == nullptr)
         return stems;
-    const fs::path archive =
-        bundle_folder(user_folder, *bundle) / std::string(bundle->files.front().copy_name);
-    std::error_code error;
-    if (!fs::is_regular_file(archive, error))
-        return stems;
-    auto opened = oa::open_hpi_file(archive);
-    if (!opened.ok())
-        return stems;
-    const oa::HpiArchive maps = std::move(*opened.value);
-    const std::vector<oa::ArchiveEntry> entries = maps.entries();
-    for (const oa::ArchiveEntry& entry : entries) {
-        if (!ota_path(entry.path))
+    // The maps are in one of the expansion's archives (ccmaps.ccx), not
+    // necessarily its first.
+    for (const oa::data::content_bundles::ContentFile& file : bundle->files) {
+        const fs::path archive = bundle_folder(user_folder, *bundle) / std::string(file.copy_name);
+        std::error_code error;
+        if (!fs::is_regular_file(archive, error))
             continue;
-        stems.push_back(folded(stem_of(entry.path)));
+        auto opened = oa::open_hpi_file(archive);
+        if (!opened.ok())
+            continue;
+        const oa::HpiArchive maps = std::move(*opened.value);
+        for (const oa::ArchiveEntry& entry : maps.entries())
+            if (ota_path(entry.path))
+                stems.push_back(folded(stem_of(entry.path)));
     }
     return stems;
 }
