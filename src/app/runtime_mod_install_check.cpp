@@ -23,6 +23,7 @@
 // finds the mod played all the same, put back before its folder was
 // resolved.
 
+#include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "library_host.hpp"
 #include "mod_install_state.hpp"
@@ -858,10 +859,19 @@ void Runtime::check_mod_install() {
                 drawing, {0, 0, larger.scale}, sized, *fonts, engine_settings_icon()
             );
             apply_gamma_rgb(drawing.rgb.data(), drawing.rgb.size() / 3U, 3);
-            const auto differing = layer_differences(
+            auto expected = expected_layer_frame(closed_windows[index], drawing, at);
+            // The closed frame holds the larger icons. Darkening that frame
+            // is not what the window draws: each icon is darkened and blended
+            // on its own, over its window rectangle. Those squares are taken
+            // from the window. The question covers its own place.
+            EngineSettingsMenuHost::copy_presented_menu_buttons(
+                *this,
                 presented,
-                expected_layer_frame(closed_windows[index], drawing, at),
-                window_pointer(oa_layer().view(), kRestingPointer)
+                expected,
+                {at.shown.x, at.shown.y, at.shown.width, at.shown.height}
+            );
+            const auto differing = layer_differences(
+                presented, expected, window_pointer(oa_layer().view(), kRestingPointer)
             );
             require(
                 differing == 0,

@@ -94,6 +94,11 @@ struct Runtime::EngineSettingsMenuHost {
     SharpButton library_sharp{};
     SharpButton settings_sharp{};
 
+    /// The pointer's cursor covers a button this frame draws again in the
+    /// window's pixels. The cursor is left out of the picture, which would
+    /// hide that draw, and presented above the button.
+    bool cursor_above{};
+
     EngineSettingsMenuHost() = default;
     EngineSettingsMenuHost(const EngineSettingsMenuHost&) = delete;
     EngineSettingsMenuHost& operator=(const EngineSettingsMenuHost&) = delete;
@@ -133,6 +138,26 @@ struct Runtime::EngineSettingsMenuHost {
     /// @return the button's square, in source pixels
     [[nodiscard]] static oa::ui::frontend_renderer::SourceRect
     settings_button_rect(const Runtime& runtime);
+
+    /// Copies the window-size Library and Settings buttons from a presented
+    /// frame into a reference, so the reference holds those squares as the
+    /// window drew them. A button whose window square is the picture's own
+    /// square is left as the reference has it. Pixels inside @p covered stay
+    /// as the reference has them, so a dialog drawn over a button stays in
+    /// the compare. A frame the size of the letterboxed picture, rather than
+    /// the whole window, is addressed from the picture's origin.
+    ///
+    /// @param runtime the runtime
+    /// @param presented the frame the window showed
+    /// @param reference the frame a check compares; its button squares change
+    /// @param covered a rectangle of the reference left unchanged, in the
+    ///        frame's pixels; empty leaves every button pixel
+    static void copy_presented_menu_buttons(
+        Runtime& runtime,
+        const oa::ui::frontend_renderer::Surface& presented,
+        oa::ui::frontend_renderer::Surface& reference,
+        oa::ui::frontend_renderer::SourceRect covered
+    );
 
     /// Returns the settings icon the Settings button, the in-game menu's
     /// OA button and the Settings dialog's header draw: its visible part,
