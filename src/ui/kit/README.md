@@ -150,7 +150,13 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
   measured in time. The badge does not
   move when the button is pressed, and a button too small to hold it draws
   none. Without the dot and without a corner mark the button is drawn
-  exactly as before.
+  exactly as before. `draw_menu_icon_button` is the main menu's button
+  when the window shows it larger than that picture's square: the icon
+  itself, its clear corners left clear, with no panel and no bevel. Hover
+  and focus draw a ring in the accent that follows the icon's corner
+  (`menu_icon_corner_256`, 56/256 of the side); a press draws that ring in
+  the held accent and shifts the icon by one point. The dot and the badge
+  are the same as on `draw_oa_button`. It draws only on the smooth canvas.
 - `chrome.hpp`: the window's face and edge, its header and footer band,
   the nav list, and a section's heading, row, rule and locked fade.
 - `controls.hpp`: the controls of the Library, the map browser and the

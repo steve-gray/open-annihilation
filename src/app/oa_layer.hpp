@@ -813,6 +813,13 @@ class OaLayer {
     /// @return the buttons
     [[nodiscard]] MenuButtonWindows menu_button_windows() const;
 
+    /// Returns how many times the main menu's picture is darkened: once for
+    /// each opaque modal screen with a backdrop that shows. A match is not
+    /// darkened.
+    ///
+    /// @return the count
+    [[nodiscard]] uint32_t front_darkenings() const;
+
     /// The layer's overlay's input callback (OverlayDesc::event): take_input.
     ///
     /// @param context the screen context, with its input and the runtime as its host

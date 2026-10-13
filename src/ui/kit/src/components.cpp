@@ -1862,6 +1862,68 @@ void draw_oa_button(const Canvas& canvas, int32_t side, OaButtonState state, boo
     draw_oa_button(canvas, side, state, mark);
 }
 
+void draw_menu_icon_button(
+    const Canvas& canvas, int32_t side, OaButtonState state, bool focused, const OaButtonMark& mark
+) {
+    oa::ui::paint::Painter* painter = canvas.smooth.painter;
+    if (painter == nullptr || side <= 0)
+        return;
+    if (canvas.smooth.clip && canvas.smooth.clip->empty())
+        return;
+    if (canvas.smooth.clip)
+        painter->set_clip(*canvas.smooth.clip);
+    else
+        painter->reset_clip();
+
+    const int32_t percent = canvas.smooth.scale_percent > 0 ? canvas.smooth.scale_percent : 100;
+    const Rect placed =
+        to_canvas({canvas.smooth.origin.x, canvas.smooth.origin.y, side, side}, percent);
+    if (placed.width <= 0 || placed.height <= 0)
+        return;
+
+    const int32_t nudge =
+        state == OaButtonState::pressed
+            ? std::max(
+                  int32_t{1}, to_canvas({0, 0, compact_metrics.button_icon_press, 0}, percent).width
+              )
+            : 0;
+    if (renderer::picture_drawable(canvas.icon)) {
+        const int32_t drawn_width = std::max(int32_t{1}, placed.width - nudge);
+        const int32_t drawn_height = std::max(int32_t{1}, placed.height - nudge);
+        painter->draw_rgba(
+            canvas.icon.pixels,
+            static_cast<int>(canvas.icon.width),
+            static_cast<int>(canvas.icon.height),
+            {static_cast<int>(placed.x + nudge),
+             static_cast<int>(placed.y + nudge),
+             static_cast<int>(drawn_width),
+             static_cast<int>(drawn_height)}
+        );
+    } else {
+        draw_oa_mark(canvas, side);
+    }
+
+    if (state != OaButtonState::idle || focused) {
+        const Colour ink = state == OaButtonState::pressed ? colour::accent_held : colour::accent;
+        const int32_t span = std::min(placed.width, placed.height);
+        const float radius =
+            static_cast<float>(span) * static_cast<float>(menu_icon_corner_256) / 256.0F;
+        const int32_t thick = std::max(int32_t{2}, to_canvas({0, 0, 2, 0}, percent).width);
+        painter->outline_rounded_rect(
+            {static_cast<float>(placed.x),
+             static_cast<float>(placed.y),
+             static_cast<float>(placed.width),
+             static_cast<float>(placed.height)},
+            radius,
+            static_cast<float>(thick),
+            {ink.r, ink.g, ink.b, ink.a}
+        );
+    }
+    draw_oa_button_corner(canvas, side, mark);
+    if (mark.dot)
+        draw_attention_dot(canvas, side);
+}
+
 void draw_oa_mark(const Canvas& canvas, int32_t side) {
     if (!drawable(canvas) || side <= 0)
         return;

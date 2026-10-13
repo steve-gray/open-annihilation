@@ -1227,15 +1227,26 @@ void Runtime::present_front_end() {
     // A match's surface_ is composed at the display gamma already.
     const auto present_start = std::chrono::steady_clock::now();
     const bool gamma = !gamma_identity_ && screen_ != Screen::match;
+    // A window larger than the picture draws the main menu's OA buttons from
+    // the icon, so the bevelled squares are put back to the menu first.
+    std::vector<uint8_t> menu_buttons;
+    const bool sharp_menu_buttons = replace_menu_button_pixels(menu_buttons);
+    const uint8_t* source_rgb = sharp_menu_buttons ? menu_buttons.data() : surface_.rgb.data();
     if (frontend_texture_.format() == SDL_PIXELFORMAT_RGB24) {
-        const uint8_t* frame = surface_.rgb.data();
+        const uint8_t* frame = source_rgb;
         std::vector<uint8_t> corrected;
         if (gamma) {
-            corrected = surface_.rgb;
+            corrected.assign(source_rgb, source_rgb + surface_.rgb.size());
             apply_gamma_rgb(corrected.data(), corrected.size() / 3U, 3);
             frame = corrected.data();
         }
         frontend_texture_.update(frame, static_cast<int>(surface_.width * 3U), 3);
+    } else if (sharp_menu_buttons) {
+        renderer::Surface punched = surface_;
+        punched.rgb = menu_buttons;
+        if (gamma)
+            apply_gamma_rgb(punched.rgb.data(), punched.rgb.size() / 3U, 3);
+        upload_rgb24_tiles(frontend_texture_, punched, nullptr);
     } else {
         upload_rgb24_tiles(frontend_texture_, surface_, gamma ? &gamma_table_ : nullptr);
     }
@@ -1262,6 +1273,10 @@ void Runtime::present_front_end() {
     }
     if (!drawn)
         draw_frame(sdl_.renderer, frontend_texture_, standard_mode);
+    // The icons go over the scaled picture and under the screens, which cover
+    // the buttons while a dialog is open.
+    if (sharp_menu_buttons)
+        present_menu_icon_buttons();
     // Open Annihilation's own screens go over the picture in the window's own
     // pixels, and the software cursor over them (tick_and_draw_cursor left it
     // out of the frame).

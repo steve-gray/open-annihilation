@@ -1,15 +1,17 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The game's three icons, each at 256 by 256 pixels, made by
-// tools/make_icons.py and embedded as a PNG file. The app icon, the plates
-// alone, is the window icon start-up gives the window, and the badge of
-// every OA dialog and notice but Settings and the Library. The settings
-// icon, the plates over two gears, is what the Settings button, the in-game
-// menu's OA button and the Settings dialog's header draw. The mods icon,
-// the plates over drive bays, is what the main menu's Library button and
-// the Library's header draw. Each is cut to its visible part where it is
-// drawn.
+// The game's three icons, made by tools/make_icons.py and embedded as PNG
+// files. Each has a 256 by 256 picture. The app icon, the plates alone, is
+// the window icon start-up gives the window, and the badge of every OA
+// dialog and notice but Settings and the Library. The settings icon, the
+// plates over two gears, is what the Settings button, the in-game menu's
+// OA button and the Settings dialog's header draw. The mods icon, the
+// plates over drive bays, is what the main menu's Library button and the
+// Library's header draw. Each is cut to its visible part where it is drawn
+// into the 640 by 480 picture. The settings and mods icons also have a 512
+// by 512 picture, which the main menu's buttons draw from when the window
+// shows them larger than 256 pixels.
 #pragma once
 
 #include <cstdint>
@@ -52,13 +54,41 @@ std::span<const uint8_t> settings_icon_png();
 ///         pixels, which lasts as long as the program
 std::span<const uint8_t> mods_icon_png();
 
+/// Returns the settings icon at 512 by 512 pixels, which the main menu's
+/// Settings button draws when the window shows it larger than
+/// window_icon_size.
+///
+/// @return a PNG file of 512 by 512 8-bit RGBA pixels, which lasts as long
+///         as the program
+std::span<const uint8_t> settings_icon_512_png();
+
+/// Returns the mods icon at 512 by 512 pixels, which the main menu's
+/// Library button draws when the window shows it larger than
+/// window_icon_size.
+///
+/// @return a PNG file of 512 by 512 8-bit RGBA pixels, which lasts as long
+///         as the program
+std::span<const uint8_t> mods_icon_512_png();
+
+/// The side, in pixels, of the larger settings and mods icons.
+inline constexpr uint32_t menu_icon_large_size = 512;
+
 /// The side, in pixels, of the app icon kept ready for the small maker's
 /// mark. A mark at most this large is drawn from that copy, filtered down,
 /// rather than from the full icon.
 inline constexpr uint32_t maker_mark_prepared_side = 64;
 
-/// Decodes an 8-bit RGBA PNG file for one of the three icons, which share
-/// this form.
+/// Decodes an 8-bit RGBA PNG file of any size.
+///
+/// @param png the file
+/// @param[out] icon the pixels; left empty on failure
+/// @param[out] error what was wrong, on failure
+/// @return true when the file held one 8-bit RGBA image
+[[nodiscard]] bool
+decode_rgba_icon(std::span<const uint8_t> png, WindowIcon& icon, std::string& error);
+
+/// Decodes an 8-bit RGBA PNG file for one of the three icons at
+/// window_icon_size, which share this form.
 ///
 /// @param png the file
 /// @param[out] icon the pixels; left empty on failure
