@@ -6,6 +6,7 @@
 // files. Battle Tactics off keeps totala4.hpi inside the first ten plain
 // archives. The base game alone mounts its own archives. Music and movies
 // are found in the bundle folders, and a name's case does not matter.
+#include "oa/app/content_copy.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/audio/music_disc.hpp"
 #include "oa/data/content_bundles.hpp"
@@ -91,12 +92,13 @@ void write_bytes(const fs::path& path, const std::vector<uint8_t>& bytes) {
 ///
 /// @param user the player's folder
 /// @param bundle the bundle
-/// @return games/<id> or expansions/<base>/<id>
+/// @return Games/<id> or Expansions/<base>/<id>
 [[nodiscard]] fs::path managed_folder(const fs::path& user, const bundles::Bundle& bundle) {
     const fs::path id{std::string(bundle.id)};
     if (bundle.kind == bundles::Kind::base_game)
-        return user / "games" / id;
-    return user / "expansions" / std::string(bundle.extends[0]) / id;
+        return user / std::string(oa::app::managed_games_folder) / id;
+    return user / std::string(oa::app::managed_expansions_folder) / std::string(bundle.extends[0]) /
+           id;
 }
 
 /// Writes a record that lists every file of a bundle.
@@ -328,7 +330,10 @@ void check_composed_mount(const fs::path& scratch) {
     }
 
     OA_CHECK(copied_content_bundles(user) == recorded);
-    OA_CHECK(copied_content_bundles(user / "games" / "totala") == recorded);
+    OA_CHECK(
+        copied_content_bundles(user / std::string(oa::app::managed_games_folder) / "totala") ==
+        recorded
+    );
 
     const fs::path plain = scratch / "plain";
     fs::create_directory(plain);
@@ -336,7 +341,7 @@ void check_composed_mount(const fs::path& scratch) {
     OA_CHECK(copied_content_bundles(plain).empty());
 
     const fs::path partial = scratch / "partial";
-    const fs::path partial_game = partial / "games" / "totala";
+    const fs::path partial_game = partial / std::string(oa::app::managed_games_folder) / "totala";
     fs::create_directories(partial_game);
     {
         std::ofstream out(partial_game / ".oa-content");

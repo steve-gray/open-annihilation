@@ -3,7 +3,7 @@
 
 // The installer of the Total Annihilation demo (1997) as a base game: the
 // installer is recognised by its size and SHA-256, whatever its name, and the
-// game data archive it carries is unpacked into games/<folder> of the
+// game data archive it carries is unpacked into Games/<folder> of the
 // player's folder, with the .oa-content record of that base game, where the
 // engine mounts it. Once that archive is there and passes its check, the
 // installer is recognised by its size alone. The installer is only read;
@@ -38,7 +38,7 @@ struct DemoRelease {
     /// The archive's size, in bytes.
     uint64_t archive_size{};
     base::sha256::Digest archive_sha256{};
-    /// The folder under games/ in the player's folder that holds the archive.
+    /// The folder under Games/ in the player's folder that holds the archive.
     std::string_view folder_name;
     /// The unpacked archive's file name.
     std::string_view archive_name;
@@ -65,7 +65,7 @@ inline constexpr DemoRelease demo_1997{
 
 /// The folder a release's archive is unpacked into.
 ///
-/// That is `player_folder`/games/`release.folder_name`, the same place a
+/// That is `player_folder`/Games/`release.folder_name`, the same place a
 /// managed copy of that base game is stored.
 ///
 /// @param player_folder the player's folder; empty stays empty
@@ -75,7 +75,8 @@ inline constexpr DemoRelease demo_1997{
 demo_bundle_directory(const fs::path& player_folder, const DemoRelease& release = demo_1997) {
     if (player_folder.empty())
         return {};
-    return player_folder / "games" / fs::path(std::string(release.folder_name));
+    return player_folder / std::string(managed_games_folder) /
+           fs::path(std::string(release.folder_name));
 }
 
 /// What set_up_demo() found in a folder, and what came of it.
@@ -109,7 +110,7 @@ struct DemoSetup {
 
 /// Recognises the installer of the Total Annihilation demo (1997) in a folder and prepares its archive.
 ///
-/// The archive goes to `player_folder`/games/release.folder_name/release.archive_name.
+/// The archive goes to `player_folder`/Games/release.folder_name/release.archive_name.
 /// When that folder name is a base game, the folder also gains its
 /// .oa-content record. An archive already there with the archive's size and
 /// SHA-256 is reused,
@@ -126,7 +127,7 @@ struct DemoSetup {
 /// written through it, and the unpacking fails.
 ///
 /// @param folder the game folder the player named or chose
-/// @param player_folder the player's folder, which holds games/; empty when
+/// @param player_folder the player's folder, which holds Games/; empty when
 ///     none is known, which fails the unpacking
 /// @param release the release to recognise
 /// @return what was found and done
@@ -136,7 +137,7 @@ struct DemoSetup {
 
 /// Copies an earlier unpack of the demo into the managed base game, once.
 ///
-/// Before the demo lived in `player_folder`/games/release.folder_name, it was
+/// Before the demo lived in `player_folder`/Games/release.folder_name, it was
 /// unpacked to `data_folder`/demo-1997/release.archive_name. When the managed
 /// folder has no matching archive and that earlier file has the archive's
 /// size and SHA-256, this copies it (sharing disk blocks where the volume
@@ -146,7 +147,7 @@ struct DemoSetup {
 /// folder name is not a base game is copied the same way and has no record.
 ///
 /// @param data_folder the per-user data folder that may hold demo-1997
-/// @param player_folder the player's folder, which holds games/
+/// @param player_folder the player's folder, which holds Games/
 /// @param release the release whose archive the earlier file must be
 /// @return true when the managed archive matches afterwards
 [[nodiscard]] bool adopt_legacy_demo(

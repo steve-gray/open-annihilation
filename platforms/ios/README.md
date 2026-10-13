@@ -138,14 +138,14 @@ Where things are, in the game's data container:
 |---|---|
 | `Documents/Total Annihilation` | the game folder, shown in the Files app and the Finder |
 | `Documents/Open Annihilation` | the player's own folder: `Saves`, `Screenshots`, `Films`, `Recordings` and `Mods`, shown in the Files app and the Finder; saves and recordings an earlier version kept beside the preferences file move here once |
-| `Documents/Open Annihilation/games` | a base game copied into the player's folder, with a `.oa-content` record of each file |
-| `Documents/Open Annihilation/expansions` | expansions copied into the player's folder, each under the base game it extends |
+| `Documents/Open Annihilation/Games` | a base game copied into the player's folder, with a `.oa-content` record of each file |
+| `Documents/Open Annihilation/Expansions` | expansions copied into the player's folder, each under the base game it extends |
 | `Documents/Total Annihilation (old)` | a folder set aside by a replacement, until removed |
 | `Library/Application Support/net.coreprime.open-annihilation/import/` | the copy being made (`Total Annihilation/`) and its state file |
-| `Documents/Open Annihilation/games/totala-demo` | the demo, with its `.oa-content` record. An earlier unpack in `Library/Application Support/net.coreprime.open-annihilation/demo-1997/` is copied from once and left there |
+| `Documents/Open Annihilation/Games/totala-demo` | the demo, with its `.oa-content` record. An earlier unpack in `Library/Application Support/net.coreprime.open-annihilation/demo-1997/` is copied from once and left there |
 
 The Game files screen still fills `Documents/Total Annihilation`, and that folder is what the
-game plays from. The same start also copies the known files into `games` and `expansions` under
+game plays from. The same start also copies the known files into `Games` and `Expansions` under
 `Documents/Open Annihilation`. That copy only reads the folder the screen filled. On the same
 volume the second copy shares the file's disk blocks, so it takes no extra space.
 

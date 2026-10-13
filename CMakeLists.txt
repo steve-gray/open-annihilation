@@ -2981,7 +2981,7 @@ endforeach()
     endif()
     # oa-game started on the folder that holds the installer of the Total
     # Annihilation demo (1997) OA_DEMO_INSTALLER names unpacks its archive
-    # into games/totala-demo of the scratch player folder, with its record,
+    # into Games/totala-demo of the scratch player folder, with its record,
     # checks it, mounts it and opens the main menu with no dialog over it,
     # and on a second start checks and mounts it again; an earlier demo-1997
     # archive is copied from once. Skipped without an installer.
