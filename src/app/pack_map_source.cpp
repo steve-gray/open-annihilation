@@ -71,6 +71,7 @@ oa::ui::frontend_multiplayer::LobbyMapSource pack_map_source(Runtime& runtime) {
         out->title = map->title.c_str();
         out->pack_name = map->pack_name.c_str();
         out->file_title = nullptr;
+        out->blocked_reason = runtime.pack_map_blocked_reason(name);
         const uint64_t bytes = map->terrain_bytes;
         const auto clamped = bytes > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())
                                  ? std::numeric_limits<int32_t>::max()
@@ -157,6 +158,7 @@ bool Runtime::bound_base_at(
     out->title = nullptr;
     out->pack_name = nullptr;
     out->file_title = nullptr;
+    out->blocked_reason = nullptr;
     return true;
 }
 

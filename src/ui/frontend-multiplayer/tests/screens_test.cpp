@@ -1633,6 +1633,7 @@ void check_map_list_words() {
         {"ponds@sample-ponds", "A Plethora of Ponds", {}, "Sample Ponds", true},
         {"ashes@archipelago", {}, "Isle of Ashes", "Archipelago Pack", true},
         {"bare@archipelago", {}, {}, "Archipelago Pack", true},
+        {"ridge@sample", "Ridge Pond", {}, "Ridge Pack", true, "for ridge"},
     };
     const std::vector<std::string> texts = mp::map_list_texts(rows);
     const std::vector<std::string> keys{
@@ -1641,6 +1642,7 @@ void check_map_list_words() {
         "ponds@sample-ponds",
         "ashes@archipelago",
         "bare@archipelago",
+        "ridge@sample",
     };
     expect(texts.size() == keys.size(), "every row has words");
     if (texts.size() != keys.size())
@@ -1650,6 +1652,7 @@ void check_map_list_words() {
     expect(texts[2] == "A Plethora of Ponds", "a pack map shows its index title");
     expect(texts[3] == "Isle of Ashes", "a pack map with no index name shows the map file's title");
     expect(texts[4] == "bare@archipelago", "a pack map with no title shows its name");
+    expect(texts[5] == "Ridge Pond  for ridge", "a greyed row shows why");
     const int32_t by_words = mp::map_list_row(texts, keys, texts[0]);
     const int32_t by_name = mp::map_list_row(texts, keys, keys[0]);
     expect(

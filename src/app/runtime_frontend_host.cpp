@@ -524,9 +524,9 @@ void Runtime::discover_first_map() {
     });
     if (!eligible_map_names_.empty())
         first_map_name_ = eligible_map_names_.front();
-    // Pack maps that fit the mod being played join after the base maps.
-    // A map that does not fit is left out. None of a pack map's files is
-    // opened here for a registry pack whose catalogue entry is already known.
+    // Every installed pack map joins after the base maps. One that cannot
+    // be played is listed greyed. None of a pack map's files is opened here
+    // for a registry pack whose catalogue entry is already known.
     refresh_listed_pack_maps();
 }
 

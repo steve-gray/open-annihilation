@@ -167,6 +167,8 @@ struct LobbyPackMap {
     /// The map file's title, when the source already holds it. The list does
     /// not open the file to find one. Null when it is not held.
     const char* file_title{};
+    /// The short English reason the row is greyed with. Null when the map can be played.
+    const char* blocked_reason{};
 };
 
 /// Where the battle room reads installed pack maps and the base maps' summaries,
@@ -175,7 +177,7 @@ struct LobbyPackMap {
 /// A null member does nothing. The binding survives multiplayer_reset.
 struct LobbyMapSource {
     void* context{};
-    /// Returns how many pack maps fit the mod being played.
+    /// Returns how many installed pack maps the list shows, greyed ones included.
     int32_t (*count)(void* context){};
     /// Writes the pack map at `index`.
     ///

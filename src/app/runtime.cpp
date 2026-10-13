@@ -1326,6 +1326,8 @@ void Runtime::rebuild_surface() {
                                                     ? bound_map_labels_
                                                     : bound_map_names_;
         lists.push_back({"MAPNAMES", shown, map_first_visible(), selected});
+        if (bound_map_grey_.size() == shown.size())
+            lists.back().grey = bound_map_grey_;
     }
     // A list its scroll bar scrolls shows the rows the bar brings into view.
     if (const auto first = frontend_list_first("Campaign"))

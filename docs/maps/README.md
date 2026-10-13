@@ -119,43 +119,55 @@ anything in the game or the mod it is played with:
 
 A map that clashes with 3.1c itself keeps its whole pack out at install.
 One that clashes only with a mod, because the mod already defines a
-feature the map adds, say, is installed. While that mod is played the
-skirmish list and the battle room's map list leave it out. The log says
-so once for that pack and that mod:
+feature the map adds, say, is installed. The skirmish list and the battle
+room's map list still show it, greyed, with the reason, and choosing it
+explains why. The same is true when the pack does not support the base
+game you are playing, or when an expansion it requires is off. The log
+names a map that cannot be played for good, once for that pack and that
+game:
 
 ```
-open-annihilation: map pack <id>: 1 map does not fit <key>
+open-annihilation: map pack <id>: 1 map cannot be played with <key>
 ```
 
-`<key>` is `ta-3.1c` for the base game, `<catalogue-id>@<release>` for a
-mod installed from a catalogue, and `the mod being played` for a mod that
-has no catalogue key. Several maps of one pack share one line, and then
-it reads `maps do not fit`. A pack from a registry follows the catalogue
-when that catalogue has a row for the mod's key: true lists the map, and
-false leaves it out. A mod the catalogue has no row for, including one
-that was not installed from a catalogue, is listed when the map's files
-fit that mod, and left out when they do not. A pack installed from a file
-is listed the same way, by its files. A release the catalogue has not
-listed yet is listed by its files until that table arrives.
+`<key>` names the base game, then each expansion that is on, in the
+built-in order, other than music, then `<catalogue-id>@<release>` when a
+mod installed from a catalogue is played. It is `the mod being played`
+for a mod that has no catalogue key. Several maps of one pack share one
+line, and then it reads `maps cannot be played with`. A pack from a
+registry follows the catalogue when that catalogue has answered for this
+game: a new name such
+as `totala` or `totala+core-contingency` wins, and the older names
+`ta-3.1c` and `<catalogue-id>@<release>` are read when the table has no
+new name. True can be played, and false is greyed, without reading the
+map's files. A mod the catalogue has no row for, including one that was
+not installed from a catalogue, can be played when the map's files fit,
+and is greyed when they do not. A pack installed from a file is judged
+the same way, by its files. A release the catalogue has not listed yet is
+judged by its files until that table arrives, and a miss then is not
+logged. Nothing is mounted to build either list.
+
 The map browser still shows the map: its card is greyed with "Doesn't
-fit", and Select is greyed ([below](#the-map-browser)). Choosing a map
-the lists left out, from a save or by its name, is refused and keeps the
-map you had.
+fit", and Select is greyed ([below](#the-map-browser)). Choosing a greyed
+map, from a save or by its name, is refused and keeps the map you had.
 
 OA checks a map again each time it adds its files, and when a match
 starts, against the game and the mod being played then.
 
 ## The map lists and MORE MAPS…
 
-The skirmish list and the battle room host's map list hold a pack's maps
-beside the base maps. A pack map's row shows the title from the pack's
-index, or the title in its map file when the index has none. A row that
-would read the same as another adds the pack's name in brackets. The
-game's own rows stay their file names. The skirmish list puts the pack
-maps after the base maps, in the packs' order. The battle room's list
-sorts every name together, not by the title. The name under a list, and
-the battle room's map name, are that same title. Choosing the row still
-uses `<stem>@<id>`.
+The skirmish list and the battle room host's map list hold every installed
+pack's maps beside the base maps. A pack map's row shows the title from
+the pack's index, or the title in its map file when the index has none. A
+row that would read the same as another adds the pack's name in brackets.
+A map that cannot be played is greyed, and the row adds the reason: "for
+the TA demo", "for Total Annihilation", "needs Battle Tactics", "for
+ridge", or "doesn't fit". Choosing that row says why, and a missing
+expansion says to turn it on in the Library. The game's own rows stay
+their file names. The skirmish list puts the pack maps after the base
+maps, in the packs' order. The battle room's list sorts every name
+together, not by the title. The name under a list, and the battle room's
+map name, are that same title. Choosing the row still uses `<stem>@<id>`.
 
 A pack installed from the Library joins both lists at once. A pack
 removed leaves both lists at once. The base maps stay in the order and

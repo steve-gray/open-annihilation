@@ -3,6 +3,7 @@
 
 // Panels stacked over the battleroom or the match.
 #include "oa/ui/frontend_multiplayer/dialogs.hpp"
+#include "oa/ui/frontend_multiplayer/map_list.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 
 #include "oa/base/game_loop.hpp"
@@ -139,6 +140,27 @@ namespace {
 /// @param reason why the map was refused
 /// @return the sentence
 std::string unfit_sentence(const Lobby& lobby, const char* reason) {
+    const std::string_view stored =
+        reason != nullptr ? std::string_view{reason} : std::string_view{};
+    const MapRefusalParts parts = map_refusal_parts(stored);
+    if (parts.kind == MapRefusalKind::ready_demo)
+        return std::string(lobby_translated(lobby, "This map is for the TA demo."));
+    if (parts.kind == MapRefusalKind::ready_for) {
+        std::string sentence(lobby_translated(lobby, "This map is for {name}."));
+        const auto at = sentence.find("{name}");
+        if (at != std::string::npos)
+            sentence.replace(at, std::strlen("{name}"), parts.name);
+        return sentence;
+    }
+    if (parts.kind == MapRefusalKind::ready_needs) {
+        std::string sentence(lobby_translated(lobby, "Needs {name}, which is off."));
+        const auto at = sentence.find("{name}");
+        if (at != std::string::npos)
+            sentence.replace(at, std::strlen("{name}"), parts.name);
+        sentence.push_back(' ');
+        sentence.append(lobby_translated(lobby, "Turn it on in the Library."));
+        return sentence;
+    }
     const char* translated = lobby_translated(lobby, "Doesn't fit this game: {reason}");
     std::string sentence = translated != nullptr ? translated : "";
     const auto at = sentence.find("{reason}");
