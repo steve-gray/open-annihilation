@@ -567,11 +567,17 @@ bool line_has(const oa::app::ContentNoticeCopy& copy, std::string_view text) {
     return false;
 }
 
-void bump_time(const fs::path& path) {
+/// Moves a file's modification time forward by whole minutes, so each step
+/// of a test gives the file a time no earlier step recorded, however quickly
+/// the steps run.
+///
+/// @param path the file
+/// @param minutes how far forward
+void bump_time(const fs::path& path, int minutes) {
     std::error_code failure;
     const auto stamp = fs::last_write_time(path, failure);
     OA_CHECK(!failure);
-    fs::last_write_time(path, stamp + std::chrono::seconds(120), failure);
+    fs::last_write_time(path, stamp + std::chrono::minutes(minutes), failure);
     OA_CHECK(!failure);
 }
 
@@ -591,7 +597,7 @@ void test_content_difference(const fs::path& scratch) {
     const fs::path rev = user / "games" / "totala" / "rev31.gp3";
 
     // A new time with the same bytes is hashed once and is not a difference.
-    bump_time(rev);
+    bump_time(rev, 2);
     const oa::app::ContentCheck touched = oa::app::check_managed_content(user, table);
     OA_CHECK(touched.files_hashed == 1);
     OA_CHECK(!oa::app::content_notice_due(touched));
@@ -608,7 +614,7 @@ void test_content_difference(const fs::path& scratch) {
     std::string changed(files[0].bytes);
     changed[0] = 'X';
     place_file(rev, changed);
-    bump_time(rev);
+    bump_time(rev, 10);
     const oa::app::ContentCheck bad = oa::app::check_managed_content(user, table);
     OA_CHECK(bad.files_hashed == 1);
     OA_CHECK(oa::app::content_notice_due(bad));
@@ -622,7 +628,7 @@ void test_content_difference(const fs::path& scratch) {
 
     // The original bytes, with a new time, match again.
     place_file(rev, files[0].bytes);
-    bump_time(rev);
+    bump_time(rev, 20);
     const oa::app::ContentCheck restored = oa::app::check_managed_content(user, table);
     OA_CHECK(!oa::app::content_notice_due(restored));
 
