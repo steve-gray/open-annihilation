@@ -314,50 +314,6 @@ std::filesystem::path branding_file(std::string_view file_name) {
     return climb_for(text_font::bundled_font_directory(), relative);
 }
 
-/// Drops the clear margin around an icon, as the menu's buttons do.
-///
-/// @param icon the icon; unchanged when it has no clear margin
-void crop_visible(Icon* icon) {
-    if (icon == nullptr || icon->picture.width == 0 || icon->picture.height == 0)
-        return;
-    const uint32_t width = icon->picture.width;
-    const uint32_t height = icon->picture.height;
-    const std::size_t row_bytes = static_cast<std::size_t>(width) * 4U;
-    if (icon->pixels.size() / row_bytes < height)
-        return;
-    uint32_t left = width;
-    uint32_t top = height;
-    uint32_t right = 0;
-    uint32_t bottom = 0;
-    for (uint32_t y = 0; y < height; ++y) {
-        for (uint32_t x = 0; x < width; ++x) {
-            if (icon->pixels[(static_cast<std::size_t>(y) * width + x) * 4U + 3U] == 0)
-                continue;
-            left = std::min(left, x);
-            top = std::min(top, y);
-            right = std::max(right, x + 1U);
-            bottom = std::max(bottom, y + 1U);
-        }
-    }
-    if (left >= right || top >= bottom ||
-        (left == 0 && top == 0 && right == width && bottom == height))
-        return;
-    Icon cropped;
-    cropped.picture.width = right - left;
-    cropped.picture.height = bottom - top;
-    const std::size_t cropped_row = static_cast<std::size_t>(cropped.picture.width) * 4U;
-    cropped.pixels.resize(cropped_row * cropped.picture.height);
-    for (uint32_t y = top; y < bottom; ++y) {
-        const uint8_t* from =
-            icon->pixels.data() + (static_cast<std::size_t>(y) * width + left) * 4U;
-        uint8_t* into = cropped.pixels.data() + static_cast<std::size_t>(y - top) * cropped_row;
-        std::copy(from, from + cropped_row, into);
-    }
-    cropped.picture.pixels = cropped.pixels;
-    *icon = std::move(cropped);
-    icon->picture.pixels = icon->pixels;
-}
-
 /// Where the main menu's OA buttons sit in a 1280×720 window.
 ///
 /// The menu's picture is 640 by 480. Letterboxed by the taller fit it is
@@ -538,29 +494,27 @@ int main(int argc, char** argv) {
                 decode_png(branding_file("open-annihilation-settings-256.png"), &settings_icon);
             if (!have_library || !have_settings)
                 std::cerr << "pictures: an OA button icon could not be read\n";
-            if (have_library) {
-                crop_visible(&library_icon);
+            if (have_library)
                 picture.canvas.icon = library_icon.picture;
-            }
             oa::ui::kit::OaButtonMark library_mark;
             library_mark.corner = oa::ui::kit::OaButtonCorner::count;
             library_mark.count = 2;
-            oa::ui::kit::draw_oa_button(
+            oa::ui::kit::draw_menu_icon_button(
                 oa::ui::kit::placed_at(picture.canvas, {buttons.library.x, buttons.library.y}),
                 buttons.library.width,
                 oa::ui::kit::OaButtonState::idle,
+                false,
                 library_mark
             );
             picture.canvas.icon = {};
-            if (have_settings) {
-                crop_visible(&settings_icon);
+            if (have_settings)
                 picture.canvas.icon = settings_icon.picture;
-            }
-            oa::ui::kit::draw_oa_button(
+            oa::ui::kit::draw_menu_icon_button(
                 oa::ui::kit::placed_at(picture.canvas, {buttons.settings.x, buttons.settings.y}),
                 buttons.settings.width,
                 oa::ui::kit::OaButtonState::idle,
-                false
+                false,
+                {}
             );
             picture.canvas.icon = {};
         }
