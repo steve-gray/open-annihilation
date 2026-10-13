@@ -357,8 +357,8 @@ app removes the folder (`Runtime::library_uninstall`,
     is. When the ask reads a catalogue the mark shows a check
     (`ButtonLook::check_ms`) and then the arrow; a failed ask leaves the
     arrow. The Off/On switch is the kit's switch. A built-in registry has a
-    neutral Built in pill under those controls, right-aligned with the
-    switch. REMOVE and ADD MIRROR… sit under the subtitle for one the
+    neutral Built in pill on the title's line, at its right. REMOVE and
+    ADD MIRROR… sit under the subtitle for one the
     player added. A note under the last card (`registry_note`) names the
     built-in registries by their short names, and a refusal
     (`Inputs::registries_notice`) stands over it in the lock colour. The
@@ -376,8 +376,9 @@ app removes the folder (`Runtime::library_uninstall`,
     over drive bays, "Library", this build's version, and a refresh icon
     at the top right; "offline" in the lock colour beside it when the last
     refresh could not reach a registry),
-    the tabs with short names and their All counts in brackets ("Active",
-    "Mods (11)", "Maps (2)", "Lang (2)", "Upd (15)", "Reg (2)"), the search
+    the tabs with their full names and All counts in brackets ("Active",
+    "Mods (11)", "Maps (2)", "Languages (2)", "Updates (15)", "Registries (2)";
+    the strip scrolls sideways, with an arrow at an end, when the names do not fit), the search
     field and the filter
     drop-down (All, New, Installed and Updates with their counts, "All
     (11)", then "Tag: balance (3)" for each tag of the tab), on the
@@ -385,8 +386,8 @@ app removes the folder (`Runtime::library_uninstall`,
     list of 28-point rows (the name, then the version, size and an
     added registry's name, and the state's icon: a download arrow for GET,
     a circled up-arrow for UPDATE, a circled check for INSTALLED and
-    PLAYING, dimmed when GET or UPDATE cannot act), and the footer (the queue's short line with a
-    progress bar while downloading, DETAILS and CLOSE, CLOSE drawn as the
+    PLAYING, dimmed when GET or UPDATE cannot act), and the footer (the queue's short line with an
+    8-point bar under it while downloading, DETAILS and CLOSE, CLOSE drawn as the
     main button). While
     `ScreenState::details_page` and the model's `details_open` are both set
     it shows the selected entry's details page instead
@@ -406,7 +407,7 @@ app removes the folder (`Runtime::library_uninstall`,
     size, the state's icon), the details (a 40-point badge beside the
     name, its state's icon and the status line, the summary in at most six lines, the package's tags as inactive pills under it, the long facts, the
     actions three to a line, the playing note), and the footer (both queue
-    lines and CLOSE);
+    lines, the 8-point bar under the first while a download runs, and CLOSE);
   - **Large** shows Regular's header, tabs and search, a 180-point filter
     pane (a nav list of All, New, Installed and Updates with their counts,
     the heading TAGS and the tab's tags with their counts) in place of the
@@ -464,13 +465,16 @@ app removes the folder (`Runtime::library_uninstall`,
     within its reach (`kit::finger_down`); a finger that moves farther than
     its reach in the list or the details scrolls that pane and presses
     nothing. A press outside an open drop-down only closes it. The wheel
+    over the tab strip scrolls the tabs when they do not fit, and otherwise
     scrolls the pane under the pointer, or an open drop-down's items.
 - Every control is named for automation (the OA layer lists each as `oa.`
   and its name):
   - `library.tab.active`, `library.tab.mods`, `library.tab.maps`,
     `library.tab.languages`, `library.tab.updates` (every tab after Active
     reads its title and its count in brackets: "Updates (2)"; Active stays
-    "Active"), `library.tab.registries`; `library.search`;
+    "Active"), `library.tab.registries`; `library.tab.scroll-left` and
+    `library.tab.scroll-right` when the strip has more tabs that way;
+    `library.search`;
   - on the Registries tab `library.registry.<id>` (its halves `.off` and
     `.on`), `.key` (its text the fingerprints, one a line) and `.refresh`,
     and for a registry the player added `.remove` and `.add-mirror`; the
@@ -657,7 +661,7 @@ with each map's name, players, size and description, that a minimap not
 yet decoded is a placeholder and then the picture, and that a one-map pack's title is the link to its pack with no From line while a pack of several keeps its From line, and that the link
 opens Maps with that pack selected and its row in view; that the Registries tab lists each registry on a card, its heading the
 title, its switch, key icon and REFRESH, its address, refresh time and
-description, a neutral Built in pill under those controls for one that
+description, a neutral Built in pill on the title's line for one that
 ships with the game, REMOVE and ADD MIRROR… only for one the player
 added, and ADD REGISTRY… at the top right above the cards, with no
 search or DETAILS; that resting on the key

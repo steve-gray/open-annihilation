@@ -19,6 +19,10 @@ namespace oa::ui::library::controls {
 
 /// The first tab's control; the others follow in Tab's order.
 inline constexpr kit::ControlId first_tab = 1;
+/// The tab strip's arrow toward the earlier tabs. It is not a tab.
+inline constexpr kit::ControlId tab_scroll_left = 8;
+/// The tab strip's arrow toward the later tabs. It is not a tab.
+inline constexpr kit::ControlId tab_scroll_right = 9;
 /// The search field.
 inline constexpr kit::ControlId search = 10;
 /// Compact's filter drop-down (library.filter).

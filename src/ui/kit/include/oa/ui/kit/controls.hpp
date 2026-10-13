@@ -291,13 +291,39 @@ void add_search(
 [[nodiscard]] std::vector<Rect>
 tab_rects(const Fonts& fonts, const Rect& strip, const TabsLook& look);
 
+/// Where a strip of tabs is placed, including a sideways scroll.
+struct TabStrip {
+    Rect strip{};             ///< the strip asked for
+    std::vector<Rect> tabs{}; ///< each tab, in window points; it may lie outside the strip
+    Rect view{};              ///< where captions are drawn, between the arrows
+    Rect left_arrow{};        ///< the arrow at the left; width 0 when it is hidden
+    Rect right_arrow{};       ///< the arrow at the right; width 0 when it is hidden
+    int32_t scroll{};         ///< how far the tabs are shifted, in points
+    int32_t limit{};          ///< the furthest the strip can scroll, in points
+    bool overflows{};         ///< the tabs are wider than the strip
+    std::size_t selected{};   ///< the open tab's index
+};
+
+/// Places a strip of tabs. The rectangles tab_rects returns are shifted by
+/// the scroll, clamped so the open tab lies wholly in the view. A strip
+/// whose tabs fit is not shifted and has no arrows. An arrow shows at an
+/// end when more tabs lie that way.
+///
+/// @param fonts the fonts
+/// @param strip the strip, tab_height high
+/// @param look the captions, the counts and the scroll asked for
+/// @return the placed strip
+[[nodiscard]] TabStrip place_tabs(const Fonts& fonts, const Rect& strip, const TabsLook& look);
+
 /// Draws a strip of tabs: a hairline along the strip's foot, each caption
 /// in the small font, the selected one in the text colour over a tab_rule
 /// accent rule along the foot, the hovered one in the text colour and the
 /// others in the hint colour. A pill draws each count above 0 in the lock
 /// colour with on_accent digits. Words draw the digits beside the caption,
 /// in the lock colour where the look asks and the count is above 0, and
-/// otherwise in the caption's colour. Without fonts only the hairline is drawn.
+/// otherwise in the caption's colour. When the tabs do not fit, the captions
+/// are clipped to the view and a hint chevron (text colour while hovered)
+/// sits at each end that has more tabs. Without fonts only the hairline is drawn.
 ///
 /// @param canvas where it is drawn
 /// @param strip the strip
@@ -307,8 +333,11 @@ void draw_tabs(const Canvas& canvas, const Rect& strip, const TabsLook& look);
 /// Appends a strip of tabs: one item for the strip and one control per tab,
 /// of kind tab, which does not take steps (Left and Right move the focus),
 /// checked on the selected tab, its text the look's reading when one is set
-/// and otherwise the caption and its count ("Updates 2"). The screen opens a
-/// tab when Space or Enter goes to it.
+/// and otherwise the caption and its count ("Updates 2"). A tab that is not
+/// wholly in the view is clipped to it. The screen opens a tab when Space or
+/// Enter goes to it. An arrow that shows, and whose number is set, is a
+/// button that does not take the focus. The item's look keeps the clamped
+/// scroll and the view.
 ///
 /// @param[in,out] list the display list
 /// @param fonts the fonts the strip is drawn in, which place the tabs
@@ -316,14 +345,33 @@ void draw_tabs(const Canvas& canvas, const Rect& strip, const TabsLook& look);
 /// @param look the captions, the counts and the state
 /// @param ids one control number per tab
 /// @param names one automation name per tab
+/// @param left_id the left arrow's number; no_control adds none
+/// @param left_name the left arrow's automation name
+/// @param right_id the right arrow's number; no_control adds none
+/// @param right_name the right arrow's automation name
 void add_tabs(
     DisplayList& list,
     const Fonts& fonts,
     const Rect& strip,
     const TabsLook& look,
     std::span<const ControlId> ids,
-    std::span<const std::string> names
+    std::span<const std::string> names,
+    ControlId left_id = no_control,
+    std::string left_name = {},
+    ControlId right_id = no_control,
+    std::string right_name = {}
 );
+
+/// Moves a placed strip by steps. A positive step reveals the next tab that
+/// is not wholly in the view, toward the right, and a negative step the
+/// previous one toward the left. The result is clamped so the open tab stays
+/// wholly in the view. The strip is the list's tabs item, and the tabs are
+/// the tab controls on its row.
+///
+/// @param list the display list a strip was added to
+/// @param steps how many tabs to move; positive reveals tabs to the right
+/// @return the scroll to ask for next, in points
+[[nodiscard]] int32_t tab_scroll_step(const DisplayList& list, int32_t steps);
 
 // ---- Cards ----
 
