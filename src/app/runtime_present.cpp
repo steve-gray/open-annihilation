@@ -926,6 +926,9 @@ void Runtime::capture_render_target() {
 void Runtime::present_software_cursor(bool match_layers) {
     if (!cursors_loaded_ || cursor_image_ == nullptr || frame_without_cursor_)
         return;
+    // A middle-click pan draws its own direction at the pointer.
+    if (middle_pan_shows_direction())
+        return;
     // With touch controls the cursor is hidden while no finger rests, or
     // lifted above the finger on the battlefield.
     float cursor_x = pointer_x_;

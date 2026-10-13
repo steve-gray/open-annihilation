@@ -329,6 +329,8 @@ std::string_view label_of(settings::Setting setting) {
         return "Maximum zoom in";
     case settings::Setting::view_past_map_edge:
         return "View past the map's edge";
+    case settings::Setting::middle_click_pan:
+        return "Middle-click pans";
     case settings::Setting::escape_opens_menu:
         return "Escape opens the game menu";
     case settings::Setting::switch_alt:
@@ -662,6 +664,16 @@ void Runtime::check_engine_settings_dialog() {
     // the declared order: the section's rows, the footer's buttons and the
     // sections' entries, and one more press to show the focus. The arrows
     // move by where the controls lie and stop at the dialog's edges.
+    // A row's control, by the name the dialog gives it (settings.<id>), so a
+    // new row above it does not move the press onto another setting.
+    const auto control_named = [&](std::string_view name) {
+        auto* dialog = engine_settings_dialog();
+        require(dialog != nullptr, "the dialog closed before " + std::string(name));
+        const oa::ui::kit::DisplayList list = settings::geometry::dialog_list(*dialog, nullptr);
+        const int32_t control = oa::ui::kit::control_named(list, name);
+        require(control != oa::ui::kit::no_control, "the dialog has no " + std::string(name));
+        return control;
+    };
     const auto focus = [&](int32_t control, std::string_view what) {
         const auto order =
             settings::page_settings(engine_settings_dialog()->page).size() +
@@ -887,8 +899,9 @@ void Runtime::check_engine_settings_dialog() {
         past_map_edge_share() == 0.25,
         "View past the map's edge 25% is not the view's limits' share"
     );
-    focus(settings::first_row_control + 4, "Select groups without Alt");
-    click(settings::first_row_control + 4, "ON", "Select groups without Alt's On");
+    const int32_t groups = control_named("settings.switch-alt");
+    focus(groups, "Select groups without Alt");
+    click(groups, "ON", "Select groups without Alt's On");
     chosen.switch_alt = true;
     expect("Select groups without Alt On");
     require(
@@ -896,7 +909,7 @@ void Runtime::check_engine_settings_dialog() {
         "Select groups without Alt did not set SwitchAlt"
     );
     // A click on the side a switch already shows changes nothing.
-    click(settings::first_row_control + 4, "ON", "Select groups without Alt's On");
+    click(groups, "ON", "Select groups without Alt's On");
     expect("a second click on On");
 
     // Escape opens the game menu, the last row of User Interface.
