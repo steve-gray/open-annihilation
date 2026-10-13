@@ -83,6 +83,9 @@ Every document in the repository, by what you want to do.
   GUID a game is hosted under and looked for.
 - [multiplayer/application-guid.md](multiplayer/application-guid.md):
   which games a search lists, and a launcher's per-mod GUID.
+- [multiplayer/status.md](multiplayer/status.md): what a game reports on
+  its standard output for a launcher, with `--status-stdout`,
+  `--status-file` and `--quit-after-game`.
 - [Demo Recorder](../README.md#demo-recorder) in the README: playing back a
   recorded game (`.tad`) from the command line with `--play-demo`, what a
   recording needs to play, and recording network games.
@@ -98,7 +101,9 @@ Every document in the repository, by what you want to do.
   program on the same machine drives the game and watches it: `--fark`,
   `--fark-address` and `--fark-file`, connecting with the token, the
   requests, input through the event queue, events, what it never does,
-  and the ` REMOTED` line in the battle room.
+  and the ` REMOTED` line in the battle room. Status lines for a
+  launcher, without the endpoint, are
+  [multiplayer/status.md](multiplayer/status.md).
 - [mods/README.md](mods/README.md): mod support: installing a mod from the
   Library, in a mod folder or as a copied install, its updates and rolling
   them back, choosing it in the settings or with

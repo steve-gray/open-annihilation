@@ -60,6 +60,14 @@ if(TARGET oa-game)
   target_link_libraries(oa-app-automation-reports
     PUBLIC oa-app-automation-protocol oa-core-types
     PRIVATE oa-ui-frontend-multiplayer oa-sim-messages oa-sim-scenario oa-options)
+  # Status lines: the same events, on standard output or in a file, with no
+  # socket. The check links this library and not the endpoint.
+  add_library(oa-app-automation-status STATIC status.cpp)
+  add_library(oa::app::automation_status ALIAS oa-app-automation-status)
+  target_include_directories(oa-app-automation-status PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+  target_link_libraries(oa-app-automation-status
+    PUBLIC oa-app-automation-reports
+    PRIVATE oa-platform-shims oa-app-automation-options)
   # The endpoint and the extension's hooks. It reads the game through the
   # check host and the automation host (check_host.hpp, automation_host.hpp)
   # and reaches no Runtime member.
@@ -67,9 +75,10 @@ if(TARGET oa-game)
     input.cpp frames.cpp serve_reports.cpp)
   add_library(oa::app::automation ALIAS oa-app-automation)
   target_link_libraries(oa-app-automation PRIVATE oa-app-automation-protocol
-    oa-app-automation-options oa-app-automation-input oa-app-automation-reports oa-app-headers
+    oa-app-automation-options oa-app-automation-input oa-app-automation-reports
+    oa-app-automation-status oa-app-headers
     oa-app-game-directory oa-netgame oa-ui-frontend-multiplayer oa-ui-frontend-renderer
-    oa-core-types SDL3::SDL3 oa-options)
+    oa-core-types SDL3::SDL3 oa-options oa-platform-shims)
   # The frame request: PNG files of the frames the game presents.
   target_link_libraries(oa-app-automation PRIVATE oa-formats-png)
   # hello names the engine's version.
@@ -104,6 +113,13 @@ if(BUILD_TESTING)
       oa-app-automation-protocol oa-ui-frontend-multiplayer oa-sim-scenario oa-test-support
       oa-options)
     add_test(NAME automation-reports COMMAND oa-app-automation-reports-test)
+  endif()
+  if(TARGET oa-app-automation-status)
+    # Status lines: hello, one event, one exit, and how a match's seats ended.
+    add_executable(oa-app-automation-status-test tests/status_test.cpp)
+    target_link_libraries(oa-app-automation-status-test PRIVATE oa-app-automation-status
+      oa-app-automation-options oa-platform-shims oa-test-support oa-options)
+    add_test(NAME automation-status COMMAND oa-app-automation-status-test)
   endif()
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_Interpreter_FOUND)
@@ -169,6 +185,16 @@ if(BUILD_TESTING AND TARGET oa-game AND IS_DIRECTORY "${OA_GAME_DIR}")
       --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
       --scratch-root "${oa_automation_checks}")
     set_tests_properties(native-automation-digest PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
+    # A skirmish with --status-stdout --quit-after-game: hello, a screen, the
+    # match starting, game_over with each player's result, and exit, and
+    # nothing else on standard output. The process exits 0.
+    add_test(NAME native-status-stdout COMMAND ${Python3_EXECUTABLE}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_native_status.py"
+      --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
+      --scratch-root "${oa_automation_checks}")
+    set_tests_properties(native-status-stdout PROPERTIES
+      TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     # An extension's window: the endpoint lists its controls, a click on its
     # button reaches it, and its clock reads the fixed clock's step. Only a
     # build that combines the window fixture runs it.

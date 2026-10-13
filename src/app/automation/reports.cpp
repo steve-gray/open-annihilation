@@ -6,10 +6,12 @@
 
 #include "oa/core/game_state.h"
 #include "oa/core/player.h"
+#include "oa/core/player_setup.h"
 #include "oa/core/world.h"
 #include "oa/sim/scenario/outcome.hpp"
 #include "oa/ui/frontend_multiplayer/lobby.hpp"
 
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -234,6 +236,41 @@ std::optional<std::string_view> match_outcome(const oa::Game& game) noexcept {
     return (game.outcome_flags & outcome_flag::won) != 0 ? "victory" : "defeat";
 }
 
+namespace {
+
+/// Tells whether a seat is one the results name.
+///
+/// @param world the match
+/// @param slot the seat
+/// @return true when a player sits there, left from there, or produced units there
+bool seat_reported(const oa::World& world, uint8_t slot) {
+    const oa::Player& player = world.game.players[slot];
+    if (player.index != slot)
+        return false;
+    if (player_seated(player) || player.reject_reason != 0 || player.units_created != 0)
+        return true;
+    return player.in_use != 0 && !player_name(player).empty();
+}
+
+/// Finds the root of a seat's group.
+///
+/// @param[in,out] parent each seat's parent
+/// @param slot the seat
+/// @return the group's root
+uint8_t find_group(std::array<uint8_t, OA_PLAYER_COUNT>& parent, uint8_t slot) {
+    uint8_t root = slot;
+    while (parent[root] != root)
+        root = parent[root];
+    while (parent[slot] != root) {
+        const uint8_t next = parent[slot];
+        parent[slot] = root;
+        slot = next;
+    }
+    return root;
+}
+
+} // namespace
+
 std::optional<uint8_t> match_winner(const oa::Game& game) noexcept {
     if (!match_decided(game))
         return std::nullopt;
@@ -250,6 +287,147 @@ std::optional<uint8_t> match_winner(const oa::Game& game) noexcept {
         standing = slot;
     }
     return standing;
+}
+
+MatchResults match_results(const oa::World& world) {
+    const oa::Game& game = world.game;
+    MatchResults results;
+    results.tick = game.tick;
+
+    struct Listed {
+        uint8_t slot{};
+        bool competing{};
+    };
+
+    std::array<Listed, OA_PLAYER_COUNT> listed{};
+    uint8_t listed_count = 0;
+    for (uint8_t slot = 0; slot < OA_PLAYER_COUNT; ++slot) {
+        if (!seat_reported(world, slot))
+            continue;
+        const oa::Player& player = game.players[slot];
+        const oa::PlayerSetupInfo* info = oa::world_player_info(&world, &player);
+        const bool departed = player.reject_reason != 0 || !player_seated(player);
+        const bool watching =
+            !departed && info != nullptr && (info->options & OA_SETUP_OPTION_WATCHER) != 0;
+        SeatResult seat;
+        seat.slot = slot;
+        seat.name = game_text(player.name, sizeof player.name);
+        if (player.team < OA_PLAYER_NO_TEAM)
+            seat.team = player.team;
+        seat.side = info != nullptr ? info->side : 0;
+        seat.units = player.unit_count;
+        seat.kills = player.kills;
+        seat.losses = player.losses;
+        if (departed)
+            seat.outcome = "left";
+        else if (watching)
+            seat.outcome = "watcher";
+        else
+            seat.outcome = "drawn";
+        listed[listed_count] = Listed{slot, !departed && !watching};
+        ++listed_count;
+        results.seats.push_back(std::move(seat));
+    }
+
+    std::array<uint8_t, OA_PLAYER_COUNT> parent{};
+    for (uint8_t slot = 0; slot < OA_PLAYER_COUNT; ++slot)
+        parent[slot] = slot;
+    for (uint8_t left = 0; left < listed_count; ++left) {
+        if (!listed[left].competing)
+            continue;
+        const oa::Player& player = game.players[listed[left].slot];
+        for (uint8_t right = static_cast<uint8_t>(left + 1); right < listed_count; ++right) {
+            if (!listed[right].competing)
+                continue;
+            const uint8_t other = listed[right].slot;
+            const oa::Player& second = game.players[other];
+            const bool same_team = player.team < OA_PLAYER_NO_TEAM && player.team == second.team;
+            const bool mutual =
+                player.alliance[other] != 0 && second.alliance[listed[left].slot] != 0;
+            if (!same_team && !mutual)
+                continue;
+            const uint8_t root = find_group(parent, listed[left].slot);
+            parent[find_group(parent, other)] = root;
+        }
+    }
+
+    std::array<bool, OA_PLAYER_COUNT> group_alive{};
+    std::array<bool, OA_PLAYER_COUNT> group_seen{};
+    uint8_t alive_groups = 0;
+    uint8_t alive_players = 0;
+    std::optional<std::string> sole;
+    for (uint8_t at = 0; at < listed_count; ++at) {
+        if (!listed[at].competing)
+            continue;
+        const uint8_t slot = listed[at].slot;
+        const uint8_t root = find_group(parent, slot);
+        if (!group_seen[root]) {
+            group_seen[root] = true;
+            if (game.players[slot].unit_count != 0)
+                group_alive[root] = true;
+        } else if (game.players[slot].unit_count != 0) {
+            group_alive[root] = true;
+        }
+        if (game.players[slot].unit_count == 0)
+            continue;
+        ++alive_players;
+        sole = results.seats[at].name;
+    }
+    for (uint8_t slot = 0; slot < OA_PLAYER_COUNT; ++slot)
+        if (group_seen[slot] && parent[slot] == slot && group_alive[slot])
+            ++alive_groups;
+    if (alive_players == 1)
+        results.winner = sole;
+
+    const bool decided_win = alive_groups == 1;
+    for (uint8_t at = 0; at < listed_count; ++at) {
+        if (!listed[at].competing)
+            continue;
+        const uint8_t root = find_group(parent, listed[at].slot);
+        if (decided_win)
+            results.seats[at].outcome = group_alive[root] ? "won" : "lost";
+        else
+            results.seats[at].outcome = "drawn";
+    }
+    return results;
+}
+
+void write_result_fields(JsonWriter& json, const MatchResults& results, bool write_winner) {
+    json.key("results");
+    json.begin_array();
+    for (const SeatResult& seat : results.seats) {
+        json.begin_object();
+        json.key("slot");
+        json.integer(seat.slot);
+        json.key("name");
+        json.string(seat.name);
+        json.key("team");
+        if (seat.team)
+            json.integer(*seat.team);
+        else
+            json.null();
+        json.key("side");
+        json.integer(seat.side);
+        json.key("outcome");
+        json.string(seat.outcome);
+        json.key("units");
+        json.integer(seat.units);
+        json.key("kills");
+        json.integer(static_cast<int64_t>(seat.kills));
+        json.key("losses");
+        json.integer(static_cast<int64_t>(seat.losses));
+        json.end_object();
+    }
+    json.end_array();
+    if (write_winner) {
+        json.key("winner");
+        if (results.winner)
+            json.string(*results.winner);
+        else
+            json.null();
+    }
+    json.key("tick");
+    json.integer(results.tick);
 }
 
 void write_match(JsonWriter& json, const oa::World* match, std::optional<uint64_t> digest) {
