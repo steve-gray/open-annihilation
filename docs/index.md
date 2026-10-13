@@ -42,6 +42,9 @@ Every document in the repository, by what you want to do.
   an iPhone or a touch screen: the gestures, the tablet and phone layouts,
   QUEUE, ADD and x5, the order wheel, building, the Touch settings, the
   keyboard's Cmd keys and the Pencil.
+- [controls.md](controls.md): group keys, and a second recall of the
+  group that is already selected, which centres the view and does not
+  follow it.
 - [controllers.md](controllers.md): playing with a gamepad: the Steam
   Deck's pad pointer (the right trackpad as the mouse, the grips as QUEUE,
   ADD, FORCE and the groups, the order and build rings), sticks only for

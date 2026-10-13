@@ -528,6 +528,40 @@ void assign_squad(World& world, int32_t squad, const Hooks& hooks) {
 bool select_squad(World& world, int32_t squad, bool add, const TypeMask& skip, const Hooks& hooks) {
     const bool skip_types =
         squad_has_type(world, squad, skip) && squad_has_armed_unit(world, squad);
+    // A recall whose result is already the selection centres the view. 3.1c
+    // does this on a second press, however long after the first, and the
+    // point is the average of the units' map positions: the signed high
+    // words, divided as integers. It does not start following a unit.
+    bool already = true;
+    int32_t sum_x = 0;
+    int32_t sum_z = 0;
+    int32_t members = 0;
+    if (const Player* player = local_player(world)) {
+        for_player_units(world, *player, [&](const Unit& unit) {
+            const bool live = selectable(world, unit);
+            const bool in_squad = unit.squad == squad;
+            const bool skipped = skip_types && in_squad &&
+                                 data::defs::category_mask_contains(&skip, unit.type_index);
+            const bool chosen = live && in_squad && !skipped;
+            const bool selected_now = (unit.flags & OA_UNIT_FLAG_SELECTED) != 0;
+            bool selected_after = selected_now;
+            if (live) {
+                if (in_squad)
+                    selected_after = !skipped;
+                else if (!add)
+                    selected_after = false;
+            }
+            if (selected_after != selected_now)
+                already = false;
+            if (chosen) {
+                sum_x += whole(unit.position.x);
+                sum_z += whole(unit.position.z);
+                ++members;
+            }
+            return true;
+        });
+    } else
+        already = false;
     int32_t selected = 0;
     if (const Player* player = local_player(world)) {
         for_player_units(world, *player, [&](Unit& unit) {
@@ -548,6 +582,14 @@ bool select_squad(World& world, int32_t squad, bool add, const TypeMask& skip, c
     reset_command(hooks);
     world.game.panel_unit_id = 0;
     mark_selection_changed(world);
+    if (already && members > 0) {
+        if (hooks.stop_follow != nullptr)
+            hooks.stop_follow(hooks.context);
+        const auto pack = [](int32_t total, int32_t count) {
+            return static_cast<int32_t>(static_cast<uint32_t>(total / count) << 16);
+        };
+        center_camera(hooks, FixedVec3{pack(sum_x, members), 0, pack(sum_z, members)});
+    }
     return selected > 0;
 }
 

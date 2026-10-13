@@ -193,7 +193,6 @@ void Runtime::check_console_option_commands(const std::function<void(const char*
     apply_match_hud_for_selection();
     match_camera_x_ = kept_camera_x;
     match_camera_z_ = kept_camera_z;
-    squad_double_tap_ = 0;
 
     // +stats alone shows or hides the frame statistics and saves the Show
     // performance statistics setting; with an argument it saves nothing.
