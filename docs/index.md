@@ -16,6 +16,9 @@ Every document in the repository, by what you want to do.
     non-Steam game, the Steam Input layouts and artwork installed by hand,
     the controls, the first start, the Deck's settings and the logs
   - [iPhone and iPad](installation/ios.md), built on your own Mac
+- [command-line.md](command-line.md): `--version`, which prints one line and
+  exits before the game starts, and `--print-profile`, which ends with that
+  same line.
 - [settings.md](settings.md): Open Annihilation's own settings, with a
   picture of each section: opening them, OK, Cancel and Restore defaults,
   and what every setting in Mods, Controls, Engine Limits, Language & Text,
