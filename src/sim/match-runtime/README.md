@@ -71,6 +71,16 @@ builder's "Starting construction", reaches the application through
 `SpeechHooks` (`Match::set_speech_hooks`); without them the speech plays its
 category through `command_sound` and the category's own caption.
 
+A unit whose type is a feature, such as dragon's teeth or a fortification
+wall, stops being a unit when its build finishes. The machine that simulates
+it marks it to die at once, dismissed, and the other players take that death.
+The feature named by its corpse is placed on the same footprint, at that
+feature's own health and with the builder's colour. It blocks movement and
+can be reclaimed for the feature's metal, and it can be destroyed, but it
+cannot be selected, ordered or counted. The builder's order still ends with
+"Building complete". A wall created already finished is marked the same way
+as it is placed.
+
 ## Rules
 
 A mod's profile reaches the match through `OfflineInputs`: `limits` (the
