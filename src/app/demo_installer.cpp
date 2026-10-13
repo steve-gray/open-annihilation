@@ -705,9 +705,13 @@ bool adopt_legacy_demo(
     if (games_linked || leads_elsewhere(folder, archive))
         return false;
     const fs::path earlier = legacy_archive(data_folder, release);
+    const fs::path record = folder / fs::path(std::string(content_record_name));
+    // A copy with its record is the content check's to watch, by size and
+    // time; it is not hashed again at every start.
+    std::error_code record_error;
+    if (fs::is_regular_file(record, record_error) && fs::is_regular_file(archive, record_error))
+        return true;
     if (archive_matches(archive, release)) {
-        std::error_code record_error;
-        const fs::path record = folder / fs::path(std::string(content_record_name));
         if (!fs::is_regular_file(record, record_error)) {
             DemoSetup setup;
             setup.folder = folder;
