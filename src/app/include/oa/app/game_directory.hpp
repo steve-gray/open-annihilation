@@ -419,9 +419,9 @@ void remember_mod_directory(oa::platform::preferences::Values& values, const fs:
 
 /// Lists the base games and expansions wholly present in a folder.
 ///
-/// A player's folder, or one bundle folder inside it (`games/<id>` or
-/// `expansions/<base>/<id>`), is read from the `.oa-content` records of
-/// `games/` and `expansions/`. A record counts when it names that bundle and
+/// A player's folder, or one bundle folder inside it (`Games/<id>` or
+/// `Expansions/<base>/<id>`), is read from the `.oa-content` records of
+/// `Games/` and `Expansions/`. A record counts when it names that bundle and
 /// lists every one of its files. The game files are not walked. Any other
 /// folder is walked: each regular file is matched by its path relative to the
 /// folder and its size, and a bundle is copied when every one of its files
@@ -434,7 +434,7 @@ void remember_mod_directory(oa::platform::preferences::Values& values, const fs:
 
 /// What a composed mount is built from: the player's folder and the choice.
 struct ManagedMount {
-    /// The player's folder, which holds `games/` and `expansions/`.
+    /// The player's folder, which holds `Games/` and `Expansions/`.
     fs::path user_folder{};
     /// `--content`, or empty to use the preferences.
     std::string_view content{};

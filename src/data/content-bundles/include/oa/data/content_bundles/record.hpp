@@ -26,6 +26,13 @@ namespace oa::data::content_bundles {
 /// The file name of a bundle folder's record.
 inline constexpr std::string_view content_record_name = ".oa-content";
 
+/// The folder of base games under the player's folder: `Games/<id>`.
+inline constexpr std::string_view managed_games_folder = "Games";
+
+/// The folder of expansions under the player's folder:
+/// `Expansions/<base>/<id>`.
+inline constexpr std::string_view managed_expansions_folder = "Expansions";
+
 /// One file recorded in a bundle folder.
 struct ContentRecordFile {
     /// The name it is stored under, relative to the bundle folder.

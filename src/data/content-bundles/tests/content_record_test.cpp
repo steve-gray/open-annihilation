@@ -20,6 +20,7 @@ using oa::data::content_bundles::ContentRecord;
 using oa::data::content_bundles::ContentRecordFile;
 using oa::data::content_bundles::format_content_record;
 using oa::data::content_bundles::parse_content_record;
+using oa::data::content_bundles::managed_games_folder;
 using oa::data::content_bundles::read_bundle_folder_record;
 
 constexpr std::string_view kHash =
@@ -195,7 +196,7 @@ void test_folder() {
     std::filesystem::create_directories(folder, failure);
     OA_CHECK(!failure);
     const ContentRecord absent_tree =
-        read_bundle_folder_record(folder / "games" / "totala", nullptr);
+        read_bundle_folder_record(folder / std::string(managed_games_folder) / "totala", nullptr);
     OA_CHECK(!absent_tree.present);
     OA_CHECK(!absent_tree.valid);
     OA_CHECK(!absent_tree.io_error);
