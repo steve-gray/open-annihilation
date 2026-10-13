@@ -165,3 +165,16 @@ SPDX-License-Identifier = "LZMA-SDK-9.22"
 path = "src/formats/lzma/tests/data/**"
 SPDX-FileCopyrightText = "The Open Annihilation Authors; see COPYRIGHT"
 SPDX-License-Identifier = "GPL-3.0-only"
+
+# The small UDIF image the disk-image tests open. It is a volume made for
+# the tests, not a published installer.
+[[annotations]]
+path = "src/formats/udif/tests/data/**"
+SPDX-FileCopyrightText = "The Open Annihilation Authors; see COPYRIGHT"
+SPDX-License-Identifier = "GPL-3.0-only"
+
+# The small setup body the Windows-installer test reads. It holds no game data.
+[[annotations]]
+path = "src/formats/inno-setup/tests/data/**"
+SPDX-FileCopyrightText = "The Open Annihilation Authors; see COPYRIGHT"
+SPDX-License-Identifier = "GPL-3.0-only"

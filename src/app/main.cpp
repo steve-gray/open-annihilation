@@ -17,6 +17,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/content_copy.hpp"
+#include "oa/app/disk_image_source.hpp"
 #include "oa/app/game_files_import.hpp"
 #include "oa/app/input_hints.hpp"
 #include "oa/app/package_install.hpp"
@@ -885,6 +886,7 @@ int run_once(
             game_directory = std::move(copied);
         options.game_dir = game_directory->installation;
     }
+    options.managed_content = game_directory->source == GameDirectorySource::managed;
     options.game_folders = game_directory->folders;
     if (options.game_folders.empty())
         options.game_folders = {options.game_dir};
@@ -1304,6 +1306,8 @@ int main(int argc, char** argv) {
             );
         if (!parsed.check_content_copy.empty())
             return run_content_copy_check(parsed.check_content_copy);
+        if (!parsed.check_installer.empty())
+            return run_installer_check(parsed.check_installer);
         // A game started for play, from a terminal or the desktop, logs to the
         // logs folder. Checks, benchmarks and other scripted runs keep their
         // output where it goes, and so does a run whose output another

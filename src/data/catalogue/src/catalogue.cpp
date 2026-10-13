@@ -5,6 +5,8 @@
 
 #include "oa/base/sha256.hpp"
 #include "oa/base/signing/ed25519.hpp"
+#include "oa/data/content_bundles.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/formats/json.hpp"
 #include "oa/formats/oamod/package_keys.hpp"
 #include "oa/formats/url.hpp"
@@ -20,6 +22,7 @@
 namespace oa::data::catalogue {
 namespace {
 
+namespace bundles = oa::data::content_bundles;
 namespace json = formats::json;
 namespace oamod = formats::oamod;
 namespace sha = base::sha256;
@@ -34,6 +37,9 @@ constexpr int64_t max_release = 2147483647;
 
 /// The most mirrors one catalogue names.
 constexpr std::size_t max_mirrors = 8;
+
+/// The most ids one supportedGames or requiredExpansions list names.
+constexpr std::size_t max_content_ids = 16;
 
 /// The most bytes of a map's title, and of a name under compatible.
 constexpr std::size_t max_map_name_bytes = 64;
@@ -235,6 +241,111 @@ bool read_requires(const json::Json& object, Package& package, std::string& reas
         }
         package.requires_base = *text;
     }
+    return true;
+}
+
+/// Tells whether an expansion extends one of the games.
+///
+/// @param expansion the expansion
+/// @param games the base game ids
+/// @return true when it extends one of them
+bool extends_one(const bundles::Bundle& expansion, const std::vector<std::string>& games) {
+    for (const std::string_view game : expansion.extends) {
+        for (const std::string& supported : games) {
+            if (supported == game)
+                return true;
+        }
+    }
+    return false;
+}
+
+/// Reads supportedGames and requiredExpansions when the entry names them.
+///
+/// A missing key leaves the list empty. supportedGames must name at least
+/// one base game. requiredExpansions may be empty. Each id is a bundle of
+/// that kind, none repeated, at most 16. An expansion has to extend a game
+/// the entry names, or, when it omits supportedGames, the games that key
+/// means: both base games for a language pack, and totala otherwise.
+///
+/// @param object the package
+/// @param[in,out] package the package being read; its kind and requires_base are set
+/// @param[out] reason why the lists were refused
+/// @return true when the lists passed, including when both keys are absent
+bool read_content_lists(const json::Json& object, Package& package, std::string& reason) {
+    const auto read_ids =
+        [&](std::string_view key, bool allow_empty, std::vector<std::string>& out) -> bool {
+        const json::Json* value = object.find(key);
+        if (!value)
+            return true;
+        if (value->type() != json::JsonType::array) {
+            reason = std::string(key) + " is not a list";
+            return false;
+        }
+        if (value->elements().size() > max_content_ids) {
+            reason = std::string(key) + " lists more than " + std::to_string(max_content_ids);
+            return false;
+        }
+        if (value->elements().empty() && !allow_empty) {
+            reason = std::string(key) + " lists none";
+            return false;
+        }
+        for (const json::Json& element : value->elements()) {
+            const std::string* text = element.string();
+            if (!text || text->empty()) {
+                reason = std::string(key) + " holds an id that is not text";
+                return false;
+            }
+            for (const std::string& earlier : out) {
+                if (earlier == *text) {
+                    reason = std::string(key) + " repeats \"" + *text + "\"";
+                    return false;
+                }
+            }
+            out.push_back(*text);
+        }
+        return true;
+    };
+
+    std::vector<std::string> games;
+    std::vector<std::string> expansions;
+    const bool games_written = object.find("supportedGames") != nullptr;
+    const bool expansions_written = object.find("requiredExpansions") != nullptr;
+    if (!read_ids("supportedGames", false, games) ||
+        !read_ids("requiredExpansions", true, expansions))
+        return false;
+    for (const std::string& id : games) {
+        const bundles::Bundle* bundle = bundles::find_bundle(id);
+        if (bundle == nullptr || bundle->kind != bundles::Kind::base_game) {
+            reason = "supportedGames \"" + id + "\" is not a base game";
+            return false;
+        }
+    }
+    std::vector<std::string> extends_against = games;
+    if (!games_written) {
+        if (package.kind == Kind::oalang) {
+            extends_against.emplace_back(bundles::default_base_game_id);
+            extends_against.emplace_back("totala-demo");
+        } else {
+            // A mod or a map pack that omits the key runs with totala, which
+            // is also what requires.base ta-3.1c means.
+            extends_against.emplace_back(bundles::default_base_game_id);
+        }
+    }
+    for (const std::string& id : expansions) {
+        const bundles::Bundle* bundle = bundles::find_bundle(id);
+        if (bundle == nullptr || bundle->kind != bundles::Kind::expansion) {
+            reason = "requiredExpansions \"" + id + "\" is not an expansion";
+            return false;
+        }
+        if (!extends_one(*bundle, extends_against)) {
+            reason = "requiredExpansions \"" + id + "\" extends none of the supported games";
+            return false;
+        }
+    }
+    if (games_written)
+        package.supported_games = std::move(games);
+    if (expansions_written)
+        package.required_expansions = std::move(expansions);
     return true;
 }
 
@@ -622,6 +733,8 @@ bool read_package(const json::Json& value, Package& package, std::string& reason
         package.published = *text;
     }
     if (!read_requires(value, package, reason))
+        return false;
+    if (!read_content_lists(value, package, reason))
         return false;
     if (const json::Json* sim_hash = value.find("sim_hash")) {
         const std::string* text = sim_hash->string();

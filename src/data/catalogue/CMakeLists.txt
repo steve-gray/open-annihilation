@@ -9,7 +9,7 @@ add_library(oa::data::catalogue ALIAS oa-data-catalogue)
 target_include_directories(oa-data-catalogue PUBLIC include)
 target_compile_features(oa-data-catalogue PUBLIC cxx_std_20)
 target_link_libraries(oa-data-catalogue PUBLIC oa-base-sha256 oa-base-signing oa-data-registry
-  oa-formats-url oa-formats-oamod oa-options PRIVATE oa-formats-json)
+  oa-formats-url oa-formats-oamod oa-options PRIVATE oa-formats-json oa-data-content-bundles)
 
 if(BUILD_TESTING)
   # Catalogue entries, and the signature, sequence and expiry check.

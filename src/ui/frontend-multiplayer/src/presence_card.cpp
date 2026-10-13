@@ -7,6 +7,7 @@
 
 #include "oa/ui/frontend_multiplayer/presence_card.hpp"
 
+#include "oa/data/content_bundles.hpp"
 #include "oa/present/game_text.hpp"
 #include "oa/ui/kit/theme.hpp"
 
@@ -166,7 +167,7 @@ PresenceCardLine rules_line(Lobby& lobby, int32_t slot, const netgame::PresenceR
     if (host == kNoSlot)
         return {{}, word(lobby, "Unknown"), CardTone::plain};
     const auto host_record = record_of(lobby, host);
-    if (lobby_rules_differ_from_host(lobby, slot)) {
+    if (lobby_sim_hash_differs_from_host(lobby, slot)) {
         if (record.mod && host_record && host_record->mod &&
             host_record->mod->id == record.mod->id &&
             host_record->mod->packaging_revision != record.mod->packaging_revision)
@@ -234,6 +235,166 @@ PresenceCardLine map_line(
     return {{}, std::move(named), CardTone::plain};
 }
 
+/// Returns a player's name as stored, decoded the way the card's title is.
+///
+/// @param player the player
+/// @return the name
+std::string stored_name(const Player& player) {
+    std::size_t length = 0;
+    while (length < sizeof player.name && player.name[length] != '\0')
+        ++length;
+    return oa::present::decode_game_text(
+        std::string_view(player.name, length), oa::present::game_text_settings().utf8
+    );
+}
+
+/// Returns the name a bundle's id is shown by. An id the table does not know is shown as itself.
+///
+/// @param lobby the battle room
+/// @param id the bundle id
+/// @return the name
+std::string bundle_label(const Lobby& lobby, std::string_view id) {
+    const auto* bundle = oa::data::content_bundles::find_bundle(id);
+    if (bundle == nullptr)
+        return std::string(id);
+    const std::string english(bundle->english_name);
+    return word(lobby, english.c_str());
+}
+
+/// Joins expansion names in the built-in order, leaving music out.
+///
+/// @param lobby the battle room
+/// @param ids the expansion ids
+/// @return the names, or "None" when there are none
+std::string expansion_list(const Lobby& lobby, const std::vector<std::string>& ids) {
+    std::string text;
+    std::vector<char> taken(ids.size(), 0);
+    const auto append = [&](std::string_view id) {
+        if (!text.empty())
+            text += ", ";
+        text += bundle_label(lobby, id);
+    };
+    for (const auto& bundle : oa::data::content_bundles::bundles()) {
+        if (bundle.kind != oa::data::content_bundles::Kind::expansion)
+            continue;
+        if (bundle.id == netgame::presence_uncompared_expansion)
+            continue;
+        for (std::size_t index = 0; index < ids.size(); ++index) {
+            if (taken[index] == 0 && ids[index] == bundle.id) {
+                taken[index] = 1;
+                append(ids[index]);
+            }
+        }
+    }
+    for (std::size_t index = 0; index < ids.size(); ++index) {
+        if (taken[index] == 0 && ids[index] != netgame::presence_uncompared_expansion)
+            append(ids[index]);
+    }
+    if (text.empty())
+        return word(lobby, "None");
+    return text;
+}
+
+/// Joins the names of several expansion ids, in the built-in order.
+///
+/// @param lobby the battle room
+/// @param ids the ids
+/// @return the names
+std::string joined_bundle_names(const Lobby& lobby, const std::vector<std::string>& ids) {
+    const std::string listed = expansion_list(lobby, ids);
+    return listed;
+}
+
+/// Adds the lines that name a difference from the host.
+///
+/// @param[in,out] card the card
+/// @param lobby the battle room
+/// @param slot the player's slot
+/// @param record the player's record
+void append_difference(
+    PresenceCard& card, Lobby& lobby, int32_t slot, const netgame::PresenceRecord& record
+) {
+    const uint8_t host = lobby_host_slot(lobby);
+    if (host == kNoSlot || host == static_cast<uint8_t>(slot) || !record.bundles)
+        return;
+    const auto host_record = record_of(lobby, host);
+    if (!host_record)
+        return;
+    const auto gap = netgame::presence_content_gap(record, *host_record);
+    if (!gap.comparable)
+        return;
+    const bool expansions_differ = !gap.missing.empty() || !gap.extra.empty();
+    if (!gap.hashes_differ && !gap.bases_differ && !expansions_differ)
+        return;
+    const std::string player = stored_name(slot_player(lobby, slot));
+    const bool one_missing =
+        !gap.bases_differ && !gap.hashes_differ && gap.missing.size() == 1 && gap.extra.empty();
+    const bool one_extra =
+        !gap.bases_differ && !gap.hashes_differ && gap.extra.size() == 1 && gap.missing.empty();
+    const bool named_set = !gap.bases_differ && !gap.hashes_differ &&
+                           (gap.missing.empty() || gap.extra.empty()) && expansions_differ;
+    if (gap.hashes_differ)
+        card.lines.push_back(
+            {{}, word(lobby, "Different from the host: a file does not match."), CardTone::amber}
+        );
+    if (gap.bases_differ) {
+        card.lines.push_back(
+            {{},
+             filled(
+                 lobby,
+                 "Different from the host: another base game ({name}).",
+                 {{"{name}", bundle_label(lobby, gap.player_base)}}
+             ),
+             CardTone::amber}
+        );
+    } else if (named_set && gap.extra.empty()) {
+        card.lines.push_back(
+            {{},
+             filled(
+                 lobby,
+                 "Different from the host: no {name}.",
+                 {{"{name}", joined_bundle_names(lobby, gap.missing)}}
+             ),
+             CardTone::amber}
+        );
+    } else if (named_set) {
+        card.lines.push_back(
+            {{},
+             filled(
+                 lobby,
+                 "Different from the host: {name} is on.",
+                 {{"{name}", joined_bundle_names(lobby, gap.extra)}}
+             ),
+             CardTone::amber}
+        );
+    }
+    if (one_missing) {
+        card.lines.push_back(
+            {{},
+             filled(
+                 lobby,
+                 "The game cannot start until {player} turns it on, or the host turns it off.",
+                 {{"{player}", player}}
+             ),
+             CardTone::amber}
+        );
+    } else if (one_extra) {
+        card.lines.push_back(
+            {{},
+             filled(
+                 lobby,
+                 "The game cannot start until the host turns it on, or {player} turns it off.",
+                 {{"{player}", player}}
+             ),
+             CardTone::amber}
+        );
+    } else {
+        card.lines.push_back(
+            {{}, word(lobby, "The game cannot start until the content matches."), CardTone::amber}
+        );
+    }
+}
+
 /// Returns a line with its label.
 ///
 /// @param label the label, translated
@@ -286,6 +447,18 @@ std::optional<PresenceCard> presence_card(
         if (!platform.empty())
             card.lines.push_back({word(lobby, "Platform"), platform, CardTone::plain});
     }
+    if (record->bundles) {
+        card.lines.push_back(
+            {word(lobby, "Base game"),
+             bundle_label(lobby, record->bundles->base_game),
+             CardTone::plain}
+        );
+        card.lines.push_back(
+            {word(lobby, "Expansions"),
+             expansion_list(lobby, record->bundles->expansions),
+             CardTone::plain}
+        );
+    }
     if (record->mod) {
         const auto& mod = *record->mod;
         const std::string named = mod.version.empty() ? mod.name : mod.name + " " + mod.version;
@@ -295,11 +468,15 @@ std::optional<PresenceCard> presence_card(
              filled(lobby, "{mod} · rev {revision}", {{"{mod}", named}, {"{revision}", revision}}),
              CardTone::plain}
         );
+    } else if (record->bundles) {
+        card.lines.push_back({word(lobby, "Mod"), word(lobby, "No Mod"), CardTone::plain});
     } else {
         card.lines.push_back(
             {word(lobby, "Mod"), word(lobby, "Total Annihilation 3.1c"), CardTone::plain}
         );
     }
+    if (record->language)
+        card.lines.push_back({word(lobby, "Language"), *record->language, CardTone::plain});
     card.lines.push_back(labelled(word(lobby, "Rules"), rules_line(lobby, slot, *record)));
     if (record->game_hacks)
         card.lines.push_back(
@@ -351,6 +528,7 @@ std::optional<PresenceCard> presence_card(
                 {{"{count}", std::to_string(total - presence_card_listed_hacks)}}
             );
     }
+    append_difference(card, lobby, slot, *record);
     return card;
 }
 

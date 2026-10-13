@@ -416,6 +416,8 @@ std::string_view action_text(Action action, const TextHooks& text) {
         return shown(text, words::active_add_from);
     case Action::ask_expansion_off:
         return shown(text, words::action_turn_off);
+    case Action::turn_on:
+        return shown(text, words::action_turn_on);
     }
     return {};
 }

@@ -147,11 +147,18 @@ std::string details_note(const Library& library) {
     if (entry == nullptr)
         return note;
     const std::string off = uninstall_off_reason(library, *entry);
-    if (off.empty())
-        return note;
-    if (note.empty())
-        return off;
-    return note + " " + off;
+    if (!off.empty()) {
+        if (!note.empty())
+            note += ' ';
+        note += off;
+    }
+    const std::string turning = turn_on_note(library);
+    if (!turning.empty()) {
+        if (!note.empty())
+            note += ' ';
+        note += turning;
+    }
+    return note;
 }
 
 } // namespace oa::ui::library

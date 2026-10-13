@@ -120,17 +120,22 @@ under them, so the maps pane keeps a row.
   mod you are playing needs asks first. **CANCEL** leaves the choice as
   it was. **TURN OFF** keeps the change on this tab, still until the
   Library closes, and says that the mod is unloaded and the game plays
-  with **No Mod**. The pills are greyed during a game and while the
-  command line named the choice for this run. When the Library closes, a
-  change of base game or of the expansions that are on is mounted the way
-  a mod switch is: the window stays and the intro is skipped. The files
-  are not mounted again while the Library stays open, nor during a game.
-  Choosing another base game turns on every expansion of it that is
-  copied and unloads the mod you are playing. The chooser says so, and
-  the change applies when the Library closes. A base game that is not
-  copied asks for its source and copies it before that choice is kept.
-  The demo asks for its installer. **USE THIS GAME** keeps the marked
-  game. **CANCEL** leaves the choice as it was.
+  with **No Mod**. The hint then names the mod and the expansion: "Ridge
+  was unloaded because Campaign is off. The game plays with No Mod."
+  Turning that expansion back on clears the sentence. When a stored note
+  says a mod was cleared for the same reason, and this tab has not edited
+  the choice, the hint is "The mod was unloaded because an expansion it
+  needs is off. The game plays with No Mod." The pills are greyed during
+  a game and while the command line named the choice for this run. When
+  the Library closes, a change of base game or of the expansions that are
+  on is mounted the way a mod switch is: the window stays and the intro
+  is skipped. The files are not mounted again while the Library stays
+  open, nor during a game. Choosing another base game turns on every
+  expansion of it that is copied and unloads the mod you are playing.
+  The chooser says so, and the change applies when the Library closes.
+  A base game that is not copied asks for its source and copies it before
+  that choice is kept. The demo asks for its installer. **USE THIS GAME**
+  keeps the marked game. **CANCEL** leaves the choice as it was.
 - **MOD**: a tile for the mod you are playing. Its badge is large, and the
   tile names the mod, its version and revision ("4.8 (rev 3)") and who made
   it ("by the Ridge team"). **Playing** is a rounded pill at the top right,
@@ -357,8 +362,13 @@ back button follow whichever of those is showing.
     author its own manifest names;
   - **Size**, and with an update how much there is to download;
   - **Base**: "Total Annihilation 3.1c";
+  - **Games**: the base games the package runs with, "Total Annihilation ✓"
+    for the one this choice is playing, in amber when this choice's game
+    is not among them ("Total Annihilation demo");
   - **Needs**: the Open Annihilation it needs, "Open Annihilation 0.8.0 or
-    later ✓", in amber when this one does not meet it;
+    later ✓", in amber when this one does not meet it. When the package
+    names expansions that must be on, a second Needs follows that one:
+    "Campaign ✓ · Battle Tactics off", in amber when any of them is off;
   - **Hacks**, for a mod: "8 change the game · 4 view only", and any it
     needs that this build lacks;
   - **Rules**, for a mod: its rules hash, "9c1f 4e0b"; with an update,
@@ -376,11 +386,17 @@ back button follow whichever of those is showing.
 
   A fact with nothing to say is left out. These hold alike for mods, map
   packs and language packs.
-- **The buttons**: **GET** or **UPDATE**, **CANCEL** while it is in the
-  download queue, **RETRY** after a download that can be tried again;
+- **The buttons**: **TURN ON Battle Tactics** first, when turning on the
+  expansions the package needs, through the same rules as the Active tab's
+  pills, would let it run. The choice waits until the Library closes.
+  **GET** stays, and the package stays in the list. **GET** or **UPDATE**,
+  **CANCEL** while it is in the download queue, **RETRY** after a download
+  that can be tried again;
   **PLAY NOW** for an installed mod you are not playing, which switches to
   it, or **SWITCH OFF** in its place for the mod you are playing, which
-  goes back to the game as 3.1c plays it ([choosing a mod](#choosing-a-mod));
+  goes back to the game as 3.1c plays it ([choosing a mod](#choosing-a-mod)).
+  **PLAY NOW** and **USE NOW** are greyed when the package's games are not
+  this choice's game, or a required expansion is off;
   **USE NOW** for a built-in language, or an installed language pack, that
   is not the one the game is showing ([choosing a language](#choosing-a-language));
   **ROLL BACK** while an earlier copy is kept
@@ -394,7 +410,10 @@ back button follow whichever of those is showing.
   installed mod, first, "The command line chose this run's mod." while
   `--mod-dir` or `--base-game` chose it; and, while UNINSTALL is off, why:
   "Map packs can't be uninstalled during a game." or "It is in the download
-  queue: CANCEL it before you uninstall it."
+  queue: CANCEL it before you uninstall it." While **TURN ON** is showing,
+  the note under the buttons says "Turning it on applies when the Library
+  closes, and then PLAY NOW works." A language says USE NOW, several
+  expansions say "them", and a map pack stops at "closes."
 
 The Regular and Large layouts show who made a package, and its download
 count, on its row; Compact shows them under the status line.
@@ -430,7 +449,15 @@ no mod, **No Mod** is the one marked **PLAYING**.
 
 - **PLAY NOW**, on any other mod, plays it: the game reloads its data for
   that mod and returns to the main menu, without closing the window, and
-  plays it at every later start too. A folder the game cannot play is
+  plays it at every later start too. It is greyed when the mod names a
+  base game this choice is not playing ("For the Total Annihilation demo
+  only", or "For Total Annihilation only") or an expansion that is off
+  ("Needs Battle Tactics, which is off"). That sentence replaces the
+  summary on the row. The same words are on Maps and Languages. **TURN ON**
+  turns those expansions on in the choice the Library is holding. **PLAY
+  NOW** is then offered, and the choice takes effect when the Library
+  closes. A package that cannot run stays in the list, and **GET** stays
+  on. A folder the game cannot play is
   refused, and a note over the Library says why under **SWITCH MOD**:
   "That folder cannot be played; the log says why.", with **OK**.
 - **SWITCH OFF**, on the mod you play, goes back to the game as 3.1c plays

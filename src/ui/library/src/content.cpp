@@ -181,6 +181,8 @@ std::vector<std::string> dependents_off(
 
 /// Writes a choice onto the draft and records the pill that made it.
 ///
+/// A note that a mod was unloaded is dropped once that expansion is on again.
+///
 /// @param[in,out] library the Library
 /// @param choice the choice G04 returned
 /// @param id the expansion
@@ -199,12 +201,155 @@ void keep_choice(
     draft.ask_id.clear();
     draft.proposed.clear();
     draft.turned_off.clear();
-    // A pill does not choose a base game. One that leaves the mod in place
-    // clears an earlier unload, unless another base game is already pending.
+    // A pill does not choose a base game. While another base game is pending,
+    // the unload stays. Otherwise a required-expansion unload clears only
+    // when that expansion is on again, and any other unload clears.
     if (!draft.pending_base) {
-        draft.unload_mod = false;
-        draft.clear_reason = PendingClear::none;
+        const bool required_back = draft.clear_reason == PendingClear::required_expansion_off &&
+                                   !draft.unloaded_for.empty() &&
+                                   holds(draft.expansions, draft.unloaded_for);
+        const bool other = draft.clear_reason != PendingClear::required_expansion_off;
+        if (required_back || other) {
+            draft.unload_mod = false;
+            draft.clear_reason = PendingClear::none;
+            draft.unloaded_mod.clear();
+            draft.unloaded_for.clear();
+        }
     }
+}
+
+/// Returns the name a base game or an expansion shows.
+///
+/// Total Annihilation is the Active tab's name, without the release. Every
+/// other bundle uses the name the bundle table gives.
+///
+/// @param text how texts are looked up
+/// @param id the bundle id
+/// @return the name
+std::string display_name(const TextHooks& text, std::string_view id) {
+    if (id == bundles::default_base_game_id)
+        return std::string(shown(text, words::active_game_name));
+    return bundle_name(id);
+}
+
+/// Joins names with "and" before the last.
+///
+/// @param text how texts are looked up
+/// @param names the names
+/// @return the joined names; empty when there are none
+std::string join_and(const TextHooks& text, const std::vector<std::string>& names) {
+    if (names.empty())
+        return {};
+    if (names.size() == 1)
+        return names.front();
+    std::string joined = names.front();
+    for (std::size_t index = 1; index + 1 < names.size(); ++index)
+        joined = filled(text, words::names_comma, {{"left", joined}, {"right", names[index]}});
+    return filled(text, words::names_and, {{"left", joined}, {"right", names.back()}});
+}
+
+/// Joins fact values with a middle dot.
+///
+/// @param text how texts are looked up
+/// @param parts the parts
+/// @return the joined fact; empty when there are none
+std::string join_dot(const TextHooks& text, const std::vector<std::string>& parts) {
+    if (parts.empty())
+        return {};
+    std::string joined = parts.front();
+    for (std::size_t index = 1; index < parts.size(); ++index)
+        joined = filled(text, words::fact_join, {{"left", joined}, {"right", parts[index]}});
+    return joined;
+}
+
+/// The games and expansions a package names, after the default games.
+struct FitLists {
+    std::vector<std::string> games{};
+    std::vector<std::string> expansions{};
+    bool declared{};
+};
+
+/// Returns the lists the package is fitted against.
+///
+/// Installed lists win when they name a game or an expansion. A package that
+/// names expansions and no games takes both base games for a language pack,
+/// and totala otherwise.
+///
+/// @param entry the entry
+/// @return the lists; `declared` is false when both sources name nothing
+FitLists fit_lists(const Entry& entry) {
+    FitLists fit;
+    const Installed* installed = entry.installed;
+    const Listing* listing = entry.listing;
+    const bool from_installed = installed != nullptr && (!installed->supported_games.empty() ||
+                                                         !installed->required_expansions.empty());
+    const bool from_listing = listing != nullptr && (!listing->supported_games.empty() ||
+                                                     !listing->required_expansions.empty());
+    if (from_installed) {
+        fit.games = installed->supported_games;
+        fit.expansions = installed->required_expansions;
+        fit.declared = true;
+    } else if (from_listing) {
+        fit.games = listing->supported_games;
+        fit.expansions = listing->required_expansions;
+        fit.declared = true;
+    }
+    if (!fit.declared || !fit.games.empty() || fit.expansions.empty())
+        return fit;
+    if (entry.id.kind == Kind::language) {
+        fit.games.emplace_back(bundles::default_base_game_id);
+        fit.games.emplace_back("totala-demo");
+    } else {
+        fit.games.emplace_back(bundles::default_base_game_id);
+    }
+    return fit;
+}
+
+/// Asks G04 to turn one expansion on, on a copy of the choice.
+///
+/// The played mod is left out, so the press does not clear it.
+///
+/// @param choice the choice before the press
+/// @param id the expansion
+/// @param copied the bundle ids that are copied
+/// @param in_match true while a match is running
+/// @param[out] after the choice afterwards
+/// @return true when the expansion is on afterwards
+bool press_on(
+    const bundles::ContentChoice& choice,
+    std::string_view id,
+    const std::vector<std::string_view>& copied,
+    bool in_match,
+    bundles::ContentChoice& after
+) {
+    const std::vector<std::string_view> no_mod;
+    const bundles::ContentChangeResult turned =
+        bundles::turn_content_expansion(choice, id, true, copied, in_match, false, no_mod);
+    if (turned.refusal != bundles::ContentRefusal::none || !turned.applied)
+        return false;
+    if (!holds(turned.choice.expansions, id))
+        return false;
+    after = turned.choice;
+    return true;
+}
+
+/// Returns the name of the mod being played, when the pending choice has not
+/// already unloaded it.
+///
+/// @param library the Library
+/// @return the name; empty when no mod shows
+std::string played_mod_name(const Library& library) {
+    if (library.content.unload_mod)
+        return {};
+    for (const Installed& installed : library.inputs.installed) {
+        if (installed.kind == Kind::mod && installed.playing && !installed.name.empty())
+            return installed.name;
+    }
+    if (library.inputs.playing_mod && !library.inputs.playing_mod->name.empty())
+        return library.inputs.playing_mod->name;
+    if (mod_is_played(library))
+        return std::string(shown(library.text, words::no_mod));
+    return {};
 }
 
 } // namespace
@@ -302,13 +447,24 @@ ActiveContent active_content(const Library& library) {
     }
 
     const ContentDraft& draft = library.content;
+    const bool unloaded = draft.clear_reason == PendingClear::required_expansion_off &&
+                          !draft.unloaded_mod.empty() && !draft.unloaded_for.empty() &&
+                          !holds(pending.choice.expansions, draft.unloaded_for);
     if (draft.pending_base) {
         face.hint = std::string(shown(text, words::base_applies));
+    } else if (unloaded) {
+        face.hint = filled(
+            text,
+            words::mod_unloaded_because,
+            {{"mod", draft.unloaded_mod}, {"name", bundle_name(draft.unloaded_for)}}
+        );
     } else if (draft.edited && !draft.last_id.empty()) {
         const std::string name = bundle_name(draft.last_id);
         face.hint = filled(
             text, draft.last_on ? words::active_turns_on : words::active_turns_off, {{"name", name}}
         );
+    } else if (!draft.edited && library.expansion_note) {
+        face.hint = std::string(shown(text, words::mod_unloaded_note));
     } else if (!expansions.empty()) {
         for (const bundles::Bundle* bundle : expansions) {
             if (holds(pending.choice.expansions, bundle->id) || bundle->needs.empty())
@@ -346,7 +502,8 @@ ContentPress press_expansion(Library& library, std::string_view id) {
     }
 
     const std::vector<std::string_view> copied_ids = id_views(library.inputs.content.copied);
-    const bool playing = mod_is_played(library);
+    // The mod is already coming off, so a later pill does not ask again.
+    const bool playing = mod_is_played(library) && !library.content.unload_mod;
     const std::vector<std::string_view> required_ids =
         playing ? id_views(library.inputs.content.mod_required) : std::vector<std::string_view>{};
     const bool turning_on = !on_now;
@@ -377,6 +534,8 @@ void accept_expansion_off(Library& library) {
     ContentDraft& draft = library.content;
     if (!draft.asking)
         return;
+    const std::string unloaded = played_mod_name(library);
+    const std::string because = draft.ask_id;
     if (draft.base_game.empty())
         draft.base_game = draft.seed_base.empty() ? resolved_base(library.inputs.content.base_id)
                                                   : draft.seed_base;
@@ -392,6 +551,10 @@ void accept_expansion_off(Library& library) {
     draft.pending_base = false;
     draft.unload_mod = true;
     draft.clear_reason = PendingClear::required_expansion_off;
+    if (!unloaded.empty() && !because.empty()) {
+        draft.unloaded_mod = unloaded;
+        draft.unloaded_for = because;
+    }
 }
 
 void cancel_expansion_off(Library& library) {
@@ -403,25 +566,6 @@ void cancel_expansion_off(Library& library) {
 }
 
 namespace {
-
-/// Returns the name of the mod being played, when the pending choice has not
-/// already unloaded it.
-///
-/// @param library the Library
-/// @return the name; empty when no mod shows
-std::string played_mod_name(const Library& library) {
-    if (library.content.unload_mod)
-        return {};
-    for (const Installed& installed : library.inputs.installed) {
-        if (installed.kind == Kind::mod && installed.playing && !installed.name.empty())
-            return installed.name;
-    }
-    if (library.inputs.playing_mod && !library.inputs.playing_mod->name.empty())
-        return library.inputs.playing_mod->name;
-    if (mod_is_played(library))
-        return std::string(shown(library.text, words::no_mod));
-    return {};
-}
 
 /// Returns the base games, in the built-in order.
 ///
@@ -632,14 +776,171 @@ BaseUse use_marked_base_game(Library& library) {
     if (turned.mod_cleared == bundles::ModClearReason::base_game_chosen ||
         owed == PendingClear::required_expansion_off) {
         draft.unload_mod = true;
-        if (owed == PendingClear::required_expansion_off)
+        if (owed == PendingClear::required_expansion_off) {
             draft.clear_reason = PendingClear::required_expansion_off;
-        else
+        } else {
             draft.clear_reason = PendingClear::base_game_chosen;
+            draft.unloaded_mod.clear();
+            draft.unloaded_for.clear();
+        }
     }
     close_base_chooser(library);
     used.kind = BaseUseKind::applied;
     return used;
+}
+
+ContentLines content_lines(const Library& library, const Entry& entry) {
+    ContentLines lines;
+    if (is_base_game(entry.id) || is_built_in_language(entry.id))
+        return lines;
+    const FitLists fit = fit_lists(entry);
+    if (!fit.declared)
+        return lines;
+
+    const TextHooks& text = library.text;
+    const PendingChoice pending = pending_choice(library);
+    const bool game_ok = holds(fit.games, pending.base);
+
+    if (!fit.games.empty()) {
+        std::vector<std::string> parts;
+        parts.reserve(fit.games.size());
+        for (const std::string& id : fit.games) {
+            const std::string name = display_name(text, id);
+            if (id == pending.base)
+                parts.push_back(filled(text, words::name_met, {{"name", name}}));
+            else
+                parts.push_back(name);
+        }
+        lines.games = join_dot(text, parts);
+        lines.games_mark = game_ok ? Mark::none : Mark::warn;
+    }
+
+    std::vector<std::string> off_names;
+    bool any_off = false;
+    if (!fit.expansions.empty()) {
+        std::vector<std::string> parts;
+        parts.reserve(fit.expansions.size());
+        for (const std::string& id : fit.expansions) {
+            const std::string name = display_name(text, id);
+            if (holds(pending.choice.expansions, id)) {
+                parts.push_back(filled(text, words::name_met, {{"name", name}}));
+            } else {
+                any_off = true;
+                off_names.push_back(name);
+                parts.push_back(filled(text, words::name_off, {{"name", name}}));
+            }
+        }
+        lines.expansions = join_dot(text, parts);
+        lines.expansions_mark = any_off ? Mark::warn : Mark::none;
+    }
+
+    if (!game_ok) {
+        lines.blocks_play = true;
+        const bool only_demo = fit.games.size() == 1 && fit.games.front() == "totala-demo";
+        if (only_demo) {
+            lines.row = std::string(shown(text, words::for_demo_only));
+        } else {
+            std::vector<std::string> names;
+            names.reserve(fit.games.size());
+            for (const std::string& id : fit.games)
+                names.push_back(display_name(text, id));
+            lines.row = filled(text, words::for_game_only, {{"name", join_and(text, names)}});
+        }
+        return lines;
+    }
+    if (fit.expansions.empty())
+        return lines;
+
+    if (!any_off) {
+        std::vector<std::string> names;
+        names.reserve(fit.expansions.size());
+        for (const std::string& id : fit.expansions)
+            names.push_back(display_name(text, id));
+        const std::string joined = join_and(text, names);
+        if (names.size() == 1)
+            lines.row = filled(text, words::needs_which_on, {{"name", joined}});
+        else
+            lines.row = filled(text, words::needs_which_are_on, {{"names", joined}});
+        return lines;
+    }
+
+    lines.blocks_play = true;
+    const std::string joined = join_and(text, off_names);
+    if (off_names.size() == 1)
+        lines.row = filled(text, words::needs_which_off, {{"name", joined}});
+    else
+        lines.row = filled(text, words::needs_which_are_off, {{"names", joined}});
+    if (library.inputs.in_match || pending.choice.command_line)
+        return lines;
+
+    const std::vector<std::string_view> copied = id_views(library.inputs.content.copied);
+    bundles::ContentChoice trial = pending.choice;
+    for (const std::string& id : fit.expansions) {
+        if (holds(trial.expansions, id))
+            continue;
+        bundles::ContentChoice after;
+        if (!press_on(trial, id, copied, false, after)) {
+            lines.turn_on.clear();
+            lines.turn_on_name.clear();
+            lines.several = false;
+            return lines;
+        }
+        if (lines.turn_on_name.empty())
+            lines.turn_on_name = display_name(text, id);
+        lines.turn_on.push_back(id);
+        trial = std::move(after);
+    }
+    lines.several = lines.turn_on.size() > 1;
+    return lines;
+}
+
+bool package_can_run(const Library& library, const Entry& entry) {
+    return !content_lines(library, entry).blocks_play;
+}
+
+bool turn_on_required(Library& library, const Entry& entry) {
+    if (library.content.seed_base.empty() && !library.content.edited)
+        note_content(library);
+    const ContentLines lines = content_lines(library, entry);
+    if (lines.turn_on.empty())
+        return false;
+    const PendingChoice pending = pending_choice(library);
+    if (library.inputs.in_match || pending.choice.command_line)
+        return false;
+    const std::vector<std::string_view> copied = id_views(library.inputs.content.copied);
+    bundles::ContentChoice trial = pending.choice;
+    std::string last;
+    for (const std::string& id : lines.turn_on) {
+        if (holds(trial.expansions, id))
+            continue;
+        bundles::ContentChoice after;
+        if (!press_on(trial, id, copied, false, after))
+            return false;
+        trial = std::move(after);
+        last = id;
+    }
+    if (last.empty())
+        return false;
+    keep_choice(library, trial, last, holds(trial.expansions, last));
+    return true;
+}
+
+std::string turn_on_note(const Library& library) {
+    const Entry* entry = selected_entry(library);
+    if (entry == nullptr)
+        return {};
+    const ContentLines lines = content_lines(library, *entry);
+    if (lines.turn_on.empty() || !lines.blocks_play)
+        return {};
+    const TextHooks& text = library.text;
+    std::string_view pattern = words::turn_on_then_play;
+    if (entry->id.kind == Kind::map_pack)
+        pattern = lines.several ? words::turn_on_several_applies : words::turn_on_applies;
+    else if (entry->id.kind == Kind::language)
+        pattern = lines.several ? words::turn_on_several_use : words::turn_on_then_use;
+    else if (lines.several)
+        pattern = words::turn_on_several_play;
+    return std::string(shown(text, pattern));
 }
 
 } // namespace oa::ui::library

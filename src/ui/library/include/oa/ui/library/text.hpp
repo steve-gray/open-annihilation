@@ -510,6 +510,38 @@ inline constexpr std::string_view roll_back_ask =
 inline constexpr std::string_view roll_back_reload =
     "The game reloads its data for the mod and returns to the main menu.";
 
+// What a package needs, on its row and in its details, against the choice
+// the Active tab is holding. Product names stay in the values filled in.
+inline constexpr std::string_view fact_games = "Games";
+inline constexpr std::string_view names_and = "{left} and {right}";
+inline constexpr std::string_view names_comma = "{left}, {right}";
+inline constexpr std::string_view fact_join = "{left} · {right}";
+inline constexpr std::string_view name_met = "{name} ✓";
+inline constexpr std::string_view name_off = "{name} off";
+inline constexpr std::string_view needs_which_off = "Needs {name}, which is off";
+inline constexpr std::string_view needs_which_are_off = "Needs {names}, which are off";
+inline constexpr std::string_view needs_which_on = "Needs {name} · on";
+inline constexpr std::string_view needs_which_are_on = "Needs {names} · on";
+inline constexpr std::string_view for_demo_only = "For the Total Annihilation demo only";
+inline constexpr std::string_view for_game_only = "For {name} only";
+inline constexpr std::string_view action_turn_on = "TURN ON {name}";
+inline constexpr std::string_view turn_on_then_play =
+    "Turning it on applies when the Library closes, and then PLAY NOW works.";
+inline constexpr std::string_view turn_on_then_use =
+    "Turning it on applies when the Library closes, and then USE NOW works.";
+inline constexpr std::string_view turn_on_several_play =
+    "Turning them on applies when the Library closes, and then PLAY NOW works.";
+inline constexpr std::string_view turn_on_several_use =
+    "Turning them on applies when the Library closes, and then USE NOW works.";
+inline constexpr std::string_view turn_on_applies =
+    "Turning it on applies when the Library closes.";
+inline constexpr std::string_view turn_on_several_applies =
+    "Turning them on applies when the Library closes.";
+inline constexpr std::string_view mod_unloaded_because =
+    "{mod} was unloaded because {name} is off. The game plays with No Mod.";
+inline constexpr std::string_view mod_unloaded_note =
+    "The mod was unloaded because an expansion it needs is off. The game plays with No Mod.";
+
 } // namespace words
 
 /// One place of a pattern and its value.
