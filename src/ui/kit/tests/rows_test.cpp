@@ -491,13 +491,14 @@ const std::vector<Expected> kControlsTall{
 };
 
 /// Controls, its first, second, fourth and fifth rows locked, the fifth's
-/// hint its status, with the game's fonts.
+/// hint its status, with the game's fonts. The status switch stays, faded,
+/// with the lock left of it, as every other switch does.
 const std::vector<Expected> kControlsLocked{
     {54, 47, {158, 63, 93, 16}, {259, 63, 148, 16}, {81}, {415, 63, 52, 16}, {}},
     {101, 79, {158, 110, 153, 16}, {319, 110, 148, 16}, {128, 140}, {158, 156, 200, 16}, {}},
     {180, 79, {158, 189, 309, 16}, {}, {207, 219}, {158, 235, 200, 16}, {}},
     {259, 59, {158, 268, 41, 16}, {207, 268, 148, 16}, {286, 298}, {363, 268, 104, 16}, {}},
-    {318, 59, {158, 327, 153, 16}, {319, 327, 148, 16}, {345, 357}, {}, {}},
+    {318, 59, {158, 327, 93, 16}, {259, 327, 148, 16}, {345, 357}, {415, 327, 52, 16}, {}},
     {377, 47, {158, 386, 249, 16}, {}, {404}, {415, 386, 52, 16}, {}},
 };
 
@@ -507,7 +508,7 @@ const std::vector<Expected> kControlsLockedTall{
     {101, 82, {158, 110, 153, 16}, {319, 110, 148, 16}, {128, 143}, {158, 159, 200, 16}, {}},
     {183, 82, {158, 192, 309, 16}, {}, {210, 225}, {158, 241, 200, 16}, {}},
     {265, 62, {158, 274, 41, 16}, {207, 274, 148, 16}, {292, 307}, {363, 274, 104, 16}, {}},
-    {327, 62, {158, 336, 153, 16}, {319, 336, 148, 16}, {354, 369}, {}, {}},
+    {327, 62, {158, 336, 93, 16}, {259, 336, 148, 16}, {354, 369}, {415, 336, 52, 16}, {}},
     {389, 47, {158, 398, 249, 16}, {}, {416}, {415, 398, 52, 16}, {}},
 };
 
@@ -527,11 +528,11 @@ const std::vector<Expected> kGraphicsTall{
 };
 
 /// Graphics' first three rows, locked, with the game's fonts: the strip,
-/// whose hint is its status, shows its lock in its place; the sliders keep
-/// their tracks.
+/// whose hint is its status, stays, faded, with the lock left of it; the
+/// sliders keep their tracks and the lock at the label line's right.
 const std::vector<Expected> kGraphicsLocked{
     {54, 65, {158, 63, 153, 16}, {319, 63, 148, 16}, {81}, {158, 97, 189, 14}, {357, 97, 110, 14}},
-    {119, 59, {158, 128, 153, 16}, {319, 128, 148, 16}, {146, 158}, {}, {}},
+    {119, 59, {158, 128, 28, 16}, {194, 128, 148, 16}, {146, 158}, {350, 128, 117, 16}, {}},
     {178,
      77,
      {158, 187, 153, 16},
@@ -544,7 +545,7 @@ const std::vector<Expected> kGraphicsLocked{
 /// Graphics' first three rows, locked, with the modern fonts' taller hints.
 const std::vector<Expected> kGraphicsLockedTall{
     {54, 65, {158, 63, 153, 16}, {319, 63, 148, 16}, {81}, {158, 97, 189, 14}, {357, 97, 110, 14}},
-    {119, 62, {158, 128, 153, 16}, {319, 128, 148, 16}, {146, 161}, {}, {}},
+    {119, 62, {158, 128, 28, 16}, {194, 128, 148, 16}, {146, 161}, {350, 128, 117, 16}, {}},
     {181,
      80,
      {158, 190, 153, 16},
@@ -686,10 +687,9 @@ void every_kind_lies_by_the_rows_rules() {
     const kit::PlacedRows narrow = kit::place_rows(views_of(locked, sample), dialog_column(false));
     check_rect("Narrow link", 0, "control", narrow.rows[0].control_area, {158, 63, 60, 16});
 
-    // A locked value row whose label and value do not fit on one line with
-    // the lock: the label keeps its line and the value stands on the next,
-    // before the lock in the button's place when the hint is the row's
-    // status, else before the lock and the button.
+    // A locked value row whose control stands below the label: the lock
+    // stays at the right of the label line, and the value stands on the
+    // button's line, before the button. A status hint does not hide it.
     std::array<kit::RowSpec<Sample>, 2> values{
         locked_in_game(
             kit::value_and_button(
@@ -721,16 +721,34 @@ void every_kind_lies_by_the_rows_rules() {
     value_views[0].hint_is_status = true;
     value_views[1].control_below = true;
     const std::vector<Expected> value_rows{
-        {54, 65, {158, 63, 309, 16}, {319, 81, 148, 16}, {99}, {}, {158, 81, 153, 16}},
+        {54,
+         65,
+         {158, 63, 153, 16},
+         {319, 63, 148, 16},
+         {99},
+         {391, 81, 76, 16},
+         {158, 81, 225, 16}},
         {119,
          65,
-         {158, 128, 309, 16},
-         {235, 146, 148, 16},
+         {158, 128, 153, 16},
+         {319, 128, 148, 16},
          {164},
          {391, 146, 76, 16},
-         {158, 146, 69, 16}},
+         {158, 146, 225, 16}},
     };
-    placed_as("Locked values", kit::place_rows(value_views, dialog_column(false)), value_rows, 184);
+    const kit::PlacedRows locked_values = kit::place_rows(value_views, dialog_column(false));
+    placed_as("Locked values", locked_values, value_rows, 184);
+    kit::DisplayList locked_list;
+    kit::add_rows(locked_list, locked_values, {});
+    bool saw_button = false;
+    for (const kit::Item& item : locked_list.items) {
+        const auto* look = std::get_if<kit::ButtonLook>(&item.look);
+        if (look == nullptr)
+            continue;
+        saw_button = true;
+        OA_CHECK(look->style == kit::ButtonStyle::plain);
+    }
+    OA_CHECK(saw_button);
 }
 
 // ---- Scroll ----

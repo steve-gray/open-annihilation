@@ -384,14 +384,13 @@ void fit_measured(
         const int32_t button = shown.control_width > 0
                                    ? shown.control_width
                                    : oa::ui::kit::compact_metrics.button_row_width;
-        // What stands at the line's right end: the button, with the lock
-        // before it, or the lock alone in the button's place when the row's
-        // hint is its status.
+        // What stands at the label line's right: the button, with the lock
+        // before it. The lock never takes the button's place.
         int32_t beside = button;
         if (!shown.lock.empty()) {
             const int32_t lock = shown.lock_columns > 0 ? shown.lock_columns
                                                         : oa::ui::kit::compact_metrics.lock_width;
-            beside = shown.hint_is_status ? lock : lock + label_gap + button;
+            beside = lock + label_gap + button;
         }
         const int32_t side =
             (label_w > 0 ? label_w + label_gap : 0) + value_width + label_gap + beside;
@@ -424,7 +423,7 @@ void fit_measured(
         if (control <= 0)
             return int32_t{0};
         int32_t width = label_width + label_gap + control;
-        if (!shown.lock.empty() && !shown.hint_is_status)
+        if (!shown.lock.empty())
             width += (shown.lock_columns > 0 ? shown.lock_columns
                                              : oa::ui::kit::compact_metrics.lock_width) +
                      label_gap;
@@ -442,12 +441,12 @@ void fit_measured(
         for (const std::string& caption : shown.captions)
             least = std::max(least, small(caption) + 8);
         const int32_t beside = shown.lock.empty() ? 0 : lock_span();
-        // Beside the label. A caption that does not fit there takes the line
-        // under the label, as wide as the caption. The lock stands on that
-        // line too, so the caption stays inside what the section leaves it.
+        // Beside the label and the lock. A caption that does not fit there
+        // takes the line under the label. The lock stays on the label line,
+        // so the dropped strip is as wide as the section.
         const int32_t room = available_width - label_width - label_gap - beside;
         const int32_t segment = (room - 2) / shown.count;
-        const int32_t full = std::max((available_width - beside - 2) / shown.count, int32_t{1});
+        const int32_t full = std::max((available_width - 2) / shown.count, int32_t{1});
         if (segment < least) {
             shown.control_below = true;
             shown.control_width = std::min(std::max(least, shown.control_width), full);
@@ -503,8 +502,6 @@ kit::RowView row_view(
     fit_measured(shown, available_width, small_width, regular_width);
     return shown;
 }
-
-void fit_locked_welcome(Rows& rows, kit::PlacedRows* placed);
 
 Rows place_section(
     const Dialog& dialog,
@@ -577,104 +574,7 @@ Rows place_section(
     }
     if (placed != nullptr)
         *placed = std::move(kit_rows);
-    // Welcome setup's lock sentence is wider than the kit's lock, and at
-    // Compact the label line cannot also hold the label and SHOW AGAIN in
-    // the game's fonts. Widen that one locked row; the kit's metrics stay.
-    fit_locked_welcome(rows, placed);
     return rows;
-}
-
-/// Gives a locked Welcome setup row room for its label and its lock sentence
-/// in the game's fonts. The kit's lock is 148 columns, so the sentence has
-/// 140, and Compact leaves the label 69: the game's regular face needs 96
-/// for "Welcome setup" and its small face 159 for the sentence. The lock
-/// grows to the sentence at the kit's estimate of 7 a character. SHOW AGAIN
-/// stays on the label line where the line is wide enough, and drops under it
-/// where it is not, still drawn and still not pressable. Later rows move
-/// down with it. The kit's placement, which the display list is built from,
-/// moves with the rows the layout draws. An unlocked row is left as placed.
-///
-/// @param[in,out] rows the section's rows
-/// @param[in,out] placed the kit's placement of the same rows; may be null
-void fit_locked_welcome(Rows& rows, kit::PlacedRows* placed) {
-    std::size_t found = rows.rows.size();
-    for (std::size_t at = 0; at < rows.rows.size(); ++at) {
-        if (rows.rows[at].setting == Setting::welcome_setup && rows.rows[at].lock != Lock::none) {
-            found = at;
-            break;
-        }
-    }
-    if (found == rows.rows.size())
-        return;
-    Row& row = rows.rows[found];
-    if (row.label.width <= 0 || row.lock_area.height <= 0 || row.control_area.width <= 0)
-        return;
-    // The game's regular face of this label is wider than the kit's 7.
-    constexpr int32_t label_character = 8;
-    const int32_t label_need =
-        static_cast<int32_t>(oa::ui::kit::character_count("Welcome setup")) * label_character;
-    const int32_t sentence =
-        static_cast<int32_t>(oa::ui::kit::character_count(lock_text(Lock::main_menu))) *
-        oa::ui::kit::estimated_character_width;
-    const int32_t lock_columns =
-        std::max(row.lock_area.width, sentence + padlock_width + padlock_gap);
-    const int32_t right = row.control_area.x + row.control_area.width;
-    const int32_t room = right - row.label.x;
-    const int32_t button = row.control_area.width;
-    if (lock_columns + label_gap >= room)
-        return;
-    const bool button_fits = label_need + label_gap + lock_columns + label_gap + button <= room;
-    int32_t drop = 0;
-    row.lock_area.width = lock_columns;
-    if (button_fits) {
-        row.lock_area.x = row.control_area.x - label_gap - lock_columns;
-    } else {
-        row.lock_area.x = right - lock_columns;
-        drop = hint_gap + row.control_area.height;
-        row.control_area.x = right - button;
-        row.control_area.y += drop;
-        for (std::size_t hint = 0; hint < row.hint_lines; ++hint)
-            row.hints[hint].y += drop;
-        row.height += drop;
-        rows.bottom += drop;
-        for (std::size_t after = found + 1; after < rows.rows.size(); ++after) {
-            Row& later = rows.rows[after];
-            later.top += drop;
-            later.label.y += drop;
-            later.lock_area.y += drop;
-            for (std::size_t hint = 0; hint < later.hint_lines; ++hint)
-                later.hints[hint].y += drop;
-            later.control_area.y += drop;
-            later.value.y += drop;
-        }
-    }
-    row.label.width = row.lock_area.x - label_gap - row.label.x;
-    if (placed == nullptr || found >= placed->rows.size())
-        return;
-    kit::PlacedRow& kit_row = placed->rows[found];
-    kit_row.lock_area.x = row.lock_area.x;
-    kit_row.lock_area.width = row.lock_area.width;
-    kit_row.label.width = row.label.width;
-    kit_row.control_area.x = row.control_area.x;
-    kit_row.control_area.y = row.control_area.y;
-    kit_row.height = row.height;
-    if (kit_row.value.y == row.label.y && kit_row.value.x == row.label.x)
-        kit_row.value.width = row.label.width;
-    for (std::size_t hint = 0; hint < kit_row.hints.size() && hint < row.hint_lines; ++hint)
-        kit_row.hints[hint].y = row.hints[hint].y;
-    if (drop == 0)
-        return;
-    placed->bottom += drop;
-    for (std::size_t after = found + 1; after < placed->rows.size(); ++after) {
-        kit::PlacedRow& shifted = placed->rows[after];
-        shifted.top += drop;
-        shifted.label.y += drop;
-        shifted.lock_area.y += drop;
-        for (kit::Rect& hint_box : shifted.hints)
-            hint_box.y += drop;
-        shifted.control_area.y += drop;
-        shifted.value.y += drop;
-    }
 }
 
 Rows place_rows(

@@ -390,7 +390,9 @@ void push_control(
             break;
         ButtonLook look;
         look.caption = view.buttons.front();
-        look.style = view.enabled ? ButtonStyle::accent : ButtonStyle::plain;
+        // A locked accent button loses its accent and is drawn plain, under
+        // the row's fade. A button the row itself disables is plain too.
+        look.style = view.enabled && view.lock.empty() ? ButtonStyle::accent : ButtonStyle::plain;
         look.hovered = hovered;
         look.held = held;
         look.enabled = view.enabled;
@@ -841,56 +843,39 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
         const Rect right_lock{placement.right - lock_width, label_top, lock_width, line_height};
         int32_t label_right = placement.right;
         const int32_t control_width = label_line_control_width(view);
-        // A label that does not fit beside its control, or beside its lock,
-        // takes the whole line. The control and the lock stand under it. A
-        // slider's track stays on its own line either way.
-        const bool drop_line = view.control_below && (control_width > 0 || locked);
+        // A label-line control that does not fit beside its label and its
+        // lock stands on the next line. The lock stays on the label line:
+        // immediately left of a control that sits there, otherwise at the
+        // line's right. A slider's track, a drop-down and a text field stay
+        // on a line of their own either way. A lock never hides a control.
+        const bool drop_line = view.control_below && control_width > 0;
         int32_t control_top = label_top;
         if (drop_line)
             control_top = label_top + line_height + kMetrics.hint_gap;
+        const bool on_label = control_width > 0 && !drop_line && view.kind != RowKind::link;
         if (drop_line) {
-            const bool control_here = control_width > 0 && !view.hint_is_status;
-            if (control_here) {
-                row.control_area = {
-                    placement.right - control_width, control_top, control_width, line_height
-                };
-            }
-            if (locked && !view.hint_is_status && control_here) {
-                row.lock_area = {
-                    row.control_area.x - kMetrics.label_gap - lock_width,
-                    control_top,
-                    lock_width,
-                    line_height
-                };
-            } else if (locked) {
-                row.lock_area = {
-                    placement.right - lock_width, control_top, lock_width, line_height
-                };
-            }
-        } else if (control_width == 0 || (locked && view.hint_is_status)) {
-            // A control of a line of its own leaves the lock the label line's
-            // right; a row whose hint is its status shows its lock where its
-            // control would be.
-            if (locked) {
-                row.lock_area = right_lock;
-                label_right = row.lock_area.x - kMetrics.label_gap;
-            }
-        } else {
+            row.control_area = {
+                placement.right - control_width, control_top, control_width, line_height
+            };
+        } else if (on_label) {
             row.control_area = {
                 placement.right - control_width, label_top, control_width, line_height
             };
-            label_right = row.control_area.x - kMetrics.label_gap;
-            // Any other locked control keeps its place, so that its value
-            // shows, with its lock left of it.
-            if (locked) {
+        }
+        if (locked) {
+            if (on_label) {
                 row.lock_area = {
                     row.control_area.x - kMetrics.label_gap - lock_width,
                     label_top,
                     lock_width,
                     line_height
                 };
-                label_right = row.lock_area.x - kMetrics.label_gap;
+            } else {
+                row.lock_area = right_lock;
             }
+            label_right = row.lock_area.x - kMetrics.label_gap;
+        } else if (on_label) {
+            label_right = row.control_area.x - kMetrics.label_gap;
         }
         if (view.kind == RowKind::link) {
             // A link stands alone where the label would, short of its lock.
@@ -943,17 +928,16 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
             break;
         }
         case RowKind::value_and_button:
-            // A label and a value that do not fit on one line with the button,
-            // or with the lock: the label keeps the first line and the value
-            // stands on the next, before the lock where there is one, else
-            // before the button. An empty label leaves the value the first line.
-            if (drop_line && !view.label.empty() &&
-                (has_area(row.lock_area) || has_area(row.control_area))) {
-                const Rect& after = has_area(row.lock_area) ? row.lock_area : row.control_area;
-                const int32_t value_right = after.x - kMetrics.label_gap;
+            // A label and a value that do not fit on one line with the button
+            // and the lock: the label keeps the first line, the lock stays
+            // there, and the value stands on the control's line, ending
+            // label_gap before the button. An empty label leaves the value
+            // the first line.
+            if (drop_line && !view.label.empty() && has_area(row.control_area)) {
+                const int32_t value_right = row.control_area.x - kMetrics.label_gap;
                 row.value = {
                     placement.left,
-                    control_top,
+                    row.control_area.y,
                     std::max(value_right - placement.left, int32_t{0}),
                     line_height
                 };
@@ -1061,11 +1045,21 @@ void add_rows(DisplayList& list, const PlacedRows& placed, const RowsState& stat
         push_frame(list, placed, row, clip);
         push_control(list, row, control, state);
         if (locked) {
-            // A status is the player's explanation and keeps its strength:
-            // such a row fades only its label line, down to its status.
-            const int32_t faded = view.hint_is_status ? row.lock_area.y + kMetrics.regular_line +
-                                                            kMetrics.hint_gap - (row.top + 1)
-                                                      : row.height - 1;
+            // A status is the player's explanation and keeps its strength.
+            // Such a row fades its label line, and a control that dropped
+            // under it, and stops at the status. Every other locked row
+            // fades whole.
+            int32_t cover_end = row.top + row.height;
+            if (view.hint_is_status) {
+                cover_end = row.lock_area.y + kMetrics.regular_line + kMetrics.hint_gap;
+                if (has_area(row.control_area)) {
+                    const int32_t control_end =
+                        row.control_area.y + row.control_area.height + kMetrics.hint_gap;
+                    if (control_end > cover_end)
+                        cover_end = control_end;
+                }
+            }
+            const int32_t faded = cover_end - (row.top + 1);
             push_item(
                 list,
                 Role::locked_fade,

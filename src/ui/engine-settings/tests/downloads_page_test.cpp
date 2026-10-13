@@ -236,20 +236,28 @@ kit::PlacedRows placed_rows(const settings::Dialog& dialog) {
 }
 
 /// Checks that a row's hint is the text, broken as the page breaks it.
+/// With no install ID, the last line is "Made at your first download".
 ///
 /// @param view the row
 /// @param hint the hint
 /// @param dialog the dialog, for the line width
+/// @param unmade true when the sentence is the switch's second hint
 void hint_matches(
-    const kit::RowView& view, const std::string& hint, const settings::Dialog& dialog
+    const kit::RowView& view,
+    const std::string& hint,
+    const settings::Dialog& dialog,
+    bool unmade = false
 ) {
     const int32_t room = static_cast<int32_t>(geometry::sizes_of(dialog).hint_line_characters) *
                          oa::ui::kit::estimated_character_width;
     const std::string shown(geometry::shown_text(hint));
     const std::vector<std::string> lines =
         oa::ui::kit::wrap(shown, std::max(room, int32_t{1}), &geometry::estimated_width);
-    OA_CHECK(view.hints.size() == lines.size());
-    for (std::size_t index = 0; index < view.hints.size() && index < lines.size(); ++index) {
+    const std::size_t expect = lines.size() + (unmade ? std::size_t{1} : std::size_t{0});
+    OA_CHECK(view.hints.size() == expect);
+    if (unmade && !view.hints.empty())
+        OA_CHECK(view.hints.back() == "Made at your first download");
+    for (std::size_t index = 0; index < lines.size() && index < view.hints.size(); ++index) {
         if (view.hints[index] != lines[index]) {
             std::fprintf(
                 stderr,
@@ -327,7 +335,10 @@ void rows_follow_the_registries() {
     const kit::PlacedRows one_rows = placed_rows(one);
     OA_CHECK(one_rows.rows.size() == 4);
     OA_CHECK(one_rows.rows[1].view.label == "Install ID");
+    OA_CHECK(one_rows.rows[2].view.label == "Your install ID");
+    OA_CHECK(one_rows.rows[2].view.value == kShownId);
     OA_CHECK(layout_has(one, "Install ID"));
+    OA_CHECK(layout_has(one, "Your install ID"));
     hint_matches(one_rows.rows[1].view, install_hint("Core Prime"), one);
 
     settings::Dialog three = opened(offer_of({
@@ -336,7 +347,7 @@ void rows_follow_the_registries() {
         registry_row("north-archive", "North Archive", false, true, {}),
     }));
     const kit::PlacedRows three_rows = placed_rows(three);
-    OA_CHECK(three_rows.rows.size() == 8);
+    OA_CHECK(three_rows.rows.size() == 7);
     OA_CHECK(settings::scroll_limit(three) > 0);
     OA_CHECK(three_rows.rows[1].view.label == "Install ID \u00b7 Core Prime");
     OA_CHECK(three_rows.rows[3].view.label == "Install ID \u00b7 Ridge");
@@ -349,7 +360,7 @@ void rows_follow_the_registries() {
     );
     hint_matches(three_rows.rows[1].view, install_hint("Core Prime"), three);
     hint_matches(three_rows.rows[3].view, install_hint("Ridge"), three);
-    hint_matches(three_rows.rows[5].view, install_hint("North Archive"), three);
+    hint_matches(three_rows.rows[5].view, install_hint("North Archive"), three, true);
     OA_CHECK(layout_has(three, "Install ID \u00b7 Core Prime"));
     three.scroll[static_cast<std::size_t>(Page::downloads)] = settings::scroll_limit(three);
     OA_CHECK(layout_has(three, "Install ID \u00b7 North Archive"));
@@ -393,12 +404,16 @@ void values_show_each_state() {
     offer.install_ids[0].made = false;
     offer.install_ids[0].id_text.clear();
     dialog = opened(offer);
-    OA_CHECK(value_has(dialog, "Made at your first download"));
+    OA_CHECK(!value_has(dialog, "Made at your first download"));
+    OA_CHECK(layout_has(dialog, "Made at your first download"));
+    OA_CHECK(placed_rows(dialog).rows.size() == 3);
 
     offer.install_ids[0].made = true;
     offer.install_ids[0].id_text = "abcd";
     dialog = opened(offer);
-    OA_CHECK(value_has(dialog, "Made at your first download"));
+    OA_CHECK(!value_has(dialog, "Made at your first download"));
+    OA_CHECK(layout_has(dialog, "Made at your first download"));
+    OA_CHECK(placed_rows(dialog).rows.size() == 3);
 
     offer = offer_of({core_prime()});
     offer.kept_bytes = 0;
@@ -439,9 +454,9 @@ void reset_and_empty_are_disabled_when_they_cannot_act() {
     offer.install_ids[0].on = true;
     offer.install_ids[0].made = false;
     dialog = opened(offer);
-    const NamedControl unmade = control_named(dialog, "settings.install-id.core-prime.reset");
-    OA_CHECK(unmade.found && !unmade.enabled);
-    OA_CHECK(click_caption(dialog, "RESET") != DialogAction::reset_install_id);
+    OA_CHECK(!control_named(dialog, "settings.install-id.core-prime.reset").found);
+    OA_CHECK(layout_has(dialog, "Made at your first download"));
+    OA_CHECK(!layout_has(dialog, "Your install ID"));
 
     offer.kept_bytes = 0;
     dialog = opened(offer);
@@ -463,6 +478,9 @@ void a_game_locks_reset_and_empty() {
     OA_CHECK(layout_has(dialog, "Locked during a game"));
     OA_CHECK(!control_named(dialog, "settings.install-id.core-prime.reset").found);
     OA_CHECK(!control_named(dialog, "settings.downloaded-files.empty").found);
+    OA_CHECK(!value_has(dialog, "412 MB kept for resuming and repairs"));
+    OA_CHECK(layout_has(dialog, "EMPTY"));
+    OA_CHECK(layout_has(dialog, "Your install ID"));
     dialog.focused = settings::first_row_control + 2;
     OA_CHECK(settings::dialog_key(dialog, DialogKey::space) != DialogAction::reset_install_id);
     dialog.focused = settings::first_row_control + 3;

@@ -532,6 +532,7 @@ inline constexpr std::string_view interface_words[] = {
     "Wreck snap radius",
     "Your changes to the profile's hacks apply while on.",
     "Your files",
+    "Your install ID",
     "Zoom",
     "Zoomed out units",
     "and",

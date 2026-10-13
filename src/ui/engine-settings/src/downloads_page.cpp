@@ -95,13 +95,56 @@ enum class Role : uint8_t {
     link,     ///< REGISTRIES IN THE LIBRARY…, on the main menu
 };
 
+const InstallIdRow* offered(const Dialog& dialog, std::size_t registry) noexcept;
+
+/// Tells whether stored text has the 12 hex digits a shown install ID needs.
+///
+/// @param text the stored short form, or a whole ID
+/// @return true when at least 12 hex digits are there
+bool shows_an_id(std::string_view text) noexcept {
+    std::size_t digits = 0;
+    for (const unsigned char character : text) {
+        if (std::isxdigit(character) == 0)
+            continue;
+        ++digits;
+        if (digits >= 12)
+            return true;
+    }
+    return false;
+}
+
+/// Tells whether this registry has an install ID the page can show.
+///
+/// @param dialog the dialog
+/// @param registry the row's place among the offer
+/// @return true when an ID is stored and long enough to show
+bool id_exists(const Dialog& dialog, std::size_t registry) noexcept {
+    const InstallIdRow* row = offered(dialog, registry);
+    return row != nullptr && row->made && shows_an_id(row->id_text);
+}
+
+/// Returns how many rows one registry adds: its switch, and the labelled ID
+/// once one exists.
+///
+/// @param dialog the dialog
+/// @param registry the row's place among the offer
+/// @return 2 when an ID shows, otherwise 1
+std::size_t registry_rows(const Dialog& dialog, std::size_t registry) noexcept {
+    return id_exists(dialog, registry) ? std::size_t{2} : std::size_t{1};
+}
+
 /// Returns how many rows the page has.
 ///
 /// @param dialog the dialog
-/// @return the check, two rows per install ID, the files, and the Library
-///     link on the main menu
+/// @return the check, each registry's switch and its labelled ID once one
+///     exists, the files, and the Library link on the main menu
 std::size_t row_count(const Dialog& dialog) noexcept {
-    return 2 + 2 * dialog.downloads.install_ids.size() + (dialog.library_link ? 1 : 0);
+    std::size_t count = 2;
+    for (std::size_t registry = 0; registry < dialog.downloads.install_ids.size(); ++registry)
+        count += registry_rows(dialog, registry);
+    if (dialog.library_link)
+        ++count;
+    return count;
 }
 
 /// Returns what the row at a place is.
@@ -117,15 +160,33 @@ Role role_of(const Dialog& dialog, std::size_t index) noexcept {
         return Role::link;
     if (index + 1 + (dialog.library_link ? std::size_t{1} : std::size_t{0}) == count)
         return Role::files;
-    return (index % 2) == 1 ? Role::toggle : Role::id_value;
+    std::size_t at = 1;
+    for (std::size_t registry = 0; registry < dialog.downloads.install_ids.size(); ++registry) {
+        if (index == at)
+            return Role::toggle;
+        ++at;
+        if (!id_exists(dialog, registry))
+            continue;
+        if (index == at)
+            return Role::id_value;
+        ++at;
+    }
+    return Role::files;
 }
 
 /// Returns the install ID a row shows.
 ///
+/// @param dialog the dialog
 /// @param index the row's place
 /// @return its place among the offer's rows
-std::size_t registry_of(std::size_t index) noexcept {
-    return (index - 1) / 2;
+std::size_t registry_of(const Dialog& dialog, std::size_t index) noexcept {
+    std::size_t at = 1;
+    for (std::size_t registry = 0; registry < dialog.downloads.install_ids.size(); ++registry) {
+        if (index == at || (id_exists(dialog, registry) && index == at + 1))
+            return registry;
+        at += registry_rows(dialog, registry);
+    }
+    return 0;
 }
 
 /// Tells whether a game is running, which locks RESET and EMPTY.
@@ -217,7 +278,7 @@ std::string install_label(const RowModel& model) {
     const std::string prefix("Install ID");
     if (model.dialog->downloads.install_ids.size() <= 1)
         return prefix;
-    const InstallIdRow* row = offered(*model.dialog, registry_of(model.index));
+    const InstallIdRow* row = offered(*model.dialog, registry_of(*model.dialog, model.index));
     const std::string name = row != nullptr ? row->registry_name : std::string();
     return prefix + " \u00b7 " + name;
 }
@@ -227,7 +288,7 @@ std::string install_label(const RowModel& model) {
 /// @param model the row
 /// @return the hint, as shown
 std::string install_hint(const RowModel& model) {
-    const InstallIdRow* row = offered(*model.dialog, registry_of(model.index));
+    const InstallIdRow* row = offered(*model.dialog, registry_of(*model.dialog, model.index));
     const std::string_view name =
         row != nullptr ? std::string_view(row->registry_name) : std::string_view();
     return geometry::filled(kInstallHint, {{"name", name}});
@@ -257,7 +318,7 @@ std::string install_hint_line(const RowModel& model, std::size_t line) {
 /// @param model the row
 /// @return true when it is on
 bool toggle_get(const RowModel& model) {
-    return switch_on(*model.dialog, registry_of(model.index));
+    return switch_on(*model.dialog, registry_of(*model.dialog, model.index));
 }
 
 /// Sets an install-ID switch. It takes effect at OK.
@@ -265,25 +326,26 @@ bool toggle_get(const RowModel& model) {
 /// @param[in,out] model the row
 /// @param on true for On
 void toggle_set(RowModel& model, bool on) {
-    const std::size_t registry = registry_of(model.index);
+    const std::size_t registry = registry_of(*model.dialog, model.index);
     if (registry < model.dialog->install_id_chosen.size())
         model.dialog->install_id_chosen[registry].on = on;
 }
 
-/// Returns the ID line: the shown ID, "Made at your first download", or "Off".
+/// Returns the labelled row's value: "Off" while the switch is off, else
+/// the shown ID. The row is placed only once an ID exists.
 ///
 /// @param model the row
 /// @return the value
 std::string id_value(const RowModel& model) {
-    if (!switch_on(*model.dialog, registry_of(model.index)))
+    if (!switch_on(*model.dialog, registry_of(*model.dialog, model.index)))
         return "Off";
-    const InstallIdRow* row = offered(*model.dialog, registry_of(model.index));
+    const InstallIdRow* row = offered(*model.dialog, registry_of(*model.dialog, model.index));
     if (row != nullptr && row->made) {
         std::string shown = masked_id(row->id_text);
         if (!shown.empty())
             return shown;
     }
-    return "Made at your first download";
+    return {};
 }
 
 /// Tells whether RESET can be pressed: an ID is stored and the switch is on.
@@ -293,17 +355,21 @@ std::string id_value(const RowModel& model) {
 bool reset_enabled(const RowModel& model) {
     if (game_running(locks_of(model)))
         return false;
-    if (!switch_on(*model.dialog, registry_of(model.index)))
+    if (!switch_on(*model.dialog, registry_of(*model.dialog, model.index)))
         return false;
-    const InstallIdRow* row = offered(*model.dialog, registry_of(model.index));
+    const InstallIdRow* row = offered(*model.dialog, registry_of(*model.dialog, model.index));
     return row != nullptr && row->made && !masked_id(row->id_text).empty();
 }
 
-/// Returns the downloaded files' size line.
+/// Returns the downloaded files' size line, or nothing while a game runs.
 ///
 /// @param model the row
-/// @return the value
+/// @return the value; empty while locked
 std::string files_value(const RowModel& model) {
+    // While a game is running the row shows its label, the lock and EMPTY,
+    // and no size line.
+    if (game_running(locks_of(model)))
+        return {};
     const DownloadsOffer& offer = model.dialog->downloads;
     std::string text;
     if (offer.kept_bytes == 0)
@@ -413,14 +479,11 @@ kit::RowSpec<RowModel> spec_for(const RowModel& model) {
     }
     if (role == Role::id_value) {
         kit::RowSpec<RowModel> spec = kit::value_and_button(
-            "install-value", {}, id_value, "RESET", "reset", reset_install_id_action
+            "install-value", "Your install ID", id_value, "RESET", "reset", reset_install_id_action
         );
         spec.control_width = geometry::manage_button_width;
         spec.enabled = reset_enabled;
         spec.lock = game_lock;
-        // In a game the lock stands where RESET was. Keeping both on the
-        // label line leaves the value too narrow for the game's font.
-        spec.hint_is_status = game_running(locks_of(model));
         return spec;
     }
     if (role == Role::link) {
@@ -441,7 +504,6 @@ kit::RowSpec<RowModel> spec_for(const RowModel& model) {
     spec.control_width = geometry::manage_button_width;
     spec.enabled = files_enabled;
     spec.lock = game_lock;
-    spec.hint_is_status = game_running(locks_of(model));
     return spec;
 }
 
@@ -450,7 +512,7 @@ kit::RowSpec<RowModel> spec_for(const RowModel& model) {
 /// @param[in,out] dialog the dialog
 /// @param model the RESET row
 void note_registry(Dialog& dialog, const RowModel& model) {
-    const std::size_t registry = registry_of(model.index);
+    const std::size_t registry = registry_of(*model.dialog, model.index);
     if (registry < dialog.install_id_chosen.size())
         dialog.install_id_registry = dialog.install_id_chosen[registry].registry_id;
     else if (const InstallIdRow* row = offered(dialog, registry))
@@ -537,11 +599,20 @@ geometry::Rows place(
         const kit::RowSpec<RowModel> spec = spec_for(model);
         kit::RowView shown = kit::view_of(spec, model, &geometry::shown_text);
         wrap_shown_hints(shown, room, measure);
+        // With no install ID yet, "Made at your first download" is the
+        // switch's second hint line, not a row of its own.
+        const Role role = role_of(dialog, index);
+        if (role == Role::toggle && !id_exists(dialog, registry_of(dialog, index)) &&
+            shown.hints.size() < geometry::most_row_lines) {
+            shown.hints.emplace_back(
+                std::string(geometry::shown_text("Made at your first download"))
+            );
+            shown.notices.push_back(false);
+        }
         geometry::fit_control(shown, sized.content_width, measure);
         geometry::fit_measured(shown, sized.content_width, measure, regular);
-        const Role role = role_of(dialog, index);
         if (role == Role::toggle || role == Role::id_value) {
-            const InstallIdRow* row = offered(dialog, registry_of(index));
+            const InstallIdRow* row = offered(dialog, registry_of(dialog, index));
             shown.id =
                 std::string("install-id.") + (row != nullptr ? row->registry_id : std::string());
         }

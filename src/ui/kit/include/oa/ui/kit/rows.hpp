@@ -993,8 +993,8 @@ struct PlacedRow {
     Rect lock_area{};              ///< its padlock and lock text; empty while unlocked
     std::vector<Rect> hints{};     ///< its hint lines, top to bottom
     /// Its switch, strip, button or buttons, link, slider track, drop-down
-    /// field or text field; empty for a text row, and for a locked row whose
-    /// hint is its status where its lock stands in the control's place.
+    /// field or text field; empty for a text row. A lock never takes this
+    /// place: the control stays, drawn faded.
     Rect control_area{};
     /// A slider's value; the label's box for a value_and_button or a text row,
     /// which shows its value there.
@@ -1016,11 +1016,11 @@ struct PlacedRows {
 /// widths and its border), a button (button_row_width) or a row of buttons
 /// (folder_button_widths and folder_button_gap) stands at the label line's
 /// right, the label ending label_gap short of it. A locked row's lock,
-/// lock_width wide, stands label_gap left of such a control, or at the label
-/// line's right for any other row, or in the control's place when the row's
-/// hint is its status. A value row's value shares its label's line, or, when
-/// the view says the control stands below, the next line, ending label_gap
-/// before the lock where there is one, else before the button. A link
+/// lock_width wide, stands on the label line, label_gap left of a control
+/// that sits there, or at the label line's right for any other row. The
+/// control stays where an unlocked row puts it. A value row's value shares
+/// its label's line, or, when the view says the control stands below, the
+/// control's line, ending label_gap before the button. A link
 /// stands alone at the label line's left, as wide
 /// as the line or its control width, and short of its lock. The hint lines
 /// follow hint_gap under the label line, small_line each, tall_hint_line_gap

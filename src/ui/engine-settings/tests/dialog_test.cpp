@@ -597,12 +597,11 @@ void every_part_lies_inside_the_dialog_and_apart() {
                 for (std::size_t index = 0; index < rows.rows.size(); ++index) {
                     const auto& row = rows.rows[index];
                     CHECK(in_columns(row.label));
-                    // A locked row whose hint lines are its status has no control,
-                    // and neither does a text row: the file-type heading and
-                    // the File types note.
+                    // A text row has no control: the file-type heading, the File
+                    // types note, and Game Content's sentence and bundles.
+                    // A locked row keeps its control.
                     if (row.control_area.width == 0) {
                         CHECK(
-                            (row.hint_is_status && row.lock != Lock::none) ||
                             row.setting == Setting::file_type_registration ||
                             row.setting == Setting::file_types_note || row.content >= 0
                         );
@@ -3094,6 +3093,7 @@ void the_hover_follows_the_rows_under_a_still_pointer() {
 void locked_switch_rows_keep_their_value_in_sight() {
     // The fourth row, a switch whose hint lines are its status, locked
     // during a game; the fifth, any other switch, set on the command line.
+    // Both keep the switch, faded, with the lock left of it.
     Section section = five_rows();
     section.locks = {
         {Setting::escape_opens_menu, Lock::in_game},
@@ -3106,13 +3106,13 @@ void locked_switch_rows_keep_their_value_in_sight() {
     current.unit_limit = 900;
     Scrolling five(std::move(section), current);
     const auto rows = five.rows().rows.rows;
-    // Its lock where the switch was, ending where the switch ended; no
-    // switch; the label 153 columns wide, 8 short of the lock.
+    // The switch kept, its lock 8 columns left of it and the label 93 wide,
+    // the same places as any other locked switch.
     const auto& status = rows[3];
     CHECK(status.hint_is_status);
-    CHECK(status.control_area.width == 0);
-    CHECK(same_rect(status.lock_area, {319, 264, 148, 16}));
-    CHECK(same_rect(status.label, {158, 264, 153, 16}));
+    CHECK(same_rect(status.control_area, {415, 264, 52, 16}));
+    CHECK(same_rect(status.lock_area, {259, 264, 148, 16}));
+    CHECK(same_rect(status.label, {158, 264, 93, 16}));
     // The switch kept, its lock 8 columns left of it and the label 93 wide.
     const auto& kept = rows[4];
     CHECK(!kept.hint_is_status);
@@ -3127,8 +3127,8 @@ void locked_switch_rows_keep_their_value_in_sight() {
     // A locked row is as tall as it is unlocked: the limit stays 80.
     CHECK(five.rows().limit == 80);
 
-    // At the end both show whole: the padlock and lock text, the kept
-    // switch's Off and On with no control, and no switch for the status row.
+    // At the end both show whole: the padlock and lock text, and each
+    // switch's Off and On with no control.
     five.dialog.scroll[static_cast<std::size_t>(Page::graphics)] = 80;
     const auto parts = settings::dialog_layout(five.dialog);
     CHECK(find_part(parts, "Locked during a game", settings::no_control) != nullptr);
@@ -3140,20 +3140,23 @@ void locked_switch_rows_keep_their_value_in_sight() {
         CHECK(part.control != settings::first_row_control + 4);
         if (part.text != "OFF" && part.text != "ON")
             continue;
-        status_captions += part.rect.y == 185 ? 1 : 0;
+        if (part.rect.y == 185) {
+            CHECK(part.control == settings::no_control);
+            ++status_captions;
+        }
         if (part.rect.y == 244) {
             CHECK(part.control == settings::no_control);
             ++kept_captions;
         }
     }
-    CHECK(status_captions == 0);
+    CHECK(status_captions == 2);
     CHECK(kept_captions == 2);
     bool status_padlock = false;
     bool kept_padlock = false;
     for (const auto& part : parts) {
         if (!part.text.empty() || part.control != settings::no_control)
             continue;
-        status_padlock = status_padlock || same_rect(part.rect, {319, 184, 5, 16});
+        status_padlock = status_padlock || same_rect(part.rect, {259, 184, 5, 16});
         kept_padlock = kept_padlock || same_rect(part.rect, {259, 243, 5, 16});
     }
     CHECK(status_padlock && kept_padlock);
@@ -3667,9 +3670,9 @@ void the_new_rows_lock_in_their_own_forms() {
     state.shared_game = true;
     CHECK(settings::settings_locks(state).vertical_sync == Lock::unavailable);
 
-    // Hardware acceleration locked: its lock where the strip was, no strip,
-    // its label 153 wide. Vertical sync locked: its switch kept, the lock 8
-    // columns left of it and its label 93 wide.
+    // Hardware acceleration locked: its strip kept, the lock 8 columns left
+    // of it and its label 41 wide. Vertical sync locked: its switch kept,
+    // the lock 8 columns left of it and its label 93 wide.
     settings::Locks locks{};
     locks.hardware_acceleration = Lock::unavailable;
     locks.vertical_sync = Lock::unavailable;
@@ -3679,17 +3682,16 @@ void the_new_rows_lock_in_their_own_forms() {
     settings::Dialog dialog =
         graphics_page(current, locks, {settings::AccelerationState::no_usable_card, {}, false});
     const auto rows = geometry::open_rows(dialog).rows.rows;
-    CHECK(same_rect(rows[3].lock_area, {319, 264, 148, 16}));
-    CHECK(same_rect(rows[3].label, {158, 264, 153, 16}));
-    CHECK(rows[3].control_area.width == 0);
+    CHECK(same_rect(rows[3].control_area, {363, 264, 104, 16}));
+    CHECK(same_rect(rows[3].lock_area, {207, 264, 148, 16}));
+    CHECK(same_rect(rows[3].label, {158, 264, 41, 16}));
     CHECK(same_rect(rows[4].control_area, {415, 323, 52, 16}));
     CHECK(same_rect(rows[4].lock_area, {259, 323, 148, 16}));
     CHECK(same_rect(rows[4].label, {158, 323, 93, 16}));
     CHECK(geometry::open_rows(dialog).limit == 336);
 
     // Scrolled down to Native pixel density: both lock texts, the status,
-    // the kept switch's captions with no control, none of the strip's, and
-    // no control for either row.
+    // the strip's captions and the kept switch's, each with no control.
     dialog.scroll[static_cast<std::size_t>(Page::graphics)] = 198;
     const auto parts = settings::dialog_layout(dialog);
     int32_t lock_texts = 0;
@@ -3703,7 +3705,7 @@ void the_new_rows_lock_in_their_own_forms() {
         find_part(parts, "Not in use: no usable graphics card was found.", settings::no_control) !=
         nullptr
     );
-    CHECK(find_part(parts, "Basic", settings::no_control) == nullptr);
+    CHECK(find_part(parts, "Basic", settings::no_control) != nullptr);
     // A press where either control is, and every key, leaves them; the
     // keys pass from the first three rows to Native pixel density,
     // Explosion flash and Zoomed out units. After zoom stays locked while
@@ -4411,15 +4413,10 @@ void the_dialog_draws_the_scroll_bar_and_clips_the_rows() {
         CHECK(rect_has(canvas, status->label, faded(kText)));
         CHECK(status->hint_lines >= 1 && rect_has(canvas, status->hints[0], kHint));
         CHECK(rect_has(canvas, status->lock_area, kLock));
-        CHECK(status->control_area.width == 0);
-        const renderer::SourceRect former_switch{
-            geometry::content_right - geometry::switch_width,
-            status->label.y,
-            geometry::switch_width,
-            status->label.height,
-        };
-        CHECK(!rect_has(canvas, former_switch, kControlHover));
-        CHECK(!rect_has(canvas, former_switch, kAccent));
+        CHECK(status->control_area.width > 0);
+        CHECK(rect_has(canvas, status->control_area, faded(kControlHover)));
+        CHECK(!rect_has(canvas, status->control_area, kControlHover));
+        CHECK(!rect_has(canvas, status->control_area, kAccent));
         CHECK(rect_has(canvas, other->label, faded(kText)));
         CHECK(other->hint_lines >= 1 && rect_has(canvas, other->hints[0], faded(kHint)));
         CHECK(rect_has(canvas, other->control_area, faded(kControlHover)));
@@ -4503,8 +4500,9 @@ void the_graphics_page_draws_its_locked_rows() {
     CHECK(at_top.at(159, 291) != kHint);
 
     // At the end, both locked Not available here: Hardware acceleration's
-    // label line faded and its status at full strength, no strip; Vertical
-    // sync faded whole, its switch kept and On without the accent.
+    // label line faded, its strip kept and faded, its status at full
+    // strength; Vertical sync faded whole, its switch kept and On without
+    // the accent.
     settings::Locks locks{};
     locks.hardware_acceleration = Lock::unavailable;
     locks.vertical_sync = Lock::unavailable;
@@ -4523,15 +4521,11 @@ void the_graphics_page_draws_its_locked_rows() {
     if (acceleration != nullptr && sync != nullptr) {
         CHECK(rect_has(canvas, acceleration->label, faded(kText)));
         CHECK(acceleration->hint_lines >= 1 && rect_has(canvas, acceleration->hints[0], kHint));
-        CHECK(acceleration->control_area.width == 0);
-        const renderer::SourceRect former_strip{
-            geometry::content_right - geometry::switch_width,
-            acceleration->label.y,
-            geometry::switch_width,
-            acceleration->label.height,
-        };
-        CHECK(!rect_has(canvas, former_strip, kWell));
-        CHECK(!rect_has(canvas, former_strip, kAccent));
+        CHECK(acceleration->control_area.width > 0);
+        CHECK(rect_has(canvas, acceleration->control_area, faded(kControlHover)));
+        CHECK(rect_has(canvas, acceleration->control_area, faded(kWell)));
+        CHECK(!rect_has(canvas, acceleration->control_area, kAccent));
+        CHECK(!rect_has(canvas, acceleration->control_area, kWell));
         CHECK(rect_has(canvas, sync->label, faded(kText)));
         CHECK(sync->hint_lines >= 1 && rect_has(canvas, sync->hints[0], faded(kHint)));
         CHECK(rect_has(canvas, sync->control_area, faded(kControlHover)));
