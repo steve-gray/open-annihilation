@@ -10,7 +10,6 @@
 
 #include <cstddef>
 #include <optional>
-#include <set>
 #include <stdint.h>
 #include <string>
 #include <string_view>
@@ -25,9 +24,13 @@ struct MapCard {
     /// for a pack map, installed or online. Two cards never share one.
     std::string name{};
     std::string title{};         ///< the title players see; the name when the map gives none
-    std::string pack_name{};     ///< the pack's name; empty for a base map
-    std::string pack_version{};  ///< the pack's version; empty for a base map
+    std::string pack_name{};     ///< the pack's name; empty for a map that is not from a pack
+    std::string pack_version{};  ///< the pack's version; empty for a map that is not from a pack
     std::string registry_name{}; ///< the name of the registry the pack comes from; empty for none
+    /// Where a game or mod map comes from, in English, as the overlay shows it:
+    /// "TA 3.1c", a bundle's name, or the mod's name. Empty when the overlay
+    /// uses the pack's name, or "Downloaded".
+    std::string source_name{};
     /// The map's width and height as its source writes them, in the game's
     /// size units: "16 x 16" from a base map's header, "16x16" from a pack.
     std::string size{};
@@ -44,7 +47,8 @@ struct MapCard {
     uint64_t download_bytes{}; ///< the pack's size, in bytes, for a map online; 0 otherwise
     /// Where the map is.
     enum class Origin : uint8_t {
-        base,      ///< in the base game
+        game,      ///< the base game, or an expansion that is on
+        mod,       ///< a map from the mod's own layers
         installed, ///< in a pack in the player's Maps folder
         online,    ///< in a pack a catalogue offers, not installed
     } origin{};
@@ -63,18 +67,26 @@ struct Filters {
     /// Which maps show, by where they are.
     enum class Source : uint8_t {
         all,       ///< every map
-        base,      ///< the base game's
-        installed, ///< the installed packs'
-        online,    ///< those online, not installed
+        game,      ///< the base game and every expansion that is on
+        mod,       ///< maps from the mod's own layers
+        downloads, ///< installed packs and packs a catalogue offers, together
     } source{};
-    /// The player chips that are on: 2, 3 and 4, and many_players_chip for
-    /// 5–10. A map shows when any of them is among its counts; none on shows
-    /// every map.
-    std::set<int32_t> players{};
-    /// The size chips that are on: 'S', 'M' and 'L'. A map shows when any of
-    /// them matches it; none on shows every map.
-    std::set<char> sizes{};
+    /// The players selector. None, or 0, is Any. Otherwise 2, 3, 4, or
+    /// many_players_chip for 5–10. One choice: a map shows when that choice
+    /// is among its counts.
+    std::optional<int32_t> players{};
+    /// The size selector. None is Any. Otherwise 'S', 'M' or 'L'. One choice.
+    std::optional<char> size{};
     std::string query{}; ///< the search's text; empty matches every map
+};
+
+/// How many cards each source pill counts: every card the players selector,
+/// the size selector and the search leave, whatever source is chosen.
+struct SourceCounts {
+    std::size_t all{};       ///< every such card
+    std::size_t game{};      ///< origin game
+    std::size_t mod{};       ///< origin mod
+    std::size_t downloads{}; ///< origin installed or online
 };
 
 /// The map browser: its cards, the filters, what shows, the selection and
@@ -108,22 +120,28 @@ inline constexpr int32_t small_side_most = 10;
 /// The longer side of a medium map, at most; a larger one is large.
 inline constexpr int32_t medium_side_most = 20;
 
-/// Merges the three sources' maps into one list of cards, each named once.
+/// Merges the four sources' maps into one list of cards, each named once.
 ///
-/// The base maps come first, then the installed pack maps, then those
-/// online, each in the order given, and each card's origin is set by the
-/// list it came from. A card whose name an earlier card has is left out:
-/// so an online map whose game name an installed pack already provides,
-/// from any registry, shows once, as installed (the Library offers its
-/// updates and other registries' copies), and a second registry's copy of
-/// an online map shows once, the first registry's.
+/// The game's maps come first, then the mod's, then the installed pack
+/// maps, then those a catalogue offers, each in the order given, and each
+/// card's origin is set by the list it came from. A card whose name an
+/// earlier card has is left out, so an online map whose game name an
+/// installed pack already provides, from any registry, shows once, as
+/// installed (the Library offers its updates and other registries' copies),
+/// and a second registry's copy of an online map shows once, the first
+/// registry's. No map is dropped for any other reason.
 ///
-/// @param base the base game's maps
+/// @param game the base game's maps and those of the expansions that are on
+/// @param mod the maps from the mod's own layers
 /// @param installed the installed packs' maps
 /// @param online the maps the catalogues offer
 /// @return the cards; no two share a name
-[[nodiscard]] std::vector<MapCard>
-merge_cards(std::vector<MapCard> base, std::vector<MapCard> installed, std::vector<MapCard> online);
+[[nodiscard]] std::vector<MapCard> merge_cards(
+    std::vector<MapCard> game,
+    std::vector<MapCard> mod,
+    std::vector<MapCard> installed,
+    std::vector<MapCard> online
+);
 
 /// Returns a map's width and height from its size text: the first two
 /// numbers it holds, as in "16 x 16" or "16x16".
@@ -181,19 +199,40 @@ struct BaseMapPlayers {
 /// @return true when it matches
 [[nodiscard]] bool players_match(int32_t chip, const MapCard& card) noexcept;
 
-/// Tells whether a search matches a card: its title, name or pack name
-/// holds the query, ignoring ASCII case. An empty query matches.
+/// Tells whether a search matches a card: its title, name, pack name or
+/// source name holds the query, ignoring ASCII case. An empty query matches.
 ///
 /// @param card the card
 /// @param query the search's text
 /// @return true when it matches
 [[nodiscard]] bool query_matches(const MapCard& card, std::string_view query);
 
+/// Returns the English name a card's overlay shows.
+///
+/// An installed or online map whose pack name is its title, or the stem of
+/// its game name before '@', ignoring ASCII case, shows "Downloaded". Any
+/// other card shows source_name when that is set, and otherwise the pack's
+/// name. The name is the catalogue's English key for "Downloaded" and
+/// "TA 3.1c", and the name as given for a bundle, a mod or a pack.
+///
+/// @param card the card
+/// @return the overlay's English name; empty when the card names no source
+[[nodiscard]] std::string overlay_name(const MapCard& card);
+
+/// Counts the cards each source pill shows. The players selector, the size
+/// selector and the search narrow the count. The source filter does not, so
+/// "All (N)" is how many the other selectors leave.
+///
+/// @param browser the browser
+/// @return the four counts
+[[nodiscard]] SourceCounts source_counts(const Browser& browser);
+
 /// Fills what shows from the cards and the filters: the cards that match
-/// the source, any player chip on (a count the map is for), any size chip
-/// on and the search; the base maps first, then the installed, then those
-/// online, each by title ignoring ASCII case, then by name. A selection
-/// that no longer shows is cleared.
+/// the source, the players choice (a count the map is for; Any matches
+/// every map), the size choice and the search. Every match is ordered by
+/// title, ignoring ASCII case, then by name, wherever the map comes from.
+/// A selection that no longer shows is cleared. No card is dropped from
+/// the browser's list.
 ///
 /// @param[in,out] browser the browser; its shown and selected change
 void apply_filters(Browser& browser);
@@ -222,7 +261,7 @@ struct PrimaryAction {
 /// under way; disabled Select with no selection; for a map that does not
 /// fit, disabled with its reason (Download and select for one online,
 /// Select for another); Download and select for an online map that fits or
-/// whose fit is unknown; Select for a base or installed map that fits.
+/// whose fit is unknown; Select for a game, mod or installed map that fits.
 ///
 /// @param browser the browser
 /// @return the button

@@ -52,21 +52,21 @@ std::string filled(
             text.append(pattern, at, std::string::npos);
             break;
         }
-        const std::size_t close = pattern.find('}', open);
-        if (close == std::string::npos) {
+        const std::size_t closing = pattern.find('}', open);
+        if (closing == std::string::npos) {
             text.append(pattern, at, std::string::npos);
             break;
         }
         text.append(pattern, at, open - at);
-        const std::string_view name(pattern.data() + open + 1, close - open - 1);
+        const std::string_view name(pattern.data() + open + 1, closing - open - 1);
         const auto found = std::find_if(values.begin(), values.end(), [&](const auto& value) {
             return value.first == name;
         });
         if (found != values.end())
             text += found->second;
         else
-            text.append(pattern, open, close - open + 1);
-        at = close + 1;
+            text.append(pattern, open, closing - open + 1);
+        at = closing + 1;
     }
     return text;
 }
@@ -97,18 +97,19 @@ constexpr std::string_view word_skirmish_mod = "Skirmish · playing {mod}";
 constexpr std::string_view word_skirmish_game = "Skirmish · No Mod";
 constexpr std::string_view word_battle_room_mod = "Battle room · playing {mod}";
 constexpr std::string_view word_battle_room_game = "Battle room · No Mod";
-constexpr std::array<std::string_view, 4> word_sources{
-    "All", "Base game", "Installed packs", "Online"
-};
+constexpr std::array<std::string_view, 4> word_sources{"All", "Game", "Mod", "Downloads"};
+constexpr std::string_view word_filter_count = "{filter} ({count})";
 constexpr std::string_view word_players_heading = "PLAYERS";
 constexpr std::string_view word_size_heading = "SIZE";
+constexpr std::string_view word_any = "Any";
 constexpr std::array<std::string_view, 4> word_players{"2", "3", "4", "5–10"};
 constexpr std::array<std::string_view, 3> word_sizes{"S", "M", "L"};
 constexpr std::string_view word_search = "Search maps";
 constexpr std::string_view word_loading = "Loading preview";
 constexpr std::string_view word_no_preview = "No preview";
-constexpr std::string_view word_base_chip = "Base";
-constexpr std::string_view word_online_chip = "Online";
+constexpr std::string_view word_downloaded = "Downloaded";
+constexpr std::string_view word_ta = "TA 3.1c";
+constexpr std::string_view word_close = "Close";
 constexpr std::string_view word_does_not_fit_chip = "Doesn't fit";
 constexpr std::string_view word_card_line = "{players} · {size}";
 constexpr std::string_view word_players_one = "1 player";
@@ -126,17 +127,9 @@ constexpr std::string_view word_downloading = "Downloading…";
 constexpr std::string_view word_none_selected = "Choose a map";
 constexpr std::string_view word_no_maps = "No map matches these filters";
 
-/// The automation names of the source chips, in their order.
+/// The automation names of the source pills, in their order.
 constexpr std::array<std::string_view, 4> source_names{
-    name_filter_all, name_filter_base, name_filter_installed, name_filter_online
-};
-/// The automation names of the players chips, in their order.
-constexpr std::array<std::string_view, 4> players_names{
-    name_players_2, name_players_3, name_players_4, name_players_many
-};
-/// The automation names of the size chips, in their order.
-constexpr std::array<std::string_view, 3> size_names{
-    name_size_small, name_size_medium, name_size_large
+    name_filter_all, name_filter_game, name_filter_mod, name_filter_downloads
 };
 
 /// The window's rows and columns at a size class.
@@ -182,9 +175,11 @@ Window window_of(const kit::Frame& frame) {
 
 /// Where the filter bar's parts lie.
 struct Bar {
-    std::array<kit::Rect, 4> sources{}; ///< the source chips
-    std::array<kit::Rect, 4> players{}; ///< the players chips
-    std::array<kit::Rect, 3> sizes{};   ///< the size chips
+    std::array<kit::Rect, 4> sources{}; ///< the source pills
+    kit::Rect players{};                ///< the players strip
+    kit::Rect sizes{};                  ///< the size strip
+    int32_t players_level_width{};      ///< one players segment, inside the border
+    int32_t sizes_level_width{};        ///< one size segment, inside the border
     kit::Rect players_heading{};        ///< PLAYERS
     kit::Rect sizes_heading{};          ///< SIZE
     kit::Rect search{};                 ///< the search field
@@ -209,47 +204,82 @@ struct Plan {
     Grid grid{};     ///< the grid
 };
 
-/// Returns a chip of a filter, its word looked up.
+/// Returns one source pill's caption: the filter's word and its count.
 ///
-/// @param english its word, in English
-/// @param on it is on
-/// @return the chip
-kit::ChipLook filter_chip(std::string_view english, bool on) {
-    kit::ChipLook look;
-    look.text = ids::word(english);
-    look.state = kit::ChipState::filter;
-    look.selected = on;
-    return look;
+/// @param english the filter's word, in English
+/// @param count how many cards it would show
+/// @return the caption, looked up
+std::string source_caption(std::string_view english, std::size_t count) {
+    return ids::filled(
+        word_filter_count, {{"filter", ids::word(english)}, {"count", std::to_string(count)}}
+    );
 }
 
-/// Places chips along a row from a column, chip_gap apart, each centred down it.
+/// Returns the four source captions, in the pills' order.
+///
+/// @param browser the browser
+/// @return All, Game, Mod and Downloads, each with its count
+std::array<std::string, 4> source_captions(const Browser& browser) {
+    const SourceCounts counts = source_counts(browser);
+    const std::array<std::size_t, 4> numbers{counts.all, counts.game, counts.mod, counts.downloads};
+    std::array<std::string, 4> captions;
+    for (std::size_t index = 0; index < captions.size(); ++index)
+        captions[index] = source_caption(word_sources[index], numbers[index]);
+    return captions;
+}
+
+/// Places pills along a row from a column, chip_gap apart, each centred down it.
 ///
 /// @param fonts the fonts
-/// @param words the chips' words, in English
-/// @param at the first chip's left column
+/// @param captions the pills' captions, already looked up
+/// @param at the first pill's left column
 /// @param row the row's top
 /// @param row_height the row's height
-/// @param[out] rects each chip's rectangle
-/// @return the column after the last chip
-template <std::size_t count>
-int32_t place_chips(
+/// @param[out] rects each pill's rectangle
+/// @return the column after the last pill
+int32_t place_pills(
     const kit::Fonts& fonts,
-    const std::array<std::string_view, count>& words,
+    const std::array<std::string, 4>& captions,
     int32_t at,
     int32_t row,
     int32_t row_height,
-    std::array<kit::Rect, count>& rects
+    std::array<kit::Rect, 4>& rects
 ) {
-    const kit::Metrics& metrics = kit::compact_metrics;
+    const int32_t height = kit::pill_height();
     int32_t x = at;
-    for (std::size_t index = 0; index < count; ++index) {
-        const int32_t width = kit::chip_width(fonts, filter_chip(words[index], false));
-        rects[index] = {
-            x, row + (row_height - metrics.chip_height) / 2, width, metrics.chip_height
-        };
-        x += width + (index + 1 < count ? metrics.chip_gap : 0);
+    for (std::size_t index = 0; index < captions.size(); ++index) {
+        const int32_t width = kit::pill_width(fonts, kit::PillLook{captions[index]});
+        rects[index] = {x, row + (row_height - height) / 2, width, height};
+        x += width + (index + 1 < captions.size() ? kit::compact_metrics.chip_gap : 0);
     }
     return x;
+}
+
+/// Returns how wide one segment of a strip is: the widest caption, plus the
+/// padding a chip keeps either side of its word.
+///
+/// @param fonts the fonts
+/// @param captions the segments' words, already looked up
+/// @return the width, in points
+int32_t segment_width(const kit::Fonts& fonts, const std::vector<std::string>& captions) {
+    int32_t widest = 0;
+    for (const std::string& caption : captions)
+        widest = std::max(widest, kit::text_width(fonts, kit::FontRole::small, caption));
+    return widest + 2 * kit::compact_metrics.chip_padding;
+}
+
+/// Returns a strip's rectangle: one border either side, then one segment each.
+///
+/// @param at the strip's left column
+/// @param row the row's top
+/// @param row_height the row's height; the strip fills it
+/// @param segments how many segments
+/// @param level_width one segment's columns, inside the border
+/// @return the strip
+kit::Rect
+strip_rect(int32_t at, int32_t row, int32_t row_height, std::size_t segments, int32_t level_width) {
+    const int32_t width = 2 + level_width * static_cast<int32_t>(segments);
+    return {at, row, width, row_height};
 }
 
 /// Returns a heading's rectangle at a column, centred down a row.
@@ -270,8 +300,34 @@ kit::Rect heading_rect(
     return {at, row + (row_height - metrics.small_line) / 2, width, metrics.small_line};
 }
 
+/// Returns the players strip's captions, already looked up: Any, then 2, 3,
+/// 4 and 5–10.
+///
+/// @return the captions
+std::vector<std::string> player_captions() {
+    std::vector<std::string> captions;
+    captions.reserve(ids::player_levels.size());
+    captions.push_back(ids::word(word_any));
+    for (const std::string_view english : word_players)
+        captions.push_back(ids::word(english));
+    return captions;
+}
+
+/// Returns the size strip's captions, already looked up: Any, then S, M and L.
+///
+/// @return the captions
+std::vector<std::string> size_captions() {
+    std::vector<std::string> captions;
+    captions.reserve(ids::size_levels.size());
+    captions.push_back(ids::word(word_any));
+    for (const std::string_view english : word_sizes)
+        captions.push_back(ids::word(english));
+    return captions;
+}
+
 /// Places the players and size groups along a row from a column: each
-/// heading, then its chips, the groups a padding apart.
+/// heading, then its strip, the groups a padding apart. A strip is as tall
+/// as the row, so it stays inside the bar.
 ///
 /// @param fonts the fonts
 /// @param window the window
@@ -279,7 +335,7 @@ kit::Rect heading_rect(
 /// @param row the row's top
 /// @param row_height the row's height
 /// @param[in,out] bar receives the places
-/// @return the column after the last size chip
+/// @return the column after the size strip
 int32_t place_groups(
     const kit::Fonts& fonts,
     const Window& window,
@@ -289,12 +345,18 @@ int32_t place_groups(
     Bar& bar
 ) {
     const kit::Metrics& metrics = *window.metrics;
+    const std::vector<std::string> players = player_captions();
+    const std::vector<std::string> sizes = size_captions();
+    bar.players_level_width = segment_width(fonts, players);
+    bar.sizes_level_width = segment_width(fonts, sizes);
     bar.players_heading = heading_rect(fonts, word_players_heading, at, row, row_height);
     int32_t x = bar.players_heading.x + bar.players_heading.width + metrics.label_gap;
-    x = place_chips(fonts, word_players, x, row, row_height, bar.players);
+    bar.players = strip_rect(x, row, row_height, players.size(), bar.players_level_width);
+    x = bar.players.x + bar.players.width;
     bar.sizes_heading = heading_rect(fonts, word_size_heading, x + window.padding, row, row_height);
     x = bar.sizes_heading.x + bar.sizes_heading.width + metrics.label_gap;
-    return place_chips(fonts, word_sizes, x, row, row_height, bar.sizes);
+    bar.sizes = strip_rect(x, row, row_height, sizes.size(), bar.sizes_level_width);
+    return bar.sizes.x + bar.sizes.width;
 }
 
 /// Places the filter bar: on one line when the search keeps
@@ -303,14 +365,16 @@ int32_t place_groups(
 ///
 /// @param fonts the fonts
 /// @param window the window
+/// @param browser the browser, for the pills' counts
 /// @return the places
-Bar bar_of(const kit::Fonts& fonts, const Window& window) {
+Bar bar_of(const kit::Fonts& fonts, const Window& window, const Browser& browser) {
     const kit::Metrics& metrics = *window.metrics;
     const int32_t row_height = std::max(metrics.field_height, metrics.chip_height);
     const int32_t first_row = window.body_top + window.gap;
     Bar bar;
+    const std::array<std::string, 4> captions = source_captions(browser);
     const int32_t after_sources =
-        place_chips(fonts, word_sources, window.left, first_row, row_height, bar.sources);
+        place_pills(fonts, captions, window.left, first_row, row_height, bar.sources);
     if (!window.compact) {
         Bar one = bar;
         const int32_t after_sizes =
@@ -353,7 +417,7 @@ Plan plan_of(
     plan.window = window_of(frame);
     const Window& window = plan.window;
     const kit::Metrics& metrics = *window.metrics;
-    plan.bar = bar_of(fonts, window);
+    plan.bar = bar_of(fonts, window, browser);
     Grid& grid = plan.grid;
     const int32_t top = plan.bar.bottom + window.gap;
     grid.view = {
@@ -528,8 +592,24 @@ bool held(const Building& building, kit::ControlId id) {
     return interaction.pressed == id && interaction.hovered == id;
 }
 
+/// Returns the header's close mark, the right-hand square, the same place
+/// at every size class.
+///
+/// @param window the window
+/// @return the button
+kit::Rect header_close_rect(const Window& window) {
+    const kit::Metrics& compact = kit::compact_metrics;
+    const int32_t side = compact.button_height;
+    return {
+        window.size.x - compact.edge - compact.padding - side,
+        compact.edge + (compact.header_height - side) / 2,
+        side,
+        side,
+    };
+}
+
 /// Appends the header: the OA mark, "Maps", and at the right the picker
-/// and the mod being played, cut to fit.
+/// and the mod being played, cut so they stop short of the close mark.
 ///
 /// @param[in,out] building the layout
 /// @param window the window
@@ -545,12 +625,18 @@ void add_header(Building& building, const Window& window) {
             skirmish ? word_skirmish_mod : word_battle_room_mod, {{"mod", browser.mod_name}}
         );
     const int32_t tracking = window.metrics->heading_tracking;
-    // The kit's header keeps Compact's places from the window's edges.
+    // The kit's header keeps Compact's places from the window's edges. The
+    // close mark keeps a square at the right, and the subtitle stops a gap
+    // short of it.
     const int32_t title_left = compact.padding + compact.mark_side + compact.header_gap;
-    const int32_t right_edge = window.size.x - compact.edge - compact.padding;
+    const kit::Rect close = header_close_rect(window);
+    const int32_t right_edge = close.x - compact.header_gap;
     kit::HeaderLook look;
     look.width = window.size.x;
     look.tracking = tracking;
+    // The close mark sits in the padding the header otherwise gives the
+    // subtitle, so the subtitle ends a gap short of that square.
+    look.right_inset = compact.button_height + compact.header_gap;
     look.title = ids::word(word_title);
     look.title_width =
         kit::tracked_width(*building.fonts, kit::FontRole::regular, look.title, tracking);
@@ -563,28 +649,89 @@ void add_header(Building& building, const Window& window) {
         std::move(look);
 }
 
-/// Appends one filter chip as a control of the bar.
+/// Appends the header's close mark. Pressing it asks for the same close as
+/// Cancel. Tab's order gains it last, after every other stop.
 ///
 /// @param[in,out] building the layout
-/// @param rect the chip
-/// @param english its word, in English
-/// @param on it is on
+/// @param window the window
+void add_close_button(Building& building, const Window& window) {
+    const kit::Rect rect = header_close_rect(window);
+    kit::ButtonLook look;
+    look.style = kit::ButtonStyle::quiet;
+    look.hovered = hovered(building, ids::close);
+    look.held = held(building, ids::close);
+    look.mark = kit::ButtonMark::close;
+    const std::size_t before = building.list.controls.size();
+    kit::add_button(
+        building.list, rect, look, ids::close, unique_name(building, std::string(name_close))
+    );
+    move_controls(building.list, before, building.top);
+    building.top.back().text = ids::word(word_close);
+}
+
+/// Appends one source pill as a control of the bar.
+///
+/// @param[in,out] building the layout
+/// @param rect the pill
+/// @param caption its words, already looked up
+/// @param on it is the chosen source
 /// @param id its control
 /// @param name its automation name
-void add_filter_chip(
+void add_source_pill(
     Building& building,
     const kit::Rect& rect,
-    std::string_view english,
+    const std::string& caption,
     bool on,
     kit::ControlId id,
     std::string_view name
 ) {
-    kit::ChipLook look = filter_chip(english, on);
+    const kit::Interaction& interaction = building.state->interaction;
+    kit::PillLook look;
+    look.text = caption;
+    look.state = on ? kit::PillState::active : kit::PillState::inactive;
     look.hovered = hovered(building, id);
+    look.focused = interaction.focus_shown && interaction.focused == id;
     const std::size_t before = building.list.controls.size();
-    kit::add_chip(building.list, rect, look, id, unique_name(building, std::string(name)));
+    kit::add_pill(building.list, rect, look, id, unique_name(building, std::string(name)));
     move_controls(building.list, before, building.top);
     tab_stop(building, building.top.back());
+}
+
+/// Appends a players or size strip. Its parts are set after the kit adds it,
+/// which does not copy them. Tab stops on the strip once.
+///
+/// @param[in,out] building the layout
+/// @param rect the strip
+/// @param captions each segment's words, already looked up
+/// @param level_width one segment's columns, inside the border
+/// @param chosen the chosen segment, from 0
+/// @param parts each segment's automation word
+/// @param id its control
+/// @param name its automation name
+void add_strip(
+    Building& building,
+    const kit::Rect& rect,
+    std::vector<std::string> captions,
+    int32_t level_width,
+    std::size_t chosen,
+    std::span<const std::string_view> parts,
+    kit::ControlId id,
+    std::string_view name
+) {
+    kit::LevelsLook look;
+    look.captions = std::move(captions);
+    look.level_width = level_width;
+    look.chosen = chosen;
+    look.offered = look.captions.size();
+    look.hovered = hovered(building, id);
+    const std::size_t before = building.list.controls.size();
+    kit::add_levels(building.list, rect, look, id, unique_name(building, std::string(name)));
+    move_controls(building.list, before, building.top);
+    kit::Control& control = building.top.back();
+    control.parts.reserve(parts.size());
+    for (const std::string_view part : parts)
+        control.parts.emplace_back(part);
+    tab_stop(building, control);
 }
 
 /// Appends a heading of the bar.
@@ -597,42 +744,45 @@ void add_heading(Building& building, const kit::Rect& rect, std::string_view eng
         kit::HeadingLook{ids::word(english)};
 }
 
-/// Appends the filter bar: the source, players and size chips, their
-/// headings and the search field.
+/// Appends the filter bar: the source pills, the players and size strips,
+/// their headings and the search field.
 ///
 /// @param[in,out] building the layout
 void add_bar(Building& building) {
     const Bar& bar = building.plan->bar;
     const Filters& filters = building.browser->filters;
+    const std::array<std::string, 4> captions = source_captions(*building.browser);
     for (std::size_t index = 0; index < ids::sources.size(); ++index)
-        add_filter_chip(
+        add_source_pill(
             building,
             bar.sources[index],
-            word_sources[index],
+            captions[index],
             filters.source == ids::sources[index],
             ids::first_source + static_cast<kit::ControlId>(index),
             source_names[index]
         );
     add_heading(building, bar.players_heading, word_players_heading);
-    for (std::size_t index = 0; index < ids::players.size(); ++index)
-        add_filter_chip(
-            building,
-            bar.players[index],
-            word_players[index],
-            filters.players.count(ids::players[index]) != 0,
-            ids::first_players + static_cast<kit::ControlId>(index),
-            players_names[index]
-        );
+    add_strip(
+        building,
+        bar.players,
+        player_captions(),
+        bar.players_level_width,
+        ids::players_index(filters),
+        ids::player_parts,
+        ids::players,
+        name_players
+    );
     add_heading(building, bar.sizes_heading, word_size_heading);
-    for (std::size_t index = 0; index < ids::sizes.size(); ++index)
-        add_filter_chip(
-            building,
-            bar.sizes[index],
-            word_sizes[index],
-            filters.sizes.count(ids::sizes[index]) != 0,
-            ids::first_size + static_cast<kit::ControlId>(index),
-            size_names[index]
-        );
+    add_strip(
+        building,
+        bar.sizes,
+        size_captions(),
+        bar.sizes_level_width,
+        ids::size_index(filters),
+        ids::size_parts,
+        ids::sizes,
+        name_sizes
+    );
     kit::SearchLook look;
     look.field = building.state->search;
     const kit::Interaction& interaction = building.state->interaction;
@@ -678,23 +828,37 @@ std::string card_line(const MapCard& card) {
     );
 }
 
-/// Returns a card's source chip: Base, the pack's name, or Online.
+/// Returns a card's overlay as the player reads it. "Downloaded" and
+/// "TA 3.1c" are looked up. A bundle's name, a mod's name and a pack's name
+/// are shown as the card gives them.
+///
+/// @param card the card
+/// @return the overlay
+std::string overlay_text(const MapCard& card) {
+    const std::string english = overlay_name(card);
+    if (english == word_downloaded || english == word_ta)
+        return ids::word(english);
+    return english;
+}
+
+/// Returns a card's source chip: the overlay, coloured by where the map is.
 ///
 /// @param card the card
 /// @return the chip
 kit::ChipLook source_chip(const MapCard& card) {
     kit::ChipLook chip;
+    chip.text = overlay_text(card);
     switch (card.origin) {
-    case MapCard::Origin::base:
-        chip.text = ids::word(word_base_chip);
+    case MapCard::Origin::game:
         chip.state = kit::ChipState::get;
         break;
+    case MapCard::Origin::mod:
+        chip.state = kit::ChipState::playing;
+        break;
     case MapCard::Origin::installed:
-        chip.text = card.pack_name.empty() ? card.name : card.pack_name;
         chip.state = kit::ChipState::installed;
         break;
     case MapCard::Origin::online:
-        chip.text = ids::word(word_online_chip);
         chip.state = kit::ChipState::online;
         break;
     }
@@ -823,15 +987,19 @@ std::string download_text(uint64_t bytes) {
     );
 }
 
-/// Returns the selected map's details line: its pack and version, its
-/// registry, the most players it is for, its size and, online, its download.
+/// Returns the selected map's details line. A game or mod map leads with the
+/// same name its overlay shows. A pack map leads with its pack, version and
+/// registry, even when the overlay says Downloaded. Then the most players
+/// it is for, its size and, online, its download.
 ///
 /// @param card the card
 /// @return the line
 std::string details_line(const MapCard& card) {
     std::vector<std::string> parts;
-    if (card.origin == MapCard::Origin::base) {
-        parts.push_back(ids::word(word_sources[1]));
+    if (card.origin == MapCard::Origin::game || card.origin == MapCard::Origin::mod) {
+        const std::string source = overlay_text(card);
+        if (!source.empty())
+            parts.push_back(source);
     } else {
         std::string pack = card.pack_name;
         if (!card.pack_version.empty())
@@ -1249,6 +1417,7 @@ kit::DisplayList browser_layout(
     building.fonts = &fonts;
     building.plan = &plan;
     add_header(building, plan.window);
+    add_close_button(building, plan.window);
     add_bar(building);
     add_grid(building, previews);
     add_footer(building);
@@ -1258,6 +1427,7 @@ kit::DisplayList browser_layout(
     for (auto* group : {&building.top, &building.cards, &building.footer})
         for (kit::Control& control : *group)
             list.controls.push_back(std::move(control));
+    building.order.push_back(ids::close);
     list.tab_order = std::move(building.order);
     return list;
 }

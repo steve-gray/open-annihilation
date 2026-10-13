@@ -31,28 +31,18 @@ inline constexpr std::string_view screen_name = "map-browser";
 
 // The controls' automation names, which journeys press as oa. and the name.
 
-/// The source chip All.
+/// The source pill All.
 inline constexpr std::string_view name_filter_all = "maps-filter-all";
-/// The source chip Base game.
-inline constexpr std::string_view name_filter_base = "maps-filter-base";
-/// The source chip Installed packs.
-inline constexpr std::string_view name_filter_installed = "maps-filter-installed";
-/// The source chip Online.
-inline constexpr std::string_view name_filter_online = "maps-filter-online";
-/// The players chip 2.
-inline constexpr std::string_view name_players_2 = "maps-players-2";
-/// The players chip 3.
-inline constexpr std::string_view name_players_3 = "maps-players-3";
-/// The players chip 4.
-inline constexpr std::string_view name_players_4 = "maps-players-4";
-/// The players chip 5–10.
-inline constexpr std::string_view name_players_many = "maps-players-5-10";
-/// The size chip S.
-inline constexpr std::string_view name_size_small = "maps-size-s";
-/// The size chip M.
-inline constexpr std::string_view name_size_medium = "maps-size-m";
-/// The size chip L.
-inline constexpr std::string_view name_size_large = "maps-size-l";
+/// The source pill Game.
+inline constexpr std::string_view name_filter_game = "maps-filter-game";
+/// The source pill Mod.
+inline constexpr std::string_view name_filter_mod = "maps-filter-mod";
+/// The source pill Downloads.
+inline constexpr std::string_view name_filter_downloads = "maps-filter-downloads";
+/// The players strip. Its parts are any, 2, 3, 4 and 5-10.
+inline constexpr std::string_view name_players = "maps-players";
+/// The size strip. Its parts are any, s, m and l.
+inline constexpr std::string_view name_sizes = "maps-size";
 /// The search field.
 inline constexpr std::string_view name_search = "maps-search";
 /// What every card's name starts with; card_word of the map's game name follows.
@@ -61,6 +51,8 @@ inline constexpr std::string_view name_card_prefix = "maps-card-";
 inline constexpr std::string_view name_cancel = "maps-cancel";
 /// The primary button: Select, Download and select, or Downloading….
 inline constexpr std::string_view name_select = "maps-select";
+/// The header's close mark. A press closes the browser as Cancel does.
+inline constexpr std::string_view name_close = "maps-close";
 
 /// The columns of the card grid at Compact.
 inline constexpr std::size_t compact_columns = 3;
@@ -156,18 +148,19 @@ struct ScreenResult {
 /// Lays the browser out for a frame.
 ///
 /// The window, from its top left corner: the header titled "Maps" with the
-/// picker and the mod being played at its right; the filter bar, one line
-/// at Regular and Large and two at Compact (the sources and the search,
-/// then the players and the sizes); the grid of cards in grid_columns
-/// columns, scrolled; and the footer with the selected map's title and
-/// details, its fit chips and the reason it does not fit, a progress bar
-/// in their place while a download runs, Cancel and the primary button.
-/// Every control is named (screen.hpp's names, and one name_card_prefix
-/// name per card that shows, "-2", "-3"… after a word already taken in grid
-/// order). Tab's order is the sources, the players, the sizes, the search,
-/// the cards, Cancel and the primary button; browser_key enters the cards
-/// at the selected one. Asks the hooks for the pictures of cards_in_view
-/// alone.
+/// picker and the mod being played at its right, and a close mark; the
+/// filter bar, one line at Regular and Large and two at Compact (the source
+/// pills and the search, then PLAYERS and SIZE); the grid of cards in
+/// grid_columns columns, scrolled; and the footer with the selected map's
+/// title and details, its fit chips and the reason it does not fit, a
+/// progress bar in their place while a download runs, Cancel and the
+/// primary button. Every control is named (screen.hpp's names, and one
+/// name_card_prefix name per card that shows, "-2", "-3"… after a word
+/// already taken in grid order). The players and size strips name each
+/// segment as a part. Tab's order is the source pills, the players strip,
+/// the sizes strip, the search, the cards, Cancel, the primary button and
+/// the close mark last; browser_key enters the cards at the selected one.
+/// Asks the hooks for the pictures of cards_in_view alone.
 ///
 /// @param browser the browser
 /// @param state the screen's state
@@ -193,12 +186,14 @@ void draw_browser(const kit::Canvas& canvas, const kit::DisplayList& list, kit::
 
 /// Takes a pointer's move, press or release, or a finger's.
 ///
-/// A press on a chip turns it on or off; on the search it gives it the
+/// A press on a source pill chooses that source; on a segment of the
+/// players or size strip it chooses that one segment, and choosing the
+/// segment already chosen leaves it chosen; on the search it gives it the
 /// focus; on a card it selects the card, and on the selected card it acts
-/// as the primary button; on Cancel or the primary button it asks for
-/// them. A press in the grid that moves farther than its reach (a finger's,
-/// or a few points for a mouse) scrolls the grid instead, and presses
-/// nothing.
+/// as the primary button; on Cancel, the close mark or the primary button
+/// it asks for them. A press in the grid that moves farther than its reach
+/// (a finger's, or a few points for a mouse) scrolls the grid instead, and
+/// presses nothing.
 ///
 /// @param[in,out] browser the browser
 /// @param[in,out] state the screen's state
@@ -222,12 +217,14 @@ ScreenResult browser_pointer(
 ///
 /// The arrows move the focus by where the controls lie (kit::focus_toward),
 /// within the grid and between the bands, and the grid scrolls to show the
-/// focused card; Tab and Shift+Tab follow the declared order, entering the
-/// grid at the selected card, else the first; Enter or Space on a chip turns
-/// it on or off, on a card selects it, and on the selected card or the
-/// primary button acts; Enter in the search goes to the grid; Escape
-/// cancels; Page Up, Page Down, Home and End scroll the grid; the editing
-/// keys edit the focused search.
+/// focused card. Left and Right on a players or size strip step its choice
+/// instead, and stay on Any or the last segment at the ends. Tab and
+/// Shift+Tab follow the declared order, entering the grid at the selected
+/// card, else the first; Enter or Space on a source pill chooses it, on a
+/// card selects it, and on the selected card or the primary button acts;
+/// Enter or Space on a strip leaves its choice as it is; Enter in the
+/// search goes to the grid; Escape cancels; Page Up, Page Down, Home and
+/// End scroll the grid; the editing keys edit the focused search.
 ///
 /// @param[in,out] browser the browser
 /// @param[in,out] state the screen's state
