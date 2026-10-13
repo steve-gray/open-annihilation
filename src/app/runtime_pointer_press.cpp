@@ -86,8 +86,11 @@ void Runtime::center_camera_on_radar_point(float x, float y) {
         return;
     const auto rx = static_cast<int>(x) - radar_picture_.x;
     const auto ry = static_cast<int>(y) - radar_picture_.y;
-    match_camera_x_ = rx * radar_map_w_ / radar_picture_.width - visible_map_width() / 2;
-    match_camera_z_ = ry * radar_map_h_ / radar_picture_.height - visible_map_height() / 2;
+    set_camera_position(
+        rx * radar_map_w_ / radar_picture_.width - visible_map_width() / 2,
+        ry * radar_map_h_ / radar_picture_.height - visible_map_height() / 2,
+        match_camera_flags_
+    );
     if (match_)
         oa::present::world_renderer::camera_stop_follow(match_->state().game);
     stop_match_tracking();

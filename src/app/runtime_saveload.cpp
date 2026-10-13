@@ -825,10 +825,7 @@ persist::SaveHooks Runtime::SaveLoadState::make_hooks(Bindings* bindings) {
     };
     // The runtime's camera placement.
     hooks.set_camera = [](void* context, int32_t x, int32_t z) {
-        auto* runtime = static_cast<Bindings*>(context)->runtime;
-        runtime->match_camera_x_ = x;
-        runtime->match_camera_z_ = z;
-        runtime->match_camera_flags_ = 0;
+        static_cast<Bindings*>(context)->runtime->set_camera_position(x, z, 0);
     };
     hooks.write_script = [](void* context, oa::Unit* unit, persist::Bank* bank) {
         auto* b = static_cast<Bindings*>(context);

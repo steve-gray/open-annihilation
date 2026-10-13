@@ -537,10 +537,11 @@ void Runtime::select_squad(int squad, bool add) {
     if (squad_double_tap_ == squad) {
         const auto& slot = match_->world().slots[first];
         if (slot.unit != nullptr) {
-            match_camera_x_ =
-                static_cast<int32_t>(slot.unit->position[0] >> 16) - visible_map_width() / 2;
-            match_camera_z_ =
-                static_cast<int32_t>(slot.unit->position[2] >> 16) - visible_map_height() / 2;
+            set_camera_position(
+                static_cast<int32_t>(slot.unit->position[0] >> 16) - visible_map_width() / 2,
+                static_cast<int32_t>(slot.unit->position[2] >> 16) - visible_map_height() / 2,
+                match_camera_flags_
+            );
         }
         squad_double_tap_ = 0;
     } else

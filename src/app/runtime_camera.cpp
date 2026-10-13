@@ -366,6 +366,64 @@ std::optional<oa::present::world_renderer::MapPixel> Runtime::map_pixel_drawn_at
     );
 }
 
+std::optional<std::array<double, 2>> Runtime::view_within_limits(double x, double z) const {
+    if (!selected_tnt_)
+        return std::nullopt;
+    const auto [map_width, map_height] = shown_map_size();
+    if (map_width <= 0 || map_height <= 0)
+        return std::nullopt;
+    const double zoom = static_cast<double>(match_zoom() <= 0.0F ? 1.0F : match_zoom());
+    const double visible_x = static_cast<double>(match_layout_.battlefield_width()) / zoom;
+    const double visible_z = static_cast<double>(match_layout_.battlefield_height()) / zoom;
+    if (!(visible_x > 0.0) || !(visible_z > 0.0))
+        return std::nullopt;
+    const double share = past_map_edge_share();
+    return std::array<double, 2>{
+        held_view(x, visible_x, static_cast<double>(map_width), share, std::nullopt),
+        held_view(z, visible_z, static_cast<double>(map_height), share, std::nullopt)
+    };
+}
+
+void Runtime::remember_placed_view(double x, double z) {
+    const double zoom = static_cast<double>(match_zoom() <= 0.0F ? 1.0F : match_zoom());
+    view_hold_ = {
+        true,
+        x + static_cast<double>(match_layout_.battlefield_width()) / zoom / 2.0,
+        z + static_cast<double>(match_layout_.battlefield_height()) / zoom / 2.0
+    };
+}
+
+void Runtime::set_camera_position(int32_t x, int32_t z, uint32_t flags) {
+    // A jump is held by the limits alone. The camera the frames take is the
+    // whole map pixel held_camera keeps inside them, the same one a frame
+    // draws (view_camera) when no earlier view widens the span.
+    if (!selected_tnt_) {
+        match_camera_x_ = x;
+        match_camera_z_ = z;
+    } else {
+        const auto [map_width, map_height] = shown_map_size();
+        const double zoom = static_cast<double>(match_zoom() <= 0.0F ? 1.0F : match_zoom());
+        const double visible_x = static_cast<double>(match_layout_.battlefield_width()) / zoom;
+        const double visible_z = static_cast<double>(match_layout_.battlefield_height()) / zoom;
+        if (map_width <= 0 || map_height <= 0 || !(visible_x > 0.0) || !(visible_z > 0.0)) {
+            match_camera_x_ = x;
+            match_camera_z_ = z;
+        } else {
+            const double share = past_map_edge_share();
+            match_camera_x_ =
+                held_camera(x, visible_x, static_cast<double>(map_width), share, std::nullopt);
+            match_camera_z_ =
+                held_camera(z, visible_z, static_cast<double>(map_height), share, std::nullopt);
+            remember_placed_view(
+                static_cast<double>(match_camera_x_), static_cast<double>(match_camera_z_)
+            );
+        }
+    }
+    match_camera_flags_ = flags;
+    // A camera put in place shows its own map pixel.
+    exact_view_.held = false;
+}
+
 void Runtime::centre_view_on(int32_t x, int32_t z) {
     if (!view_between_pixels_) {
         // The whole map pixel of the point, its 16.16 high word.
@@ -377,10 +435,18 @@ void Runtime::centre_view_on(int32_t x, int32_t z) {
         );
         return;
     }
+    const auto place_held = [this](double place_x, double place_z) {
+        if (const auto held = view_within_limits(place_x, place_z)) {
+            place_match_view((*held)[0], (*held)[1]);
+            remember_placed_view((*held)[0], (*held)[1]);
+            return;
+        }
+        place_match_view(place_x, place_z);
+    };
     const uint32_t step = oa::present::scene_step(match_zoom());
     if (!view_on_scene_grid_ || view_moved_by_card_) {
         const auto zoom = static_cast<double>(match_zoom() > 0.0F ? match_zoom() : 1.0F);
-        place_match_view(
+        place_held(
             static_cast<double>(x) / oa::present::scene_step_one -
                 static_cast<double>(match_layout_.battlefield_width()) / zoom / 2.0,
             static_cast<double>(z) / oa::present::scene_step_one -
@@ -396,7 +462,7 @@ void Runtime::centre_view_on(int32_t x, int32_t z) {
         return static_cast<double>(pixel - battlefield / 2) *
                static_cast<double>(oa::present::scene_step_one) / static_cast<double>(step);
     };
-    place_match_view(
+    place_held(
         place(x, match_layout_.battlefield_width()), place(z, match_layout_.battlefield_height())
     );
 }

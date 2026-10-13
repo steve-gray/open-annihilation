@@ -160,8 +160,9 @@ Each of these takes effect at once.
   battlefield's centre.
 - **View past the map's edge**, Off, 25% or 50%, 50% by default, as far
   as the view has always gone. How much of the battlefield the view may
-  show past the map's edges, by a scroll, the minimap, a finger's drag and
-  a zoom, at any zoom. 50% lets the map's edge reach the middle of the
+  show past the map's edges, from the first view of a match and by a
+  scroll, the minimap, a finger's drag, a zoom and a jump to a point, at
+  any zoom. 50% lets the map's edge reach the middle of the
   battlefield, or, with more than the whole map in view, the map's centre
   reach the view's edge; a zoom keeps the ground under the pointer under
   it wherever that takes the view. 25% lets a quarter of the battlefield

@@ -611,12 +611,4 @@ void Runtime::report_missing_start_position(int32_t index) {
     throw std::runtime_error("selected map lacks start position " + std::to_string(index));
 }
 
-void Runtime::set_camera_position(int32_t x, int32_t z, uint32_t flags) {
-    match_camera_x_ = x;
-    match_camera_z_ = z;
-    match_camera_flags_ = flags;
-    // A camera put in place shows its own map pixel.
-    exact_view_.held = false;
-}
-
 } // namespace oa::app
