@@ -327,6 +327,17 @@ struct TabsLook {
     /// A tab's automation text when set. Empty, the text is the caption and,
     /// for a count above 0, a space and the count.
     std::vector<std::string> readings{};
+    /// How far the strip is scrolled, in points from the first tab. The
+    /// layout clamps it so the open tab lies wholly in the strip. 0 draws
+    /// the strip from its start, and a strip whose tabs fit ignores it.
+    int32_t scroll{};
+    /// The tab drawing area's left, in window points, after an arrow. 0
+    /// until the strip is placed.
+    int32_t view_x{};
+    /// The tab drawing area's width, in points. 0 until the strip is placed.
+    int32_t view_width{};
+    bool left_arrow_hovered{};  ///< the pointer is over the arrow at the left
+    bool right_arrow_hovered{}; ///< the pointer is over the arrow at the right
 };
 
 /// A card of a grid: a square preview, its chips, a title and a subtitle.
@@ -481,7 +492,9 @@ struct SetupChromeLook {
     int32_t step_count{1};          ///< how many steps
     std::string skip{"Skip setup"}; ///< the quiet button on the left
     std::string back{"Back"};       ///< the plain button
-    std::string next{"Next"};       ///< the accent button
+    std::string next{"Next"};       ///< the right-hand button
+    /// Pause is plain. Continue, Next and Copy the game are the accent.
+    ButtonStyle next_style{ButtonStyle::accent};
     bool skip_hovered{};
     bool skip_held{};
     bool skip_enabled{true};

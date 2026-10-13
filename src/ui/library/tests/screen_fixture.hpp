@@ -609,12 +609,19 @@ texts_not_fitting(const kit::DisplayList& list, const kit::Fonts& fonts) {
             break;
         case kit::Role::tabs:
             if (const auto* look = std::get_if<kit::TabsLook>(&item.look)) {
-                const std::vector<kit::Rect> rects = kit::tab_rects(fonts, item.rect, *look);
-                check(
-                    rects.empty() ||
-                        rects.back().x + rects.back().width <= item.rect.x + item.rect.width,
-                    "tabs"
-                );
+                const kit::TabStrip placed = kit::place_tabs(fonts, item.rect, *look);
+                if (!placed.overflows) {
+                    check(
+                        placed.tabs.empty() || kit::wholly_in(placed.tabs.back(), item.rect), "tabs"
+                    );
+                    check(
+                        placed.left_arrow.width == 0 && placed.right_arrow.width == 0, "tabs arrows"
+                    );
+                } else if (placed.selected < placed.tabs.size()) {
+                    check(
+                        kit::wholly_in(placed.tabs[placed.selected], placed.view), "tabs selected"
+                    );
+                }
             }
             break;
         case kit::Role::nav:

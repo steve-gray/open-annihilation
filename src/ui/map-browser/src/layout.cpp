@@ -148,8 +148,9 @@ struct Window {
     const kit::Metrics* metrics{}; ///< the class's metrics
 };
 
-/// Returns the window's rows and columns for a frame. Compact's footer has a
-/// second line for the fit chips under the title and the buttons.
+/// Returns the window's rows and columns for a frame. Compact keeps one
+/// footer line: the buttons sit on the title, and the byline and the fit
+/// chips share the line under it.
 ///
 /// @param frame the frame
 /// @return the window
@@ -164,11 +165,12 @@ Window window_of(const kit::Frame& frame) {
     window.right = window.size.x - metrics.edge - metrics.padding;
     window.body_top = metrics.edge + metrics.header_height + 1;
     window.footer_height = metrics.footer_height;
-    if (window.compact)
-        window.footer_height += metrics.chip_height + 2 * metrics.hint_gap;
     window.footer_rule = window.size.y - metrics.edge - window.footer_height - 1;
     window.footer_top = window.footer_rule + 1;
-    window.button_top = window.footer_top + (metrics.footer_height - metrics.button_height) / 2;
+    // Compact's buttons sit on the title line, clear of the byline under it.
+    window.button_top =
+        window.compact ? window.footer_top
+                       : window.footer_top + (metrics.footer_height - metrics.button_height) / 2;
     window.gap = metrics.paragraph_gap;
     return window;
 }
@@ -987,6 +989,35 @@ std::string download_text(uint64_t bytes) {
     );
 }
 
+/// Returns the Compact footer's byline: the pack, or the source a game or
+/// mod map shows, and the player count. The version, the registry, the size
+/// and the download stay off this line so it and the fit chips both fit.
+///
+/// @param card the card
+/// @return the line
+std::string compact_byline(const MapCard& card) {
+    std::vector<std::string> parts;
+    if (card.origin == MapCard::Origin::game || card.origin == MapCard::Origin::mod) {
+        const std::string source = overlay_text(card);
+        if (!source.empty())
+            parts.push_back(source);
+    } else if (!card.pack_name.empty()) {
+        parts.push_back(card.pack_name);
+    }
+    const int32_t players = shown_players(card);
+    parts.push_back(
+        players == 1 ? ids::word(word_players_one)
+                     : ids::filled(word_players_many, {{"count", std::to_string(players)}})
+    );
+    std::string line;
+    for (const std::string& part : parts) {
+        if (!line.empty())
+            line += " · ";
+        line += part;
+    }
+    return line;
+}
+
 /// Returns the selected map's details line. A game or mod map leads with the
 /// same name its overlay shows. A pack map leads with its pack, version and
 /// registry, even when the overlay says Downloaded. Then the most players
@@ -1225,33 +1256,61 @@ void add_footer(Building& building) {
     const int32_t room = std::max(room_right - window.left, int32_t{0});
 
     int32_t text_right = room_right;
+    // Compact draws its byline here, on the line under the title, with the
+    // chips after it across the whole footer. The title stays left of the
+    // buttons.
+    bool compact_byline_drawn = false;
     if (window.compact) {
-        // The second line: the chips from the left and the reason after them,
-        // or the progress bar across.
-        const int32_t row = window.footer_top + metrics.footer_height + metrics.hint_gap;
+        const int32_t row = window.footer_top + metrics.regular_line;
+        const int32_t line_right = window.right;
+        const int32_t line_width = std::max(line_right - window.left, int32_t{0});
         if (downloading) {
             kit::add_progress(
                 building.list,
                 {window.left,
-                 row + (metrics.chip_height - metrics.progress_bar_height) / 2,
-                 window.right - window.left,
+                 row + (metrics.small_line - metrics.progress_bar_height) / 2,
+                 line_width,
                  metrics.progress_bar_height},
                 static_cast<int32_t>(std::clamp(browser.progress, 0.0F, 1.0F) * progress_whole),
                 progress_whole
             );
-        } else {
-            const int32_t after = add_chip_items(building, chips, window.left, row);
-            const int32_t reason_left = chips.empty() ? window.left : after + metrics.label_gap;
+        } else if (card != nullptr) {
+            const std::string byline = compact_byline(*card);
+            const int32_t byline_width =
+                kit::text_width(*building.fonts, kit::FontRole::small, byline);
+            const int32_t chip_span = chips_width(building, chips);
+            const int32_t gap = chips.empty() ? 0 : metrics.label_gap;
+            int32_t chip_x = window.left + byline_width + gap;
+            if (!chips.empty() && chip_x + chip_span > line_right)
+                chip_x = std::max(line_right - chip_span, window.left);
+            const int32_t byline_room =
+                chips.empty() ? line_width : std::max(chip_x - gap - window.left, int32_t{0});
             add_text(
                 building,
                 kit::FontRole::small,
-                cut(building, kit::FontRole::small, reason, window.right - reason_left),
-                {reason_left,
-                 row,
-                 std::max(window.right - reason_left, int32_t{0}),
-                 metrics.small_line},
-                reason_ink
+                cut(building, kit::FontRole::small, byline, byline_room),
+                {window.left, row, byline_room, metrics.small_line},
+                kit::colour::hint
             );
+            if (!chips.empty()) {
+                const int32_t chip_row =
+                    row + std::max((metrics.small_line - metrics.chip_height) / 2, int32_t{0});
+                const int32_t after = add_chip_items(building, chips, chip_x, chip_row);
+                if (!reason.empty()) {
+                    const int32_t reason_left = after + metrics.label_gap;
+                    add_text(
+                        building,
+                        kit::FontRole::small,
+                        cut(building, kit::FontRole::small, reason, line_right - reason_left),
+                        {reason_left,
+                         row,
+                         std::max(line_right - reason_left, int32_t{0}),
+                         metrics.small_line},
+                        reason_ink
+                    );
+                }
+            }
+            compact_byline_drawn = true;
         }
     } else {
         // Beside the title: the chips over the reason, or the progress bar,
@@ -1337,6 +1396,8 @@ void add_footer(Building& building) {
         {window.left, title_top, text_width_room, metrics.regular_line},
         kit::colour::text
     );
+    if (compact_byline_drawn)
+        return;
     add_text(
         building,
         kit::FontRole::small,

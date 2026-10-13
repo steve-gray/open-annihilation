@@ -33,6 +33,7 @@ inline constexpr std::string_view interface_words[] = {
     "Downloads",
     "file",
     "Filter",
+    "Filter names",
     "folder",
     "FOUND",
     "GAMES",

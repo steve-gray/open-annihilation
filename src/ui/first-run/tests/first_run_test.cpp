@@ -10,6 +10,7 @@
 #include "oa/test/check.hpp"
 #include "oa/ui/kit/looks.hpp"
 
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <string_view>
@@ -528,7 +529,7 @@ void check_centred_language() {
         "fr=~fr-next~;\n"
         "}\n"
         "[Other languages download from Core Prime. The first download makes a random install "
-        "ID, which the next step explains.]\n"
+        "ID, which a later step explains.]\n"
         "{\n"
         "de=~de-note~;\n"
         "fr=~fr-note~;\n"
@@ -745,8 +746,36 @@ void check_game_column() {
                 item.rect.x + item.rect.width <= second->rect.x + second->rect.width &&
                 item.rect.y + item.rect.height <= second->rect.y + second->rect.height;
             OA_CHECK(in_first || in_second);
+            const auto* pill = std::get_if<oa::ui::kit::PillLook>(&item.look);
+            OA_CHECK(pill != nullptr);
+            if (pill == nullptr)
+                continue;
+            if (in_first)
+                OA_CHECK(pill->state == oa::ui::kit::PillState::active);
+            if (in_second)
+                OA_CHECK(pill->state == oa::ui::kit::PillState::neutral);
         }
+        const oa::ui::kit::Control* locate =
+            oa::ui::kit::control_of(scene.list, oa::ui::first_run::locate_id);
+        OA_CHECK(locate != nullptr);
+        if (locate == nullptr)
+            continue;
+        OA_CHECK(locate->rect.height == oa::ui::kit::compact_metrics.button_height);
+        OA_CHECK(locate->rect.y == second->rect.y + second->rect.height + metrics.padding);
+        OA_CHECK(locate->rect.width == oa::ui::kit::compact_metrics.button_width);
+        OA_CHECK(locate->rect.x == first->rect.x + (column - locate->rect.width) / 2);
     }
+}
+
+/// The right-hand button's style on a laid-out step, or plain when the chrome is absent.
+oa::ui::kit::ButtonStyle next_style(const oa::ui::first_run::Scene& scene) {
+    for (const oa::ui::kit::Item& item : scene.list.items) {
+        if (item.role != oa::ui::kit::Role::setup_chrome)
+            continue;
+        if (const auto* look = std::get_if<oa::ui::kit::SetupChromeLook>(&item.look))
+            return look->next_style;
+    }
+    return oa::ui::kit::ButtonStyle::plain;
 }
 
 /// The y of the first item whose text is `words`, or -1.
@@ -796,6 +825,7 @@ void check_copying_layout() {
 
     const auto finished = oa::ui::first_run::lay_out(session, frame, nullptr);
     OA_CHECK(next_caption(finished) == "Continue · 3");
+    OA_CHECK(next_style(finished) == oa::ui::kit::ButtonStyle::accent);
     OA_CHECK(shows_line(finished, "38 of 38 · 100%"));
     OA_CHECK(shows_line(finished, "All files match"));
     OA_CHECK(shows_line(finished, "17 of 18 tracks"));
@@ -843,6 +873,7 @@ void check_copying_layout() {
     session.model.copy.bundles.front().file = "rev31.gp3";
     const auto running = oa::ui::first_run::lay_out(session, frame, nullptr);
     OA_CHECK(next_caption(running) == "Pause");
+    OA_CHECK(next_style(running) == oa::ui::kit::ButtonStyle::plain);
     OA_CHECK(shows_line(running, "rev31.gp3"));
     OA_CHECK(!shows_line(running, "music/9.mp3"));
 
@@ -916,6 +947,167 @@ void check_copying_layout() {
     OA_CHECK(!meets(skip->rect, next->rect));
 }
 
+/// A bundle's row stays the same height when its file line becomes the result.
+void bundle_row_keeps_its_height() {
+    oa::ui::kit::Frame frame;
+    frame.area = {0, 0, 1280, 720};
+    frame.size_class = oa::ui::kit::SizeClass::large;
+
+    Session session;
+    session.model.walk = Walk::setup;
+    session.model.leave = Leave::quit;
+    session.model.step = Step::copying;
+    session.model.copy.running = true;
+    session.model.copy.checked = false;
+    oa::ui::first_run::CopyBundle base;
+    base.name = "Total Annihilation";
+    base.file = "rev31.gp3";
+    base.amount = "31%";
+    base.done = 300;
+    base.whole = 1000;
+    base.phase = oa::ui::first_run::CopyPhase::copying;
+    oa::ui::first_run::CopyBundle music;
+    music.name = "Music";
+    music.amount = "17 of 18 tracks";
+    music.done = 1000;
+    music.whole = 1000;
+    music.phase = oa::ui::first_run::CopyPhase::done;
+    music.note = true;
+    session.model.copy.bundles.push_back(std::move(base));
+    session.model.copy.bundles.push_back(std::move(music));
+
+    const auto copying = oa::ui::first_run::lay_out(session, frame, nullptr);
+    session.model.copy.bundles.front().phase = oa::ui::first_run::CopyPhase::done;
+    session.model.copy.bundles.front().amount = "All files match";
+    session.model.copy.bundles.front().file = "rev31.gp3";
+    const auto done = oa::ui::first_run::lay_out(session, frame, nullptr);
+
+    const int32_t copying_base = line_y(copying, "Total Annihilation");
+    const int32_t copying_music = line_y(copying, "Music");
+    const int32_t done_base = line_y(done, "Total Annihilation");
+    const int32_t done_music = line_y(done, "Music");
+    OA_CHECK(copying_base >= 0 && done_base >= 0);
+    OA_CHECK(copying_music - copying_base == done_music - done_base);
+    OA_CHECK(
+        line_y(copying, "rev31.gp3") == copying_base + oa::ui::kit::compact_metrics.regular_line
+    );
+    OA_CHECK(
+        line_y(done, "All files match") == done_base + oa::ui::kit::compact_metrics.regular_line
+    );
+    OA_CHECK(shows_line(copying, "31%"));
+    OA_CHECK(shows_line(done, "All files match"));
+    OA_CHECK(!shows_line(done, "rev31.gp3"));
+    OA_CHECK(!shows_line(done, "31%"));
+}
+
+/// The band the step's words share, matching the screen's own band.
+oa::ui::kit::Rect content_band(int32_t width, int32_t height) {
+    const int32_t left = oa::ui::kit::compact_metrics.edge + oa::ui::kit::compact_metrics.padding;
+    const int32_t top = oa::ui::kit::compact_metrics.edge +
+                        oa::ui::kit::compact_metrics.header_height + 1 +
+                        oa::ui::kit::compact_metrics.padding;
+    const int32_t bottom = height - oa::ui::kit::compact_metrics.edge -
+                           oa::ui::kit::compact_metrics.footer_height - 1 -
+                           oa::ui::kit::compact_metrics.padding;
+    return {left, top, std::max(width - 2 * left, int32_t{0}), std::max(bottom - top, int32_t{0})};
+}
+
+/// Half a rule over the window face, the painter's mix at 128 of 256.
+oa::ui::kit::Colour expected_floor() {
+    const auto channel = [](uint8_t under, uint8_t over) {
+        constexpr uint32_t kOpaque = 256;
+        constexpr uint32_t kShare = kOpaque / 2;
+        const uint32_t painted = uint32_t{over} * kShare + kOpaque / 2;
+        return static_cast<uint8_t>((uint32_t{under} * (kOpaque - kShare) + painted) / kOpaque);
+    };
+    return {
+        channel(oa::ui::kit::colour::panel.r, oa::ui::kit::colour::rule.r),
+        channel(oa::ui::kit::colour::panel.g, oa::ui::kit::colour::rule.g),
+        channel(oa::ui::kit::colour::panel.b, oa::ui::kit::colour::rule.b),
+    };
+}
+
+/// The language step's floor is half a rule at every size, and the note says
+/// a later step explains the install ID.
+void check_language_floor_and_note() {
+    const oa::ui::kit::Colour floor = expected_floor();
+    OA_CHECK(floor != oa::ui::kit::colour::rule);
+    OA_CHECK(floor != oa::ui::kit::colour::edge_light);
+    const int32_t sizes[][2] = {{640, 480}, {1280, 720}, {1344, 838}};
+    for (const auto& size : sizes) {
+        oa::ui::kit::Frame frame;
+        frame.area = {0, 0, size[0], size[1]};
+        frame.size_class = oa::ui::kit::size_class_of(size[0], size[1]);
+        Session session;
+        session.model.walk = Walk::setup;
+        session.model.leave = Leave::quit;
+        session.model.step = Step::language;
+        const auto scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+        int rules = 0;
+        std::string words;
+        for (const oa::ui::kit::Item& item : scene.list.items) {
+            if (item.role == oa::ui::kit::Role::rule) {
+                ++rules;
+                OA_CHECK(item.colour == floor);
+            }
+            if (!item.text.empty()) {
+                if (!words.empty())
+                    words.push_back(' ');
+                words += item.text;
+            }
+        }
+        OA_CHECK(rules == 6 + 13);
+        OA_CHECK(words.find("next step") == std::string::npos);
+        OA_CHECK(words.find("later step") != std::string::npos);
+    }
+}
+
+/// Compact leaves the picture well out. Regular and Large keep it.
+void check_online_well() {
+    const struct Size {
+        int32_t width;
+        int32_t height;
+        bool well;
+    } sizes[] = {
+        {640, 480, false},
+        {800, 500, false},
+        {960, 540, true},
+        {1280, 720, true},
+        {1344, 838, true},
+    };
+
+    for (const Size& size : sizes) {
+        oa::ui::kit::Frame frame;
+        frame.area = {0, 0, size.width, size.height};
+        frame.size_class = oa::ui::kit::size_class_of(size.width, size.height);
+        Session session;
+        session.model.step = Step::online;
+        const auto scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+        const oa::ui::kit::Rect band = content_band(size.width, size.height);
+        bool saw_well = false;
+        int32_t kicker_x = -1;
+        int32_t kicker_y = -1;
+        int32_t kicker_w = -1;
+        for (const oa::ui::kit::Item& item : scene.list.items) {
+            if (item.role == oa::ui::kit::Role::picture_well)
+                saw_well = true;
+            if (item.text == "ONLINE FEATURES") {
+                kicker_x = item.rect.x;
+                kicker_y = item.rect.y;
+                kicker_w = item.rect.width;
+            }
+        }
+        OA_CHECK(saw_well == size.well);
+        OA_CHECK((scene.well_inset.width > 0) == size.well);
+        if (!size.well) {
+            OA_CHECK(kicker_x == band.x);
+            OA_CHECK(kicker_y == band.y);
+            OA_CHECK(kicker_w == band.width);
+            OA_CHECK(!scene.sample);
+        }
+    }
+}
+
 } // namespace
 
 int main() {
@@ -929,7 +1121,10 @@ int main() {
     check_lookup();
     check_leave_word();
     check_copying_layout();
+    bundle_row_keeps_its_height();
     check_centred_language();
     check_game_column();
+    check_language_floor_and_note();
+    check_online_well();
     return oa::test::check_exit_status();
 }

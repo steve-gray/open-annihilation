@@ -16,6 +16,7 @@
 #include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -471,6 +472,7 @@ kit::SetupChromeLook chrome_look(
         look.back_enabled = false;
         if (session.model.copy.checked || session.model.copy.paused) {
             look.next = show("Continue", language);
+            look.next_style = kit::ButtonStyle::accent;
             if (session.model.copy.checked && session.copy_continue_ms > 0) {
                 const int32_t seconds = (session.copy_continue_ms + 999) / 1000;
                 look.next += " · ";
@@ -479,6 +481,7 @@ kit::SetupChromeLook chrome_look(
             look.next_enabled = true;
         } else {
             look.next = show("Pause", language);
+            look.next_style = kit::ButtonStyle::plain;
             look.next_enabled = session.model.copy.running;
         }
     }
@@ -527,7 +530,36 @@ void add_chrome(
     order.push_back(next_id);
 }
 
+/// One channel of a rule blended over the window face at half.
+///
+/// The same mix the painter uses at 128 of 256: the face keeps half, the
+/// rule takes half, and a half is added before the divide.
+///
+/// @param under the window face's channel
+/// @param over the rule's channel
+/// @return the blended channel
+uint8_t floor_channel(uint8_t under, uint8_t over) noexcept {
+    constexpr uint32_t kOpaque = 256;
+    constexpr uint32_t kShare = kOpaque / 2;
+    const uint32_t painted = uint32_t{over} * kShare + kOpaque / 2;
+    return static_cast<uint8_t>((uint32_t{under} * (kOpaque - kShare) + painted) / kOpaque);
+}
+
+/// The floor's ink: half the strength of a rule, over the window face.
+///
+/// @return the colour
+kit::Colour floor_ink() noexcept {
+    return {
+        floor_channel(kit::colour::panel.r, kit::colour::rule.r),
+        floor_channel(kit::colour::panel.g, kit::colour::rule.g),
+        floor_channel(kit::colour::panel.b, kit::colour::rule.b),
+    };
+}
+
 /// Draws the floor the language cards stand on: a grid, denser toward its top.
+///
+/// The lines are half a rule over the window face, at every size, so they
+/// do not read as the edges of a table under the cards.
 ///
 /// @param[in,out] list the display list
 /// @param width the window's width
@@ -536,13 +568,14 @@ void add_chrome(
 void add_floor(kit::DisplayList& list, int32_t width, int32_t top, int32_t bottom) {
     if (width <= 0 || bottom - top < 8)
         return;
+    const kit::Colour ink = floor_ink();
     constexpr int32_t kRows = 5;
     for (int32_t row = 0; row <= kRows; ++row) {
         const int32_t y = top + (bottom - top) * row * row / (kRows * kRows);
         kit::Item rule;
         rule.role = kit::Role::rule;
         rule.rect = {0, y, width, 1};
-        rule.colour = kit::colour::edge_light;
+        rule.colour = ink;
         list.items.push_back(std::move(rule));
     }
     constexpr int32_t kColumns = 12;
@@ -551,7 +584,7 @@ void add_floor(kit::DisplayList& list, int32_t width, int32_t top, int32_t botto
         kit::Item rule;
         rule.role = kit::Role::rule;
         rule.rect = {x, top, 1, bottom - top};
-        rule.colour = kit::colour::edge_light;
+        rule.colour = ink;
         list.items.push_back(std::move(rule));
     }
 }
@@ -630,7 +663,7 @@ void lay_language(
     constexpr int32_t kArrow = 28;
     const std::string note = show(
         "Other languages download from Core Prime. The first download makes a random install ID, "
-        "which the next step explains.",
+        "which a later step explains.",
         preview
     );
     const int32_t note_width = std::max(band.width, int32_t{1});
@@ -918,7 +951,10 @@ void lay_online(
     int32_t text_left = band.left;
     int32_t text_top = band.top;
     int32_t text_width = band.width;
-    if (band.width >= kTextFloor + kGap + 200 && band.height >= 200) {
+    // At Compact the well is a strip of the sample's header. The text takes
+    // that room, from the top of the band. Regular and Large keep the well.
+    const bool show_well = frame.size_class != kit::SizeClass::compact;
+    if (show_well && band.width >= kTextFloor + kGap + 200 && band.height >= 200) {
         const int32_t well_room = band.width - kTextFloor - kGap;
         fitted = fit_sample(well_room, band.height);
         const kit::Metrics& fitted_metrics = kit::metrics_of(fitted.size_class);
@@ -935,7 +971,7 @@ void lay_online(
             text_width = std::max(band.left + band.width - text_left, int32_t{1});
         }
     }
-    if (!beside) {
+    if (show_well && !beside) {
         const int32_t words = column_height(std::max(band.width, int32_t{1}));
         int32_t room_h = std::max(band.height - words - 8, int32_t{72});
         const int32_t cap = std::max(band.height * 2 / 5, int32_t{72});
@@ -1074,6 +1110,21 @@ std::string_view source_badge(SourceMark mark) noexcept {
     return "FOLDER";
 }
 
+/// Returns a footer button's width: button_width, or the caption with the
+/// same inset the footer's buttons keep either side of the word.
+///
+/// @param fonts the fonts; null uses button_width
+/// @param caption the button's words
+/// @return the width, in points
+int32_t footer_button_width(const kit::Fonts* fonts, std::string_view caption) {
+    int32_t text = 0;
+    if (fonts != nullptr)
+        text = kit::text_width(*fonts, kit::FontRole::small, caption);
+    return std::max(
+        kit::compact_metrics.button_width, text + 2 * kit::compact_metrics.choice_text_inset
+    );
+}
+
 /// A chip's width: the pill's own measure, or the estimate when the fonts are not there.
 ///
 /// @param fonts the fonts; null estimates
@@ -1202,7 +1253,7 @@ void lay_game(
         for (const ChipSpot& spot : spots) {
             kit::PillLook pill;
             pill.text = spot.text;
-            pill.state = kit::PillState::active;
+            pill.state = card.chosen ? kit::PillState::active : kit::PillState::neutral;
             kit::add_pill(
                 scene.list,
                 {text_left + spot.x, chips_y + spot.y, spot.width, chip_h},
@@ -1228,15 +1279,20 @@ void lay_game(
         row += card_h + metrics.padding;
     }
 
+    const std::string locate = show("Locate another…");
     const int32_t button_height = kit::compact_metrics.button_height;
-    const kit::Rect locate_rect{left, row, std::min(column, int32_t{220}), button_height};
+    const int32_t locate_w =
+        std::min(footer_button_width(fonts, locate), std::max(column, int32_t{1}));
+    const kit::Rect locate_rect{
+        left + std::max((column - locate_w) / 2, int32_t{0}), row, locate_w, button_height
+    };
     add_button(
         scene.list,
         order,
         locate_rect,
         locate_id,
         control_name(Step::game, "locate"),
-        show("Locate another…"),
+        locate,
         true,
         kit::ButtonStyle::plain
     );
@@ -1365,34 +1421,44 @@ void lay_copying(
                 kit::colour::text
             );
             y += kit::compact_metrics.regular_line;
-            if (bundle.phase == CopyPhase::copying && !bundle.file.empty()) {
+            // The line under the name stays for the whole copy, so a bundle
+            // that finishes does not pull the rows under it up. While the
+            // bundle copies it is the file's name. Once the bundle is done
+            // it is the result, and the file's name is not shown again.
+            const bool copying_file = bundle.phase == CopyPhase::copying;
+            const std::string& detail = copying_file ? bundle.file : bundle.amount;
+            const kit::Colour detail_ink = copying_file                        ? kit::colour::hint
+                                           : bundle.phase == CopyPhase::differ ? kit::colour::lock
+                                           : bundle.note                       ? kit::colour::hint
+                                                                               : kit::colour::quiet;
+            if (!detail.empty()) {
                 add_text(
                     scene.list,
                     {inner_left, y, inner_width, kit::compact_metrics.small_line},
-                    bundle.file,
+                    detail,
                     kit::FontRole::small,
-                    kit::colour::hint
+                    detail_ink
                 );
-                y += kit::compact_metrics.small_line;
             }
+            y += kit::compact_metrics.small_line;
             y += 4;
             kit::add_progress(
                 scene.list, {inner_left, y, inner_width, 6}, bundle.done, bundle.whole
             );
             y += 10;
-            if (!bundle.amount.empty()) {
-                const kit::Colour ink = bundle.phase == CopyPhase::differ ? kit::colour::lock
-                                        : bundle.note                     ? kit::colour::hint
-                                                                          : kit::colour::quiet;
+            // The amount under the bar is the live count while the file
+            // copies. The same height stays once the result has moved up,
+            // so the row does not change height.
+            if (copying_file && !bundle.amount.empty()) {
                 add_text(
                     scene.list,
                     {inner_left, y, inner_width, kit::compact_metrics.small_line},
                     bundle.amount,
                     kit::FontRole::small,
-                    ink
+                    bundle.note ? kit::colour::hint : kit::colour::quiet
                 );
-                y += kit::compact_metrics.small_line;
             }
+            y += kit::compact_metrics.small_line;
             if (index + 1 < count) {
                 y += 8;
                 kit::Item rule;

@@ -692,6 +692,13 @@ void every_component_at_every_class_and_scale(text_font::FontStack* modern) {
         expect(
             smooth_setup.second > setup.second, "the setup chrome at 150% is not larger than at 1x"
         );
+        chrome.next_style = kit::ButtonStyle::plain;
+        const auto setup_plain = crisp_draw(280, 62, [&](const kit::Canvas& canvas) {
+            kit::draw_setup_chrome(canvas, chrome);
+        });
+        states_differ(
+            "a plain right-hand button matches an accent one", setup.first, setup_plain.first
+        );
 
         kit::ChoiceCardLook choice;
         choice.title = "Ridge pack";
@@ -1020,6 +1027,82 @@ void carousel_wraps_one_step_and_a_double_click_picks() {
     }
 }
 
+/// The two cards two steps out are drawn with no pill. The three nearer keep one.
+void outer_cards_leave_the_pill_off() {
+    kit::CarouselLook carousel;
+    carousel.card_width = 80;
+    carousel.card_height = 56;
+    carousel.step = 88;
+    carousel.centre_milli = 2000;
+    carousel.wrap = true;
+    for (int index = 0; index < 5; ++index) {
+        kit::CarouselCard card;
+        card.letters = "EN";
+        card.own_name = "English";
+        card.english_name = "English";
+        card.facts = "Built into the game";
+        card.pill = "Built in";
+        card.availability =
+            index == 2 ? kit::LanguageAvailability::active : kit::LanguageAvailability::built_in;
+        carousel.cards.push_back(std::move(card));
+    }
+    const int32_t carousel_w = carousel.step * 4 + carousel.card_width + 8;
+    const int32_t carousel_h = carousel.card_height + kit::carousel_pager_band + 8;
+    const kit::Rect rect{0, 0, carousel_w, carousel_h};
+    const std::vector<kit::CarouselSlot> slots = kit::carousel_places(
+        kit::carousel_band(rect),
+        {carousel.card_width, carousel.card_height, carousel.step},
+        5,
+        carousel.centre_milli,
+        false,
+        true
+    );
+    int outer = 0;
+    int nearer = 0;
+    int32_t centre_index = -1;
+    int32_t side_index = -1;
+    for (const kit::CarouselSlot& slot : slots) {
+        if (slot.distance_milli >= kit::carousel_visible_side * 1000) {
+            ++outer;
+        } else {
+            ++nearer;
+            if (slot.centre)
+                centre_index = slot.index;
+            else if (side_index < 0)
+                side_index = slot.index;
+        }
+    }
+    expect(outer == 2 && nearer == 3, "a resting carousel is not two outer cards and three nearer");
+    expect(centre_index >= 0 && side_index >= 0, "the centre or a side card is missing");
+    if (centre_index < 0 || side_index < 0)
+        return;
+
+    const auto draw = [&](const kit::CarouselLook& look) {
+        const auto drawn = crisp_draw(carousel_w, carousel_h, [&](const kit::Canvas& canvas) {
+            kit::draw_carousel(canvas, rect, look);
+        });
+        return drawn.first;
+    };
+    const uint64_t kept = draw(carousel);
+    kit::CarouselLook stripped = carousel;
+    for (const kit::CarouselSlot& placed : slots) {
+        if (placed.distance_milli >= kit::carousel_visible_side * 1000)
+            stripped.cards[static_cast<std::size_t>(placed.index)].pill.clear();
+    }
+    expect(draw(stripped) == kept, "an outer card still draws its pill");
+
+    kit::CarouselLook centre = carousel;
+    centre.cards[static_cast<std::size_t>(centre_index)].pill.clear();
+    states_differ("the centre card leaves its pill off", kept, draw(centre));
+    kit::CarouselLook side = carousel;
+    side.cards[static_cast<std::size_t>(side_index)].pill.clear();
+    states_differ("a card one step out leaves its pill off", kept, draw(side));
+
+    carousel.reduced_motion = true;
+    stripped.reduced_motion = true;
+    expect(draw(stripped) == draw(carousel), "reduced motion still draws an outer pill");
+}
+
 void smooth_pill_keeps_its_words(text_font::FontStack* modern) {
     Smooth smooth(160, 40, modern);
     smooth.canvas.fonts = nullptr;
@@ -1043,6 +1126,7 @@ int main() {
     // exercise a smooth canvas, or the filter is never checked.
     smooth_copy_is_filtered(modern.get());
     smooth_pill_keeps_its_words(modern.get());
+    outer_cards_leave_the_pill_off();
     every_component_at_every_class_and_scale(modern.get());
     return oa::test::check_exit_status();
 }

@@ -47,7 +47,7 @@ inline constexpr std::string_view interface_words[] = {
     "Open Annihilation's own settings: controls, graphics, the interface's size, downloads and "
     "your files.",
     "Other languages download from Core Prime. The first download makes a random install ID, which "
-    "the next step explains.",
+    "a later step explains.",
     "Previous",
     "Retry",
     "Settings",

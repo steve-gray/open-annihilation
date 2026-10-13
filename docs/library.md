@@ -238,13 +238,13 @@ The tabs are **Active**, **Mods**, **Maps**, **Languages**, **Updates**
 and **Registries**. Each tab after Active shows how many it lists under
 All, before a search or a tag, in brackets after its title and in that
 title's own font and colour: "Mods (11)", "Maps (2)", "Languages (2)",
-"Updates (2)", "Registries (2)". The full names are used when they fit
-the strip. The short names ("Lang", "Upd", "Reg", with the brackets, as
-"Upd (2)") are used only when they do not. Compact always uses the short
-names. On a regular or large window, Active and Registries give the tabs
-the whole row, so the full names fit there. A catalogue tab shares that
-row with the search, and keeps the short names when the full ones would
-run into the field. Active has no count.
+"Updates (2)", "Registries (2)". The names are always the full ones.
+When they do not fit the strip, the strip scrolls sideways. The open tab
+stays wholly in view. A small arrow at an end shows when more tabs lie
+that way, and pressing it moves the strip by one tab. The wheel over the
+strip scrolls it the same way. Where every tab fits, there are no arrows
+and the strip does not scroll. Active
+has no count.
 Updates counts the updates you can install, as the OA button's dot does.
 Registries counts the registries listed. Registries is last, and it is
 where registries are added, checked and turned off
@@ -543,6 +543,8 @@ With a controller, Y focuses the search (the maps search on the Active tab),
 X presses the chosen entry's GET,
 UPDATE, CANCEL or RETRY, L1 and R1 change tab, B goes back as Escape does,
 and the right stick scrolls ([gamepad controls](controllers.md#menus)).
+The wheel over the tab strip scrolls the tabs when they do not fit;
+elsewhere it scrolls the page under the pointer.
 A finger or the mouse presses any control. A press, double click or tap on
 a row chooses it: nothing installs until you press GET or UPDATE, in the
 details or as the row's download arrow or up-arrow.
@@ -596,7 +598,10 @@ The queue is at the foot of the Library, under the list:
   ("Waiting · finishes when you leave Ridge"), or a failure;
 - the second says what comes next: "Then Ridge 4.8 · waiting", and how many
   more;
-- in Compact one line, "Cinder 28%" with a bar.
+- while a download is running, an 8-point bar under the first line shows
+  how far it has come, at every window size. Compact's first line is the
+  short one ("Cinder 28%"). Regular and Large keep the two lines, with the
+  bar between them.
 
 After an update that changes the rules the line says so: "Updated Ridge ·
 revision 4 changes the game's rules · ROLL BACK restores revision 3", or
@@ -692,10 +697,9 @@ Each card shows:
   ("31 packages · not reviewed"), then how many mirrors you added
   (" · 2 mirrors").
 
-A registry that ships with the game has a **Built in** pill at the card's
-right, under the key icon, **REFRESH** and the switch. It is the same
-neutral pill the Active tab uses, so it does not look like an installed
-chip.
+A registry that ships with the game has a **Built in** pill on the title's
+line, at its right, the same neutral pill the Active tab's Language tile
+uses. It does not look like an installed chip.
 
 A registry you added also has **REMOVE** and **ADD MIRROR…**, standard
 buttons, under the subtitle. **REMOVE** forgets the registry at once and
@@ -725,7 +729,7 @@ The cards and the note scroll together when they are taller than the
 window. Settings › Downloads, on the main menu, has **REGISTRIES IN THE
 LIBRARY…**, which opens the Library on this tab.
 
-![The Registries tab at Compact: Core Prime's card, with its title, description, key icon, REFRESH, switch and Built in pill.](images/library/library-registries-compact.png)
+![The Registries tab at Compact: Core Prime's card, with its title and the Built in pill beside it, then the description, key icon, REFRESH and switch.](images/library/library-registries-compact.png)
 
 ![The Registries tab at Regular: the same cards, one under another.](images/library/library-registries-regular.png)
 

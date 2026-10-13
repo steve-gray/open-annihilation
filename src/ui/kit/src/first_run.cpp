@@ -1202,7 +1202,10 @@ void draw_carousel(const Canvas& canvas, const Rect& rect, const CarouselLook& l
         card.own_name = source.own_name;
         card.english_name = source.english_name;
         card.facts = source.facts;
-        card.pill = source.pill;
+        // Two steps out the pill is copied through the turn and cannot be
+        // read. The centre and the cards one step out keep theirs.
+        if (slot.distance_milli < carousel_visible_side * 1000)
+            card.pill = source.pill;
         card.availability = source.availability;
         card.hovered = source.hovered;
         card.held = source.held;
@@ -1407,9 +1410,7 @@ void draw_setup_chrome(const Canvas& canvas, const SetupChromeLook& look) {
     draw_button(
         canvas,
         buttons.next,
-        ButtonLook{
-            look.next, ButtonStyle::accent, look.next_hovered, look.next_held, look.next_enabled
-        }
+        ButtonLook{look.next, look.next_style, look.next_hovered, look.next_held, look.next_enabled}
     );
     draw_window_edge(canvas, whole);
 }

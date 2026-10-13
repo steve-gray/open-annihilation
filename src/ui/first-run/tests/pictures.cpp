@@ -471,15 +471,17 @@ oa::ui::first_run::Session copying_session(bool checked) {
     bundle.phase =
         checked ? oa::ui::first_run::CopyPhase::done : oa::ui::first_run::CopyPhase::copying;
     session.model.copy.bundles.push_back(std::move(bundle));
+    // Music is already done, beside the bundle that is still copying, so the
+    // two rows can be compared. Once the check is done both rows show a result.
+    oa::ui::first_run::CopyBundle music;
+    music.name = "Music";
+    music.amount = "17 of 18 tracks";
+    music.done = 1000;
+    music.whole = 1000;
+    music.phase = oa::ui::first_run::CopyPhase::done;
+    music.note = true;
+    session.model.copy.bundles.push_back(std::move(music));
     if (checked) {
-        oa::ui::first_run::CopyBundle music;
-        music.name = "Music";
-        music.amount = "17 of 18 tracks";
-        music.done = 1000;
-        music.whole = 1000;
-        music.phase = oa::ui::first_run::CopyPhase::done;
-        music.note = true;
-        session.model.copy.bundles.push_back(std::move(music));
         session.model.copy.verdict = "All files match";
         session.copy_continue_ms = 3000;
     }
@@ -732,6 +734,7 @@ int main(int argc, char** argv) {
         oa::ui::first_run::Session quit_copy = copying_session(false);
         oa::ui::first_run::Session skip_copy = copying_session(false);
         skip_copy.model.leave = oa::ui::first_run::Leave::skip;
+        oa::ui::first_run::Session quit_checked = copying_session(true);
         oa::ui::first_run::Session skip_online = language_session(false);
         skip_online.model.step = oa::ui::first_run::Step::online;
         skip_online.model.leave = oa::ui::first_run::Leave::skip;
@@ -747,8 +750,9 @@ int main(int argc, char** argv) {
         if (!save(skip_language, "skip-language.png") ||
             !save(quit_language, "quit-language.png") || !save(quit_game, "quit-game.png") ||
             !save(skip_game, "skip-game.png") || !save(quit_copy, "quit-copying.png") ||
-            !save(skip_copy, "skip-copying.png") || !save(skip_online, "skip-online.png") ||
-            !save(quit_online, "quit-online.png") || !save(buttons, "buttons.png"))
+            !save(skip_copy, "skip-copying.png") || !save(quit_checked, "quit-checked.png") ||
+            !save(skip_online, "skip-online.png") || !save(quit_online, "quit-online.png") ||
+            !save(buttons, "buttons.png"))
             return 1;
     }
     return 0;

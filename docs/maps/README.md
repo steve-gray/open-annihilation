@@ -207,6 +207,8 @@ Interface size ([settings](../settings.md#graphics)):
   fits, "Fits No Mod ✓", "Doesn't fit Ridge" with the reason, or, for a map
   online, "Fit with No Mod is checked when it's installed" or what the
   registry's catalogue says ("Its catalogue says it does not fit Ridge.").
+  At Compact the line under the title is only the pack, or that source
+  name, and the player count, and the fit chips sit on that line.
 - **Select**, for a map you have, chooses it in the list you came from,
   where you then press LOAD or start as ever. **Download and select**, for a
   map online, downloads its pack as the Library's GET does, shows how far it

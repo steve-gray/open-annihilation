@@ -579,6 +579,8 @@ std::string_view glyph_name(kit::Glyph glyph) {
         return "file";
     case kit::Glyph::oa:
         return "oa";
+    case kit::Glyph::magnifier:
+        return "magnifier";
     }
     return "?";
 }
@@ -844,11 +846,15 @@ void check_order_and_filter() {
     bool file_glyph = false;
     bool folder_glyph = false;
     bool size_shown = false;
+    bool placeholder = false;
+    bool magnifier = false;
     for (const kit::Item& part : shown.paint.list.items) {
         if (part.role == kit::Role::icon && part.glyph == kit::Glyph::file)
             file_glyph = true;
         if (part.role == kit::Role::icon && part.glyph == kit::Glyph::folder)
             folder_glyph = true;
+        if (part.role == kit::Role::icon && part.glyph == kit::Glyph::magnifier)
+            magnifier = true;
         for (const std::string& line : part.lines) {
             if (line.find("Choose a folder or an installer") != std::string::npos)
                 title = true;
@@ -856,9 +862,17 @@ void check_order_and_filter() {
                 qualify = true;
             if (line == "2.4 GB")
                 size_shown = true;
+            if (line == "Filter names")
+                placeholder = true;
         }
     }
+    const kit::Control* filter = find(shown, {chooser::TargetKind::filter, 0});
+    const kit::Control* up = find(shown, {chooser::TargetKind::up, 0});
     OA_CHECK(title);
+    OA_CHECK(placeholder);
+    OA_CHECK(magnifier);
+    OA_CHECK(filter != nullptr && up != nullptr && filter->rect.y > up->rect.y);
+    OA_CHECK(filter != nullptr && filter->rect.width > up->rect.width);
     OA_CHECK(qualify);
     OA_CHECK(file_glyph);
     OA_CHECK(folder_glyph);
@@ -872,7 +886,7 @@ void check_order_and_filter() {
     bool none = false;
     for (const kit::Item& part : narrowed.paint.list.items) {
         for (const std::string& line : part.lines) {
-            if (line.find("Filter: commander") != std::string::npos)
+            if (line.find("commander") != std::string::npos)
                 filter_shown = true;
             if (line == "No names match.")
                 none = true;

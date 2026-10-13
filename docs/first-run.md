@@ -51,8 +51,11 @@ The language in use starts in the centre, in front of the cards beside it.
 A move eases to the next card over half a second, and the window draws
 every frame of that move. The place at a moment depends on how long the
 move has been running, not on how many times the window has been drawn.
-Cards one or two steps away stay readable, and the floor's grid is drawn
-behind them.
+Cards one or two steps away stay readable. The two furthest from the
+centre show no pill, because a pill turned with those cards cannot be
+read. The centre card and the card one step to either side keep theirs.
+The floor's grid is drawn behind the cards, at half the strength of a
+rule, so the lines do not meet the cards as a table.
 
 ![The language step of a first start, at 1280 by 720: English centred and ringed, Active and Built in whole, and a fixture pack offering Get.](images/first-run/language-large.png)
 
@@ -88,7 +91,7 @@ either way, and the language stays as it was until a pack is installed.
 
 Under the carousel, a note says that other languages download from Core
 Prime and that the first download makes a random install ID, which the
-next step explains. **Next** is disabled while a download is running.
+later step explains. **Next** is disabled while a download is running.
 Escape, and B on a controller, do nothing on this step.
 
 ## When the packs cannot be fetched
@@ -116,11 +119,13 @@ installation, never a folder of loose files such as Downloads. When a
 folder was only searched for installers, those installers are the rows.
 The fullest place is selected. A row names the file or the folder, the
 path shortened under the home folder, and the bundles that place holds.
-It does not name a bundle the place lacks. The list is ready when the
-step opens. Copying still checks each file as it reads it. **Locate
-another…** asks for a folder. **Copy the game** is available once a row
-is chosen. **Back** returns to the language. The left button is the
-walk's **Quit** or **Skip**.
+It does not name a bundle the place lacks. The selected row's bundles
+are accent pills, and every other row's are quiet pills. The list is
+ready when the step opens. Copying still checks each file as it reads
+it. **Locate another…** is centred under the rows, at the footer
+buttons' height, and asks for a folder. **Copy the game** is available
+once a row is chosen. **Back** returns to the language. The left button
+is the walk's **Quit** or **Skip**.
 
 The line under the rows says the copies go to Documents › Open
 Annihilation, and that the installation is left as it is.
@@ -138,9 +143,13 @@ The overall count is the files this copy takes from
 this source. A file the source does not hold is not in that count, so a
 finished copy reads 100%. The bundles the source holds sit in a panel
 under the bar. A bundle the source does not hold is not listed. While a
-file is being copied its name is on the row; once that bundle is complete
-the name goes. A track the music bundle never held is a note, such as
-"17 of 18 tracks", and is not a failure.
+file is being copied its name is the line under the bundle's name. Once
+that bundle is complete the file's name goes, and that same line says
+the result, such as "All files match" or "17 of 18 tracks". The row
+keeps its height, so the bundles under it stay put. A track the music
+bundle never held is a note, and is not a failure. While the copy runs
+the footer's right-hand button is **Pause**, drawn plain. Once the check
+is done it is **Continue**, in the accent, and counts down.
 
 Two centred lines say "If OA stops, the copy carries on from here next
 time." and "To Documents › Open Annihilation › Games and Expansions".
@@ -159,11 +168,14 @@ is still there.
 
 ![Online features: a picture of the Library's Active tab, the heading ONLINE FEATURES, three lines about downloads, the install ID panel, and the choices Turn on online features and Not now.](images/first-run/online.png)
 
-The page word is still Welcome. The step is ONLINE, 2 of 3. The picture is
-the Library's Active tab, drawn live in the language just chosen, from a
-fixed sample (the made-up mod Ridge). No picture of it is shipped with the
-game. Under it, the kicker ONLINE FEATURES, the heading "Downloads, updates
-and a number only you hold", three lines, and the install ID as
+The page word is still Welcome. The step is ONLINE, 2 of 3. At Regular
+and Large a picture of the Library's Active tab sits beside the words, or
+above them when the column is too narrow for both. It is drawn live in
+the language just chosen, from a fixed sample (the made-up mod Ridge). No
+picture of it is shipped with the game. At Compact that picture is left
+out, and the words use the whole column from the top of the page. The
+kicker is ONLINE FEATURES, then the heading "Downloads, updates and a
+number only you hold", three lines, and the install ID as
 [downloads.md](downloads.md#the-install-id) describes it:
 
 - Get language packs, mods and map packs from Core Prime.

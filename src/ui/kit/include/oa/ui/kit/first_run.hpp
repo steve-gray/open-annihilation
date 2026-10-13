@@ -322,8 +322,11 @@ void add_language_card(
 ///
 /// Cards are drawn at card_width by card_height and copied into their places,
 /// so a card that has fallen back is smaller and turned. The copy is the
-/// canvas's perspective blit. The pager is one bar a card, and the bar of the
-/// card nearest centre_milli is lit. The arrows are not part of the carousel.
+/// canvas's perspective blit. A card two steps from the centre, the two outer
+/// cards of the five that show, is drawn with no pill: the blit turns those
+/// words into a smear. The centre card and the cards one step out keep the
+/// pill. The pager is one bar a card, and the bar of the card nearest
+/// centre_milli is lit. The arrows are not part of the carousel.
 ///
 /// @param canvas where it is drawn
 /// @param rect the band and the pager
@@ -422,7 +425,8 @@ struct SetupButtons {
 
 /// Draws the setup window from the canvas's origin: the face, the header
 /// (the mark, "Open Annihilation", the page word and the step indicator at
-/// the right), the footer, Skip setup, Back and Next, and the edge.
+/// the right), the footer, Skip setup, Back and the right-hand button, and
+/// the edge. The right-hand button is plain or the accent as the look says.
 ///
 /// @param canvas where it is drawn; its origin is the window's top left
 /// @param look the window, the page and the buttons
