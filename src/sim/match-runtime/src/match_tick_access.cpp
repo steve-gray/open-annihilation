@@ -49,4 +49,37 @@ bool MatchTickAccess::order_building(const sim::simulation_state::Order& order) 
     return (order.flags & tick_detail::order_building_flag) != 0;
 }
 
+void MatchTickAccess::link_target(
+    Match& match, sim::simulation_state::Order& order, sim::simulation_state::Unit* target
+) {
+    auto* entry = match.runtime_order(&order);
+    if (entry == nullptr) {
+        match.note_fault("order outside the match");
+        return;
+    }
+    match.link_target_observer(*entry, target);
+}
+
+MatchTickAccess::ObserverPlace
+MatchTickAccess::observer_place(Match& match, const sim::simulation_state::Order& order) {
+    return ObserverPlace{match.runtime_order(&order)};
+}
+
+bool MatchTickAccess::list_holds(
+    Match& match, sim::simulation_state::Unit& unit, ObserverPlace place
+) {
+    if (place.node == nullptr)
+        return false;
+    const auto found = match.target_observers_.find(&unit);
+    if (found == match.target_observers_.end())
+        return false;
+    std::size_t steps = overlay_order_budget;
+    for (auto* cursor = found->second; cursor != nullptr && steps-- > 0;
+         cursor = cursor->observer_next) {
+        if (cursor == place.node)
+            return true;
+    }
+    return false;
+}
+
 } // namespace oa::sim::match_runtime

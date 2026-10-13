@@ -8,6 +8,7 @@
 #include "oa/formats/tdf.hpp"
 
 #include <array>
+#include <cassert>
 #include <cstdint>
 
 namespace oa::sim::match_runtime {
@@ -51,8 +52,12 @@ void Match::wake_target_observers(sim::simulation_state::Unit& unit, uint32_t ev
     const auto found = target_observers_.find(&unit);
     if (found == target_observers_.end())
         return;
-    for (auto* entry = found->second; entry != nullptr; entry = entry->observer_next)
+    for (auto* entry = found->second; entry != nullptr; entry = entry->observer_next) {
+        // Every order on the list still targets this unit. The walk raises
+        // the event on each of them.
+        assert(entry->attack.target == &unit);
         entry->order.raised_events |= event;
+    }
 }
 
 void Match::react_to_damage(sim::unit_spawn::Slot& target, sim::unit_spawn::Slot* source) {
@@ -406,28 +411,60 @@ void Match::lose_target(RuntimeOrder& entry, const sim::simulation_state::Unit& 
 }
 
 void Match::link_target_observer(RuntimeOrder& entry, sim::simulation_state::Unit* target) {
+    // Drop the order from the unit it watches now, so that unit's list no
+    // longer reaches it once the order points somewhere else.
+    unlink_target_observer(entry);
     if (target == nullptr || target->record.type_index == 0) {
         entry.attack.target = nullptr;
         entry.observer_next = nullptr;
+        check_target_observer(entry);
         return;
     }
     auto& head = target_observers_[target];
     entry.attack.target = target;
     entry.observer_next = head;
     head = &entry;
+    check_target_observer(entry);
 }
 
 void Match::unlink_target_observer(RuntimeOrder& entry) {
-    if (entry.attack.target == nullptr)
-        return;
-    auto** link = &target_observers_[entry.attack.target];
-    std::size_t steps = overlay_order_budget;
-    while (*link != nullptr && *link != &entry && steps-- > 0)
-        link = &(*link)->observer_next;
-    if (*link == &entry)
-        *link = entry.observer_next;
-    entry.attack.target = nullptr;
-    entry.observer_next = nullptr;
+    if (entry.attack.target != nullptr) {
+        auto** link = &target_observers_[entry.attack.target];
+        std::size_t steps = overlay_order_budget;
+        while (*link != nullptr && *link != &entry && steps-- > 0)
+            link = &(*link)->observer_next;
+        if (*link == &entry)
+            *link = entry.observer_next;
+        entry.attack.target = nullptr;
+        entry.observer_next = nullptr;
+    }
+    check_target_observer(entry);
+}
+
+void Match::check_target_observer(const RuntimeOrder& entry) const noexcept {
+#ifndef NDEBUG
+    auto* target = entry.attack.target;
+    for (const auto& [unit, head] : target_observers_) {
+        auto* cursor = head;
+        int seen = 0;
+        std::size_t steps = overlay_order_budget;
+        while (cursor != nullptr && steps-- > 0) {
+            if (cursor == &entry)
+                ++seen;
+            cursor = cursor->observer_next;
+        }
+        if (unit != target)
+            assert(seen == 0);
+        else if (cursor == nullptr)
+            assert(seen == 1);
+        else
+            assert(seen <= 1);
+    }
+    if (target != nullptr)
+        assert(target_observers_.find(target) != target_observers_.end());
+#else
+    (void)entry;
+#endif
 }
 
 void Match::release_air_driver(uint16_t unit) {
