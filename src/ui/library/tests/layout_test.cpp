@@ -289,7 +289,8 @@ std::vector<std::string> order_problems(const kit::DisplayList& list) {
 /// @return true when it is
 bool designed_name(const std::string& name) {
     static const std::regex pattern(
-        "library\\.(tab\\.(active|mods|maps|languages|updates|registries)|search|filter|"
+        "library\\.(tab\\.(active|mods|maps|languages|updates|registries|scroll-left|scroll-right)|"
+        "search|filter|"
         "filter\\.(all|new|installed|updates|tag-[a-z0-9-]+)|tag\\.[a-z0-9-]+|tags|tags\\.[a-z0-9-]"
         "+|detail\\.tag\\.[a-z0-9-]+|"
         "list|row\\.[a-z0-9-]+(\\.[a-z0-9-]+)?(\\.(get|update))?|action|"
@@ -638,10 +639,7 @@ void check_frame(const fixture::NamedFrame& named) {
     const kit::Control* updates_tab = fixture::named(updates_list, "library.tab.updates");
     // Updates counts the updates that can be installed.
     const std::string updates_count = std::to_string(lib::update_count(library));
-    OA_CHECK(
-        updates_tab != nullptr &&
-        updates_tab->text == (compact ? "Upd (" : "Updates (") + updates_count + ")"
-    );
+    OA_CHECK(updates_tab != nullptr && updates_tab->text == "Updates (" + updates_count + ")");
 
     // The Active tab: first, no catalogue search, no filters and no list.
     // Its lines are labels. Tab reaches the tabs, UNLOAD MOD, the maps
@@ -897,21 +895,18 @@ void larger_classes_show_more() {
     OA_CHECK(all_entry != nullptr && all_entry->kind == kit::ControlKind::tab);
     OA_CHECK(fixture::named(regular, "library.filter.all") != nullptr);
     OA_CHECK(fixture::named(compact, "library.filter") != nullptr);
-    // Compact's tabs take their short names. Active is the first stop; the
-    // close mark is last, after the footer.
+    // The tabs keep their full names. Active is the first stop; the close
+    // mark is last, after the footer.
     const kit::Control* first_stop = kit::control_of(compact, compact.tab_order.front());
     OA_CHECK(first_stop != nullptr && first_stop->name == "library.tab.active");
     const kit::Control* last_stop = kit::control_of(compact, compact.tab_order.back());
     OA_CHECK(last_stop != nullptr && last_stop->name == "library.close-x");
     const kit::Control* languages = fixture::named(compact, "library.tab.languages");
-    OA_CHECK(languages != nullptr && languages->text == "Lang (2)");
-    // Compact forces the short names. Regular and Large, on a tab that shows
-    // the search, may still shorten them. Active and Registries give the
-    // tabs the whole row, so the full names fit there.
+    OA_CHECK(languages != nullptr && languages->text == "Languages (2)");
     const kit::Control* updates = fixture::named(compact, "library.tab.updates");
     OA_CHECK(
         updates != nullptr &&
-        updates->text == "Upd (" + std::to_string(lib::update_count(library)) + ")"
+        updates->text == "Updates (" + std::to_string(lib::update_count(library)) + ")"
     );
 }
 
@@ -1720,12 +1715,11 @@ void active_base_game_is_a_tile() {
         OA_CHECK(text_item(list, "TA") != nullptr);
         const kit::Control* languages = fixture::named(list, "library.tab.languages");
         const kit::Control* registries = fixture::named(list, "library.tab.registries");
-        const bool compact = named.frame.size_class == kit::SizeClass::compact;
         OA_CHECK(languages != nullptr && registries != nullptr);
         if (languages != nullptr)
-            OA_CHECK(languages->text.starts_with(compact ? "Lang (" : "Languages ("));
+            OA_CHECK(languages->text.starts_with("Languages ("));
         if (registries != nullptr)
-            OA_CHECK(registries->text.starts_with(compact ? "Reg (" : "Registries ("));
+            OA_CHECK(registries->text.starts_with("Registries ("));
         OA_CHECK(text_item(list, "All files match") != nullptr);
         OA_CHECK(text_starts(list, "3.1c"));
         const kit::Control* change = fixture::named(list, "library.active.change");
@@ -2160,7 +2154,7 @@ bool row_refresh_turning(const kit::DisplayList& list) {
 /// The Registries tab lists every registry. ADD REGISTRY… sits at the top
 /// right, above the cards. Each card shows its refresh time, a key icon and
 /// REFRESH beside the switch; REMOVE and ADD MIRROR… only for one the player
-/// added, and a neutral Built in pill under those controls for one that ships
+/// added, and a neutral Built in pill on the title's line for one that ships
 /// with the game. It has no search. The heading is the title, and the note
 /// keeps the short name.
 void registries_tab_lists_every_registry() {
@@ -2182,9 +2176,8 @@ void registries_tab_lists_every_registry() {
         OA_EXPECT_NONE(order_problems(list), named.name + " registries");
         OA_CHECK(fixture::named(list, "library.tab.registries") != nullptr);
         const kit::Control* registries_tab = fixture::named(list, "library.tab.registries");
-        const bool compact_tabs = named.frame.size_class == kit::SizeClass::compact;
         if (registries_tab != nullptr)
-            OA_CHECK(registries_tab->text.starts_with(compact_tabs ? "Reg (" : "Registries ("));
+            OA_CHECK(registries_tab->text.starts_with("Registries ("));
         OA_CHECK(fixture::named(list, "library.search") == nullptr);
         OA_CHECK(fixture::named(list, "library.registry.fixture-core") != nullptr);
         OA_CHECK(fixture::named(list, "library.registry.fixture-core.remove") == nullptr);
@@ -2241,15 +2234,19 @@ void registries_tab_lists_every_registry() {
         }
         OA_CHECK(built_in_pills == 1);
         OA_CHECK(key_icon);
-        OA_CHECK(built_in_pill != nullptr && core_row != nullptr);
-        if (built_in_pill != nullptr && core_row != nullptr) {
+        const kit::Item* core_title_item = text_item(list, core_title);
+        OA_CHECK(built_in_pill != nullptr && core_row != nullptr && core_title_item != nullptr);
+        if (built_in_pill != nullptr && core_title_item != nullptr && core_key != nullptr) {
             const auto* pill_look = std::get_if<kit::PillLook>(&built_in_pill->look);
             OA_CHECK(pill_look != nullptr && pill_look->state == kit::PillState::neutral);
-            OA_CHECK(built_in_pill->rect.y >= core_row->rect.y + core_row->rect.height);
             OA_CHECK(
-                built_in_pill->rect.x + built_in_pill->rect.width ==
-                core_row->rect.x + core_row->rect.width
+                built_in_pill->rect.y < core_title_item->rect.y + core_title_item->rect.height
             );
+            OA_CHECK(built_in_pill->rect.y + built_in_pill->rect.height > core_title_item->rect.y);
+            OA_CHECK(
+                built_in_pill->rect.x >= core_title_item->rect.x + core_title_item->rect.width
+            );
+            OA_CHECK(built_in_pill->rect.x + built_in_pill->rect.width <= core_key->rect.x);
         }
         std::vector<kit::Rect> cards;
         for (const kit::Item& item : list.items) {
@@ -3707,6 +3704,147 @@ void expansion_download_arrow_sits_inside_the_pill() {
     OA_CHECK(!library.content.edited);
 }
 
+/// Returns the strip of tabs, or null when the layout has none.
+///
+/// @param list the display list
+/// @return the item
+const kit::Item* tab_strip(const kit::DisplayList& list) {
+    for (const kit::Item& item : list.items)
+        if (item.role == kit::Role::tabs)
+            return &item;
+    return nullptr;
+}
+
+/// Tells whether the open tab lies wholly in the strip's view.
+///
+/// @param list the display list
+/// @return true when it does
+bool open_tab_is_shown(const kit::DisplayList& list) {
+    const kit::Item* strip = tab_strip(list);
+    if (strip == nullptr)
+        return false;
+    const auto* look = std::get_if<kit::TabsLook>(&strip->look);
+    if (look == nullptr)
+        return false;
+    const kit::TabStrip placed = kit::place_tabs(fonts(), strip->rect, *look);
+    return placed.selected < placed.tabs.size() &&
+           kit::wholly_in(placed.tabs[placed.selected], placed.view);
+}
+
+/// The tabs keep their full names. At Compact the strip scrolls, the open
+/// tab stays in view, and an arrow or the wheel moves it by one tab. Where
+/// the names fit there are no arrows. A download draws its bar at every size.
+void tabs_scroll_and_the_queue_shows_its_bar() {
+    const std::vector<fixture::NamedFrame> all = fixture::frames();
+    lib::Library library = with_ridge();
+    for (const fixture::NamedFrame& named : all) {
+        lib::ScreenState state;
+        const kit::DisplayList list = laid_out(library, state, named.frame);
+        const bool compact = named.frame.size_class == kit::SizeClass::compact;
+        const kit::Control* languages = fixture::named(list, "library.tab.languages");
+        const kit::Control* updates = fixture::named(list, "library.tab.updates");
+        const kit::Control* registries = fixture::named(list, "library.tab.registries");
+        OA_CHECK(languages != nullptr && languages->text.starts_with("Languages ("));
+        OA_CHECK(updates != nullptr && updates->text.starts_with("Updates ("));
+        OA_CHECK(registries != nullptr && registries->text.starts_with("Registries ("));
+        OA_CHECK(open_tab_is_shown(list));
+        const kit::Item* strip = tab_strip(list);
+        const kit::Control* left = fixture::named(list, "library.tab.scroll-left");
+        const kit::Control* right = fixture::named(list, "library.tab.scroll-right");
+        bool overflows = false;
+        if (strip != nullptr) {
+            if (const auto* look = std::get_if<kit::TabsLook>(&strip->look))
+                overflows = kit::place_tabs(fonts(), strip->rect, *look).overflows;
+        }
+        if (overflows && compact) {
+            OA_CHECK(state.tab_scroll == 0);
+            OA_CHECK(left == nullptr && right != nullptr && !right->focusable);
+        } else {
+            OA_CHECK(left == nullptr && right == nullptr);
+        }
+        const kit::Control* queue = fixture::named(list, "library.queue");
+        const kit::Item* bar = nullptr;
+        for (const kit::Item& item : list.items)
+            if (item.role == kit::Role::progress)
+                bar = &item;
+        const kit::Metrics& metrics = kit::metrics_of(named.frame.size_class);
+        OA_CHECK(queue != nullptr && bar != nullptr);
+        if (queue != nullptr && bar != nullptr) {
+            OA_CHECK(bar->rect.height == metrics.progress_bar_height);
+            OA_CHECK(bar->rect.y >= queue->rect.y + queue->rect.height);
+            OA_CHECK(bar->rect.x == queue->rect.x);
+            OA_CHECK(bar->rect.width == queue->rect.width);
+        }
+    }
+
+    lib::set_tab(library, lib::Tab::mods);
+    for (const fixture::NamedFrame& named : {all[1], all[2]}) {
+        const kit::DisplayList list = laid_out(library, {}, named.frame);
+        OA_CHECK(fixture::named(list, "library.tab.scroll-left") == nullptr);
+        OA_CHECK(fixture::named(list, "library.tab.scroll-right") == nullptr);
+        OA_CHECK(open_tab_is_shown(list));
+    }
+
+    // Narrower than the fixture's Compact, so the full names overflow the
+    // synthetic font the same way they overflow a Compact window in the
+    // game's font.
+    kit::Frame narrow;
+    narrow.area = {0, 0, 280, 480};
+    narrow.size_class = kit::SizeClass::compact;
+    narrow.scale_percent = 100;
+    lib::set_tab(library, lib::Tab::registries);
+    lib::ScreenState at_end;
+    const kit::DisplayList end = laid_out(library, at_end, narrow);
+    const kit::Item* end_strip = tab_strip(end);
+    bool end_overflows = false;
+    if (end_strip != nullptr) {
+        if (const auto* look = std::get_if<kit::TabsLook>(&end_strip->look))
+            end_overflows = kit::place_tabs(fonts(), end_strip->rect, *look).overflows;
+    }
+    OA_CHECK(end_overflows);
+    OA_CHECK(at_end.tab_scroll > 0);
+    OA_CHECK(fixture::named(end, "library.tab.scroll-left") != nullptr);
+    OA_CHECK(fixture::named(end, "library.tab.scroll-right") == nullptr);
+    OA_CHECK(open_tab_is_shown(end));
+
+    lib::set_tab(library, lib::Tab::updates);
+    lib::ScreenState scrolling;
+    const kit::DisplayList updates = laid_out(library, scrolling, narrow);
+    const kit::Item* strip = tab_strip(updates);
+    OA_CHECK(strip != nullptr && open_tab_is_shown(updates));
+    if (strip != nullptr) {
+        const kit::Point over{
+            strip->rect.x + strip->rect.width / 2, strip->rect.y + strip->rect.height / 2
+        };
+        const int32_t before_scroll = scrolling.tab_scroll;
+        const int32_t stepped = kit::tab_scroll_step(updates, 1);
+        const lib::ScreenResult turned =
+            lib::library_wheel(library, scrolling, updates, over, -1.0F);
+        OA_CHECK(stepped != before_scroll);
+        OA_CHECK(turned.redraw);
+        OA_CHECK(scrolling.tab_scroll == stepped);
+        OA_CHECK(scrolling.list_scroll == 0);
+        OA_CHECK(open_tab_is_shown(laid_out(library, scrolling, narrow)));
+
+        lib::ScreenState by_arrow;
+        const kit::DisplayList before = laid_out(library, by_arrow, narrow);
+        const int32_t by_step = kit::tab_scroll_step(before, 1);
+        click(library, by_arrow, before, "library.tab.scroll-right");
+        OA_CHECK(by_arrow.tab_scroll == by_step);
+        OA_CHECK(open_tab_is_shown(laid_out(library, by_arrow, narrow)));
+    }
+
+    library = with_ridge();
+    lib::ScreenState commands;
+    kit::DisplayList shown = laid_out(library, commands, narrow);
+    for (int32_t step = 0; library.tab != lib::Tab::registries && step < 6; ++step)
+        lib::library_command(library, commands, shown, lib::ScreenCommand::next_tab);
+    shown = laid_out(library, commands, narrow);
+    OA_CHECK(library.tab == lib::Tab::registries);
+    OA_CHECK(open_tab_is_shown(shown));
+    OA_CHECK(commands.tab_scroll > 0);
+}
+
 } // namespace
 
 int main() {
@@ -3733,6 +3871,7 @@ int main() {
     active_maps_fill_scroll_and_filter();
     active_base_game_is_a_tile();
     expansion_download_arrow_sits_inside_the_pill();
+    tabs_scroll_and_the_queue_shows_its_bar();
     the_base_chooser_names_its_rows();
     base_badge_is_nearest_and_tabs_are_bracketed();
     unload_mod_asks_switch_off();

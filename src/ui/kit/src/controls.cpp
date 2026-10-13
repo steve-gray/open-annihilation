@@ -14,6 +14,7 @@
 #include "oa/ui/frontend_renderer/artless.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -1071,25 +1072,231 @@ std::vector<Rect> tab_rects(const Fonts& fonts, const Rect& strip, const TabsLoo
     return rects;
 }
 
+namespace {
+
+/// How wide a tab-strip arrow is, in points.
+constexpr int32_t kTabArrow = 12;
+
+/// A chevron's side, in points. The right one is Mark::arrow_closed.
+constexpr int32_t kChevron = 5;
+
+/// A left chevron, 5 by 5, the right one mirrored.
+constexpr std::array<uint8_t, 5 * 5> kTabArrowLeftBits{
+    0, 0, 0, 1, 0, //
+    0, 0, 1, 1, 0, //
+    0, 1, 1, 1, 0, //
+    0, 0, 1, 1, 0, //
+    0, 0, 0, 1, 0, //
+};
+
+/// The left chevron.
+constexpr renderer::Mark kTabArrowLeft{kChevron, kChevron, kTabArrowLeftBits};
+
+/// How a scroll sits in a strip: which arrows show, and how much is visible.
+struct TabMeasure {
+    bool left{};          ///< an arrow shows at the left
+    bool right{};         ///< an arrow shows at the right
+    int32_t visible{};    ///< the caption area's width, in points
+    int32_t max_scroll{}; ///< the furthest scroll, in points
+};
+
+/// Measures a strip at one scroll. A row that fits has no arrows. The right
+/// arrow is kept only when the tabs still run past the view it leaves.
+///
+/// @param total the tabs' width, in points
+/// @param strip_width the strip's width, in points
+/// @param scroll the scroll asked for, in points
+/// @param arrow an arrow's width, in points
+/// @return the measure
+TabMeasure measure_strip(int32_t total, int32_t strip_width, int32_t scroll, int32_t arrow) {
+    TabMeasure measured;
+    if (arrow < 1)
+        arrow = 1;
+    if (strip_width <= arrow * 2 || total <= strip_width) {
+        measured.visible = std::max(strip_width, int32_t{0});
+        return measured;
+    }
+    measured.left = scroll > 0;
+    int32_t visible = strip_width - (measured.left ? arrow : 0);
+    if (total > scroll + visible) {
+        const int32_t narrower = visible - arrow;
+        if (narrower > 0 && total > scroll + narrower) {
+            visible = narrower;
+            measured.right = true;
+        }
+    }
+    if (visible < 1)
+        visible = 1;
+    measured.visible = visible;
+    measured.max_scroll = std::max(total - visible, int32_t{0});
+    return measured;
+}
+
+/// Clamps a scroll so the open tab lies wholly in the view. The rectangles'
+/// x is each tab's left in the unshifted content, from 0.
+///
+/// @param asked the scroll asked for, in points
+/// @param total the tabs' width, in points
+/// @param strip_width the strip's width, in points
+/// @param arrow an arrow's width, in points
+/// @param content each tab, from the content's left
+/// @param selected the open tab's index
+/// @return the clamped scroll, in points
+int32_t fit_tab_scroll(
+    int32_t asked,
+    int32_t total,
+    int32_t strip_width,
+    int32_t arrow,
+    const std::vector<Rect>& content,
+    std::size_t selected
+) {
+    int32_t scroll = std::max(asked, int32_t{0});
+    for (int32_t pass = 0; pass < 8; ++pass) {
+        const TabMeasure measured = measure_strip(total, strip_width, scroll, arrow);
+        int32_t next = std::clamp(scroll, int32_t{0}, measured.max_scroll);
+        if (selected < content.size()) {
+            const Rect& tab = content[selected];
+            int32_t low = tab.x + tab.width - measured.visible;
+            if (tab.width > measured.visible)
+                low = tab.x;
+            const int32_t high = tab.x;
+            if (low > high)
+                low = high;
+            const int32_t floor = std::max(low, int32_t{0});
+            const int32_t ceiling = std::min(high, measured.max_scroll);
+            if (floor <= ceiling)
+                next = std::clamp(scroll, floor, ceiling);
+            else
+                next = std::clamp(tab.x, int32_t{0}, measured.max_scroll);
+        }
+        if (next == scroll)
+            break;
+        scroll = next;
+    }
+    return scroll;
+}
+
+/// Draws one chevron, centred in an arrow above the strip's rule.
+///
+/// @param canvas where it is drawn
+/// @param rect the arrow
+/// @param pointing_left a left chevron; a right one otherwise
+/// @param ink the colour
+void draw_tab_arrow(const Canvas& canvas, const Rect& rect, bool pointing_left, Colour ink) {
+    if (rect.width <= 0 || rect.height <= 0)
+        return;
+    const int32_t x = rect.x + (rect.width - kChevron) / 2;
+    const int32_t y = rect.y + (rect.height - kMetrics.tab_rule - kChevron) / 2;
+    const Point at{x, y};
+    if (pointing_left)
+        draw_mark(canvas, kTabArrowLeft, at, ink);
+    else
+        draw_mark(canvas, Mark::arrow_closed, at, ink);
+}
+
+/// Moves one step and clamps it. A positive direction reveals the next tab
+/// whose right lies past the view; a negative one the last whose left lies
+/// before the scroll.
+///
+/// @param scroll the scroll now, in points
+/// @param total the tabs' width, in points
+/// @param strip_width the strip's width, in points
+/// @param arrow an arrow's width, in points
+/// @param content each tab, from the content's left
+/// @param selected the open tab's index
+/// @param direction positive toward the right, negative toward the left
+/// @return the scroll after the step, in points
+int32_t step_tab_scroll(
+    int32_t scroll,
+    int32_t total,
+    int32_t strip_width,
+    int32_t arrow,
+    const std::vector<Rect>& content,
+    std::size_t selected,
+    int32_t direction
+) {
+    const TabMeasure measured = measure_strip(total, strip_width, scroll, arrow);
+    int32_t asked = scroll;
+    if (direction > 0) {
+        const int32_t edge = scroll + measured.visible;
+        for (const Rect& tab : content) {
+            if (tab.x + tab.width > edge) {
+                asked = tab.x + tab.width - measured.visible;
+                break;
+            }
+        }
+    } else if (direction < 0) {
+        for (const Rect& tab : content)
+            if (tab.x < scroll)
+                asked = tab.x;
+    }
+    return fit_tab_scroll(asked, total, strip_width, arrow, content, selected);
+}
+
+} // namespace
+
+TabStrip place_tabs(const Fonts& fonts, const Rect& strip, const TabsLook& look) {
+    TabStrip placed;
+    placed.strip = strip;
+    placed.tabs = tab_rects(fonts, strip, look);
+    placed.selected = look.selected < look.captions.size() ? look.selected : 0;
+    int32_t total = 0;
+    if (!placed.tabs.empty()) {
+        const Rect& last = placed.tabs.back();
+        total = last.x + last.width - strip.x;
+    }
+    std::vector<Rect> content = placed.tabs;
+    for (Rect& tab : content)
+        tab.x -= strip.x;
+    placed.scroll =
+        fit_tab_scroll(look.scroll, total, strip.width, kTabArrow, content, placed.selected);
+    const TabMeasure measured = measure_strip(total, strip.width, placed.scroll, kTabArrow);
+    placed.overflows = total > strip.width && strip.width > kTabArrow * 2;
+    placed.limit = measured.max_scroll;
+    const int32_t inset = measured.left ? kTabArrow : 0;
+    placed.view = {strip.x + inset, strip.y, measured.visible, strip.height};
+    if (measured.left)
+        placed.left_arrow = {strip.x, strip.y, kTabArrow, strip.height};
+    if (measured.right)
+        placed.right_arrow = {strip.x + strip.width - kTabArrow, strip.y, kTabArrow, strip.height};
+    // Content at `scroll` is the view's left, past a left arrow.
+    for (Rect& tab : placed.tabs)
+        tab.x += inset - placed.scroll;
+    return placed;
+}
+
 void draw_tabs(const Canvas& canvas, const Rect& strip, const TabsLook& look) {
     if (!drawable(canvas))
         return;
     draw_rule(canvas, strip.x, strip.y + strip.height - kMetrics.hairline, strip.width);
     if (canvas.fonts == nullptr)
         return;
-    const std::vector<Rect> rects = tab_rects(*canvas.fonts, strip, look);
-    for (std::size_t index = 0; index < rects.size(); ++index) {
-        const Rect& tab = rects[index];
+    const TabStrip placed = place_tabs(*canvas.fonts, strip, look);
+    if (placed.left_arrow.width > 0)
+        draw_tab_arrow(
+            canvas, placed.left_arrow, true, look.left_arrow_hovered ? colour::text : colour::hint
+        );
+    if (placed.right_arrow.width > 0)
+        draw_tab_arrow(
+            canvas,
+            placed.right_arrow,
+            false,
+            look.right_arrow_hovered ? colour::text : colour::hint
+        );
+    const Canvas room = clipped(canvas, placed.view);
+    for (std::size_t index = 0; index < placed.tabs.size() && index < look.captions.size();
+         ++index) {
+        const Rect& tab = placed.tabs[index];
         const bool selected = index == look.selected;
         const bool hovered = look.hovered.has_value() && *look.hovered == index;
         const std::string& caption = look.captions[index];
-        const int32_t width = caption_width(canvas.fonts, caption);
+        const int32_t caption_columns = caption_width(canvas.fonts, caption);
         const int32_t above_rule = tab.height - kMetrics.tab_rule;
         line(
-            canvas,
+            room,
             FontRole::small,
             caption,
-            {tab.x + kMetrics.tab_padding, tab.y, width, above_rule},
+            {tab.x + kMetrics.tab_padding, tab.y, caption_columns, above_rule},
             Align::left,
             selected || hovered ? colour::text : colour::hint,
             kMetrics.tab_tracking
@@ -1100,7 +1307,7 @@ void draw_tabs(const Canvas& canvas, const Rect& strip, const TabsLook& look) {
                 const std::string digits = std::to_string(count);
                 const int32_t digits_width = text_width(*canvas.fonts, FontRole::small, digits);
                 const Rect digits_box{
-                    tab.x + kMetrics.tab_padding + width + kMetrics.tab_count_gap,
+                    tab.x + kMetrics.tab_padding + caption_columns + kMetrics.tab_count_gap,
                     tab.y,
                     digits_width,
                     above_rule,
@@ -1110,27 +1317,22 @@ void draw_tabs(const Canvas& canvas, const Rect& strip, const TabsLook& look) {
                 Colour ink = selected || hovered ? colour::text : colour::hint;
                 if (amber)
                     ink = colour::lock;
-                line(canvas, FontRole::small, digits, digits_box, Align::left, ink);
+                line(room, FontRole::small, digits, digits_box, Align::left, ink);
             }
         } else if (count > 0) {
             const Rect pill{
-                tab.x + kMetrics.tab_padding + width + kMetrics.tab_count_gap,
+                tab.x + kMetrics.tab_padding + caption_columns + kMetrics.tab_count_gap,
                 tab.y + (above_rule - kMetrics.tab_count_height) / 2,
                 count_width(canvas.fonts, count),
                 kMetrics.tab_count_height,
             };
-            fill(canvas, pill, colour::lock);
+            fill(room, pill, colour::lock);
             line(
-                canvas,
-                FontRole::small,
-                std::to_string(count),
-                pill,
-                Align::centre,
-                colour::on_accent
+                room, FontRole::small, std::to_string(count), pill, Align::centre, colour::on_accent
             );
         }
         if (selected)
-            fill(canvas, {tab.x, tab.y + above_rule, tab.width, kMetrics.tab_rule}, colour::accent);
+            fill(room, {tab.x, tab.y + above_rule, tab.width, kMetrics.tab_rule}, colour::accent);
     }
 }
 
@@ -1140,22 +1342,31 @@ void add_tabs(
     const Rect& strip,
     const TabsLook& look,
     std::span<const ControlId> ids,
-    std::span<const std::string> names
+    std::span<const std::string> names,
+    ControlId left_id,
+    std::string left_name,
+    ControlId right_id,
+    std::string right_name
 ) {
+    const TabStrip placed = place_tabs(fonts, strip, look);
+    TabsLook stored = look;
+    stored.scroll = placed.scroll;
+    stored.view_x = placed.view.x;
+    stored.view_width = placed.view.width;
+
     Item item;
     item.role = Role::tabs;
     item.rect = strip;
     if (look.selected < look.captions.size())
         item.text = look.captions[look.selected];
-    item.look = look;
+    item.look = std::move(stored);
     list.items.push_back(std::move(item));
 
-    const std::vector<Rect> rects = tab_rects(fonts, strip, look);
-    for (std::size_t index = 0; index < rects.size(); ++index) {
+    for (std::size_t index = 0; index < placed.tabs.size(); ++index) {
         std::string text;
         if (index < look.readings.size() && !look.readings[index].empty()) {
             text = look.readings[index];
-        } else {
+        } else if (index < look.captions.size()) {
             text = look.captions[index];
             const int32_t count = count_of(look, index);
             if (count > 0)
@@ -1163,7 +1374,7 @@ void add_tabs(
         }
         add_control(
             list,
-            rects[index],
+            placed.tabs[index],
             index < ids.size() ? ids[index] : no_control,
             index < names.size() ? names[index] : std::string{},
             ControlKind::tab,
@@ -1172,7 +1383,85 @@ void add_tabs(
             std::move(text),
             true
         );
+        if (!wholly_in(placed.tabs[index], placed.view))
+            list.controls.back().clip = placed.view;
     }
+    const auto add_arrow = [&](const Rect& rect, ControlId id, std::string name, std::string text) {
+        if (rect.width <= 0 || id == no_control)
+            return;
+        add_control(
+            list,
+            rect,
+            id,
+            std::move(name),
+            ControlKind::button,
+            false,
+            false,
+            std::move(text),
+            true
+        );
+        list.controls.back().focusable = false;
+    };
+    add_arrow(placed.left_arrow, left_id, std::move(left_name), "scroll left");
+    add_arrow(placed.right_arrow, right_id, std::move(right_name), "scroll right");
+}
+
+int32_t tab_scroll_step(const DisplayList& list, int32_t steps) {
+    const Item* tabs_item = nullptr;
+    for (const Item& item : list.items) {
+        if (item.role == Role::tabs) {
+            tabs_item = &item;
+            break;
+        }
+    }
+    if (tabs_item == nullptr)
+        return 0;
+    const auto* look = std::get_if<TabsLook>(&tabs_item->look);
+    if (look == nullptr || look->view_width <= 0)
+        return look == nullptr ? 0 : look->scroll;
+
+    const Rect& strip = tabs_item->rect;
+    std::vector<const Control*> tabs;
+    for (const Control& control : list.controls) {
+        if (control.kind != ControlKind::tab)
+            continue;
+        if (control.rect.y != strip.y || control.rect.height != strip.height)
+            continue;
+        tabs.push_back(&control);
+    }
+    if (tabs.empty())
+        return look->scroll;
+
+    std::vector<Rect> content;
+    content.reserve(tabs.size());
+    for (const Control* control : tabs) {
+        const int32_t left = control->rect.x - look->view_x + look->scroll;
+        content.push_back(Rect{left, 0, control->rect.width, control->rect.height});
+    }
+    std::sort(content.begin(), content.end(), [](const Rect& ahead, const Rect& behind) {
+        return ahead.x < behind.x;
+    });
+    const int32_t total = content.back().x + content.back().width;
+    const int32_t left_inset = look->view_x - strip.x;
+    const int32_t right_inset = strip.x + strip.width - (look->view_x + look->view_width);
+    int32_t arrow = kTabArrow;
+    if (left_inset > 0)
+        arrow = left_inset;
+    else if (right_inset > 0)
+        arrow = right_inset;
+
+    const std::size_t selected = look->selected < content.size() ? look->selected : 0;
+    int32_t scroll = look->scroll;
+    int32_t remaining = steps;
+    while (remaining > 0) {
+        scroll = step_tab_scroll(scroll, total, strip.width, arrow, content, selected, 1);
+        --remaining;
+    }
+    while (remaining < 0) {
+        scroll = step_tab_scroll(scroll, total, strip.width, arrow, content, selected, -1);
+        ++remaining;
+    }
+    return scroll;
 }
 
 // ---- Cards ----
