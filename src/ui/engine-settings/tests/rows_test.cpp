@@ -595,9 +595,8 @@ void tab_follows_the_dialogs_focus_order() {
         engine_dialog_of({}, settings::Page::controls, true, true, true);
     OA_CHECK(
         tab_order(controls) ==
-        (std::vector<int32_t>{16, 17, 18, 19, 20, 12, 13,
-                              14, 0,  1,  2,  3,  4,  5,
-                              6,  8,  9,  11, 10, 7,  settings::close_x_control})
+        (std::vector<int32_t>{16, 17, 18, 19, 20, 21, 12, 13, 14, 0, 1,
+                              2,  3,  4,  5,  6,  8,  9,  11, 10, 7, settings::close_x_control})
     );
     // Graphics: After zoom, locked while units are drawn whole, takes none.
     settings::Dialog graphics = controls;
