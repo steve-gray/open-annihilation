@@ -242,6 +242,10 @@ struct GameDirectoryRequest {
     /// The chooser comes before the system's folder dialog (Steam's Game Mode, where the
     /// dialog may not show).
     bool chooser_first = false;
+    /// The player chose the demo and it is not copied. A folder counts only when
+    /// it holds the demo's installer. The locator asks for it, or the system's
+    /// picker where the locator is not shown.
+    bool demo_only = false;
 };
 
 /// Why resolution found no folder to play when the Game files screen is offered.

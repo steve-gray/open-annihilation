@@ -49,8 +49,10 @@ and the keys below are the game's (`src/app/include/oa/app/user_folder.hpp`).
 
 Earlier versions named the macOS folder `com.coreprime.open-annihilation`. When
 the engine resolves the folder and finds only that one, it renames it to
-`net.coreprime.open-annihilation`, once, so the preferences file and the
-unpacked demo data (`demo-1997`) keep working. When both exist, it uses the new
+`net.coreprime.open-annihilation`, once, so the preferences file keeps
+working and an earlier unpack of the demo (`demo-1997`) stays where a later
+start can copy it once into `games/totala-demo` in the player's Open
+Annihilation folder. When both exist, it uses the new
 folder and leaves the earlier one alone. When the rename fails, it uses the
 earlier folder under its old name for that run, says so on standard error, and
 tries again on the next start; the files are never copied, merged or replaced.

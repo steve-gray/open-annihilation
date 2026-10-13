@@ -86,6 +86,9 @@ std::string path_length_problem(const fs::path& folder, std::size_t names) {
 
 namespace {
 
+[[nodiscard]] bool
+accepted_install(const GameDirectoryRequest& request, const GameInstall& install);
+
 [[nodiscard]] bool equal_ignoring_case(std::string_view left, std::string_view right) {
     if (left.size() != right.size())
         return false;
@@ -347,7 +350,7 @@ void take_archive(const fs::path& root, const fs::path& archive, GameInstall& in
         platform.reset();
         if (!platform_folder.empty()) {
             auto install = inspect_folder(host, platform_folder);
-            if (usable(install))
+            if (accepted_install(request, install))
                 return resolved(platform_folder, std::move(install), GameDirectorySource::platform);
             platform = RefusedFolder{
                 platform_folder,
@@ -359,7 +362,7 @@ void take_archive(const fs::path& root, const fs::path& archive, GameInstall& in
         if (request.stored && !request.stored->empty()) {
             const auto folder = path_from_utf8(*request.stored);
             auto install = inspect_folder(host, folder);
-            if (usable(install))
+            if (accepted_install(request, install))
                 return resolved(folder, std::move(install), GameDirectorySource::stored);
             stored = RefusedFolder{
                 folder,
@@ -545,6 +548,17 @@ struct ReadRecord {
     return false;
 }
 
+/// A folder this start will play. The demo, when that is what was chosen and
+/// it is not copied yet, comes only from its installer.
+[[nodiscard]] bool
+accepted_install(const GameDirectoryRequest& request, const GameInstall& install) {
+    if (!usable(install))
+        return false;
+    if (request.demo_only && install.demo.outcome != DemoOutcome::ready)
+        return false;
+    return true;
+}
+
 } // namespace
 
 std::string describe_archive_problem(const DemoSetup& demo) {
@@ -711,7 +725,7 @@ std::optional<GameDirectory> resolve_game_directory(
     std::optional<RefusedFolder> platform_refused;
     if (!request.choose && !request.platform_default.empty()) {
         auto install = inspect_folder(host, request.platform_default);
-        if (usable(install))
+        if (accepted_install(request, install))
             return resolved(
                 request.platform_default, std::move(install), GameDirectorySource::platform
             );
@@ -728,7 +742,7 @@ std::optional<GameDirectory> resolve_game_directory(
         if (request.stored && !request.stored->empty()) {
             const auto stored = path_from_utf8(*request.stored);
             auto install = inspect_folder(host, stored);
-            if (usable(install))
+            if (accepted_install(request, install))
                 return resolved(stored, std::move(install), GameDirectorySource::stored);
         }
         needed->needed = true;
@@ -754,7 +768,7 @@ std::optional<GameDirectory> resolve_game_directory(
         }
         const auto stored = path_from_utf8(*request.stored);
         auto install = inspect_folder(host, stored);
-        if (!usable(install))
+        if (!accepted_install(request, install))
             throw std::runtime_error(
                 "the Total Annihilation folder chosen earlier can no longer be used: " +
                 path_to_utf8(stored) + " (" + describe_install_problem(install) +
@@ -768,7 +782,7 @@ std::optional<GameDirectory> resolve_game_directory(
         start = path_from_utf8(*request.stored);
         if (!request.choose) {
             auto install = inspect_folder(host, start);
-            if (usable(install))
+            if (accepted_install(request, install))
                 return resolved(start, std::move(install), GameDirectorySource::stored);
             stored_refused = RefusedFolder{
                 start, describe_install_problem(install), install.folder || !install.problem.empty()
@@ -784,7 +798,7 @@ std::optional<GameDirectory> resolve_game_directory(
     if (!request.choose || chooser) {
         for (const FoundInstall& candidate : request.found) {
             auto install = inspect_folder(host, candidate.folder);
-            if (!usable(install))
+            if (!accepted_install(request, install))
                 continue;
             if (usable_found.empty()) {
                 only_found =
@@ -858,7 +872,7 @@ std::optional<GameDirectory> resolve_game_directory(
         switch (pick) {
         case FolderPick::chosen: {
             auto install = inspect_folder(host, chosen);
-            if (usable(install))
+            if (accepted_install(request, install))
                 return resolved(chosen, std::move(install), GameDirectorySource::chosen);
             host.tell_user(
                 host.context,

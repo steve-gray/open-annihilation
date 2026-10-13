@@ -119,7 +119,9 @@ replacements take effect from the next start of Open Annihilation, and
 - The copy being made, in `import/Total Annihilation` of the game's data
   folder (`--data-dir`, else the per-user data folder), with the import's
   state in `import/state`.
-- The demo's unpacked archive, in `demo-1997` of the data folder.
+- The demo, in `games/totala-demo` of the player's Open Annihilation folder.
+  An earlier unpack in `demo-1997` of the data folder is copied from once
+  and left there.
 
 ## For developers
 

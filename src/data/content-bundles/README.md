@@ -8,9 +8,11 @@ copy name, the source names it may have, its size and its known SHA-256
 values. The table holds names, sizes and hashes only.
 
 The demo's installer is still recognised where it is today
-(`demo_1997` in `oa/app/demo_installer.hpp`). This table names the unpacked
-archive, `TADemo.hpi`, with the same size and SHA-256 that recognition
-checks. It does not repeat the installer's size, hash or resource.
+(`demo_1997` in `oa/app/demo_installer.hpp`), by its size and SHA-256. The
+archive it carries is copied into `games/totala-demo` with that bundle's
+record. This table names the unpacked archive, `TADemo.hpi`, with the same
+size and SHA-256 that recognition checks. It does not repeat the installer's
+size, hash or resource.
 
 ## Entry points
 
