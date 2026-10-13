@@ -7,6 +7,7 @@
 #include "render_state.hpp"
 #include "window_pixels.hpp"
 
+#include "oa/app/window_icon.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/platform/log_files.hpp"
 #include "oa/platform/system.hpp"
@@ -153,6 +154,23 @@ kit::Frame progress_room(SDL_Window* window, SDL_Renderer* renderer, paint::Canv
     return kit::frame_of(view);
 }
 
+/// The shipped app icon, cropped to what is visible, as the setup's header
+/// draws it. Empty when the picture does not decode.
+renderer::RgbaPicture progress_app_icon() {
+    static WindowIcon kept;
+    static bool decoded = false;
+    if (!decoded) {
+        decoded = true;
+        WindowIcon full;
+        std::string error;
+        if (decode_window_icon(window_icon_png(), full, error))
+            kept = visible_part(full);
+    }
+    if (kept.pixels.empty())
+        return {};
+    return {kept.width, kept.height, kept.pixels};
+}
+
 /// Dims the frame and draws the dialog in its middle. The canvas already holds
 /// the picture behind it.
 void paint_progress_dialog(
@@ -170,6 +188,7 @@ void paint_progress_dialog(
     drawn.smooth.painter = &painter;
     drawn.smooth.fonts = &progress_fonts();
     drawn.smooth.scale_percent = room.scale_percent;
+    drawn.icon = progress_app_icon();
     kit::WorkDialog dialog;
     dialog.title = std::string(title);
     dialog.line = std::string(line);

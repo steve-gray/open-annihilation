@@ -465,10 +465,9 @@ struct PlacedWorkDialog {
 };
 
 /// Places a work dialog at its size class: the title in the header, the line
-/// fitted to one row under it, and the bar or the spinner. Its height is the
-/// text and the indicator, from the class's least to its greatest notice
-/// height. When the text is shorter than the least height, the indicator
-/// sits near the bottom, a text_bottom_gap above the edge.
+/// fitted to one row under it, and the bar or the spinner just under that
+/// line. Its height is that content plus the gap under the text and the
+/// edge, and no taller than the class's greatest notice height.
 ///
 /// @param dialog the dialog
 /// @param measure a text's width in the small font
