@@ -463,12 +463,11 @@ struct BuiltinScreens {
 
     static void step_load_preferences(ScreenContext* ctx, void*) {
         auto& runtime = host(ctx);
-        // The player's own skirmish setup comes back from a saved, recorded
-        // or network game before the preferences are read over it.
-        if (runtime.player_skirmish_settings_) {
-            runtime.skirmish_settings_ = std::move(*runtime.player_skirmish_settings_);
-            runtime.player_skirmish_settings_.reset();
-        }
+        // The player's own skirmish setup comes back from a saved, recorded,
+        // network or campaign game before the preferences are read over it.
+        init::restore_player_skirmish_settings(
+            runtime.skirmish_settings_, runtime.player_skirmish_settings_
+        );
         init::load_preferences(
             runtime.state_,
             runtime.skirmish_settings_,

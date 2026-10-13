@@ -48,6 +48,8 @@ Every document in the repository, by what you want to do.
 - [controls.md](controls.md): group keys, and a second recall of the
   group that is already selected, which centres the view and does not
   follow it.
+- [skirmish.md](skirmish.md): the skirmish setup's one **Player** row,
+  which a campaign mission leaves as you set it.
 - [controllers.md](controllers.md): playing with a gamepad: the Steam
   Deck's pad pointer (the right trackpad as the mouse, the grips as QUEUE,
   ADD, FORCE and the groups, the order and build rings), sticks only for

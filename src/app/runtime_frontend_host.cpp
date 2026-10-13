@@ -541,8 +541,11 @@ void Runtime::save_preferences() {
 }
 
 void Runtime::keep_player_skirmish_settings() {
-    if (!player_skirmish_settings_)
-        player_skirmish_settings_ = skirmish_settings_;
+    init::remember_player_skirmish_settings(skirmish_settings_, player_skirmish_settings_);
+}
+
+void Runtime::release_player_skirmish_settings() {
+    init::restore_player_skirmish_settings(skirmish_settings_, player_skirmish_settings_);
 }
 
 // MAINMENU callback boundary.

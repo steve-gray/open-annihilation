@@ -154,7 +154,7 @@ void layered_origins_clipping_and_special_route() {
     frame_header(bytes, 64, 4, 3, 2, 1, 0, false, 2, 0, 88);
     put32(bytes, 88, 96);
     put32(bytes, 92, 128);
-    // Child 0 lands at (-1,0), so its first column clips. Index 0 is transparent.
+    // Child 0 lands at (-1,0), one column past the frame. Index 0 is transparent.
     frame_header(bytes, 96, 3, 2, 3, 1, 0, false, 0, 0, 160);
     bytes[160] = 1;
     bytes[161] = 2;
@@ -177,9 +177,24 @@ void layered_origins_clipping_and_special_route() {
     );
     const auto rendered = gaf::render_normal(frame);
     require(rendered.ok(), rendered.error ? rendered.error->message : "layer render failed");
+    // The canvas grows one column to the left and the origin moves with it,
+    // so child 0's first column, which used to fall outside, is kept.
     require(
-        rendered.frame->pixels == std::vector<uint8_t>({2, 3, 0, 0, 0, 6, 7, 0, 0, 0, 8, 5}),
-        "layer origin subtraction, transparency, or clipping disagreed"
+        rendered.frame->width == 5 && rendered.frame->height == 3 &&
+            rendered.frame->origin_x == 3 && rendered.frame->origin_y == 1 &&
+            rendered.frame->pixels ==
+                std::vector<uint8_t>({1, 2, 3, 0, 0, 4, 0, 6, 7, 0, 0, 0, 0, 8, 5}) &&
+            rendered.frame->coverage ==
+                std::vector<uint8_t>({1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 1}),
+        "layer origin subtraction, transparency, or the whole child disagreed"
+    );
+    // Drawing at a point P puts child 0's pixel (0, 0) at P minus that
+    // child's origin: one column left of the hotspot and on its row.
+    const int held_x = rendered.frame->origin_x + 0 - frame.layers[0].origin_x;
+    const int held_y = rendered.frame->origin_y + 0 - frame.layers[0].origin_y;
+    require(
+        held_x == 0 && held_y == 0 && rendered.frame->pixels[0] == 1,
+        "a layer past the frame was not kept at its origin"
     );
 
     auto special = frame;
@@ -482,8 +497,8 @@ void ranged_compressed_frame() {
     );
 }
 
-// A frame of two layers, each read on its own: raw layers clipped at the
-// frame's edge and placed by their origins, and a raw layer under a
+// A frame of two layers, each read on its own: raw layers placed by their
+// origins, including a column past the frame, and a raw layer under a
 // compressed one whose literal of the transparency index still covers it.
 void ranged_layered_frame() {
     auto bytes = one_frame_file();
@@ -551,6 +566,241 @@ void ranged_failed_read() {
     );
 }
 
+/// Returns a simple frame filled with `pixels`. A pixel equal to `key` is uncovered.
+gaf::Frame simple_layer(
+    uint16_t width,
+    uint16_t height,
+    int16_t origin_x,
+    int16_t origin_y,
+    uint8_t key,
+    std::vector<uint8_t> pixels
+) {
+    gaf::Frame frame;
+    frame.width = width;
+    frame.height = height;
+    frame.origin_x = origin_x;
+    frame.origin_y = origin_y;
+    frame.transparency_index = key;
+    frame.pixels = std::move(pixels);
+    frame.coverage.assign(frame.pixels.size(), 1);
+    for (std::size_t index = 0; index < frame.pixels.size(); ++index)
+        if (frame.pixels[index] == key)
+            frame.coverage[index] = 0;
+    return frame;
+}
+
+/// Returns a composite frame holding `layers`.
+gaf::Frame composite_layer(
+    uint16_t width,
+    uint16_t height,
+    int16_t origin_x,
+    int16_t origin_y,
+    uint8_t key,
+    std::vector<gaf::Frame> layers
+) {
+    gaf::Frame frame;
+    frame.width = width;
+    frame.height = height;
+    frame.origin_x = origin_x;
+    frame.origin_y = origin_y;
+    frame.transparency_index = key;
+    frame.layer_count = static_cast<uint8_t>(layers.size());
+    frame.layers = std::move(layers);
+    return frame;
+}
+
+/// Paints `source` onto a canvas of the frame's own size, dropping every row
+/// and column outside it: what a fitted composite rendered as before the
+/// canvas grew to hold layers that reach past the frame.
+void paint_inside_frame(
+    const gaf::Frame& source,
+    std::vector<uint8_t>& pixels,
+    std::vector<uint8_t>& coverage,
+    int32_t left,
+    int32_t top,
+    uint16_t dest_w,
+    uint16_t dest_h
+) {
+    if (!source.layers.empty()) {
+        for (const auto& layer : source.layers) {
+            paint_inside_frame(
+                layer,
+                pixels,
+                coverage,
+                left + static_cast<int32_t>(source.origin_x) - static_cast<int32_t>(layer.origin_x),
+                top + static_cast<int32_t>(source.origin_y) - static_cast<int32_t>(layer.origin_y),
+                dest_w,
+                dest_h
+            );
+        }
+        return;
+    }
+    const int64_t first_x = std::max<int64_t>(0, -static_cast<int64_t>(left));
+    const int64_t end_x =
+        std::min<int64_t>(source.width, static_cast<int64_t>(dest_w) - static_cast<int64_t>(left));
+    for (int32_t y = 0; y < static_cast<int32_t>(source.height); ++y) {
+        const auto destination_y = top + y;
+        if (destination_y < 0 || destination_y >= static_cast<int32_t>(dest_h))
+            continue;
+        const std::size_t source_row = static_cast<std::size_t>(y) * source.width;
+        const std::size_t destination_row = static_cast<std::size_t>(destination_y) * dest_w;
+        for (int64_t x = first_x; x < end_x; ++x) {
+            const std::size_t source_index = source_row + static_cast<std::size_t>(x);
+            if (source.coverage[source_index] == 0)
+                continue;
+            const std::size_t destination_index =
+                destination_row + static_cast<std::size_t>(left + x);
+            pixels[destination_index] = source.pixels[source_index];
+            coverage[destination_index] = 1;
+        }
+    }
+}
+
+/// A composite whose layers sit inside its rectangle keeps that rectangle.
+void require_fitted(const gaf::Frame& frame, std::string_view message) {
+    const auto rendered = gaf::render_normal(frame);
+    require(rendered.ok(), message);
+    require(
+        rendered.frame->width == frame.width && rendered.frame->height == frame.height &&
+            rendered.frame->origin_x == frame.origin_x &&
+            rendered.frame->origin_y == frame.origin_y,
+        message
+    );
+    const std::size_t count = static_cast<std::size_t>(frame.width) * frame.height;
+    std::vector<uint8_t> pixels(count, frame.transparency_index);
+    std::vector<uint8_t> coverage(count, 0);
+    paint_inside_frame(frame, pixels, coverage, 0, 0, frame.width, frame.height);
+    require(rendered.frame->pixels == pixels && rendered.frame->coverage == coverage, message);
+}
+
+/// Every composite whose layers fit the frame, the shape shipped frames have,
+/// renders the same size, origin and pixels as a canvas clipped to the frame.
+void fitted_layers_match_the_frame() {
+    // Two layers overlap inside a 4 by 3 frame. The later layer's transparent
+    // index does not cover the earlier pixel under it.
+    const auto overlapped = composite_layer(
+        4,
+        3,
+        5,
+        6,
+        0,
+        {simple_layer(3, 2, 4, 5, 0, {1, 2, 3, 4, 0, 6}), simple_layer(2, 2, 4, 5, 9, {7, 9, 8, 5})}
+    );
+    require_fitted(overlapped, "overlapping layers inside the frame changed it");
+    const auto overlapped_drawn = gaf::render_normal(overlapped);
+    require(
+        overlapped_drawn.ok() && overlapped_drawn.frame->pixels ==
+                                     std::vector<uint8_t>({0, 0, 0, 0, 0, 7, 2, 3, 0, 8, 5, 6}),
+        "overlapping layers inside the frame drew the wrong pixels"
+    );
+
+    // A layer the same size as the frame, placed on its edges.
+    require_fitted(
+        composite_layer(3, 2, 1, -2, 0, {simple_layer(3, 2, 1, -2, 0, {1, 2, 3, 4, 5, 6})}),
+        "a layer flush with the frame changed it"
+    );
+    // A layer whose origin is left of the frame's still lands inside it.
+    require_fitted(
+        composite_layer(4, 3, 1, 1, 0, {simple_layer(2, 2, -1, 0, 0, {8, 8, 8, 8})}),
+        "a layer placed inside by a smaller origin changed the frame"
+    );
+    // A nested layer, itself a composite, stays inside the frame and the
+    // frame between them.
+    const auto nested = composite_layer(
+        5, 4, 2, 2, 0, {composite_layer(3, 3, 2, 2, 0, {simple_layer(2, 2, 1, 1, 0, {8, 8, 8, 8})})}
+    );
+    require_fitted(nested, "a nested layer inside the frame changed it");
+    const auto nested_drawn = gaf::render_normal(nested);
+    require(
+        nested_drawn.ok() &&
+            nested_drawn.frame->pixels ==
+                std::vector<uint8_t>({0, 0, 0, 0, 0, 0, 8, 8, 0, 0, 0, 8, 8, 0, 0, 0, 0, 0, 0, 0}),
+        "a nested layer inside the frame drew the wrong pixels"
+    );
+}
+
+/// A layer that reaches past the frame on every side is drawn whole, at the
+/// same place relative to the origin as drawing that layer at the frame's point.
+void layer_past_every_side_is_drawn_whole() {
+    std::vector<uint8_t> pixels(36);
+    for (std::size_t index = 0; index < pixels.size(); ++index)
+        pixels[index] = static_cast<uint8_t>(index + 1);
+    const auto child = simple_layer(6, 6, 3, 3, 0, pixels);
+    const auto frame = composite_layer(4, 4, 2, 2, 0, {child});
+    const auto rendered = gaf::render_normal(frame);
+    require(rendered.ok(), rendered.error ? rendered.error->message : "wide layer did not render");
+    require(
+        rendered.frame->width == 6 && rendered.frame->height == 6 &&
+            rendered.frame->origin_x == 3 && rendered.frame->origin_y == 3,
+        "a layer past every side did not grow the frame and its origin together"
+    );
+    const auto ranged = gaf::render_ranged(frame, gaf::ReadHooks{});
+    require(
+        ranged.ok() && ranged.frame->width == rendered.frame->width &&
+            ranged.frame->height == rendered.frame->height &&
+            ranged.frame->origin_x == rendered.frame->origin_x &&
+            ranged.frame->origin_y == rendered.frame->origin_y &&
+            ranged.frame->pixels == rendered.frame->pixels &&
+            ranged.frame->coverage == rendered.frame->coverage,
+        "a layer past every side rendered differently from its byte range"
+    );
+    for (int row = 0; row < 6; ++row) {
+        for (int column = 0; column < 6; ++column) {
+            const int canvas_x = rendered.frame->origin_x + column - child.origin_x;
+            const int canvas_y = rendered.frame->origin_y + row - child.origin_y;
+            require(
+                canvas_x >= 0 && canvas_y >= 0 && canvas_x < rendered.frame->width &&
+                    canvas_y < rendered.frame->height,
+                "part of a layer past every side fell outside the rendered frame"
+            );
+            const auto at = static_cast<std::size_t>(canvas_y) * rendered.frame->width +
+                            static_cast<std::size_t>(canvas_x);
+            const auto source =
+                static_cast<std::size_t>(row) * child.width + static_cast<std::size_t>(column);
+            require(
+                rendered.frame->pixels[at] == child.pixels[source] &&
+                    rendered.frame->coverage[at] == 1,
+                "a layer past every side was not drawn at its origin"
+            );
+        }
+    }
+
+    // A nested layer past the left edge, through a composite that itself fits.
+    const auto grandchild = simple_layer(2, 2, 4, 3, 0, {5, 6, 7, 8});
+    const auto through =
+        composite_layer(6, 6, 3, 3, 0, {composite_layer(4, 4, 3, 3, 0, {grandchild})});
+    const auto through_drawn = gaf::render_normal(through);
+    require(through_drawn.ok(), "a nested layer past the frame did not render");
+    require(
+        through_drawn.frame->width == 7 && through_drawn.frame->height == 6 &&
+            through_drawn.frame->origin_x == 4 && through_drawn.frame->origin_y == 3,
+        "a nested layer past the frame did not move only the origin it grew past"
+    );
+    const int nest_x = through_drawn.frame->origin_x + 0 - grandchild.origin_x;
+    const int nest_y = through_drawn.frame->origin_y + 0 - grandchild.origin_y;
+    require(
+        nest_x == 0 && nest_y == 0 &&
+            through_drawn.frame->pixels
+                    [static_cast<std::size_t>(nest_y) * 7 + static_cast<std::size_t>(nest_x)] == 5,
+        "a nested layer past the frame was not drawn at its origin"
+    );
+}
+
+/// A canvas that would pass the frame's pixel limit is refused before it is allocated.
+void rendered_frame_keeps_the_pixel_limit() {
+    gaf::Frame wide;
+    wide.width = 4096;
+    wide.height = 4096;
+    gaf::Frame shifted = wide;
+    shifted.origin_x = -1;
+    const auto frame = composite_layer(4096, 4096, 0, 0, 0, {wide, shifted});
+    const auto rendered = gaf::render_normal(frame);
+    require(
+        !rendered.ok() && rendered.error->code == gaf::ErrorCode::pixel_limit,
+        "a canvas past the frame pixel limit was drawn"
+    );
+}
+
 } // namespace
 
 int main() {
@@ -558,6 +808,9 @@ int main() {
         raw_fields_and_low_words();
         compressed_commands();
         layered_origins_clipping_and_special_route();
+        fitted_layers_match_the_frame();
+        layer_past_every_side_is_drawn_whole();
+        rendered_frame_keeps_the_pixel_limit();
         compressed_literal_transparency_index_is_still_written();
         frame_at_rejects_out_of_range_indices();
         malformed_and_bounded_inputs();

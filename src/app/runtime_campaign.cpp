@@ -714,6 +714,9 @@ bool Runtime::load_campaign_map(std::string_view mission_file) {
 }
 
 void Runtime::configure_campaign_players() {
+    // The mission seats its own two players in these slots. The player's
+    // skirmish setup is kept, and the preferences write that instead.
+    keep_player_skirmish_settings();
     const auto& file = campaign_runtime().file;
     skirmish_settings_.slot_count = 2;
     for (auto& slot : skirmish_settings_.slots)
@@ -1763,6 +1766,7 @@ void Runtime::start_campaign_mission() {
         return;
     }
     campaign_mission_ = true;
+    bool campaign_seated = false;
     try {
         if (!load_campaign_map(mission_file)) {
             campaign_mission_ = false;
@@ -1770,6 +1774,7 @@ void Runtime::start_campaign_mission() {
             return;
         }
         configure_campaign_players();
+        campaign_seated = true;
         // The mission info sets the unit limit from the GlobalHeader's maxunits
         // and mission start leaves it for a campaign.
         bootstrap_match(
@@ -1783,6 +1788,10 @@ void Runtime::start_campaign_mission() {
         status_ = std::string("campaign start: ") + error.what();
         std::cerr << "unsupported operation: " << status_ << '\n';
     }
+    // A start that never builds a match puts the player's setup back. The
+    // preferences then keep those slots, not the mission's two players.
+    if (campaign_seated && !match_)
+        release_player_skirmish_settings();
 }
 
 void Runtime::leave_load_dialog() {

@@ -71,4 +71,34 @@ unit_draw_state(std::vector<UnitDrawState>& units, uint16_t slot, uint32_t insta
     return tracked.state;
 }
 
+/// Copies a 3DO feature's record position into its draw.
+///
+/// While the record sinks, each frame's picture is drawn lower; once the
+/// record rests, the picture stays at that height. A change drops the cached
+/// picture, so the next frame builds it where the wreck is and the underwater
+/// tint follows the hull.
+///
+/// @param[in,out] feature the feature's draw
+/// @param world world holding the plot and the feature record
+inline void follow_feature_draw(MatchFeatureDraw& feature, oa::World& world) {
+    const oa::MapPlot* plot = oa::world_plot(&world, feature.cell_x, feature.cell_z);
+    if (plot == nullptr || (plot->flags & OA_PLOT_FLAG_ANIMATING_FEATURE) == 0)
+        return;
+    const oa::sim::feature_runtime::PlacedFeature* record =
+        oa::sim::feature_runtime::feature_record(world, plot->feature_record);
+    if (record == nullptr)
+        return;
+    const oa::formats::objects3d::FixedVector3 record_position{
+        record->model.position.x, record->model.position.y, record->model.position.z
+    };
+    if (feature.position.x == record_position.x && feature.position.y == record_position.y &&
+        feature.position.z == record_position.z)
+        return;
+    feature.position = record_position;
+    feature.state.image = {};
+    feature.state.shadow = {};
+    feature.state.cache = {};
+    feature.state.finer.reset();
+}
+
 } // namespace oa::app

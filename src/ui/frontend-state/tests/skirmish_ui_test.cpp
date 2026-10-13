@@ -231,6 +231,19 @@ void helper_tests() {
     check(s.slots[0].controller == 1, "computer to human if none");
     ui::cycle_player(s, 1, h);
     check(s.slots[1].controller == 0, "computer to open if human");
+    {
+        // The fifth row is Player. Cycling the first row's Computer does not
+        // make a second Player.
+        auto rows = settings();
+        rows.slot_count = 10;
+        rows.slots[0].controller = 2;
+        rows.slots[4].controller = 1;
+        ui::cycle_player(rows, 0, h);
+        check(
+            rows.slots[0].controller == 0 && rows.slots[4].controller == 1,
+            "computer stays short of a second player"
+        );
+    }
     ui::cycle_player(s, 0, h);
     check(s.slots[0].controller == 0, "human to open");
     s.slots[1].controller = 2;

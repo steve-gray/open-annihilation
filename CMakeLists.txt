@@ -824,6 +824,12 @@ if(BUILD_TESTING)
   target_link_libraries(oa-match-model-draws-test PRIVATE oa-app-headers oa-present-model oa-sim-feature-runtime
     oa-options)
   add_test(NAME match-model-draws COMMAND oa-match-model-draws-test)
+  # A wreck's picture follows its record down through deep water until it
+  # rests, and a wreck on land stays where it was placed.
+  add_executable(oa-match-wreck-draw-test src/app/runtime_match_render_test.cpp)
+  target_link_libraries(oa-match-wreck-draw-test PRIVATE oa-app-headers oa-present-model
+    oa-sim-feature-runtime oa-options)
+  add_test(NAME match-wreck-draw COMMAND oa-match-wreck-draw-test)
   # What frames between two ticks show: the blends of places, angles and
   # piece poses, the poses each tick leaves, and projectiles and debris
   # followed from one tick to the next.
@@ -1193,6 +1199,10 @@ if(BUILD_TESTING)
     oa-formats-oamod oa-formats-tdf oa-platform-text-font oa-test-support oa-options)
   add_test(NAME app-language-packs COMMAND oa-app-language-packs-test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/data/languages/tests)
+  # The player's skirmish rows through a campaign mission's options save.
+  add_executable(oa-campaign-skirmish-slots-test src/app/runtime_campaign_test.cpp)
+  target_link_libraries(oa-campaign-skirmish-slots-test PRIVATE oa-ui-frontend-state)
+  add_test(NAME campaign-skirmish-slots COMMAND oa-campaign-skirmish-slots-test)
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/OaExtensions.cmake")
 # Without SDL3's intro player, oa-game links the one that skips each movie
