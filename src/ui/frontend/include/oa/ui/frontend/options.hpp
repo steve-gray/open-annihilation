@@ -535,10 +535,12 @@ OptionsAction options_on_sound_click(Panel& panel, OptionsContext& context) noex
 
 /// Sets up VISUALS, or SELVMODE when `select_mode`.
 ///
-/// Outside a game the display modes are scanned and sorted and VIDSLDR runs
-/// over them at the saved size; in game the MAP* and VID* controls are
-/// hidden. VISUALS also shows ANTI, BSHADOWS and SHADING from the graphics
-/// flags and GAMMA over 0..20.
+/// Where the panel draws VIDSLDR, in a match as well as outside one, the
+/// display modes are scanned and sorted and the slider runs over them at the
+/// saved size, in the same order and words as the settings' Screen size. A
+/// panel that draws no screen-size control hides any MAP* and VID* records
+/// while the in-game panels are showing. VISUALS also shows ANTI, BSHADOWS
+/// and SHADING from the graphics flags and GAMMA over 0..20.
 ///
 /// @param[in,out] panel The loaded panel.
 /// @param[in,out] context Preferences, flags, host and the display-mode list.

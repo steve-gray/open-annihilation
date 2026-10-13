@@ -3,7 +3,8 @@
 
 // The sizes offered for made-up monitors, as SDL would report them: a 4K
 // monitor on Windows, a Retina Mac's built-in display, a 1280x1024 monitor
-// of Windows XP's time, an ultrawide, a portrait monitor, one that reports
+// of Windows XP's time, an ultrawide, a portrait monitor, a Wayland laptop
+// whose desktop is a scaled 1920x1080, one that reports
 // more sizes than a list holds and one that reports nothing; for full
 // screen and for a window, which also takes the fixed sizes that fit the
 // desktop. Then the mode each size switches to, the sizes a
@@ -331,8 +332,53 @@ void test_nearest_offered() {
     OA_CHECK(!dm::nearest_offered({}, {640, 480}));
 }
 
+/// A 1920x1080 laptop at 125% on Wayland: the desktop is the logical
+/// 1536x864, and the panel's own pixels are a full-screen mode that does
+/// not fit that desktop. SDL cannot switch the output mode; full screen
+/// still lists the mode.
+DisplayReport wayland_laptop() {
+    const ReportedMode desktop = dense(1536, 864, 1.25F, 60.0F);
+    return report_of(
+        desktop,
+        {mode(1920, 1080),
+         desktop,
+         mode(1280, 720),
+         mode(1024, 768),
+         mode(800, 600),
+         mode(640, 480)}
+    );
+}
+
+void test_wayland_laptop() {
+    const DisplayReport report = wayland_laptop();
+    const std::vector<Size> window{
+        {640, 480},
+        {800, 600},
+        {1024, 768},
+        {1280, 720},
+        {1536, 864},
+    };
+    // 1920x1080 is larger than the logical desktop, and 1280x1024 and
+    // 1600x1200 do not fit it, so a window does not offer them.
+    OA_CHECK(dm::offered_sizes(report, Use::window) == window);
+    const std::vector<Size> full{
+        {640, 480},
+        {800, 600},
+        {1024, 768},
+        {1280, 720},
+        {1536, 864},
+        {1920, 1080},
+    };
+    OA_CHECK(dm::offered_sizes(report, Use::full_screen) == full);
+    OA_CHECK(dm::mode_for(report, {1920, 1080}) == std::optional<std::size_t>{0});
+    OA_CHECK(dm::mode_for(report, {1536, 864}) == std::optional<std::size_t>{1});
+}
+
 void test_text() {
     OA_CHECK(dm::size_text({3840, 2160}) == "3840x2160");
+    OA_CHECK(dm::size_text({1920, 1080}) == "1920x1080");
+    OA_CHECK(dm::listed_size_text({1920, 1080}) == "1920 x 1080");
+    OA_CHECK(dm::listed_size_text({1536, 864}) == "1536 x 864");
     const auto report = dm::report_from_text("3840x2160@60,2560x1440@59.94,1512x982@120/2");
     OA_CHECK(report.has_value());
     if (report) {
@@ -373,6 +419,7 @@ int main() {
     test_ultrawide();
     test_portrait_monitor();
     test_reports_nothing();
+    test_wayland_laptop();
     test_minimum_height();
     test_more_sizes_than_a_list_holds();
     test_nearest_offered();

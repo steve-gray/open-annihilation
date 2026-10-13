@@ -446,24 +446,9 @@ void service_free_picture(void*, oa_ref32 picture) {
 }
 
 int32_t service_display_modes(void*, DisplayMode* out, int32_t capacity) {
-    if (g_display_modes.modes != nullptr && capacity > 0) {
-        const int32_t written =
-            std::clamp(g_display_modes.modes(g_display_modes.context, out, capacity), 0, capacity);
-        if (written > 0)
-            return written;
-    }
-    constexpr DisplayMode kModes[] = {
-        {640, 480, 8},
-        {800, 600, 8},
-        {1024, 768, 8},
-        {1152, 864, 8},
-        {1280, 1024, 8},
-        {1600, 1200, 8}
-    };
-    const auto count = std::min<int32_t>(capacity, static_cast<int32_t>(std::size(kModes)));
-    for (int32_t index = 0; index < count; ++index)
-        out[index] = kModes[index];
-    return count;
+    if (g_display_modes.modes == nullptr || out == nullptr || capacity <= 0)
+        return 0;
+    return std::clamp(g_display_modes.modes(g_display_modes.context, out, capacity), 0, capacity);
 }
 
 data::campaign::CampaignFiles map_files() {
@@ -4455,6 +4440,11 @@ void multiplayer_bind_clock(const LobbyClock& clock) noexcept {
 
 void multiplayer_bind_display_modes(const LobbyDisplayModes& display_modes) noexcept {
     g_display_modes = display_modes;
+}
+
+void multiplayer_choose_screen_size(int32_t width, int32_t height) noexcept {
+    if (g_display_modes.choose != nullptr)
+        g_display_modes.choose(g_display_modes.context, width, height);
 }
 
 void multiplayer_bind_map_source(const LobbyMapSource& source) noexcept {

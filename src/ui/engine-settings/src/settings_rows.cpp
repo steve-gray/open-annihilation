@@ -13,6 +13,7 @@
 #include "language_page.hpp"
 
 #include "oa/data/languages.hpp"
+#include "oa/platform/display_modes.hpp"
 #include "oa/ui/kit/text.hpp"
 #include "oa/ui/pad_controls.hpp"
 
@@ -880,7 +881,7 @@ std::string screen_size_text(const SettingsModel& model, ScreenSize size) {
         return std::string(shown_text("Custom"));
     if (size == desktop_screen_size)
         return std::string(shown_text("Desktop"));
-    return std::to_string(size.width) + " x " + std::to_string(size.height);
+    return oa::platform::display_modes::listed_size_text({size.width, size.height});
 }
 
 /// Returns a stop's text: the size shown at its own stop, else the stop's size.
