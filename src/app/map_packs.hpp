@@ -138,9 +138,11 @@ class MapPacks {
 ///
 /// The base game comes first. An empty base game is Total Annihilation.
 /// Each expansion that extends that base game and is on is appended, in the
-/// built-in order, as `+<id>`. A mod key is appended last, as `+<mod key>`.
-/// An expansion that does not extend the base game is left out, so the demo
-/// with any expansions still on is `totala-demo`.
+/// built-in order, as `+<id>`. Music is left out: it does not change the
+/// rules, and turning it on or off does not change the key. A mod key is
+/// appended last, as `+<mod key>`. An expansion that does not extend the
+/// base game is left out, so the demo with any expansions still on is
+/// `totala-demo`.
 ///
 /// @param base_game the base game's id; empty means Total Annihilation
 /// @param expansions the expansion ids that are on, in any order
@@ -170,8 +172,9 @@ struct CompatibleFlag {
 /// How a catalogue answers for the game being played.
 ///
 /// The new names are tried first (`totala`, `totala+core-contingency`,
-/// `totala+<mod>@<release>`, expansions in the built-in order). A row whose
-/// expansions are all on matches, and the longest such row wins, so a pack
+/// `totala+<mod>@<release>`, expansions in the built-in order). Music in a
+/// row is ignored. A row whose other expansions are all on matches, and the
+/// longest such row wins, so a pack
 /// published as `totala` still matches when more expansions are on. The old
 /// names (`ta-3.1c`, `<mod>@<release>`) are used only when no new name matches,
 /// and a new name that is present is never overruled by an old one.
@@ -229,9 +232,10 @@ struct MapListVerdict {
 /// Decides whether a map can be played, and why the list greys it.
 ///
 /// The pack must support the base game, then every required expansion must be
-/// on. The catalogue is final when it has answered: a fit is playable and a
-/// miss is not, and the files are not read either way. A true row that names
-/// another mod is the reason "for <id>". When the catalogue has not answered,
+/// on. Music is not required: it does not change the rules. The catalogue is
+/// final when it has answered: a fit is playable and a miss is not, and the
+/// files are not read either way. A true row that names another mod is the
+/// reason "for <id>". When the catalogue has not answered,
 /// `files.known` false asks for a file check; a miss then is final unless the
 /// release is not listed yet.
 ///

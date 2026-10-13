@@ -332,6 +332,10 @@ namespace bundles = oa::data::content_bundles;
 /// The old key of Total Annihilation with no mod.
 constexpr std::string_view kLegacyBaseKey = "ta-3.1c";
 
+/// The expansion whose tracks do not change the rules. It is left out of the
+/// key, and turning it on or off does not change a map's fit.
+constexpr std::string_view kMusic = "music";
+
 /// The sentence a catalogue miss uses when no other mod fits.
 constexpr std::string_view kCatalogueDetail = "Its catalogue says it does not fit {game}.";
 
@@ -460,7 +464,8 @@ std::string map_compatibility_key(
     const std::string_view game = base_id(base_game);
     std::string key(game);
     for (const bundles::Bundle& bundle : bundles::bundles()) {
-        if (bundle.kind != bundles::Kind::expansion || !extends_game(bundle, game))
+        if (bundle.kind != bundles::Kind::expansion || bundle.id == kMusic ||
+            !extends_game(bundle, game))
             continue;
         if (!id_listed(expansions, bundle.id))
             continue;
@@ -526,6 +531,10 @@ std::optional<bool> compatible_answer(
         bool covered = true;
         int count = 0;
         for (std::size_t index = 1; index < expansion_end; ++index) {
+            // Music never changes the rules, so a row that names it matches
+            // the same row without it, whether or not music is on.
+            if (parts[index] == kMusic)
+                continue;
             ++count;
             if (!id_listed(expansions_on, parts[index]))
                 covered = false;
@@ -569,7 +578,7 @@ MapListVerdict map_list_verdict(
     }
 
     for (const bundles::Bundle& bundle : bundles::bundles()) {
-        if (bundle.kind != bundles::Kind::expansion)
+        if (bundle.kind != bundles::Kind::expansion || bundle.id == kMusic)
             continue;
         if (!id_listed(required_expansions, bundle.id) || id_listed(expansions_on, bundle.id))
             continue;
@@ -579,7 +588,8 @@ MapListVerdict map_list_verdict(
         return verdict;
     }
     for (const std::string& required : required_expansions) {
-        if (id_listed(expansions_on, required) || bundles::find_bundle(required) != nullptr)
+        if (required == kMusic || id_listed(expansions_on, required) ||
+            bundles::find_bundle(required) != nullptr)
             continue;
         MapListVerdict verdict;
         verdict.block = MapListBlock::needs_expansion;

@@ -628,7 +628,8 @@ void Runtime::check_map_pack_lists() {
     }
     require(omitted, "the map that cannot be played was not named with one log line");
     require(
-        played_map_key().starts_with("totala") && played_map_key().find('@') == std::string::npos,
+        played_map_key().starts_with("totala") && played_map_key().find('@') == std::string::npos &&
+            played_map_key().find("music") == std::string::npos,
         "the base game's key is \"" + played_map_key() + "\""
     );
     std::cout << "map pack lists check: after install, skirmish " << eligible_map_names_.size()
@@ -699,7 +700,8 @@ void Runtime::check_map_pack_lists() {
     refresh_listed_pack_maps();
     require(!plays_mod(), "the base game is still played as a mod");
     require(
-        played_map_key().starts_with("totala") && played_map_key().find('@') == std::string::npos,
+        played_map_key().starts_with("totala") && played_map_key().find('@') == std::string::npos &&
+            played_map_key().find("music") == std::string::npos,
         "the base game's key is \"" + played_map_key() + "\""
     );
     require(

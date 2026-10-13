@@ -131,11 +131,12 @@ open-annihilation: map pack <id>: 1 map cannot be played with <key>
 ```
 
 `<key>` names the base game, then each expansion that is on, in the
-built-in order, then `<catalogue-id>@<release>` when a mod installed from
-a catalogue is played. It is `the mod being played` for a mod that has no
-catalogue key. Several maps of one pack share one line, and then it reads
-`maps cannot be played with`. A pack from a registry follows the
-catalogue when that catalogue has answered for this game: a new name such
+built-in order, other than music, then `<catalogue-id>@<release>` when a
+mod installed from a catalogue is played. It is `the mod being played`
+for a mod that has no catalogue key. Several maps of one pack share one
+line, and then it reads `maps cannot be played with`. A pack from a
+registry follows the catalogue when that catalogue has answered for this
+game: a new name such
 as `totala` or `totala+core-contingency` wins, and the older names
 `ta-3.1c` and `<catalogue-id>@<release>` are read when the table has no
 new name. True can be played, and false is greyed, without reading the

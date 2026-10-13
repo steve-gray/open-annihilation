@@ -322,6 +322,9 @@ Runtime::PackMapDecision Runtime::decide_pack_map(const PackMap& map) {
     );
     const bool from_registry = !map.registry.empty() && map.release > 0;
     ListedFit listed = ListedFit::unchecked;
+    // The flags are views of these strings. Both verdicts read them, including
+    // the reason that names another mod, so the strings stay until then.
+    std::vector<std::pair<std::string, bool>> owned_rows;
     std::vector<CompatibleFlag> flags;
     if (from_registry && !target.unkeyed) {
         const CatalogueMapTable table = catalogue_map_table(map);
@@ -330,8 +333,9 @@ Runtime::PackMapDecision Runtime::decide_pack_map(const PackMap& map) {
         } else if (!table.named) {
             listed = ListedFit::unfit;
         } else {
-            flags.reserve(table.rows.size());
-            for (const auto& row : table.rows)
+            owned_rows = table.rows;
+            flags.reserve(owned_rows.size());
+            for (const auto& row : owned_rows)
                 flags.push_back(CompatibleFlag{row.first, row.second});
             const std::string_view mod = target.mod_key;
             if (const std::optional<bool> answer =

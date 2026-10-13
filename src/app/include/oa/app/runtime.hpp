@@ -4245,7 +4245,8 @@ class Runtime final : public menu::Host,
     /// Returns the compatible-table key of the game being played.
     ///
     /// The key names the base game, then each expansion that is on, in the
-    /// built-in order, then `<id>@<release>` when a catalogue mod is played.
+    /// built-in order, other than music, then `<id>@<release>` when a
+    /// catalogue mod is played.
     /// A mod with no catalogue record has an empty key. The names a catalogue
     /// published earlier, `ta-3.1c` and `<id>@<release>` alone, are still read.
     ///

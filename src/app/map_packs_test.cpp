@@ -472,12 +472,16 @@ void test_base_fit() {
 void test_list_rules() {
     const std::vector<std::string> music_then_core{"music", "core-contingency"};
     OA_CHECK(
-        oa::app::map_compatibility_key("totala", music_then_core, "") ==
-        "totala+core-contingency+music"
+        oa::app::map_compatibility_key("totala", music_then_core, "") == "totala+core-contingency"
     );
     OA_CHECK(
         oa::app::map_compatibility_key("totala", music_then_core, "ridge@28") ==
-        "totala+core-contingency+music+ridge@28"
+        "totala+core-contingency+ridge@28"
+    );
+    const std::vector<std::string> core_only{"core-contingency"};
+    OA_CHECK(
+        oa::app::map_compatibility_key("totala", core_only, "") ==
+        oa::app::map_compatibility_key("totala", music_then_core, "")
     );
     OA_CHECK(oa::app::map_compatibility_key("totala-demo", music_then_core, "") == "totala-demo");
     OA_CHECK(oa::app::map_compatibility_key("", {}, "ridge@28") == "totala+ridge@28");
@@ -518,6 +522,11 @@ void test_list_rules() {
         totala, tactics, "totala", tactics, "", oa::app::ListedFit::fits, {}, missed
     );
     OA_CHECK(tactics_on.block == oa::app::MapListBlock::playable);
+    const std::vector<std::string> music{"music"};
+    const oa::app::MapListVerdict music_off = oa::app::map_list_verdict(
+        totala, music, "totala", {}, "", oa::app::ListedFit::fits, {}, missed
+    );
+    OA_CHECK(music_off.block == oa::app::MapListBlock::playable);
 
     const oa::app::CompatibleFlag ridge_rows[] = {
         {"ta-3.1c", false},
@@ -590,6 +599,17 @@ void test_list_rules() {
     OA_CHECK(specific.has_value() && *specific);
     const oa::app::CompatibleFlag absent[] = {{"ridge@28", true}};
     OA_CHECK(!oa::app::compatible_answer(absent, "totala", {}, "").has_value());
+
+    const oa::app::CompatibleFlag music_true[] = {{"totala+music", true}};
+    const std::vector<std::string> music_on{"music"};
+    const std::optional<bool> music_off_answer =
+        oa::app::compatible_answer(music_true, "totala", {}, "");
+    const std::optional<bool> music_on_answer =
+        oa::app::compatible_answer(music_true, "totala", music_on, "");
+    OA_CHECK(
+        music_off_answer.has_value() && *music_off_answer && music_on_answer.has_value() &&
+        *music_on_answer
+    );
 }
 
 } // namespace
