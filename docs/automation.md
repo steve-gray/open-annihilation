@@ -404,9 +404,7 @@ Controls are listed as `oa.first-run.<step>.<control>`:
 
 | Control | Name |
 |---|---|
-| Skip setup | `oa.first-run.language.skip`, `oa.first-run.online.skip` |
-| Quit, on the game step | `oa.first-run.game.skip` |
-| Cancel, on the copying step | `oa.first-run.copying.skip` |
+| Quit on a first start, Skip on a re-run | `oa.first-run.language.skip`, `oa.first-run.game.skip`, `oa.first-run.copying.skip`, `oa.first-run.online.skip` |
 | Back | `oa.first-run.language.back`, `oa.first-run.game.back`, `oa.first-run.online.back`, `oa.first-run.buttons.back` |
 | Next | `oa.first-run.language.next`, `oa.first-run.online.next` |
 | Copy the game | `oa.first-run.game.next` |
