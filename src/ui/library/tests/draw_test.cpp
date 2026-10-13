@@ -453,6 +453,48 @@ void add_many_maps(lib::Library& library) {
     lib::refresh(library, std::move(library.inputs));
 }
 
+/// Dresses the three Active pictures: No Mod, the base game from GOG, every
+/// expansion copied and on except Battle Tactics, which turns off when the
+/// Library closes. The draft is set after the last refresh, which would
+/// otherwise drop it.
+///
+/// @param[in,out] library the scene's library
+void dress_active_choice(lib::Library& library) {
+    for (lib::Installed& held : library.inputs.installed) {
+        if (held.kind == lib::Kind::mod)
+            held.playing = false;
+    }
+    library.inputs.playing_mod.reset();
+    library.inputs.content.base_id = "totala";
+    library.inputs.content.source = "from GOG for macOS";
+    library.inputs.content.files_differ = 0;
+    library.inputs.content.copied = {
+        "totala",
+        "campaign",
+        "core-contingency",
+        "battle-tactics",
+        "music",
+        "cavedog-units",
+        "cavedog-tilesets",
+    };
+    library.inputs.content.enabled = {
+        "campaign",
+        "core-contingency",
+        "battle-tactics",
+        "music",
+        "cavedog-units",
+        "cavedog-tilesets",
+    };
+    lib::refresh(library, std::move(library.inputs));
+    library.content.base_game = "totala";
+    library.content.expansions = {
+        "campaign", "core-contingency", "music", "cavedog-units", "cavedog-tilesets"
+    };
+    library.content.last_id = "battle-tactics";
+    library.content.last_on = false;
+    library.content.edited = true;
+}
+
 /// Lays a scene out and draws it.
 ///
 /// @param scene the scene
@@ -470,6 +512,8 @@ Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
         dress_map_previews(library);
     if (scene.many)
         add_many_maps(library);
+    if (scene.tab == lib::Tab::active && !scene.many)
+        dress_active_choice(library);
     lib::select(library, fixture::ridge_id());
     lib::set_tab(library, scene.tab);
     if (!scene.select_key.empty()) {

@@ -90,23 +90,48 @@ filters.
 
 ## The Active tab
 
-**Active**, the first tab, shows what you are using now, as tiles:
+**Active**, the first tab, shows what you are using now, as tiles. At
+every size, including a small window, the first row is **BASE GAME** and
+**LANGUAGE**, and the second is **EXPANSIONS** and **MOD**. **MAPS** stays
+under them, so the maps pane keeps a row.
 
+- **BASE GAME**: the game you play, and its version ("Total Annihilation",
+  "3.1c", or "Demo"). Its badge is Total Annihilation's own icon, taken
+  from the program in the game folder that describes itself as Total
+  Annihilation, and drawn centred in the square. When that program is
+  missing or its icon cannot be read, the letters "TA" stay. A source the
+  host knows is named on the version line ("3.1c · from GOG for macOS").
+  A file check the host knows is the next line: "All files match", or
+  "1 file differs", or "2 files differ". **CHANGE…** sits at the bottom
+  right. It is the control that will open the chooser; this tab does not
+  open it.
+- **EXPANSIONS**: one pill for each expansion of that base game. A pill
+  that is on is filled. One that is copied and off is plain, in the
+  expansion's name. One that is not copied reads "Campaign · ADD FROM…",
+  and that press is the control that will open the locator; this tab does
+  not open it. The heading counts them, "EXPANSIONS · 5 OF 6 ON". A game
+  with none says "EXPANSIONS" and "This game has no expansions." A hint
+  under the pills names what the first expansion that is off still needs
+  ("Core Contingency needs Campaign."). Pressing a pill follows the
+  rules for turning an expansion on or off, and the choice waits on this
+  tab until the Library closes. The hint then names that wait ("Battle
+  Tactics turns off when the Library closes."). Turning one off that the
+  mod you are playing needs asks first. **CANCEL** leaves the choice as
+  it was. **TURN OFF** keeps the change on this tab, still until the
+  Library closes, and says that the mod is unloaded and the game plays
+  with **No Mod**. The pills are greyed during a game and while the
+  command line named the choice for this run.
 - **MOD**: a tile for the mod you are playing. Its badge is large, and the
   tile names the mod, its version and revision ("4.8 (rev 3)") and who made
   it ("by the Ridge team"). **Playing** is a rounded pill at the top right,
   on the title's line. **UNLOAD MOD** sits at the bottom right. It asks the
   same **SWITCH MOD** question as **SWITCH OFF** and, on **SWITCH**, goes
-  back to the game as 3.1c plays it
+  back to the game as it was made
   ([choosing a mod](#choosing-a-mod)). It is greyed during a game and while
   the command line chose the run's mod; resting on it then shows "The
   command line chose this run's mod." When you are playing no mod, the
-  tile is **Base Game**. Its badge is Total Annihilation's own icon, taken
-  from the program in the game folder that describes itself as Total
-  Annihilation, and drawn centred in the square. When that program is
-  missing or its icon cannot be read, the letters "3.1c" stay. The tile reads "Total
-  Annihilation 3.1c" and "No mod: the game as it was made", and it has no
-  pill and no button.
+  tile is **No Mod**. Its badge is an em dash. The tile reads "No Mod"
+  and "Total Annihilation as it was made", and it has no pill and no button.
 - **LANGUAGE**: a tile for the language the game is showing. It carries the
   pack's badge, or a language mark, the language's name in itself and in
   English, the pack's version and revision, and how much of the game the
@@ -133,33 +158,33 @@ filters.
   the heading counts them, "2 of 5". When none match, the pane says "No
   installed map matches." Clearing the field shows every map again. The
   words stay while the Library is open, including on the other tabs. The
-  search does not hide **MOD** or **LANGUAGE**.
+  search does not hide the four tiles above it.
 
 The badge, the title and the lines start at the top of each tile, with the
-same small padding above them and below the last line or, on the mod tile,
-below **UNLOAD MOD**. Side by side, the mod and the language share a title
-line and the same height, and so do maps in one row. Extra room stays
-under the shorter tile's lines. A minimap keeps its shape: it is centred
-in its square, and the rest of the square is the list's well colour.
+same small padding above them and below the last line or, on a tile with a
+button, below **CHANGE…** or **UNLOAD MOD**. In a row, the two tiles share
+a title line and the same height, and so do maps in one row. Extra room
+stays under the shorter tile's lines. A minimap keeps its shape: it is
+centred in its square, and the rest of the square is the list's well colour.
 
-On a small window the mod and the language stand in one column, and the
-maps are one line each, several of them in the pane. On a larger window
-the mod and the language stand side by side, and on the largest the maps
+The four tiles stand two by two at every size. On a small window the maps
+are one line each, several of them in the pane. On the largest the maps
 stand in two columns when you have more than one. The tab has no catalogue
-search and no filters. The mod and language labels and each map's title line take
-no press, except the title of a map whose pack holds only that map: that
-title is the link to the pack. **UNLOAD MOD** does, and so does each map's
-link to its pack while that link shows, and so does the maps search. Tab
-and the arrows reach them. **MOD** and **LANGUAGE** stay where they are.
-The maps pane runs from under the **MAPS** heading to the bottom of the
-window, and when the maps are taller than that pane they scroll inside it
-with the mouse wheel, a finger, the scroll bar, Page Up and Page Down,
-Home and End, and a controller's right stick. The other tabs are where
-packages are got, updated and played.
+search and no filters. The base, expansions, mod and language labels and
+each map's title line take no press, except the title of a map whose pack
+holds only that map: that title is the link to the pack. **CHANGE…**,
+each expansion pill, **UNLOAD MOD**, each map's link to its pack while
+that link shows, and the maps search do take a press. Tab and the arrows
+reach them. The four tiles stay where they are. The maps pane runs from
+under the **MAPS** heading to the bottom of the window, and when the maps
+are taller than that pane they scroll inside it with the mouse wheel, a
+finger, the scroll bar, Page Up and Page Down, Home and End, and a
+controller's right stick. The wheel over a tile above the maps does not
+scroll them. The other tabs are where packages are got, updated and played.
 
-![The Active tab at Compact: one column, Highland's tile with a Playing pill and UNLOAD MOD, the language under it, and several maps on one line each. Atoll's title is the link and has no From line; the others keep From at the right of the line.](images/library/library-active-compact.png)
+![The Active tab at Compact: base game and language on the first row, expansions and No Mod on the second, then maps on one line each. Battle Tactics is off until the Library closes. Atoll's title is the link and has no From line; the others keep From at the right of the line.](images/library/library-active-compact.png)
 
-![The Active tab at Regular: the mod and the language side by side, and under them each installed map with its minimap and a cut description. Atoll, alone in its pack, has no From line; the others keep one.](images/library/library-active-regular.png)
+![The Active tab at Regular: the same four tiles, two by two, and under them each installed map with its minimap and a cut description. Atoll, alone in its pack, has no From line; the others keep one.](images/library/library-active-regular.png)
 
 ![The Active tab at Large: the same tiles, with the maps in two columns of equal height.](images/library/library-active-large.png)
 
@@ -354,15 +379,14 @@ count, on its row; Compact shows them under the status line.
 
 ## Choosing a mod
 
-The Mods list starts with **Base Game (Disable Mods)**, above every mod,
-under All and Installed, and whenever a search matches its name. Its
-badge is the same icon as the Active tab's base-game tile, or the letters
-"3.1c" when that icon cannot be read. Its details say "Total Annihilation
-3.1c as it was made, with no mod". It is
+The Mods list starts with **No Mod**, above every mod, under All and
+Installed, and whenever a search matches its name. Its badge is the same
+icon as the Active tab's base-game tile, or an em dash when that icon
+cannot be read. Its details say "Total Annihilation as it was made". It is
 not a mod: All, New, Installed and Updates leave it out of their counts,
 New never lists it, and Active, Updates and Registries do not list it. It
 has no update, and its details never offer UPDATE, ROLL BACK, UNINSTALL or
-OPEN FOLDER.
+OPEN FOLDER. The base game itself is named on the Active tab's own tile.
 
 While no mod is played it is marked **PLAYING** and its details offer no
 action. While a mod is played its details offer **PLAY NOW**. That asks
@@ -380,7 +404,7 @@ a folder without an `oamod.yaml`, which shows "N/A" for its version and
 rules, and a folder an earlier version's Pick Folder… chose, while it is
 still the mod you play. A mod of your own shows its `oamod.yaml`'s
 description in its details. The one you play is marked **PLAYING**. With
-no mod, **Base Game (Disable Mods)** is the one marked **PLAYING**.
+no mod, **No Mod** is the one marked **PLAYING**.
 
 - **PLAY NOW**, on any other mod, plays it: the game reloads its data for
   that mod and returns to the main menu, without closing the window, and

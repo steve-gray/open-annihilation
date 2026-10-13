@@ -207,6 +207,7 @@ int declared_place(std::string_view name) {
         return 3;
     if (name == "library.action" || starts(name, "library.action.") ||
         name == "library.active.unload" || name == "library.active.search" ||
+        name == "library.active.change" || starts(name, "library.active.expansion.") ||
         starts(name, "library.active.from.") || starts(name, "library.detail.tag."))
         return 4;
     if (starts(name, "library.registry."))
@@ -295,7 +296,8 @@ bool designed_name(const std::string& name) {
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|uninstall|"
         "open-folder|homepage)|"
         "details|back|refresh|close-x|close|status|queue|note|from|rules|"
-        "active\\.(mod|language|unload|search|map\\.[1-9][0-9]*|from\\.[1-9][0-9]*)|"
+        "active\\.(mod|language|base|expansions|unload|change|search|map\\.[1-9][0-9]*|"
+        "from\\.[1-9][0-9]*|expansion\\.[a-z0-9-]+)|"
         "add-registry|registries\\.(note|notice)|"
         "registry\\.[a-z0-9-]+(\\.(remove|add-mirror|key|refresh|address|refreshed))?)"
     );
@@ -303,7 +305,7 @@ bool designed_name(const std::string& name) {
 }
 
 /// The labels: lines a journey reads, which take nothing.
-constexpr std::array<std::string_view, 9> label_names{
+constexpr std::array<std::string_view, 11> label_names{
     "library.status",
     "library.queue",
     "library.note",
@@ -311,6 +313,8 @@ constexpr std::array<std::string_view, 9> label_names{
     "library.rules",
     "library.active.mod",
     "library.active.language",
+    "library.active.base",
+    "library.active.expansions",
     "library.registries.note",
     "library.registries.notice",
 };
@@ -341,7 +345,9 @@ std::vector<std::string> name_problems(const kit::DisplayList& list) {
     }
     for (const kit::Control& control : list.controls)
         if (control.name != "library.active.unload" && control.name != "library.active.search" &&
+            control.name != "library.active.change" &&
             !starts(control.name, "library.active.from.") &&
+            !starts(control.name, "library.active.expansion.") &&
             starts(control.name, "library.active.") &&
             (control.kind != kit::ControlKind::area || control.enabled || control.focusable))
             problems.push_back(control.name + " takes a press, a key or Tab");
@@ -668,6 +674,8 @@ void check_frame(const fixture::NamedFrame& named) {
             (starts(stop->name, "library.tab.") || stop->name == "library.close" ||
              stop->name == "library.close-x" || stop->name == "library.refresh" ||
              stop->name == "library.active.unload" || stop->name == "library.active.search" ||
+             stop->name == "library.active.change" ||
+             starts(stop->name, "library.active.expansion.") ||
              starts(stop->name, "library.active.from."))
         );
     }
@@ -706,10 +714,14 @@ void check_frame(const fixture::NamedFrame& named) {
         OA_CHECK(unload->rect.y >= mod_line->rect.y + mod_line->rect.height);
     const kit::Item* mod_title = text_item(active_list, "Highland");
     const kit::Item* language_title = text_item(active_list, "Polski");
+    const kit::Item* base_name = text_item(active_list, "Total Annihilation");
     if (mod_title != nullptr && mod_line != nullptr)
         OA_CHECK(mod_title->rect.y == mod_line->rect.y + kit::compact_metrics.card_inset);
-    if (!compact && mod_title != nullptr && language_title != nullptr)
-        OA_CHECK(mod_title->rect.y == language_title->rect.y);
+    // Row one is the base game beside the language. Row two is the mod.
+    if (base_name != nullptr && language_title != nullptr)
+        OA_CHECK(base_name->rect.y == language_title->rect.y);
+    if (mod_title != nullptr && base_name != nullptr)
+        OA_CHECK(mod_title->rect.y > base_name->rect.y);
     OA_CHECK(text_item(active_list, "by the Highland team") != nullptr);
     OA_CHECK(text_item(active_list, "0.4.0 (rev 1)") != nullptr);
     OA_CHECK(text_item(active_list, "Polish") != nullptr);
@@ -906,8 +918,8 @@ void rows_name_their_entries() {
     const kit::DisplayList list = laid_out(library, {}, fixture::frames()[1].frame);
     const kit::Control* base = fixture::named(list, "library.row.base-game");
     OA_CHECK(
-        base != nullptr && base->text == "Base Game (Disable Mods)" &&
-        base->kind == kit::ControlKind::list_item && !base->checked
+        base != nullptr && base->text == "No Mod" && base->kind == kit::ControlKind::list_item &&
+        !base->checked
     );
     OA_CHECK(
         !library.visible.empty() && library.entries[library.visible.front()].id.key == "@base-game"
@@ -996,9 +1008,7 @@ void empty_and_offline_lists_say_why() {
     lib::set_tab(none, lib::Tab::mods);
     const kit::DisplayList none_list = laid_out(none, {}, fixture::frames()[0].frame);
     const kit::Control* base_row = fixture::named(none_list, "library.row.base-game");
-    OA_CHECK(
-        base_row != nullptr && base_row->text == "Base Game (Disable Mods)" && base_row->checked
-    );
+    OA_CHECK(base_row != nullptr && base_row->text == "No Mod" && base_row->checked);
     bool told = false;
     for (const kit::Item& item : none_list.items)
         told =
@@ -1607,8 +1617,22 @@ void filters_and_tags() {
     );
 }
 
-/// With no mod played the Active tab's tile is the base game, the language
-/// says it is built in, and the maps tile says there are none.
+/// Tells whether a drawn text starts with a prefix.
+///
+/// @param list the display list
+/// @param prefix the prefix
+/// @return true when one text does
+bool text_starts(const kit::DisplayList& list, std::string_view prefix) {
+    for (const kit::Item& item : list.items) {
+        if (item.role == kit::Role::text && item.text.compare(0, prefix.size(), prefix) == 0)
+            return true;
+    }
+    return false;
+}
+
+/// With no mod played the base game and No Mod are tiles, the language says
+/// it is built in, and the maps tile says there are none. Compact, Regular
+/// and Large keep the same four tiles.
 void active_base_game_is_a_tile() {
     const std::vector<fixture::NamedFrame> all = fixture::frames();
     lib::Inputs inputs = fixture::fixture_inputs();
@@ -1616,30 +1640,52 @@ void active_base_game_is_a_tile() {
         held.playing = false;
     inputs.language = {};
     inputs.map_packs.clear();
+    inputs.content.source = "from GOG for macOS";
+    inputs.content.files_differ = 0;
     lib::Library library;
     lib::refresh(library, std::move(inputs));
     OA_CHECK(library.tab == lib::Tab::active);
-    for (const fixture::NamedFrame& named : {all[0], all[2]}) {
+    for (const fixture::NamedFrame& named : {all[0], all[1], all[2]}) {
         lib::ScreenState state;
         const kit::DisplayList list = laid_out(library, state, named.frame);
         const kit::Point window = lib::window_size(named.frame);
         OA_EXPECT_NONE(fixture::outside_window(list, window), named.name + " base game");
         OA_EXPECT_NONE(meeting_controls(list), named.name + " base game");
+        OA_EXPECT_NONE(order_problems(list), named.name + " base game");
+        OA_EXPECT_NONE(name_problems(list), named.name + " base game");
         OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), named.name + " base game");
         const kit::Control* mod = fixture::named(list, "library.active.mod");
-        OA_CHECK(mod != nullptr && mod->text == "No mod: the game as it was made");
+        OA_CHECK(mod != nullptr && mod->text == "No Mod");
         OA_CHECK(mod != nullptr && !mod->enabled && !mod->focusable);
-        OA_CHECK(text_item(list, "Base Game") != nullptr);
-        OA_CHECK(text_item(list, "Total Annihilation 3.1c") != nullptr);
-        OA_CHECK(text_item(list, "3.1") != nullptr);
+        OA_CHECK(text_item(list, "No Mod") != nullptr);
+        OA_CHECK(text_item(list, "Total Annihilation as it was made") != nullptr);
+        OA_CHECK(text_item(list, "Total Annihilation") != nullptr);
+        OA_CHECK(text_item(list, "TA") != nullptr);
+        OA_CHECK(text_item(list, "All files match") != nullptr);
+        OA_CHECK(text_starts(list, "3.1c"));
+        const kit::Control* change = fixture::named(list, "library.active.change");
+        OA_CHECK(change != nullptr && change->enabled && change->text == "CHANGE…");
+        const kit::Control* expansions = fixture::named(list, "library.active.expansions");
+        OA_CHECK(expansions != nullptr && expansions->text == "EXPANSIONS · 0 OF 6 ON");
+        OA_CHECK(text_starts(list, "Core Contingency needs"));
+        const kit::Control* add = fixture::named(list, "library.active.expansion.campaign");
+        OA_CHECK(add != nullptr && add->text.find("ADD FROM…") != std::string::npos);
         OA_CHECK(!shows_pill(list, "Playing"));
         OA_CHECK(!shows_chip(list, "Playing"));
         OA_CHECK(!shows_chip(list, "Built in"));
         OA_CHECK(shows_pill(list, "Built in"));
         OA_CHECK(fixture::named(list, "library.active.unload") == nullptr);
-        const kit::Item* base_title = text_item(list, "Base Game");
-        if (mod != nullptr && base_title != nullptr)
-            OA_CHECK(base_title->rect.y == mod->rect.y + kit::compact_metrics.card_inset);
+        const kit::Item* game_title = text_item(list, "Total Annihilation");
+        const kit::Item* language_title = text_item(list, "English");
+        const kit::Item* mod_title = text_item(list, "No Mod");
+        if (game_title != nullptr && language_title != nullptr)
+            OA_CHECK(game_title->rect.y == language_title->rect.y);
+        if (mod_title != nullptr && game_title != nullptr)
+            OA_CHECK(mod_title->rect.y > game_title->rect.y);
+        const kit::Control* base = fixture::named(list, "library.active.base");
+        OA_CHECK(base != nullptr && base->text == "Total Annihilation · 3.1c");
+        if (base != nullptr && game_title != nullptr)
+            OA_CHECK(game_title->rect.y == base->rect.y + kit::compact_metrics.card_inset);
         OA_CHECK(text_item(list, "No map packs are installed.") != nullptr);
         OA_CHECK(fixture::named(list, "library.active.map.1") == nullptr);
     }
@@ -2415,7 +2461,8 @@ void base_badge_is_nearest_and_tabs_are_bracketed() {
     lib::refresh(letters, inputs);
     lib::set_tab(letters, lib::Tab::active);
     const kit::DisplayList letter_list = laid_out(letters, {}, compact);
-    OA_CHECK(text_item(letter_list, "3.1") != nullptr);
+    OA_CHECK(text_item(letter_list, "TA") != nullptr);
+    OA_CHECK(text_item(letter_list, "—") != nullptr);
     const kit::Control* mods = fixture::named(letter_list, "library.tab.mods");
     OA_CHECK(
         mods != nullptr &&

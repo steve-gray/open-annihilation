@@ -13,6 +13,7 @@
 #include "oa/data/mod_profile/registry.hpp"
 #include "oa/test/check.hpp"
 #include "oa/ui/library/library.hpp"
+#include "oa/ui/library/mod_questions.hpp"
 #include "oa/ui/library/text.hpp"
 
 #include <algorithm>
@@ -926,16 +927,17 @@ void test_active_setup() {
     OA_CHECK(setup.mod_name.empty() && setup.mod_badge == nullptr);
     library.inputs.base_game_badge = lib::Badge{std::vector<uint8_t>(2 * 2 * 4, 9), 2, 2};
     setup = lib::active_setup(library);
-    OA_CHECK(
-        library.inputs.base_game_badge.has_value() &&
-        setup.mod_badge == &*library.inputs.base_game_badge
-    );
+    OA_CHECK(library.inputs.base_game_badge.has_value() && setup.mod_badge == nullptr);
+    const lib::ActiveContent face = lib::active_content(library);
+    OA_CHECK(face.badge == &*library.inputs.base_game_badge);
+    OA_CHECK_TEXT(face.letters, "TA");
     library.inputs.base_game_badge.reset();
     setup = lib::active_setup(library);
     OA_CHECK(setup.mod_badge == nullptr);
-    OA_CHECK_TEXT(setup.mod_line, "No mod: the game as it was made");
-    OA_CHECK_TEXT(setup.base_title, "Base Game");
-    OA_CHECK_TEXT(setup.base_look, "Total Annihilation 3.1c");
+    OA_CHECK(lib::active_content(library).badge == nullptr);
+    OA_CHECK_TEXT(setup.mod_line, "No Mod");
+    OA_CHECK_TEXT(setup.base_title, "No Mod");
+    OA_CHECK_TEXT(setup.base_look, "Total Annihilation as it was made");
     OA_CHECK(setup.mod_state.empty() && setup.mod_release.empty() && setup.mod_author.empty());
     OA_CHECK_TEXT(setup.language_name, "Français");
     OA_CHECK_TEXT(setup.language_note, "Built in");
@@ -1960,9 +1962,9 @@ bool shows_key(const lib::Library& library, std::string_view key) {
 /// @param english the pattern
 /// @return its translation, or the pattern
 std::string_view translated_base_game(void*, std::string_view english) {
-    if (english == lib::words::base_game_name)
+    if (english == lib::words::no_mod)
         return "Jeu de base";
-    if (english == lib::words::base_game_summary)
+    if (english == lib::words::active_as_made)
         return "Sans mod";
     return english;
 }
@@ -1988,10 +1990,8 @@ void test_base_game() {
     if (entry != nullptr) {
         OA_CHECK(actions_of(none, *entry).empty());
         OA_CHECK(lib::facts(none, *entry).empty());
-        OA_CHECK_TEXT(lib::entry_name(*entry), "Base Game (Disable Mods)");
-        OA_CHECK_TEXT(
-            lib::entry_summary(*entry), "Total Annihilation 3.1c as it was made, with no mod"
-        );
+        OA_CHECK_TEXT(lib::entry_name(*entry), "No Mod");
+        OA_CHECK_TEXT(lib::entry_summary(*entry), "Total Annihilation as it was made");
         OA_CHECK_TEXT(lib::status_line(none, *entry), "Playing");
     }
     OA_CHECK_TEXT(lib::playing_note(none), "");
@@ -2089,7 +2089,7 @@ void test_base_game() {
     lib::set_tag(library, "units");
     OA_CHECK(!shows_key(library, "@base-game@"));
     lib::set_tag(library, "");
-    for (const std::string_view word : {"base", "game", "disable", "mods"}) {
+    for (const std::string_view word : {"no", "mod", "annihilation", "made"}) {
         lib::set_query(library, word);
         OA_CHECK(visible_keys(library).front() == "@base-game@");
     }
@@ -2496,6 +2496,126 @@ void test_rolled_back_update_returns() {
     }
 }
 
+/// Tells whether an id list holds an id.
+///
+/// @param ids the ids
+/// @param id the id
+/// @return true when it is among them
+bool holds_id(const std::vector<std::string>& ids, std::string_view id) {
+    return std::find(ids.begin(), ids.end(), id) != ids.end();
+}
+
+/// A pill press goes through turn_content_expansion and stays on the draft.
+void test_expansion_pills() {
+    lib::Inputs inputs;
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"campaign", "music"};
+    inputs.content.enabled = {"campaign"};
+    lib::Library library;
+    lib::refresh(library, inputs);
+
+    const lib::ContentPress off = lib::press_expansion(library, "campaign");
+    OA_CHECK(off.kind == lib::ContentPressKind::redraw);
+    OA_CHECK(library.content.edited);
+    OA_CHECK(!holds_id(library.content.expansions, "campaign"));
+    OA_CHECK_TEXT(lib::active_content(library).hint, "Campaign turns off when the Library closes.");
+    const lib::ContentPress again = lib::press_expansion(library, "campaign");
+    OA_CHECK(again.kind == lib::ContentPressKind::redraw);
+    OA_CHECK(holds_id(library.content.expansions, "campaign"));
+    OA_CHECK(!library.content.edited);
+
+    const lib::ContentPress missing = lib::press_expansion(library, "core-contingency");
+    OA_CHECK(missing.kind == lib::ContentPressKind::add);
+    OA_CHECK(missing.expansion == "core-contingency");
+    OA_CHECK(!holds_id(library.content.expansions, "core-contingency"));
+
+    inputs.content.copied = {"campaign", "core-contingency"};
+    inputs.content.enabled = {};
+    lib::refresh(library, inputs);
+    const lib::ContentPress on = lib::press_expansion(library, "core-contingency");
+    OA_CHECK(on.kind == lib::ContentPressKind::redraw);
+    OA_CHECK(holds_id(library.content.expansions, "campaign"));
+    OA_CHECK(holds_id(library.content.expansions, "core-contingency"));
+    OA_CHECK_TEXT(
+        lib::active_content(library).hint, "Core Contingency turns on when the Library closes."
+    );
+
+    const lib::ContentPress cascade = lib::press_expansion(library, "campaign");
+    OA_CHECK(cascade.kind == lib::ContentPressKind::redraw);
+    OA_CHECK(!holds_id(library.content.expansions, "campaign"));
+    OA_CHECK(!holds_id(library.content.expansions, "core-contingency"));
+
+    inputs.content.copied = {"campaign", "cavedog-units"};
+    inputs.content.enabled = {};
+    lib::refresh(library, inputs);
+    const lib::ContentPress refused = lib::press_expansion(library, "cavedog-units");
+    OA_CHECK(refused.kind == lib::ContentPressKind::none);
+    OA_CHECK(!library.content.edited);
+
+    inputs.content.copied = {"campaign"};
+    inputs.content.enabled = {"campaign"};
+    inputs.content.mod_required = {"campaign"};
+    lib::Installed ridge;
+    ridge.kind = Kind::mod;
+    ridge.key = "ridge";
+    ridge.folder = "ridge";
+    ridge.name = "Ridge";
+    ridge.playing = true;
+    inputs.installed.push_back(ridge);
+    lib::refresh(library, inputs);
+    const lib::ContentPress asked = lib::press_expansion(library, "campaign");
+    OA_CHECK(asked.kind == lib::ContentPressKind::ask);
+    OA_CHECK(asked.expansion == "campaign");
+    OA_CHECK(!library.content.edited);
+    OA_CHECK(library.content.asking);
+    OA_CHECK(holds_id(library.content.seed_enabled, "campaign"));
+    const lib::ContentPress during = lib::press_expansion(library, "campaign");
+    OA_CHECK(during.kind == lib::ContentPressKind::none);
+    const oa::ui::kit::Question question = lib::expansion_off_question(library);
+    OA_CHECK(question.title == "Turn off Campaign?");
+    OA_CHECK(question.buttons.size() == 2);
+    OA_CHECK(question.buttons[0].id == lib::cancel_button_id);
+    OA_CHECK(question.buttons[1].id == lib::turn_off_button_id);
+    OA_CHECK(question.buttons[1].caption == "TURN OFF");
+    OA_CHECK(question.paragraphs.size() == 2);
+    if (question.paragraphs.size() == 2) {
+        OA_CHECK(
+            question.paragraphs[0].text ==
+            "Ridge needs Campaign, so it is unloaded and the game plays with No Mod."
+        );
+        OA_CHECK(question.paragraphs[1].text.find("Nothing is deleted.") != std::string::npos);
+    }
+    lib::cancel_expansion_off(library);
+    OA_CHECK(!library.content.asking && !library.content.edited);
+    OA_CHECK(holds_id(library.content.seed_enabled, "campaign"));
+
+    const lib::ContentPress asked_again = lib::press_expansion(library, "campaign");
+    OA_CHECK(asked_again.kind == lib::ContentPressKind::ask);
+    lib::accept_expansion_off(library);
+    OA_CHECK(!library.content.asking && library.content.edited);
+    OA_CHECK(!holds_id(library.content.expansions, "campaign"));
+    OA_CHECK(library.content.last_id == "campaign" && !library.content.last_on);
+
+    library.inputs.in_match = true;
+    const lib::ContentPress blocked = lib::press_expansion(library, "music");
+    OA_CHECK(blocked.kind == lib::ContentPressKind::none);
+    library.inputs.in_match = false;
+    library.inputs.content.locked = true;
+    const lib::ContentPress locked = lib::press_expansion(library, "campaign");
+    OA_CHECK(locked.kind == lib::ContentPressKind::none);
+
+    lib::Inputs demo;
+    demo.content.base_id = "totala-demo";
+    lib::Library shown;
+    lib::refresh(shown, std::move(demo));
+    const lib::ActiveContent face = lib::active_content(shown);
+    OA_CHECK_TEXT(face.name, "Total Annihilation");
+    OA_CHECK_TEXT(face.version_line, "Demo");
+    OA_CHECK_TEXT(face.expansions_heading, "EXPANSIONS");
+    OA_CHECK_TEXT(face.hint, "This game has no expansions.");
+    OA_CHECK(face.pills.empty());
+}
+
 void test_lookup() {
     lib::TextHooks hooks;
     hooks.shown = reversed_words;
@@ -2531,6 +2651,7 @@ int main() {
     test_entry_actions();
     test_switch_off();
     test_base_game();
+    test_expansion_pills();
     test_check_now();
     test_built_in_languages();
     test_tab_counts();

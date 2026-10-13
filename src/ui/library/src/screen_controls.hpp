@@ -73,6 +73,12 @@ inline constexpr kit::ControlId registries_note = 72;
 /// The Active tab's maps search (library.active.search). It is not the
 /// catalogue search: that one is absent on Active.
 inline constexpr kit::ControlId active_search = 73;
+/// CHANGE… on the base game tile. The host opens the chooser.
+inline constexpr kit::ControlId active_change = 74;
+/// The base game tile's label. It takes no press.
+inline constexpr kit::ControlId active_base = 75;
+/// The expansions heading's label. It takes no press.
+inline constexpr kit::ControlId active_expansions = 76;
 /// An entry's action button: this and the Action's value.
 inline constexpr kit::ControlId first_action = 100;
 /// A tag's chip or nav entry: this and the tag's place in tags_in_tab.
@@ -95,6 +101,20 @@ inline constexpr kit::ControlId first_active_from = 9000000;
 inline constexpr kit::ControlId first_detail_tag = 11000000;
 /// The most tags one package's details name.
 inline constexpr std::size_t most_detail_tags = 256;
+/// The Active tab's first expansion pill. The rest follow in the built-in
+/// order of that base game's expansions.
+inline constexpr kit::ControlId first_expansion = 12000000;
+/// The most expansion pills named. A base game has fewer.
+inline constexpr std::size_t most_expansions = 64;
+
+/// Tells whether a control is an expansion pill.
+///
+/// @param id the control
+/// @return true for a pill the Active tab names
+[[nodiscard]] constexpr bool expansion_control(kit::ControlId id) noexcept {
+    return id >= first_expansion &&
+           id < first_expansion + static_cast<kit::ControlId>(most_expansions);
+}
 
 /// Tells whether a control is an Active tab From link.
 ///

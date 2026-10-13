@@ -77,8 +77,8 @@ constexpr std::size_t badge_letter_count = 3;
 constexpr kit::Colour badge_face = kit::colour::hint;
 /// The most bytes one word of an automation name keeps.
 constexpr std::size_t most_name_word_bytes = 40;
-/// The letters on the base game's badge: the 3.1c mark.
-constexpr std::string_view base_badge_name = "3.1c";
+/// The letters on the No Mod tile, and on the Mods row, when the icon is absent.
+constexpr std::string_view base_badge_name = "\u2014";
 /// A full progress bar, in the bar's own units.
 constexpr int32_t progress_whole = 1000;
 /// The prefix of every control's name.
@@ -151,6 +151,12 @@ std::string_view action_word(Action action) {
         return "uninstall";
     case Action::use_now:
         return "use-now";
+    case Action::change_base_game:
+        return "change";
+    case Action::add_expansion:
+        return "add-from";
+    case Action::ask_expansion_off:
+        return "turn-off";
     }
     return "action";
 }
@@ -747,7 +753,8 @@ kit::ListRowLook row_look(const Building& building, const Entry& entry, RowForm 
     const Library& library = *building.library;
     kit::ListRowLook look;
     look.badge = badge_picture(entry);
-    look.badge_text = badge_letters(entry_name(entry));
+    look.badge_text =
+        is_base_game(entry.id) ? std::string(base_badge_name) : badge_letters(entry_name(entry));
     look.badge_colour = badge_face;
     look.title = std::string(entry_name(entry));
     look.chip = entry_chip(library, entry);
@@ -2049,7 +2056,8 @@ void add_badge(
             return;
         }
     }
-    add_badge_of(building, badge_picture(entry), entry_name(entry), rect, clip);
+    const std::string_view letters = is_base_game(entry.id) ? base_badge_name : entry_name(entry);
+    add_badge_of(building, badge_picture(entry), letters, rect, clip);
 }
 
 /// Returns a map's players and size as one line: "4 players · 16x16".
@@ -2705,20 +2713,20 @@ int32_t tile_lines_height(const kit::Metrics& metrics, const std::vector<TileLin
 }
 
 /// Returns an identity tile's height. The badge and the lines start at the
-/// top inset. A tile with UNLOAD MOD keeps the button under both, with the
-/// button gap between and the card's inset below the button. One without a
-/// button keeps that inset below the badge or the last line.
+/// top inset. A tile with a button keeps it under both, with the button gap
+/// between and the card's inset below the button. One without a button keeps
+/// that inset below the badge or the last line.
 ///
 /// @param metrics the class's metrics
 /// @param badge the badge's side
 /// @param lines the lines beside the badge
-/// @param unload the tile holds UNLOAD MOD
+/// @param button the tile holds a button
 /// @return the height, in points
 int32_t identity_tile_height(
-    const kit::Metrics& metrics, int32_t badge, const std::vector<TileLine>& lines, bool unload
+    const kit::Metrics& metrics, int32_t badge, const std::vector<TileLine>& lines, bool button
 ) {
     int32_t stack = std::max(badge, tile_lines_height(metrics, lines));
-    if (unload)
+    if (button)
         stack += metrics.button_gap + metrics.button_height;
     return stack + 2 * metrics.card_inset;
 }
@@ -2801,9 +2809,9 @@ int32_t add_idle_pill(
 }
 
 /// Appends an identity tile: a badge and lines from the top inset, a pill
-/// at the right of the title's line, and UNLOAD MOD at the bottom right
-/// while a mod is played. The label is the tile above that button, so the
-/// two do not meet, and the label takes no press.
+/// at the right of the title's line, and a button at the bottom right when
+/// the tile has one. The label is the tile above that button, so the two do
+/// not meet, and the label takes no press.
 ///
 /// @param[in,out] building the layout
 /// @param tile the tile
@@ -2812,7 +2820,11 @@ int32_t add_idle_pill(
 /// @param lines the lines beside the badge
 /// @param pill the pill's words; empty for none
 /// @param pill_state the pill's colours
-/// @param unload the tile holds UNLOAD MOD
+/// @param button the tile holds a button
+/// @param button_caption the button's words, looked up
+/// @param button_enabled the button takes a press
+/// @param button_id the button's number
+/// @param button_name the button's name
 /// @param id the label's number
 /// @param name the label's name
 /// @param read the label's text
@@ -2825,13 +2837,16 @@ void add_identity_tile(
     const std::vector<TileLine>& lines,
     const std::string& pill,
     kit::PillState pill_state,
-    bool unload,
+    bool button,
+    const std::string& button_caption,
+    bool button_enabled,
+    kit::ControlId button_id,
+    const std::string& button_name,
     kit::ControlId id,
     std::string name,
     std::string read,
     const kit::Rect& clip
 ) {
-    const Library& library = *building.library;
     const kit::Metrics& metrics = *building.metrics;
     const int32_t inset = metrics.card_inset;
     const int32_t side =
@@ -2856,30 +2871,30 @@ void add_identity_tile(
                        : text_width;
     place_tile_lines(building, lines, text_left, text_top, text_width, first_room, clip);
     kit::Rect label = tile;
-    if (unload) {
-        const std::string caption(shown(library.text, words::action_unload_mod));
-        const int32_t across =
-            std::min(button_width(building, caption), std::max(tile.width - 2 * inset, int32_t{0}));
-        const kit::Rect button{
+    if (button && !button_caption.empty()) {
+        const int32_t across = std::min(
+            button_width(building, button_caption), std::max(tile.width - 2 * inset, int32_t{0})
+        );
+        const kit::Rect button_rect{
             tile.x + tile.width - inset - across,
             tile.y + tile.height - inset - metrics.button_height,
             across,
             metrics.button_height,
         };
-        if (across > 0 && button.y >= tile.y) {
+        if (across > 0 && button_rect.y >= tile.y) {
             add_button(
                 building,
                 building.detail,
-                button,
-                caption,
+                button_rect,
+                button_caption,
                 true,
-                can_switch(library),
-                controls::active_unload,
-                named("active.unload"),
+                button_enabled,
+                button_id,
+                button_name,
                 clip,
                 -1
             );
-            label.height = std::max(button.y - tile.y, int32_t{0});
+            label.height = std::max(button_rect.y - tile.y, int32_t{0});
         }
     }
     add_label(
@@ -2912,7 +2927,11 @@ struct IdentityTile {
     std::vector<TileLine> lines{};
     std::string pill{};
     kit::PillState pill_state{kit::PillState::neutral};
-    bool unload{}; ///< UNLOAD MOD, on the mod tile while a mod is played
+    bool button{}; ///< a button at the bottom right
+    std::string button_caption{};
+    bool button_enabled{true};
+    kit::ControlId button_id{};
+    std::string button_name{};
     kit::ControlId id{};
     std::string name{};
     std::string read{};
@@ -2939,7 +2958,9 @@ IdentityTile mod_tile(Building& building, const ActiveSetup& setup) {
             tile.lines.push_back(
                 TileLine{setup.base_look, kit::FontRole::small, kit::colour::hint}
             );
-        if (!setup.mod_line.empty())
+        // The label reads "No Mod", which is already the title. A different
+        // line, when one is set, is drawn under the look.
+        if (!setup.mod_line.empty() && setup.mod_line != setup.base_title)
             tile.lines.push_back(TileLine{setup.mod_line, kit::FontRole::small, kit::colour::hint});
     } else {
         tile.letters = setup.mod_name;
@@ -2954,7 +2975,11 @@ IdentityTile mod_tile(Building& building, const ActiveSetup& setup) {
             );
         tile.pill = setup.mod_state;
         tile.pill_state = kit::PillState::playing;
-        tile.unload = true;
+        tile.button = true;
+        tile.button_caption = std::string(shown(building.library->text, words::action_unload_mod));
+        tile.button_enabled = can_switch(*building.library);
+        tile.button_id = controls::active_unload;
+        tile.button_name = named("active.unload");
     }
     return tile;
 }
@@ -3002,7 +3027,7 @@ IdentityTile language_tile(Building& building, const ActiveSetup& setup) {
 /// @param tile the tile
 /// @return the height, in points
 int32_t identity_height(const kit::Metrics& metrics, const IdentityTile& tile) {
-    return identity_tile_height(metrics, active_badge_side(metrics), tile.lines, tile.unload);
+    return identity_tile_height(metrics, active_badge_side(metrics), tile.lines, tile.button);
 }
 
 /// Appends an identity tile.
@@ -3022,7 +3047,11 @@ void place_identity(
         tile.lines,
         tile.pill,
         tile.pill_state,
-        tile.unload,
+        tile.button,
+        tile.button_caption,
+        tile.button_enabled,
+        tile.button_id,
+        tile.button_name,
         tile.id,
         tile.name,
         tile.read,
@@ -3208,6 +3237,40 @@ void add_map_tile(
 /// @param width its width
 /// @param clip what drawing may touch
 /// @return the row under it and the gap after it
+/// Returns a heading cut so its tracked width fits.
+///
+/// @param building the layout
+/// @param words_shown the heading, looked up
+/// @param width the room, in points
+/// @return the heading, with "..." when it does not fit
+std::string cut_heading(const Building& building, std::string_view words_shown, int32_t width) {
+    const kit::Metrics& metrics = *building.metrics;
+    const auto fits = [&](std::string_view text) {
+        return kit::tracked_width(
+                   *building.fonts, kit::FontRole::small, text, metrics.heading_tracking
+               ) <= width;
+    };
+    if (width <= 0)
+        return {};
+    if (fits(words_shown))
+        return std::string(words_shown);
+    std::string kept;
+    std::string next;
+    for (std::size_t index = 0; index < words_shown.size();) {
+        const std::size_t bytes =
+            std::max(kit::character_bytes(words_shown.substr(index)), std::size_t{1});
+        next.append(words_shown.substr(index, bytes));
+        const std::string trial = next + "...";
+        if (!fits(trial))
+            break;
+        kept = trial;
+        index += bytes;
+    }
+    if (kept.empty() || !fits(kept))
+        return {};
+    return kept;
+}
+
 int32_t add_active_heading(
     Building& building,
     std::string_view words_shown,
@@ -3217,10 +3280,11 @@ int32_t add_active_heading(
     const kit::Rect& clip
 ) {
     const kit::Metrics& metrics = *building.metrics;
+    const std::string drawn = cut_heading(building, words_shown, width);
     kit::Item& heading =
         add_item(building.list, kit::Role::heading, {left, top, width, metrics.small_line}, clip);
-    heading.text = std::string(words_shown);
-    heading.look = kit::HeadingLook{std::string(words_shown)};
+    heading.text = drawn;
+    heading.look = kit::HeadingLook{drawn};
     return top + metrics.small_line + metrics.hint_gap;
 }
 
@@ -3709,53 +3773,283 @@ void add_visible_map_rows(
     }
 }
 
-/// Appends the mod tile and the language tile, which do not scroll, and
-/// returns the row under them.
+/// Returns the base game tile: its icon or "TA", its name, version and check,
+/// and CHANGE….
+///
+/// @param[in,out] building the layout, which records the label's name
+/// @param content what the tile shows
+/// @return the tile
+IdentityTile base_tile(Building& building, const ActiveContent& content) {
+    IdentityTile tile;
+    tile.badge = content.badge;
+    tile.letters = content.letters;
+    tile.id = controls::active_base;
+    tile.name = unique_name(building, named("active.base"));
+    tile.read = content.read;
+    if (!content.name.empty())
+        tile.lines.push_back(TileLine{content.name, kit::FontRole::regular, kit::colour::text});
+    if (!content.version_line.empty())
+        tile.lines.push_back(
+            TileLine{content.version_line, kit::FontRole::small, kit::colour::hint}
+        );
+    if (!content.check_line.empty()) {
+        const kit::Colour ink = content.check_good ? kit::colour::accent : kit::colour::lock;
+        tile.lines.push_back(TileLine{content.check_line, kit::FontRole::small, ink});
+    }
+    tile.button = true;
+    tile.button_caption = std::string(shown(building.library->text, words::active_change));
+    tile.button_enabled = true;
+    tile.button_id = controls::active_change;
+    tile.button_name = named("active.change");
+    return tile;
+}
+
+/// Returns a pill's words cut so the pill fits a width.
+///
+/// @param building the layout
+/// @param text the pill's words
+/// @param room the width, in points
+/// @return the words, with "..." when they do not fit
+std::string fit_pill_text(const Building& building, std::string text, int32_t room) {
+    kit::PillLook look;
+    look.text = text;
+    if (room <= 0)
+        return {};
+    if (kit::pill_width(*building.fonts, look) <= room)
+        return text;
+    const int32_t padding = std::max(building.metrics->chip_padding, kit::pill_height() / 2);
+    std::string fitted =
+        cut(building, kit::FontRole::small, text, std::max(room - 2 * padding, int32_t{0}));
+    look.text = fitted;
+    while (!fitted.empty() && kit::pill_width(*building.fonts, look) > room) {
+        std::size_t drop = 1;
+        if (fitted.size() >= 3 && fitted.compare(fitted.size() - 3, 3, "...") == 0 &&
+            fitted.size() > 3) {
+            const std::string_view body(fitted.data(), fitted.size() - 3);
+            std::size_t index = 0;
+            std::size_t previous = 0;
+            while (index < body.size()) {
+                previous = index;
+                index += std::max(kit::character_bytes(body.substr(index)), std::size_t{1});
+            }
+            drop = body.size() - previous;
+            if (drop == 0)
+                drop = 1;
+            fitted.erase(fitted.size() - 3 - drop, drop);
+        } else {
+            fitted.pop_back();
+        }
+        look.text = fitted;
+    }
+    return fitted;
+}
+
+/// One row of expansion pills, measured before it is placed.
+struct ExpansionRow {
+    std::vector<std::size_t> indexes{};
+    std::vector<int32_t> widths{};
+};
+
+/// The expansion pills wrapped into the tile's inner width.
+struct ExpansionWrap {
+    std::vector<ExpansionRow> rows{};
+    int32_t rows_height{}; ///< the rows, gaps included
+    bool hint{};
+};
+
+/// Wraps the expansion pills into a width.
+///
+/// @param building the layout
+/// @param content the pills and the hint
+/// @param inner the width inside the card
+/// @return the rows
+ExpansionWrap
+wrap_expansions(const Building& building, const ActiveContent& content, int32_t inner) {
+    const kit::Metrics& metrics = *building.metrics;
+    ExpansionWrap wrap;
+    const int32_t room = std::max(inner, int32_t{0});
+    const int32_t gap = metrics.button_gap;
+    const int32_t pill_height = kit::pill_height();
+    ExpansionRow row;
+    int32_t across = 0;
+    for (std::size_t index = 0; index < content.pills.size(); ++index) {
+        kit::PillLook look;
+        look.text = fit_pill_text(building, content.pills[index].text, room);
+        int32_t width = room <= 0 ? 0 : kit::pill_width(*building.fonts, look);
+        if (room > 0)
+            width = std::min(width, room);
+        if (!row.indexes.empty() && across + gap + width > room) {
+            wrap.rows.push_back(std::move(row));
+            row = {};
+            across = 0;
+        }
+        row.indexes.push_back(index);
+        row.widths.push_back(width);
+        across += width;
+        if (row.indexes.size() > 1)
+            across += gap;
+    }
+    if (!row.indexes.empty())
+        wrap.rows.push_back(std::move(row));
+    if (!wrap.rows.empty())
+        wrap.rows_height = static_cast<int32_t>(wrap.rows.size()) * pill_height +
+                           static_cast<int32_t>(wrap.rows.size() - 1) * gap;
+    wrap.hint = !content.hint.empty();
+    return wrap;
+}
+
+/// Returns the expansions tile's height, including a button's room when the
+/// mod tile has UNLOAD MOD, so the pills stay above that button.
+///
+/// @param building the layout
+/// @param content the pills and the hint
+/// @param width the tile's width
+/// @param reserve_button leave room for a button at the bottom
+/// @return the height, in points
+int32_t expansions_height(
+    const Building& building, const ActiveContent& content, int32_t width, bool reserve_button
+) {
+    const kit::Metrics& metrics = *building.metrics;
+    const int32_t inset = metrics.card_inset;
+    const int32_t inner = std::max(width - 2 * inset, int32_t{0});
+    const ExpansionWrap wrap = wrap_expansions(building, content, inner);
+    int32_t stack = wrap.rows_height;
+    if (wrap.hint)
+        stack += (wrap.rows.empty() ? 0 : metrics.hint_gap) + metrics.small_line;
+    if (reserve_button)
+        stack += metrics.button_gap + metrics.button_height;
+    return stack + 2 * inset;
+}
+
+/// Appends the expansions tile: wrapped pills and the hint. The heading's
+/// label is the caller's.
 ///
 /// @param[in,out] building the layout
-/// @param setup what the tab shows
+/// @param content the pills and the hint
+/// @param tile the tile
+/// @param clip what drawing may touch
+void place_expansions(
+    Building& building, const ActiveContent& content, const kit::Rect& tile, const kit::Rect& clip
+) {
+    const kit::Metrics& metrics = *building.metrics;
+    const int32_t inset = metrics.card_inset;
+    add_tile_face(building, tile, clip);
+    const int32_t inner_left = tile.x + inset;
+    const int32_t inner_width = std::max(tile.width - 2 * inset, int32_t{0});
+    const ExpansionWrap wrap = wrap_expansions(building, content, inner_width);
+    int32_t row_y = tile.y + inset;
+    const int32_t pill_height = kit::pill_height();
+    for (const ExpansionRow& row : wrap.rows) {
+        int32_t column = inner_left;
+        for (std::size_t place = 0; place < row.indexes.size(); ++place) {
+            const std::size_t index = row.indexes[place];
+            const ExpansionPill& pill = content.pills[index];
+            const int32_t width = row.widths[place];
+            if (width <= 0 || index >= controls::most_expansions) {
+                column += width + metrics.button_gap;
+                continue;
+            }
+            const kit::ControlId id =
+                controls::first_expansion + static_cast<kit::ControlId>(index);
+            kit::PillLook look;
+            look.text = fit_pill_text(building, pill.text, inner_width);
+            look.state =
+                pill.face == ExpansionFace::on ? kit::PillState::active : kit::PillState::inactive;
+            look.hovered = hovered(building, id);
+            look.focused = focused(building, id);
+            look.disabled = !pill.enabled;
+            const kit::Rect rect{column, row_y, width, pill_height};
+            const std::size_t before = building.list.controls.size();
+            kit::add_pill(
+                building.list,
+                rect,
+                look,
+                id,
+                unique_name(building, named("active.expansion." + pill.id))
+            );
+            building.list.items.back().clip = clip;
+            move_controls(building.list, before, building.detail);
+            kit::Control& control = building.detail.back();
+            control.clip = clip;
+            control.group = -1;
+            control.focusable = pill.enabled;
+            control.enabled = pill.enabled;
+            tab_stop(building, control);
+            column += width + metrics.button_gap;
+        }
+        row_y += pill_height + metrics.button_gap;
+    }
+    if (!content.hint.empty() && inner_width > 0) {
+        if (!wrap.rows.empty())
+            row_y += metrics.hint_gap - metrics.button_gap;
+        const std::string hint = cut(building, kit::FontRole::small, content.hint, inner_width);
+        if (!hint.empty() && width_of(building, kit::FontRole::small, hint) <= inner_width)
+            add_text(
+                building,
+                kit::FontRole::small,
+                hint,
+                {inner_left, row_y, inner_width, metrics.small_line},
+                kit::Align::left,
+                kit::colour::hint,
+                clip
+            );
+    }
+}
+
+/// Appends the base game, the language, the expansions and the mod, which do
+/// not scroll, and returns the row under them. The four tiles stand two by
+/// two at every size, so the maps pane under them keeps a row.
+///
+/// @param[in,out] building the layout
+/// @param setup what the tab shows of the mod and the language
 /// @param area the tab's area, which clips them
 /// @return the row under the tiles and the gap after them
 int32_t place_fixed_identity(Building& building, const ActiveSetup& setup, const kit::Rect& area) {
     const Library& library = *building.library;
     const kit::Metrics& metrics = *building.metrics;
-    const IdentityTile mod = mod_tile(building, setup);
+    const ActiveContent content = active_content(library);
+    const IdentityTile base = base_tile(building, content);
     const IdentityTile language = language_tile(building, setup);
-    const int32_t mod_height = identity_height(metrics, mod);
-    const int32_t language_height = identity_height(metrics, language);
-    int32_t top = area.y;
-    if (building.size_class == kit::SizeClass::compact) {
-        top = add_active_heading(
-            building, shown(library.text, words::active_heading_mod), area.x, top, area.width, area
-        );
-        place_identity(building, mod, {area.x, top, area.width, mod_height}, area);
-        top += mod_height + metrics.paragraph_gap;
-        top = add_active_heading(
-            building,
-            shown(library.text, words::active_heading_language),
-            area.x,
-            top,
-            area.width,
-            area
-        );
-        place_identity(building, language, {area.x, top, area.width, language_height}, area);
-        top += language_height + metrics.paragraph_gap;
-        return top;
-    }
+    const IdentityTile mod = mod_tile(building, setup);
     const int32_t gap = metrics.card_gap;
     const int32_t left_width = std::max((area.width - gap) / 2, int32_t{0});
     const int32_t right = area.x + left_width + gap;
     const int32_t right_width = std::max(area.x + area.width - right, int32_t{0});
-    const int32_t tiles = add_active_heading(
-        building, shown(library.text, words::active_heading_mod), area.x, top, left_width, area
+    const int32_t row1 =
+        std::max(identity_height(metrics, base), identity_height(metrics, language));
+    const int32_t row2 = std::max(
+        expansions_height(building, content, left_width, mod.button), identity_height(metrics, mod)
+    );
+
+    int32_t top = area.y;
+    const int32_t first = add_active_heading(
+        building, shown(library.text, words::active_heading_base), area.x, top, left_width, area
     );
     static_cast<void>(add_active_heading(
         building, shown(library.text, words::active_heading_language), right, top, right_width, area
     ));
-    const int32_t tile_height = std::max(mod_height, language_height);
-    place_identity(building, mod, {area.x, tiles, left_width, tile_height}, area);
-    place_identity(building, language, {right, tiles, right_width, tile_height}, area);
-    return tiles + tile_height + metrics.paragraph_gap;
+    place_identity(building, base, {area.x, first, left_width, row1}, area);
+    place_identity(building, language, {right, first, right_width, row1}, area);
+
+    top = first + row1 + metrics.paragraph_gap;
+    const std::string expansions_heading = content.expansions_heading;
+    const int32_t second =
+        add_active_heading(building, expansions_heading, area.x, top, left_width, area);
+    add_label(
+        building.detail,
+        controls::active_expansions,
+        kit::intersect({area.x, top, left_width, metrics.small_line}, area),
+        unique_name(building, named("active.expansions")),
+        expansions_heading,
+        area,
+        -1
+    );
+    static_cast<void>(add_active_heading(
+        building, shown(library.text, words::active_heading_mod), right, top, right_width, area
+    ));
+    place_expansions(building, content, {area.x, second, left_width, row2}, area);
+    place_identity(building, mod, {right, second, right_width, row2}, area);
+    return second + row2 + metrics.paragraph_gap;
 }
 
 /// Appends the Active tab. The mod and the language stay under the tabs.

@@ -103,8 +103,8 @@ translator finds them together. Every word passes through `Library::text`
   played, the installed mod marked playing (its listing's name, badge and
   author when a registry lists it) or else `Inputs::playing_mod`, with its
   version ("Highland 0.4.0") and the release the tile states
-  ("0.4.0 (rev 1)"), or the base game ("Base Game", "Total Annihilation
-  3.1c", "No mod: the game as it was made"); the language in use, its name
+  ("0.4.0 (rev 1)"), or No Mod ("No Mod", "Total Annihilation as it was
+  made"); the language in use, its name
   in itself and in English, its pack, version, revision and coverage
   (`Inputs::language`: "Polski 1.0", "Coverage 92%") or the language the
   game holds itself ("English · built in", "Built in"); and each installed
@@ -262,14 +262,19 @@ app removes the folder (`Runtime::library_uninstall`,
   the Library in a frame's window (`window_size`: 480 by 324, 720 by 486 or
   960 by 600 points, never larger than the frame), from its top left corner:
   - **The Active tab**, at every class, shows under the tabs, with no
-    search and no filters, the headings MOD, LANGUAGE and MAPS over tiles.
-    The mod tile has a large badge, the name, the version and revision
-    and the author, with Playing as a pill on the title's line at the top
-    right, or Base Game with Total Annihilation's icon, from the program in
+    search and no filters. At every size the first row is BASE GAME and
+    LANGUAGE and the second is EXPANSIONS and MOD, then the MAPS heading.
+    The base-game tile has Total Annihilation's icon, from the program in
     the game folder that describes itself as Total Annihilation,
-    nearest-neighbour and centred in the badge square (the letters "3.1c"
-    when that program is missing or its icon cannot be read) and "No mod:
-    the game as it was made" and no pill.
+    nearest-neighbour and centred in the badge square (the letters "TA"
+    when that program is missing or its icon cannot be read), the name,
+    the version and, when the inputs name them, the source and the file
+    check, and CHANGE… (`library.active.change`) at the bottom right.
+    The expansions tile has one pill `library.active.expansion.<id>` for
+    each expansion of that game. The mod tile has a large badge, the name,
+    the version and revision and the author, with Playing as a pill on the
+    title's line at the top right, or No Mod with an em dash and "Total
+    Annihilation as it was made" and no pill.
     While a mod is played, UNLOAD MOD
     (`library.active.unload`, kind `button`, text "UNLOAD MOD") sits at the
     mod tile's bottom right. It is accent while it can act and plain while
@@ -483,8 +488,10 @@ app removes the folder (`Runtime::library_uninstall`,
     neither enabled nor focusable, whose text is the words shown (the From
     fact's long value, and the Rules fact's value whole, short at Compact
     and long at Regular and Large);
-  - on the Active tab the labels `library.active.mod` ("Highland 0.4.0",
-    or "No mod: the game as it was made"), `library.active.language`
+  - on the Active tab the labels `library.active.base` ("Total
+    Annihilation · 3.1c"), `library.active.expansions` ("EXPANSIONS · 5 OF
+    6 ON"), `library.active.mod` ("Highland 0.4.0", or "No Mod"),
+    `library.active.language`
     ("Polski 1.0") and `library.active.map.<n>`, from 1 in the order shown
     ("Ridgeline · 4 players · 16x16"), the link `library.active.from.<n>`
     ("From Core Map Pack", or the map's title when its pack holds that map
@@ -662,8 +669,9 @@ press, the header's close mark to the right of refresh asking what CLOSE
 asks, the wheel and a finger's drag, typing and Backspace, the
 filter drop-down with its counts, each tab keeping its filter, New's
 pill, and a press outside the drop-down, the tag pills, MORE ▾, and the
-Active tab with forty more maps: the mod and the language take no press
-and stay put, UNLOAD MOD asking what SWITCH OFF asks and greyed during a
+Active tab with forty more maps: the four tiles take no press on their
+labels and stay put, CHANGE… and the expansion pills take a press,
+UNLOAD MOD asking what SWITCH OFF asks and greyed during a
 game, the maps pane scrolling by the wheel, a finger, its scroll bar, the
 page keys, Home, End and the right stick, and the maps search filtering
 by map name and by pack name, counting the tiles that match and saying

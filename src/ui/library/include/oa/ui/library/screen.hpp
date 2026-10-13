@@ -151,6 +151,8 @@ struct ScreenResult {
     std::string registry{};
     /// The switch's new state, for Action::set_registry.
     bool registry_on{};
+    /// The expansion ADD FROM… or the expansion-off question names.
+    std::string expansion{};
     bool redraw{}; ///< what the screen shows changed: lay it out and draw it again
 };
 

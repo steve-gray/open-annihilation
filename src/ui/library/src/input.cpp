@@ -822,6 +822,31 @@ ScreenResult activate(
     }
     if (controls::active_from_control(id))
         return open_map_pack(library, state, id);
+    if (controls::expansion_control(id)) {
+        const ActiveContent face = active_content(library);
+        const auto index = static_cast<std::size_t>(id - controls::first_expansion);
+        if (index >= face.pills.size() || !face.pills[index].enabled)
+            return {};
+        const std::string expansion_id = face.pills[index].id;
+        const ContentPress pressed = press_expansion(library, expansion_id);
+        ScreenResult answered;
+        answered.expansion = pressed.expansion;
+        switch (pressed.kind) {
+        case ContentPressKind::none:
+            return {};
+        case ContentPressKind::redraw:
+            answered.redraw = true;
+            return answered;
+        case ContentPressKind::ask:
+            answered.action = Action::ask_expansion_off;
+            answered.redraw = true;
+            return answered;
+        case ContentPressKind::add:
+            answered.action = Action::add_expansion;
+            return answered;
+        }
+        return {};
+    }
     ScreenResult result = redrawn();
     switch (id) {
     case controls::search:
@@ -854,6 +879,9 @@ ScreenResult activate(
     case controls::close:
     case controls::close_x:
         result.action = Action::close;
+        return result;
+    case controls::active_change:
+        result.action = Action::change_base_game;
         return result;
     case controls::active_unload:
         // The same action SWITCH OFF returns. The host asks switch_off_question
