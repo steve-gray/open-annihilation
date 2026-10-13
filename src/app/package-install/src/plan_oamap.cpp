@@ -177,6 +177,8 @@ InstalledPackage installed_of(const pack::Manifest& manifest) {
     installed.revision = manifest.packaging.revision;
     installed.author = manifest.author.name;
     installed.description = manifest.description;
+    installed.supported_games = manifest.supported_games;
+    installed.required_expansions = manifest.required_expansions;
     return installed;
 }
 

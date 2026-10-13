@@ -20,9 +20,13 @@ The public rules are [the OAMAP standard](../../../docs/maps/oamap-standard.md).
   problem as `oamap.yaml:<line>:<column>: <key>: <message>`.
 - `write_manifest` writes a manifest back in a fixed key order, two-space
   indentation, every string double-quoted, one file path per line. An empty
-  description, preview, homepage, tag list or engine requirement is left out.
+  description, preview, homepage, tag list or engine requirement is left
+  out, and so are `supportedGames` that is only `totala` and an empty
+  `requiredExpansions`.
 - `homepage`, `tags` and `requires.engine` are read by the shared
   package-key rules. The text of `requires.engine` is kept as written.
+  `supportedGames` and `requiredExpansions` are read by the shared
+  content-needs rules. Leaving `supportedGames` out means `totala`.
 
 `oa/data/map_pack/map_name.hpp`:
 
@@ -44,7 +48,8 @@ is installed for the rest of the process, and nothing opens a file.
 - `@` is never part of an id or a stem, so a name splits at its last `@`.
 - A key the manifest does not define is refused.
 - `homepage`, `tags` and `requires.engine` follow the shared package-key
-  rules, and are not stated again here.
+  rules, and are not stated again here. `supportedGames` and
+  `requiredExpansions` follow the shared content-needs rules.
 
 ## Tests
 

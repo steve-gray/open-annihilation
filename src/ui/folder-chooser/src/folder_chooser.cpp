@@ -98,26 +98,20 @@ Outcome outcome_of(Target target) noexcept {
     switch (target.kind) {
     case TargetKind::none:
         break;
-    case TargetKind::install:
-        return {Command::play_install, target.index};
-    case TargetKind::browse:
-        return {Command::open_browser, 0};
-    case TargetKind::dialog:
-        return {Command::use_dialog, 0};
-    case TargetKind::demo:
-        return {Command::find_demo, 0};
-    case TargetKind::quit:
-        return {Command::quit, 0};
     case TargetKind::place:
         return {Command::open_place, target.index};
-    case TargetKind::parent:
+    case TargetKind::up:
         return {Command::parent_folder, 0};
+    case TargetKind::filter:
+        return {Command::toggle_filter, 0};
     case TargetKind::entry:
-        return {Command::enter_folder, target.index};
+        return {Command::activate_entry, target.index};
+    case TargetKind::dialog:
+        return {Command::use_dialog, 0};
+    case TargetKind::cancel:
+        return {Command::cancel, 0};
     case TargetKind::choose:
-        return {Command::choose_folder, 0};
-    case TargetKind::back:
-        return {Command::back_to_list, 0};
+        return {Command::choose, 0};
     }
     return {};
 }
@@ -206,7 +200,7 @@ Target target_of(kit::ControlId id) noexcept {
         return {};
     const kit::ControlId kind = id >> index_bits;
     if (kind <= static_cast<kit::ControlId>(TargetKind::none) ||
-        kind > static_cast<kit::ControlId>(TargetKind::back))
+        kind > static_cast<kit::ControlId>(TargetKind::choose))
         return {};
     return {static_cast<TargetKind>(kind), static_cast<uint16_t>(id & index_mask)};
 }
@@ -244,21 +238,39 @@ Outcome press_up(const Layout& layout, UiState& state, Point point) noexcept {
     return outcome_of(target);
 }
 
-Outcome key(const Layout& layout, UiState& state, Key key) noexcept {
+/// Returns select_entry when a target is a row, so the side panel follows the focus.
+///
+/// @param target the target the focus reached
+/// @return the selection, or none
+Outcome selection_of(Target target) noexcept {
+    if (target.kind != TargetKind::entry)
+        return {};
+    return {Command::select_entry, target.index};
+}
+
+Outcome key(const Layout& layout, UiState& state, Key pressed) noexcept {
     const int32_t count = static_cast<int32_t>(layout.focus_order.size());
-    if (key == Key::escape) {
-        // Back from the browser to the list; the list has nowhere to go back to.
-        if (part_of(layout, Target{TargetKind::back, 0}) != nullptr)
-            return {Command::back_to_list, 0};
+    if (pressed == Key::choose) {
+        const kit::Item* button = part_of(layout, Target{TargetKind::choose, 0});
+        if (button != nullptr && !button->state.disabled)
+            return {Command::choose, 0};
         return {};
     }
-    if (key == Key::page_up || key == Key::page_down) {
+    if (pressed == Key::filter)
+        return {Command::toggle_filter, 0};
+    if (pressed == Key::escape) {
+        const kit::Item* up = part_of(layout, Target{TargetKind::up, 0});
+        if (up != nullptr && !up->state.disabled)
+            return {Command::parent_folder, 0};
+        return {Command::cancel, 0};
+    }
+    if (pressed == Key::page_up || pressed == Key::page_down) {
         const float scale = layout.paint.px_per_point > 0.0f ? layout.paint.px_per_point : 1.0f;
         const int32_t page = std::max<int32_t>(
             1,
             static_cast<int32_t>(std::lround(static_cast<float>(layout.paint.rows.height) / scale))
         );
-        scroll(layout, state, key == Key::page_down ? page : -page);
+        scroll(layout, state, pressed == Key::page_down ? page : -page);
         return {};
     }
     if (count == 0)
@@ -268,11 +280,12 @@ Outcome key(const Layout& layout, UiState& state, Key key) noexcept {
         if (state.focus < 0 || state.focus >= count)
             state.focus = 0;
         state.focus_shown = true;
-        scroll_into_view(layout, state, layout.focus_order[static_cast<std::size_t>(state.focus)]);
-        return {};
+        const Target shown = layout.focus_order[static_cast<std::size_t>(state.focus)];
+        scroll_into_view(layout, state, shown);
+        return selection_of(shown);
     }
     std::optional<int32_t> next;
-    switch (key) {
+    switch (pressed) {
     case Key::tab:
         next = (state.focus + 1) % count;
         break;
@@ -296,11 +309,15 @@ Outcome key(const Layout& layout, UiState& state, Key key) noexcept {
     case Key::escape:
     case Key::page_up:
     case Key::page_down:
+    case Key::choose:
+    case Key::filter:
         break;
     }
     if (next) {
         state.focus = *next;
-        scroll_into_view(layout, state, layout.focus_order[static_cast<std::size_t>(state.focus)]);
+        const Target shown = layout.focus_order[static_cast<std::size_t>(state.focus)];
+        scroll_into_view(layout, state, shown);
+        return selection_of(shown);
     }
     return {};
 }

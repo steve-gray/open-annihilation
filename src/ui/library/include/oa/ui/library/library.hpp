@@ -144,6 +144,12 @@ struct Listing {
     /// The day this release was published, `YYYY-MM-DD` as the catalogue
     /// writes it; empty when the catalogue names none.
     std::string published{};
+    /// Base games the package runs with. Empty until a catalogue carries the
+    /// keys; a catalogue listing does not fill these.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty until a catalogue carries the keys,
+    /// and empty when a filled package names none.
+    std::vector<std::string> required_expansions{};
 };
 
 /// The version a package keeps from before its last update.
@@ -176,6 +182,10 @@ struct Installed {
     /// A mod folder with no oamod.yaml, which layers over the game folder
     /// and plays by the game's own rules: its status line says so.
     bool without_manifest{};
+    /// Base games the installed package runs with, from its manifest.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty when the manifest names none.
+    std::vector<std::string> required_expansions{};
 };
 
 /// A newer release of an installed package, in the same registry.
@@ -276,6 +286,26 @@ struct LanguageInUse {
     std::string tag{};
 };
 
+/// The base game and expansions the host last read. Empty `base_id` is the
+/// default base game. `files_differ` is unset when this build has no file
+/// check to show. `locked` is a choice `--content` named for the run.
+struct ContentSnapshot {
+    std::string base_id{};
+    /// Shown after the version, such as "from GOG for macOS". Empty omits it.
+    std::string source{};
+    /// How many of the base game's files differ. Unset omits the line.
+    /// 0 is "All files match".
+    std::optional<int32_t> files_differ{};
+    /// Bundle ids copied into the game folder, base game and expansions.
+    std::vector<std::string> copied{};
+    /// Expansion ids the stored choice has on, in the built-in order.
+    std::vector<std::string> enabled{};
+    /// Expansions the mod being played needs. Empty when no mod is played.
+    std::vector<std::string> mod_required{};
+    /// `--content` named the choice. Pills do not change it.
+    bool locked{};
+};
+
 /// One installed map pack, as the Active tab lists its maps.
 struct InstalledMaps {
     std::string name{};          ///< the pack's name
@@ -284,6 +314,10 @@ struct InstalledMaps {
     std::string key{};
     /// Where it came from; empty for the player's own, and when `key` is empty.
     std::string registry{};
+    /// Base games the pack's maps run with, from its manifest.
+    std::vector<std::string> supported_games{};
+    /// Expansions that must be on. Empty when the manifest names none.
+    std::vector<std::string> required_expansions{};
 };
 
 /// Everything the Library is built from.
@@ -321,8 +355,12 @@ struct Inputs {
     std::string registries_notice{};
     /// The base game entry's badge: Total Annihilation's icon from the game
     /// folder in use. Empty shows the entry's letters. The entry's `badge`
-    /// points here until the next refresh.
+    /// points here until the next refresh. On the Active tab the same icon
+    /// is the base game tile's, not the No Mod tile's.
     std::optional<Badge> base_game_badge{};
+    /// The base game and expansions the Active tab shows. The host fills
+    /// this from the stored choice. A pill does not write it back.
+    ContentSnapshot content{};
 };
 
 /// One of the Library's tabs, in the order they are shown.
@@ -505,6 +543,35 @@ struct TextHooks {
     std::string_view (*shown)(void* context, std::string_view english){};
 };
 
+/// The choice the Active tab is holding until the Library closes.
+///
+/// `edited` is set when the pills have changed the stored expansions.
+/// `asking` is set while the player is being asked before a mod is unloaded.
+/// The host applies nothing here: G10 reads this when the Library closes.
+struct ContentDraft {
+    bool edited{};
+    /// The base game the pending choice names. Empty until a pill edits it,
+    /// and then the stored base game.
+    std::string base_game{};
+    /// Expansion ids that are on in the pending choice.
+    std::vector<std::string> expansions{};
+    /// The stored base game and expansions this draft was taken from.
+    /// A refresh that brings a different stored choice drops the draft.
+    std::string seed_base{};
+    std::vector<std::string> seed_enabled{};
+    bool asking{};
+    /// The expansion the question is about.
+    std::string ask_id{};
+    /// The expansions that would be on if the player confirms.
+    std::vector<std::string> proposed{};
+    /// Expansions G04 turned off with `ask_id`, apart from `ask_id` itself.
+    std::vector<std::string> turned_off{};
+    /// The expansion the last applied pill named, for the tile's hint.
+    std::string last_id{};
+    /// That expansion is on in the pending choice.
+    bool last_on{};
+};
+
 /// The Library's whole state.
 struct Library {
     Inputs inputs{};
@@ -522,6 +589,10 @@ struct Library {
     std::optional<EntryId> selected{};  ///< one of the visible entries; none when none shows
     bool details_open{};                ///< the selected entry's details page is open
     TextHooks text{};                   ///< how texts are looked up; empty for English
+    /// The Active tab's pending choice. A pill writes it here. It is not the
+    /// stored choice, and it is kept across refresh while that choice is the
+    /// same. Empty `edited` shows `inputs.content` as it was read.
+    ContentDraft content{};
     /// The base game's badge, scaled for the squares of the last layout.
     /// Those pictures point here until the next layout, which clears this.
     mutable std::deque<std::vector<uint8_t>> scaled_badge_pixels{};
@@ -555,6 +626,15 @@ inline constexpr std::string_view supported_base = "ta-3.1c";
 /// @param[in,out] library the Library
 /// @param inputs the new inputs, which the Library keeps
 void refresh(Library& library, Inputs inputs);
+
+/// Keeps or drops the Active tab's pending choice after the inputs change.
+///
+/// A draft that was edited from the stored base game and expansions now in
+/// the inputs is kept, including a question that is waiting. Any other
+/// refresh stores that choice as the new seed and clears the draft.
+///
+/// @param[in,out] library the Library, its inputs already stored
+void note_content(Library& library);
 
 /// Shows a tab with its own filter, keeping the tag and query.
 ///
@@ -732,14 +812,14 @@ struct ActiveSetup {
     /// "Playing" while a mod is played; empty for the base game.
     std::string mod_state{};
     /// Its badge, which points into the Library's inputs until the next
-    /// refresh. The base game's is Inputs::base_game_badge; null without one.
+    /// refresh. Null when no mod is played: the base game's icon is the
+    /// base game tile's, from active_content.
     const Badge* mod_badge{};
-    /// The base game's title when no mod is played ("Base Game"); empty when one is.
+    /// "No Mod" when no mod is played; empty when one is.
     std::string base_title{};
-    /// The base game's look ("Total Annihilation 3.1c"); empty when a mod is played.
+    /// "{game} as it was made" when no mod is played; empty when one is.
     std::string base_look{};
-    /// The mod's line as automation reads it: "Ridge 4.8 · rev 3", or
-    /// "No mod: the game as it was made".
+    /// The mod's line as automation reads it: "Ridge 4.8 · rev 3", or "No Mod".
     std::string mod_line{};
     /// The language's name in itself; "English" when none other is named.
     std::string language_name{};
@@ -779,6 +859,90 @@ struct ActiveSetup {
 /// @param library the Library
 /// @return the setup
 [[nodiscard]] ActiveSetup active_setup(const Library& library);
+
+/// How one expansion pill is drawn.
+enum class ExpansionFace : uint8_t {
+    on,  ///< on in the pending choice
+    off, ///< copied, and off in the pending choice
+    add, ///< not copied: ADD FROM…
+};
+
+/// One expansion of the base game, as the Active tab's pill shows it.
+struct ExpansionPill {
+    std::string id{};   ///< the bundle id
+    std::string text{}; ///< the name, or the name and ADD FROM…
+    ExpansionFace face{ExpansionFace::off};
+    /// A press does something. Off during a match and while `--content` locked the run.
+    bool enabled{true};
+};
+
+/// What the Active tab shows of the base game and its expansions.
+struct ActiveContent {
+    /// The letters on the badge when the icon is absent ("TA").
+    std::string letters{};
+    /// The base game's icon. Points into the inputs until the next refresh.
+    const Badge* badge{};
+    std::string name{};         ///< "Total Annihilation"
+    std::string version_line{}; ///< "3.1c", or "3.1c · from GOG for macOS"
+    /// "All files match" or "2 files differ". Empty when the inputs name no check.
+    std::string check_line{};
+    /// The check line is the accent. False draws it in the lock colour.
+    bool check_good{true};
+    /// The base tile's label, as automation reads it.
+    std::string read{};
+    /// "EXPANSIONS", or "EXPANSIONS · 5 OF 6 ON".
+    std::string expansions_heading{};
+    std::vector<ExpansionPill> pills{};
+    /// What an expansion needs, or that a pending change applies when the Library closes.
+    std::string hint{};
+};
+
+/// Describes the base game tile and the expansion pills.
+///
+/// The choice is the pending draft while it has been edited, and the stored
+/// choice otherwise. The rules of turning a pill are not applied here.
+///
+/// @param library the Library
+/// @return the tile
+[[nodiscard]] ActiveContent active_content(const Library& library);
+
+/// What pressing an expansion pill did.
+enum class ContentPressKind : uint8_t {
+    none,   ///< refused, or the choice already said this
+    redraw, ///< the pending choice changed
+    ask,    ///< a playing mod needs the expansion; the question is waiting
+    add,    ///< the expansion is not copied
+};
+
+/// The result of pressing an expansion pill.
+struct ContentPress {
+    ContentPressKind kind{ContentPressKind::none};
+    /// The expansion, when `kind` is `ask` or `add`.
+    std::string expansion{};
+};
+
+/// Presses one expansion pill.
+///
+/// A copied expansion is turned on or off by turn_content_expansion, and the
+/// result is kept on the pending draft. It is not written to the preferences.
+/// Turning one off that a playing mod needs does not change the draft: it
+/// stores the choice G04 returned and waits for accept_expansion_off. An
+/// expansion that is not copied is `add` and is not turned on.
+///
+/// @param[in,out] library the Library
+/// @param id the expansion
+/// @return what the press did
+[[nodiscard]] ContentPress press_expansion(Library& library, std::string_view id);
+
+/// Keeps the choice the expansion-off question proposed, on the pending draft.
+///
+/// @param[in,out] library the Library
+void accept_expansion_off(Library& library);
+
+/// Drops the expansion-off question's proposal. The pending choice stays.
+///
+/// @param[in,out] library the Library
+void cancel_expansion_off(Library& library);
 
 /// How well one search word was found: the best field it is in.
 enum class MatchClass : uint8_t {
@@ -844,6 +1008,15 @@ enum class Action : uint8_t {
     /// A built-in language, or an installed language pack, that is not the
     /// one the game shows: switches to it as Settings › Language does.
     use_now,
+    /// CHANGE… on the base game tile. The host opens the chooser. This press
+    /// does not change the choice.
+    change_base_game,
+    /// ADD FROM… on an expansion that is not copied. The host opens the
+    /// locator. `ScreenResult::expansion` names it. This press does not turn it on.
+    add_expansion,
+    /// A pill would turn off an expansion a playing mod needs. The host asks
+    /// expansion_off_question and, on Turn off, calls accept_expansion_off.
+    ask_expansion_off,
 };
 
 /// One button of an entry's details.

@@ -10,7 +10,7 @@ add_library(oa-data-mod-profile src/baseline.cpp src/overrides.cpp src/records.c
 add_library(oa::data::mod_profile ALIAS oa-data-mod-profile)
 target_include_directories(oa-data-mod-profile PUBLIC include)
 target_link_libraries(oa-data-mod-profile PUBLIC oa-formats-oamod oa-data-limits oa-data-match-rules oa-base-sha256
-  PRIVATE oa-options)
+  PRIVATE oa-data-content-bundles oa-options)
 target_compile_features(oa-data-mod-profile PUBLIC cxx_std_20)
 # The resolver checks a profile's engine requirement against this build.
 set_property(SOURCE src/resolver.cpp APPEND PROPERTY COMPILE_DEFINITIONS

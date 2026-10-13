@@ -49,8 +49,10 @@ and the keys below are the game's (`src/app/include/oa/app/user_folder.hpp`).
 
 Earlier versions named the macOS folder `com.coreprime.open-annihilation`. When
 the engine resolves the folder and finds only that one, it renames it to
-`net.coreprime.open-annihilation`, once, so the preferences file and the
-unpacked demo data (`demo-1997`) keep working. When both exist, it uses the new
+`net.coreprime.open-annihilation`, once, so the preferences file keeps
+working and an earlier unpack of the demo (`demo-1997`) stays where a later
+start can copy it once into `games/totala-demo` in the player's Open
+Annihilation folder. When both exist, it uses the new
 folder and leaves the earlier one alone. When the rename fails, it uses the
 earlier folder under its old name for that run, says so on standard error, and
 tries again on the next start; the files are never copied, merged or replaced.
@@ -93,6 +95,25 @@ version's Pick Folder... chose, as an absolute UTF-8 path, which the
 Library lists while the folder still exists. It is kept only while
 `open-annihilation.mod-directory` names the same folder: once another mod
 or No Mod is chosen, it is erased. Absent, there is none.
+`open-annihilation.base-game` holds the base game the player plays,
+`totala` or `totala-demo`. Absent, or any other text, the choice is
+`totala` with every copied expansion of it that can be on, which is what
+a player of an earlier version plays. `open-annihilation.expansions.<game>`
+holds the expansions that are on for that base game, their ids separated
+by commas in the built-in order, as `campaign,core-contingency`. An empty
+value means none are on. Absent, every copied expansion of that game that
+can be on is on. An expansion that needs one which is not copied stays
+off. Turning one off turns off every expansion that needs it. Turning one
+on turns on what it needs and every copied expansion that was waiting only
+on it. Choosing a base game turns on every copied expansion of it that can
+be on and clears the mod. The change is kept for the next time the game
+mounts its files, and it is refused while a match is running.
+`open-annihilation.content-note` is `required-expansion` when a mod was
+cleared because an expansion it needs went off. The sentence the player
+reads is chosen from that token. Absent, no such note is waiting.
+`--content GAME[:EXPANSION,...]` names the base game and expansions for
+one run and writes nothing. An expansion the list needs is included; one
+that was only waiting is not.
 `open-annihilation.user-folder` holds the folder the player keeps their
 saved games, screenshots, films, recordings and mods in, as an absolute
 UTF-8 path, in place of `Open Annihilation` in Documents; absent or
@@ -179,6 +200,9 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | `open-annihilation.file-types.oamap` | `on` or `off`, as the mod packages' key | on: this copy opens map packs |
 | `open-annihilation.file-types.oalang` | `on` or `off`, as the mod packages' key | on: this copy opens language packs |
 | `open-annihilation.file-types.oareg` | `on` or `off`, as the mod packages' key | on: this copy opens registry files |
+| `open-annihilation.base-game` | `totala` or `totala-demo`; any other text reads as `totala` | `totala`, with every copied expansion of it that can be on |
+| `open-annihilation.expansions.<game>` | comma-separated expansion ids, in the built-in order; empty means none on | every copied expansion of that game that can be on |
+| `open-annihilation.content-note` | `required-expansion` when a mod was cleared because an expansion it needs went off | no note waiting |
 
 The four file-type keys are words, `on` and `off`, not the `0` and `1` of
 the other switches. Settings › System shows a switch for each on Windows,

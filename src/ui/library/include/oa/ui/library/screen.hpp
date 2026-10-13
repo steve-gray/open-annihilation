@@ -72,9 +72,11 @@ struct ScreenState {
     /// The Active tab's maps search, above that pane. It is not the catalogue's
     /// query. Its text stays while the Library is open, on every tab.
     kit::TextField maps_search{};
-    int32_t maps_scroll{};         ///< how far the Active tab's maps are scrolled, in points
-    kit::WheelCarry maps_wheel{};  ///< the wheel's turn those maps have not scrolled yet
-    bool maps_bar_held{};          ///< the pointer holds the maps pane's scroll bar
+    /// How far the Active tab is scrolled, in points: its maps pane, or the
+    /// whole page when the tiles leave the maps fewer than four rows.
+    int32_t maps_scroll{};
+    kit::WheelCarry maps_wheel{};  ///< the wheel's turn that scroll has not taken yet
+    bool maps_bar_held{};          ///< the pointer holds the Active tab's scroll bar
     int32_t maps_bar_grab{};       ///< where on the thumb the pointer took hold, from its top
     MenuKind menu{MenuKind::none}; ///< the open drop-down
     int32_t menu_first{};          ///< the open drop-down's first item shown, from 0
@@ -151,6 +153,8 @@ struct ScreenResult {
     std::string registry{};
     /// The switch's new state, for Action::set_registry.
     bool registry_on{};
+    /// The expansion ADD FROM… or the expansion-off question names.
+    std::string expansion{};
     bool redraw{}; ///< what the screen shows changed: lay it out and draw it again
 };
 

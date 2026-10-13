@@ -260,6 +260,10 @@ inline constexpr bool self_checks_built = true;
 struct Options {
     // Empty until main() resolves it when --game-dir is not passed.
     fs::path game_dir;
+    // True when the command line named --game-dir, set before
+    // find_game_directory fills game_dir. That folder is played as it
+    // stands: the content check still runs, and its notice stays closed.
+    bool game_dir_named = false;
     // Opens the folder dialog even when a usable folder is remembered.
     bool choose_game_dir = false;
     // The folder the dialog chose, which the runtime stores in the
@@ -283,6 +287,11 @@ struct Options {
     fs::path mod_dir;
     // Plays the game folder without the remembered mod folder (--base-game).
     bool base_game = false;
+    /// The base game and expansions for this run (--content
+    /// GAME[:EXPANSION,...]). Empty when the run uses the remembered choice.
+    /// It is not written to the preferences, and the mounted files change
+    /// with the next mount.
+    std::string content{};
     // The folders loose files come from, highest precedence first: the mod
     // folder, then game_dir. main() fills it; empty means game_dir alone.
     std::vector<fs::path> game_folders;
@@ -475,6 +484,9 @@ struct Options {
     // Spanish, Italian and Simplified Chinese, at 640x480 and 1280x720, and
     // fails when any text is wider than its box or crosses another text.
     bool check_text_fit = false;
+    // Opens the locator on --game-dir's parent, moves onto that folder with
+    // Tab and chooses it. With --snapshot, writes that PNG and a Deck PNG.
+    bool check_folder_chooser = false;
     // Sends a construction kbot on PATROL through the SDL presenter with the
     // metal store low and checks it reclaims a feature on its way.
     bool check_patrol_reclaim = false;
@@ -508,6 +520,12 @@ struct Options {
     bool touch_controls = false;
     /// --check-game-files: the Game files screen driven through a route by scripted hooks.
     bool check_game_files = false;
+    /// --check-content-copy PATH: copies a small fixture into PATH, standing in
+    /// for Documents, and checks that copy. The run does nothing else.
+    fs::path check_content_copy{};
+    /// --check-installer FILE: reads a Windows installer, lists the bundles it
+    /// holds and every file's SHA-256. The run does nothing else.
+    fs::path check_installer{};
     /// --no-game-files-screen: with no usable game folder, the notice with its look-again
     /// button instead of the Game files screen, where the platform offers both.
     bool no_game_files_screen = false;

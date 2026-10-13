@@ -145,6 +145,8 @@ PackMap map_of(
     listed.release = release;
     listed.folder = folder;
     listed.files = map.files;
+    listed.supported_games = manifest.supported_games;
+    listed.required_expansions = manifest.required_expansions;
     const std::string terrain = "maps/" + map.stem + ".tnt";
     if (const auto file = find_entry(folder, terrain))
         listed.terrain_bytes = size_of(*file);

@@ -4,6 +4,7 @@
 #include "oa/data/languages/language_pack.hpp"
 
 #include "oa/formats/oamod.hpp"
+#include "oa/data/content_bundles/content_needs.hpp"
 #include "oa/formats/oamod/package_keys.hpp"
 #include "oa/formats/tdf.hpp"
 
@@ -430,7 +431,10 @@ bool read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::
             } else if (key == "packaging") {
                 if (!read_packaging(entry, read.packaging, failure))
                     break;
-            } else if (key == "homepage" || key == "tags") {
+            } else if (
+                key == "homepage" || key == "tags" || key == "supportedGames" ||
+                key == "requiredExpansions"
+            ) {
                 ok = true;
             } else if (key == "requires") {
                 if (entry.kind != oamod::NodeKind::mapping) {
@@ -438,8 +442,14 @@ bool read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::
                     break;
                 }
                 for (const oamod::Node& child : entry.children) {
-                    if (child.key.kind != oamod::KeyKind::string || child.key.text != "engine") {
-                        failure = "the manifest's requires takes engine only";
+                    if (child.key.kind != oamod::KeyKind::string ||
+                        (child.key.text != "engine" && child.key.text != "base")) {
+                        failure = "the manifest's requires takes engine and base";
+                        break;
+                    }
+                    if (child.key.text == "base" &&
+                        (child.kind != oamod::NodeKind::string || child.text != "ta-3.1c")) {
+                        failure = "requires.base must be ta-3.1c";
                         break;
                     }
                 }
@@ -478,6 +488,23 @@ bool read_manifest(std::span<const uint8_t> bytes, PackManifest& manifest, std::
                 read.homepage = std::move(keys.homepage);
                 read.tags = std::move(keys.tags);
                 read.requires_engine = std::move(keys.requires_engine);
+                oa::data::content_bundles::ContentNeeds needs;
+                std::vector<oamod::KeyProblem> need_problems;
+                oa::data::content_bundles::read_content_needs(
+                    root,
+                    requires_block,
+                    oa::data::content_bundles::GamesWhenOmitted::every_game,
+                    needs,
+                    need_problems
+                );
+                if (!need_problems.empty())
+                    failure = need_problems.front().path + ": " + need_problems.front().message;
+                else {
+                    read.supported_games = std::move(needs.supported_games);
+                    read.required_expansions = std::move(needs.required_expansions);
+                    if (needs.legacy_base)
+                        read.requires_base = "ta-3.1c";
+                }
             }
         }
     }

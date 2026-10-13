@@ -16,12 +16,14 @@
 
 #include "oa/app/demo_installer.hpp"
 #include "oa/app/mod_profile_loader.hpp"
+#include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/platform/game_installs.hpp"
 #include "oa/platform/preferences.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -240,6 +242,10 @@ struct GameDirectoryRequest {
     /// The chooser comes before the system's folder dialog (Steam's Game Mode, where the
     /// dialog may not show).
     bool chooser_first = false;
+    /// The player chose the demo and it is not copied. A folder counts only when
+    /// it holds the demo's installer. The locator asks for it, or the system's
+    /// picker where the locator is not shown.
+    bool demo_only = false;
 };
 
 /// Why resolution found no folder to play when the Game files screen is offered.
@@ -271,6 +277,7 @@ enum class GameDirectorySource : uint8_t {
     chosen,   ///< the player chose it in the folder dialog; it is remembered
     platform, ///< the platform's default folder, which is not remembered
     found,    ///< the one usable folder found on this machine; it is remembered
+    managed,  ///< the player's copy of the chosen base game and expansions; it is not remembered
 };
 
 struct GameDirectory {
@@ -293,6 +300,9 @@ struct GameDirectory {
     std::vector<std::string> profile_warnings;
     /// Where the folder was found, for GameDirectorySource::found.
     std::optional<FoundInstall> found_from{};
+    /// True when `folders` begins with a mod folder. Expansion bundles are
+    /// not a mod folder.
+    bool mod_layered = false;
 };
 
 /// Resolves the game folder.
@@ -301,14 +311,14 @@ struct GameDirectory {
 /// the stored folder while it is still usable (neither when `choose`), else
 /// the one usable folder found on this machine (request.found) when no stored
 /// folder has gone, else the folder dialog until the user picks a usable
-/// folder. Where the in-engine chooser is offered (request.chooser_offered,
-/// with `needed`), it opens instead (`needed` says so, with the usable
-/// folders found) for several usable folders found, for a stored folder that
-/// has gone while a usable one was found, for a start with no usable folder
-/// in Steam's Game Mode (request.chooser_first, which --choose-game-dir
-/// follows too) or with no dialog in the build, and when the dialog cannot
-/// open (with its reason); otherwise a desktop whose dialog works resolves
-/// as without the chooser. An unattended run
+/// folder. Where the in-engine locator is offered (request.chooser_offered,
+/// with `needed`), it opens instead of the dialog (`needed` says so, with the
+/// usable folders found). On the desktop the system's dialog stays available
+/// as a button (dialog_offered). In Steam's Game Mode (request.chooser_first)
+/// that button is absent, and the dialog is not opened. A build with no
+/// dialog offers none. Where the locator is not offered, a desktop whose
+/// dialog works resolves as before, including when the dialog cannot open.
+/// An unattended run
 /// never opens the dialog: without --game-dir it takes a usable platform
 /// default, else a usable stored folder. --game-dir is inspected too, unless
 /// --archive names the archives, and refused when it names no folder or one
@@ -399,6 +409,107 @@ void remember_game_directory(oa::platform::preferences::Values& values, const fs
 /// @param folder the mod folder, stored absolute and normalised as UTF-8;
 ///        empty forgets the choice, for the base game
 void remember_mod_directory(oa::platform::preferences::Values& values, const fs::path& folder);
+
+/// Lists the base games and expansions wholly present in a folder.
+///
+/// A player's folder, or one bundle folder inside it (`games/<id>` or
+/// `expansions/<base>/<id>`), is read from the `.oa-content` records of
+/// `games/` and `expansions/`. A record counts when it names that bundle and
+/// lists every one of its files. The game files are not walked. Any other
+/// folder is walked: each regular file is matched by its path relative to the
+/// folder and its size, and a bundle is copied when every one of its files
+/// matches.
+///
+/// @param folder the player's folder, one managed bundle folder, or a game
+///        folder to walk; empty, or not a folder, copies nothing
+/// @return the copied bundle ids, in the built-in order
+[[nodiscard]] std::vector<std::string> copied_content_bundles(const fs::path& folder);
+
+/// What a composed mount is built from: the player's folder and the choice.
+struct ManagedMount {
+    /// The player's folder, which holds `games/` and `expansions/`.
+    fs::path user_folder{};
+    /// `--content`, or empty to use the preferences.
+    std::string_view content{};
+    /// `--mod-dir`; empty to play the folder the preferences remember.
+    fs::path mod_dir{};
+    /// `--base-game`: play no remembered mod folder.
+    bool base_game = false;
+    /// `--mod`; empty for the folders' own profile.
+    fs::path mod_file{};
+    /// Accept hacks this build does not implement yet, with a warning each.
+    bool accept_unimplemented_hacks = false;
+};
+
+/// Mounts the chosen base game and expansions from the player's folder.
+///
+/// The loose roots are the mod folder, then each enabled expansion's bundle
+/// folder, then the base game's, and discovery mounts them in the game's own
+/// order. A mod's revision archive replaces the base game's. Nothing is
+/// mounted when the base game has no record and the run names no `--content`.
+/// `--content` that cannot be read, or that names a bundle with no record,
+/// throws std::runtime_error, as does a mod profile that cannot be used.
+///
+/// @param request the player's folder, `--content` and the mod
+/// @param values the preferences the stored choice and the mod folder are read from
+/// @return the folders and the archives in mount order; nullopt when there is
+///     no recorded base game to play
+[[nodiscard]] std::optional<GameDirectory> compose_managed_content(
+    const ManagedMount& request, const oa::platform::preferences::Values& values
+);
+
+/// Reports whether any of the folders holds a movie.
+///
+/// A movie is a file whose extension is `.zrb`, in a directory named `data`.
+/// The directory's name and the extension are matched without regard to case.
+///
+/// @param roots the folders, highest precedence first
+/// @return true when one of them holds such a file
+[[nodiscard]] bool roots_hold_movies(std::span<const fs::path> roots);
+
+/// Reads the content choice from the preferences.
+///
+/// The base game is `open-annihilation.base-game` and the expansions are
+/// `open-annihilation.expansions.<game>`. A non-empty `command_line` is
+/// `--content` and replaces both for this call. Nothing is written.
+///
+/// @param values the preferences
+/// @param copied the bundle ids that are copied
+/// @param command_line the `--content` value; empty when the run names none
+/// @return the choice
+[[nodiscard]] oa::data::content_bundles::ContentChoice content_choice_from_preferences(
+    const oa::platform::preferences::Values& values,
+    std::span<const std::string_view> copied,
+    std::string_view command_line
+);
+
+/// Stores the base game and its expansions in the preferences.
+///
+/// Other base games' expansion lists are left as they are. An empty
+/// expansion list is stored as an empty value, which is none on, and is
+/// different from the key being absent.
+///
+/// @param[in,out] values the preferences
+/// @param choice the choice to store; its error is not stored
+void remember_content_choice(
+    oa::platform::preferences::Values& values,
+    const oa::data::content_bundles::ContentChoice& choice
+);
+
+/// Stores a change that was applied, including clearing the mod.
+///
+/// When the mod is cleared, the mod folder and the picked folder are
+/// forgotten. A clear because a required expansion went off sets
+/// `open-annihilation.content-note` to `required-expansion`. A change that
+/// was not applied writes nothing.
+///
+/// @param[in,out] values the preferences
+/// @param result the change
+/// @return true when the preferences were written
+[[nodiscard]] bool store_content_change(
+    oa::platform::preferences::Values& values,
+    const oa::data::content_bundles::ContentChangeResult& result
+);
 
 /// Resolves the game folder with the native dialogs (game_directory_dialog.cpp).
 ///

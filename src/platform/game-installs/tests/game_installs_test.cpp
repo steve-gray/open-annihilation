@@ -428,9 +428,72 @@ void check_search(const fs::path& temporary) {
 
 } // namespace
 
+/// The locator's places, from facts, with empty paths left out. No disk is read.
+void check_locator_places() {
+    installs::LocatorFacts facts;
+    facts.home = "/home/play";
+    facts.desktop = "/home/play/Desktop";
+    facts.downloads = "/home/play/Downloads";
+    facts.applications = "/Applications";
+    facts.volumes = {"/", "/Volumes/TOTALA"};
+    facts.steam = "/home/play/.local/share/Steam/steamapps/compatdata/298030/pfx";
+    facts.heroic = "/home/play/Games/Heroic";
+    const std::vector<installs::LocatorPlace> places = installs::locator_places(facts);
+    OA_CHECK(places.size() == 8);
+    OA_CHECK(places[0].label == "Home" && places[0].group == installs::LocatorGroup::places);
+    OA_CHECK(places[1].label == "Desktop");
+    OA_CHECK(places[2].label == "Downloads");
+    OA_CHECK(places[3].label == "Applications");
+    OA_CHECK(places[4].label == "System" && places[4].group == installs::LocatorGroup::volumes);
+    OA_CHECK(places[5].label == "TOTALA" && places[5].group == installs::LocatorGroup::volumes);
+    OA_CHECK(
+        places[6].label == "Steam · Proton" && places[6].group == installs::LocatorGroup::deck_games
+    );
+    OA_CHECK(places[6].folder == facts.steam);
+    OA_CHECK(places[7].label == "Heroic" && places[7].group == installs::LocatorGroup::deck_games);
+    OA_CHECK(places[7].folder == facts.heroic);
+    OA_CHECK(installs::path_under_home("/home/play", "/home/play") == "~");
+    OA_CHECK(installs::path_under_home("/home/play", "/home/play/Games") == "~/Games");
+    OA_CHECK(
+        installs::path_under_home("/home/play", "/home/play/Games/Total Annihilation") ==
+        "~/Games/Total Annihilation"
+    );
+    OA_CHECK(installs::path_under_home("/home/play", "/Volumes/TOTALA") == "/Volumes/TOTALA");
+    OA_CHECK(installs::path_under_home({}, "/home/play/Games") == "/home/play/Games");
+
+    installs::LocatorFacts deck;
+    deck.deck = true;
+    deck.home = "/home/deck";
+    deck.sd_cards = {"/run/media/mmcblk0p1", "/run/media/extra"};
+    deck.volumes = {"/should-not-show"};
+    deck.lutris = "/home/deck/Games";
+    deck.bottles = "/home/deck/.local/share/bottles/bottles";
+    const std::vector<installs::LocatorPlace> on_deck = installs::locator_places(deck);
+    OA_CHECK(on_deck.size() == 5);
+    OA_CHECK(on_deck[0].label == "Home");
+    OA_CHECK(
+        on_deck[1].label == "microSD card mmcblk0p1" &&
+        on_deck[1].group == installs::LocatorGroup::places
+    );
+    OA_CHECK(on_deck[2].label == "microSD card extra");
+    OA_CHECK(
+        on_deck[3].label == "Lutris" && on_deck[3].group == installs::LocatorGroup::deck_games
+    );
+    OA_CHECK(on_deck[4].label == "Bottles");
+
+    installs::LocatorFacts windows;
+    windows.applications = "C:/Program Files";
+    windows.program_files = true;
+    const std::vector<installs::LocatorPlace> programs = installs::locator_places(windows);
+    OA_CHECK(programs.size() == 1 && programs[0].label == "Program Files");
+
+    OA_CHECK(installs::locator_places({}).empty());
+}
+
 /// Runs the checks.
 int main() {
     check_source_words();
+    check_locator_places();
     check_search_roots();
     check_library_folders();
     check_manifest();

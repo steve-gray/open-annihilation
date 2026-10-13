@@ -414,6 +414,7 @@ const std::vector<FlagCase>& flag_cases() {
         {"--check-language-notice", &Options::check_language_notice, {}},
         {"--check-first-run", &Options::check_first_run, {}},
         {"--check-text-fit", &Options::check_text_fit, {}},
+        {"--check-folder-chooser", &Options::check_folder_chooser, {}},
         {"--check-patrol-reclaim", &Options::check_patrol_reclaim, {}},
         {"--check-reclaim-cursor", &Options::check_reclaim_cursor, {}},
         {"--check-build-preview", &Options::check_build_preview, {}},
@@ -449,6 +450,7 @@ struct ValueCase {
 const std::vector<ValueCase>& value_cases() {
     static const std::vector<ValueCase> cases{
         {"--game-dir", "ta", {}},
+        {"--content", "totala", {}},
         {"--archive", "totala1.hpi", {}},
         {"--mod", "mods/x/oamod.yaml", {}},
         {"--mod-dir", "mods/x", {}},
@@ -489,6 +491,8 @@ const std::vector<ValueCase>& value_cases() {
         {"--game-files-free-bytes", "5", {"--check-game-files"}},
         {"--game-files-copy-rate", "5", {"--check-game-files"}},
         {"--game-files-stop-after", "5", {"--check-game-files"}},
+        {"--check-content-copy", "docs", {}},
+        {"--check-installer", "setup.bin", {}},
         {"--generate-script", "game.rec", {}},
         {"--render-script", "game.oascript", {}},
         {"--output", "out", {"--render-script", "game.oascript"}},
@@ -1250,6 +1254,26 @@ int main() {
         "--mod-dir takes a mod folder"
     );
     expect(parse({"--base-game"}).base_game, "--base-game plays without the remembered mod");
+    expect(
+        parse({"--content", "totala:campaign,core-contingency"}).content ==
+            "totala:campaign,core-contingency",
+        "--content names a base game and its expansions for the run"
+    );
+    expect(parse({"--content", "totala"}).content == "totala", "--content names a base game alone");
+    expect(
+        rejection({"--content", "totala:ridge"}) == "--content names an unknown expansion: ridge",
+        "--content refuses an unknown expansion"
+    );
+    expect(
+        rejection({"--content", "campaign"}) ==
+            "--content names an expansion as the base game: campaign",
+        "--content refuses an expansion as the base game"
+    );
+    expect(
+        rejection({"--content", "totala-demo:music"}) ==
+            "--content: music does not extend totala-demo",
+        "--content refuses an expansion the base game does not take"
+    );
     expect(
         rejection({"--base-game", "--mod-dir", "mods/x"}) ==
             "--base-game and --mod-dir cannot be used together",

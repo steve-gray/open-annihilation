@@ -8,7 +8,9 @@
 // commit that renames the copy into place, recovery at the next start,
 // adopting files the player copied themselves, what is installed, and the
 // additions and removals of the management state. The platform's side comes
-// through GameFilesHooks (game_files_hooks.hpp).
+// through GameFilesHooks (game_files_hooks.hpp). The managed copy of a base
+// game and its expansions, and the source reader an installer implements,
+// are content_copy.hpp.
 #pragma once
 
 #include "oa/app/game_directory.hpp"

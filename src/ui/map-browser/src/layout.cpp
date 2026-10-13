@@ -94,9 +94,9 @@ constexpr uint64_t megabyte = kilobyte * 1024;
 
 constexpr std::string_view word_title = "Maps";
 constexpr std::string_view word_skirmish_mod = "Skirmish · playing {mod}";
-constexpr std::string_view word_skirmish_game = "Skirmish · Total Annihilation 3.1c";
+constexpr std::string_view word_skirmish_game = "Skirmish · No Mod";
 constexpr std::string_view word_battle_room_mod = "Battle room · playing {mod}";
-constexpr std::string_view word_battle_room_game = "Battle room · Total Annihilation 3.1c";
+constexpr std::string_view word_battle_room_game = "Battle room · No Mod";
 constexpr std::array<std::string_view, 4> word_sources{
     "All", "Base game", "Installed packs", "Online"
 };
@@ -115,7 +115,7 @@ constexpr std::string_view word_players_one = "1 player";
 constexpr std::string_view word_players_many = "{count} players";
 constexpr std::string_view word_megabytes = "{size} MB";
 constexpr std::string_view word_kilobytes = "{size} KB";
-constexpr std::string_view word_game_short = "TA 3.1c";
+constexpr std::string_view word_game_short = "No Mod";
 constexpr std::string_view word_fits = "Fits {game} ✓";
 constexpr std::string_view word_does_not_fit = "Doesn't fit {game}";
 constexpr std::string_view word_fit_later = "Fit with {game} is checked when it's installed";

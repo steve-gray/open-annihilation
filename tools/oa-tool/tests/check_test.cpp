@@ -236,16 +236,40 @@ void test_mod(const Scratch& scratch) {
         return;
 
     const std::vector<std::string> expected_names{
-        "check",   "ok",        "problems", "warnings", "file",     "kind",          "id",
-        "name",    "version",   "revision", "size",     "sha256",   "unpacked_size", "files",
-        "summary", "homepage",  "tags",     "author",   "requires", "sim_hash",      "full_hash",
-        "hacks",   "packaging",
+        "check",
+        "ok",
+        "problems",
+        "warnings",
+        "file",
+        "kind",
+        "id",
+        "name",
+        "version",
+        "revision",
+        "size",
+        "sha256",
+        "unpacked_size",
+        "files",
+        "summary",
+        "homepage",
+        "tags",
+        "supportedGames",
+        "requiredExpansions",
+        "author",
+        "requires",
+        "sim_hash",
+        "full_hash",
+        "hacks",
+        "packaging",
     };
     OA_CHECK(names_of(*report) == expected_names);
     OA_CHECK(member(*report, "check") && member(*report, "check")->integer() == 1);
     OA_CHECK(member(*report, "ok") && member(*report, "ok")->boolean() == true);
     OA_CHECK(strings_of(member(*report, "problems")).empty());
-    OA_CHECK(strings_of(member(*report, "warnings")).empty());
+    expect_strings(
+        member(*report, "warnings"),
+        {"requires.base: ta-3.1c reads as supportedGames: [totala]; write supportedGames instead"}
+    );
     OA_CHECK(text_of(member(*report, "file")) == "example-mod-1.0-r3.oamod");
     OA_CHECK(text_of(member(*report, "kind")) == "oamod");
     OA_CHECK(text_of(member(*report, "id")) == "example-mod");
@@ -267,6 +291,8 @@ void test_mod(const Scratch& scratch) {
     OA_CHECK(text_of(member(*report, "summary")) == "A made-up mod the check reports.");
     OA_CHECK(text_of(member(*report, "homepage")) == "https://example.org/mod");
     expect_strings(member(*report, "tags"), {"example"});
+    expect_strings(member(*report, "supportedGames"), {"totala"});
+    expect_strings(member(*report, "requiredExpansions"), {});
     OA_CHECK(text_of(member(*report, "author")) == "Ada Example");
 
     const json::Json* required = member(*report, "requires");
@@ -449,7 +475,12 @@ void test_oalang(const fs::path& manifest_path) {
     OA_CHECK(report && report->type() == json::JsonType::object);
     if (!report)
         return;
-    expect_names(*report, {"id", "name", "version", "revision", "language"});
+    expect_names(
+        *report,
+        {"id", "name", "version", "revision", "supportedGames", "requiredExpansions", "language"}
+    );
+    expect_strings(member(*report, "supportedGames"), {"totala", "totala-demo"});
+    expect_strings(member(*report, "requiredExpansions"), {});
     OA_CHECK(text_of(member(*report, "id")) == "en-XA");
     OA_CHECK(text_of(member(*report, "name")) == "［测Pseudo试］");
     OA_CHECK(text_of(member(*report, "version")) == "1");
@@ -486,6 +517,52 @@ void test_oalang(const fs::path& manifest_path) {
     OA_CHECK(revised && text_of(member(*revised, "id")) == "en-XB");
 }
 
+void test_content_suggestions(const Scratch& scratch) {
+    const std::string archives =
+        "oamod: 1\n"
+        "id: example-mod\n"
+        "name: Example Mod\n"
+        "version: \"1.0\"\n"
+        "requires: {base: ta-3.1c, catalogue: 1}\n"
+        "author: {name: Ada Example}\n"
+        "packaging: {revision: 1, date: 2026-11-01, packager: Open Annihilation}\n"
+        "layout:\n"
+        "  installation-archives: [ccdata.ccx, btdata.ccx, rev31.gp3, zeta.ccx]\n";
+    const fs::path path = write_package(scratch, "archives.oamod", archives);
+    const Captured checked = run({"check", path.string(), "--json"});
+    expect_status(checked, oa::tool::exit_done);
+    const std::optional<json::Json> report = parsed_object(checked);
+    if (!report)
+        return;
+    OA_CHECK(member(*report, "ok") && member(*report, "ok")->boolean() == true);
+    expect_strings(
+        member(*report, "warnings"),
+        {"requires.base: ta-3.1c reads as supportedGames: [totala]; write supportedGames instead",
+         "layout.installation-archives: ccdata.ccx is an archive of core-contingency; declare "
+         "requiredExpansions: [core-contingency] instead",
+         "layout.installation-archives: btdata.ccx is an archive of battle-tactics; declare "
+         "requiredExpansions: [battle-tactics] instead"}
+    );
+
+    const std::string clean =
+        "oamod: 1\n"
+        "id: example-mod\n"
+        "name: Example Mod\n"
+        "version: \"1.0\"\n"
+        "supportedGames: [\"totala\"]\n"
+        "author: {name: Ada Example}\n"
+        "packaging: {revision: 1, date: 2026-11-01, packager: Open Annihilation}\n";
+    const fs::path clean_path = write_package(scratch, "clean.oamod", clean);
+    const Captured quiet = run({"check", clean_path.string(), "--json"});
+    expect_status(quiet, oa::tool::exit_done);
+    const std::optional<json::Json> quiet_report = parsed_object(quiet);
+    if (!quiet_report)
+        return;
+    OA_CHECK(member(*quiet_report, "ok") && member(*quiet_report, "ok")->boolean() == true);
+    OA_CHECK(strings_of(member(*quiet_report, "warnings")).empty());
+    expect_strings(member(*quiet_report, "supportedGames"), {"totala"});
+}
+
 void test_help() {
     const Captured help = run({"help", "check"});
     expect_status(help, oa::tool::exit_done);
@@ -508,6 +585,7 @@ int main(int argc, char** argv) {
     test_unimplemented(scratch);
     test_usage(scratch);
     test_oalang(argv[1]);
+    test_content_suggestions(scratch);
     test_help();
     return oa::test::check_exit_status();
 }

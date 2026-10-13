@@ -3,12 +3,18 @@
 
 // Game directory resolution and installation checks for oa-game.
 #include "oa/app/game_directory.hpp"
+#include "oa/data/content_bundles.hpp"
 #include "oa/formats/hpi.hpp"
 #include "oa/platform/files.hpp"
+#include "oa/ui/engine_settings.hpp"
+
+#include <algorithm>
 #include <cctype>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <system_error>
+#include <utility>
 
 namespace oa::app {
 namespace {
@@ -79,6 +85,9 @@ std::string path_length_problem(const fs::path& folder, std::size_t names) {
 }
 
 namespace {
+
+[[nodiscard]] bool
+accepted_install(const GameDirectoryRequest& request, const GameInstall& install);
 
 [[nodiscard]] bool equal_ignoring_case(std::string_view left, std::string_view right) {
     if (left.size() != right.size())
@@ -341,7 +350,7 @@ void take_archive(const fs::path& root, const fs::path& archive, GameInstall& in
         platform.reset();
         if (!platform_folder.empty()) {
             auto install = inspect_folder(host, platform_folder);
-            if (usable(install))
+            if (accepted_install(request, install))
                 return resolved(platform_folder, std::move(install), GameDirectorySource::platform);
             platform = RefusedFolder{
                 platform_folder,
@@ -353,7 +362,7 @@ void take_archive(const fs::path& root, const fs::path& archive, GameInstall& in
         if (request.stored && !request.stored->empty()) {
             const auto folder = path_from_utf8(*request.stored);
             auto install = inspect_folder(host, folder);
-            if (usable(install))
+            if (accepted_install(request, install))
                 return resolved(folder, std::move(install), GameDirectorySource::stored);
             stored = RefusedFolder{
                 folder,
@@ -362,6 +371,192 @@ void take_archive(const fs::path& root, const fs::path& archive, GameInstall& in
             };
         }
     }
+}
+
+// The managed copy's folder names. They match content_copy.hpp. That module
+// links this one, so this file keeps its own copies and does not call it.
+constexpr std::string_view kManagedGamesFolder = "games";
+constexpr std::string_view kManagedExpansionsFolder = "expansions";
+constexpr std::string_view kContentRecordName = ".oa-content";
+
+[[nodiscard]] bool directory_named(const fs::path& folder, std::string_view name) {
+    return equal_ignoring_case(path_to_utf8(folder.filename()), name);
+}
+
+[[nodiscard]] bool has_managed_layout(const fs::path& user) {
+    std::error_code games_failure;
+    std::error_code expansions_failure;
+    return fs::is_directory(user / std::string(kManagedGamesFolder), games_failure) ||
+           fs::is_directory(user / std::string(kManagedExpansionsFolder), expansions_failure);
+}
+
+[[nodiscard]] fs::path
+bundle_directory(const fs::path& user, const oa::data::content_bundles::Bundle& bundle) {
+    const fs::path id{std::string(bundle.id)};
+    if (bundle.kind == oa::data::content_bundles::Kind::base_game)
+        return user / std::string(kManagedGamesFolder) / id;
+    if (bundle.extends.empty())
+        return user / std::string(kManagedExpansionsFolder) / id;
+    return user / std::string(kManagedExpansionsFolder) / std::string(bundle.extends[0]) / id;
+}
+
+// A `.oa-content` record, read far enough to know which bundle it lists.
+struct ReadRecord {
+    bool valid = false;
+    std::string bundle_id;
+    std::vector<std::string> files;
+};
+
+[[nodiscard]] bool digits_only(std::string_view text, bool sign) {
+    if (text.empty())
+        return false;
+    std::size_t start = 0;
+    if (sign && (text.front() == '-' || text.front() == '+')) {
+        if (text.size() == 1)
+            return false;
+        start = 1;
+    }
+    for (std::size_t index = start; index < text.size(); ++index)
+        if (std::isdigit(static_cast<unsigned char>(text[index])) == 0)
+            return false;
+    return true;
+}
+
+[[nodiscard]] bool sha256_hex(std::string_view text) {
+    if (text.size() != 64)
+        return false;
+    for (const char character : text)
+        if (std::isxdigit(static_cast<unsigned char>(character)) == 0)
+            return false;
+    return true;
+}
+
+[[nodiscard]] bool has_prefix(std::string_view text, std::string_view prefix) {
+    return text.size() >= prefix.size() && text.compare(0, prefix.size(), prefix) == 0;
+}
+
+// Reads the bundle id and the file names. A file that is not a record this
+// reader understands is not valid. The hash is checked only as 64 hex digits.
+[[nodiscard]] ReadRecord read_bundle_record(const fs::path& file) {
+    ReadRecord record{};
+    std::ifstream input(file);
+    if (!input)
+        return record;
+    std::string line;
+    const auto take = [&]() {
+        if (!std::getline(input, line))
+            return false;
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        return true;
+    };
+    if (!take() || line != "oa-content 1")
+        return record;
+    if (!take() || !has_prefix(line, "bundle "))
+        return record;
+    std::string bundle_id = line.substr(7);
+    if (bundle_id.empty())
+        return record;
+    if (!take() || !has_prefix(line, "source "))
+        return record;
+    std::vector<std::string> files;
+    while (take()) {
+        if (!has_prefix(line, "file ") || line.size() == 5)
+            return record;
+        files.push_back(line.substr(5));
+        if (!take() || !has_prefix(line, "size ") || !digits_only(line.substr(5), false))
+            return record;
+        if (!take() || !has_prefix(line, "modified ") || !digits_only(line.substr(9), true))
+            return record;
+        if (!take() || !has_prefix(line, "sha256 ") || !sha256_hex(line.substr(7)))
+            return record;
+    }
+    if (files.empty())
+        return record;
+    record.valid = true;
+    record.bundle_id = std::move(bundle_id);
+    record.files = std::move(files);
+    return record;
+}
+
+[[nodiscard]] bool record_covers(
+    const oa::data::content_bundles::Bundle& bundle, const std::vector<std::string>& files
+) {
+    if (bundle.files.empty())
+        return false;
+    for (const auto& entry : bundle.files) {
+        bool found = false;
+        for (const std::string& name : files) {
+            if (equal_ignoring_case(name, entry.copy_name)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            return false;
+    }
+    return true;
+}
+
+[[nodiscard]] std::vector<std::string> recorded_content_bundles(const fs::path& user) {
+    std::vector<std::string> ids;
+    std::error_code failure;
+    if (user.empty() || !fs::is_directory(user, failure) || failure)
+        return ids;
+    for (const auto& bundle : oa::data::content_bundles::bundles()) {
+        const ReadRecord record =
+            read_bundle_record(bundle_directory(user, bundle) / std::string(kContentRecordName));
+        if (!record.valid || record.bundle_id != bundle.id)
+            continue;
+        if (!record_covers(bundle, record.files))
+            continue;
+        ids.emplace_back(bundle.id);
+    }
+    return ids;
+}
+
+// The player's folder behind `folder`: the folder itself when it holds
+// games/ or expansions/, or the folder above a managed bundle folder.
+[[nodiscard]] std::optional<fs::path> managed_user_of(const fs::path& folder) {
+    if (folder.empty())
+        return std::nullopt;
+    if (has_managed_layout(folder))
+        return folder;
+    std::error_code failure;
+    if (directory_named(folder.parent_path(), kManagedGamesFolder)) {
+        const fs::path user = folder.parent_path().parent_path();
+        const bool known =
+            oa::data::content_bundles::find_bundle(path_to_utf8(folder.filename())) != nullptr;
+        const bool recorded =
+            fs::is_regular_file(folder / std::string(kContentRecordName), failure);
+        if ((known || recorded) && has_managed_layout(user))
+            return user;
+    }
+    const fs::path expansions = folder.parent_path().parent_path();
+    if (directory_named(expansions, kManagedExpansionsFolder)) {
+        const fs::path user = expansions.parent_path();
+        if (has_managed_layout(user))
+            return user;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] bool listed_id(const std::vector<std::string>& ids, std::string_view id) {
+    for (const std::string& known : ids)
+        if (known == id)
+            return true;
+    return false;
+}
+
+/// A folder this start will play. The demo, when that is what was chosen and
+/// it is not copied yet, comes only from its installer.
+[[nodiscard]] bool
+accepted_install(const GameDirectoryRequest& request, const GameInstall& install) {
+    if (!usable(install))
+        return false;
+    if (request.demo_only && install.demo.outcome != DemoOutcome::ready)
+        return false;
+    return true;
 }
 
 } // namespace
@@ -530,7 +725,7 @@ std::optional<GameDirectory> resolve_game_directory(
     std::optional<RefusedFolder> platform_refused;
     if (!request.choose && !request.platform_default.empty()) {
         auto install = inspect_folder(host, request.platform_default);
-        if (usable(install))
+        if (accepted_install(request, install))
             return resolved(
                 request.platform_default, std::move(install), GameDirectorySource::platform
             );
@@ -547,7 +742,7 @@ std::optional<GameDirectory> resolve_game_directory(
         if (request.stored && !request.stored->empty()) {
             const auto stored = path_from_utf8(*request.stored);
             auto install = inspect_folder(host, stored);
-            if (usable(install))
+            if (accepted_install(request, install))
                 return resolved(stored, std::move(install), GameDirectorySource::stored);
         }
         needed->needed = true;
@@ -573,7 +768,7 @@ std::optional<GameDirectory> resolve_game_directory(
         }
         const auto stored = path_from_utf8(*request.stored);
         auto install = inspect_folder(host, stored);
-        if (!usable(install))
+        if (!accepted_install(request, install))
             throw std::runtime_error(
                 "the Total Annihilation folder chosen earlier can no longer be used: " +
                 path_to_utf8(stored) + " (" + describe_install_problem(install) +
@@ -587,24 +782,23 @@ std::optional<GameDirectory> resolve_game_directory(
         start = path_from_utf8(*request.stored);
         if (!request.choose) {
             auto install = inspect_folder(host, start);
-            if (usable(install))
+            if (accepted_install(request, install))
                 return resolved(start, std::move(install), GameDirectorySource::stored);
             stored_refused = RefusedFolder{
                 start, describe_install_problem(install), install.folder || !install.problem.empty()
             };
         }
     }
-    // The folders found on this machine fill the gap the dialog fills: one
-    // usable folder is played and remembered; several, or a remembered one
-    // that has gone, are offered in the in-engine chooser, as is a start
-    // where the system's dialog may not show (Game Mode) or does not exist.
+    // One usable folder is played and remembered. Otherwise, where the locator
+    // can be shown, it asks: the system's dialog is a button on the desktop
+    // and is not opened from here. Game Mode does not offer that button.
     const bool chooser = request.chooser_offered && needed != nullptr;
     std::vector<FoundInstall> usable_found;
     std::optional<GameDirectory> only_found;
     if (!request.choose || chooser) {
         for (const FoundInstall& candidate : request.found) {
             auto install = inspect_folder(host, candidate.folder);
-            if (!usable(install))
+            if (!accepted_install(request, install))
                 continue;
             if (usable_found.empty()) {
                 only_found =
@@ -616,8 +810,10 @@ std::optional<GameDirectory> resolve_game_directory(
     }
     if (!request.choose && usable_found.size() == 1 && !stored_refused)
         return only_found;
-    if (chooser && (request.chooser_first || !dialog || usable_found.size() > 1 ||
-                    (stored_refused && !usable_found.empty()))) {
+    // The locator is the ask whenever it can be shown. The system's dialog is
+    // not opened here: on the desktop it stays a button (dialog_offered), and
+    // in Game Mode dialog_offered stays false so the button is absent.
+    if (chooser) {
         ask_for_chooser(
             request, platform_refused, stored_refused, std::move(usable_found), dialog, {}, *needed
         );
@@ -676,7 +872,7 @@ std::optional<GameDirectory> resolve_game_directory(
         switch (pick) {
         case FolderPick::chosen: {
             auto install = inspect_folder(host, chosen);
-            if (usable(install))
+            if (accepted_install(request, install))
                 return resolved(chosen, std::move(install), GameDirectorySource::chosen);
             host.tell_user(
                 host.context,
@@ -785,6 +981,217 @@ void remember_mod_directory(oa::platform::preferences::Values& values, const fs:
     }
     values[std::string(mod_directory_preference)] =
         path_to_utf8(fs::absolute(folder).lexically_normal());
+}
+
+std::vector<std::string> copied_content_bundles(const fs::path& folder) {
+    if (const std::optional<fs::path> managed = managed_user_of(folder))
+        return recorded_content_bundles(*managed);
+    std::vector<std::string> ids;
+    if (folder.empty())
+        return ids;
+    std::error_code error;
+    if (!fs::is_directory(folder, error) || error)
+        return ids;
+    std::vector<std::pair<std::string, uint64_t>> owned;
+    const fs::recursive_directory_iterator end;
+    for (fs::recursive_directory_iterator cursor(
+             folder, fs::directory_options::skip_permission_denied, error
+         );
+         !error && cursor != end;
+         cursor.increment(error)) {
+        if (!cursor->is_regular_file(error) || error) {
+            error.clear();
+            continue;
+        }
+        const fs::path relative = cursor->path().lexically_relative(folder);
+        if (relative.empty() || *relative.begin() == "..")
+            continue;
+        std::error_code size_error;
+        const auto bytes = cursor->file_size(size_error);
+        if (!size_error) {
+            const auto spelling = relative.generic_u8string();
+            owned.emplace_back(
+                std::string(spelling.begin(), spelling.end()), static_cast<uint64_t>(bytes)
+            );
+        }
+        error.clear();
+    }
+    std::vector<oa::data::content_bundles::SourceFile> sources;
+    sources.reserve(owned.size());
+    for (const std::pair<std::string, uint64_t>& entry : owned)
+        sources.push_back({entry.first, entry.second});
+    for (const std::string_view id : oa::data::content_bundles::present_bundles(sources))
+        ids.emplace_back(id);
+    return ids;
+}
+
+std::optional<GameDirectory> compose_managed_content(
+    const ManagedMount& request, const oa::platform::preferences::Values& values
+) {
+    const std::vector<std::string> recorded = recorded_content_bundles(request.user_folder);
+    std::vector<std::string_view> copied;
+    copied.reserve(recorded.size());
+    for (const std::string& id : recorded)
+        copied.emplace_back(id);
+    const auto choice = content_choice_from_preferences(values, copied, request.content);
+    if (!choice.error.empty())
+        throw std::runtime_error(choice.error);
+    if (!listed_id(recorded, choice.base_game)) {
+        if (!request.content.empty())
+            throw std::runtime_error("Open Annihilation has not copied " + choice.base_game + ".");
+        return std::nullopt;
+    }
+    if (!request.content.empty()) {
+        for (const std::string& id : choice.expansions)
+            if (!listed_id(recorded, id))
+                throw std::runtime_error("Open Annihilation has not copied " + id + ".");
+    }
+    const oa::data::content_bundles::Bundle* base =
+        oa::data::content_bundles::find_bundle(choice.base_game);
+    if (base == nullptr)
+        return std::nullopt;
+
+    std::vector<fs::path> folders;
+    fs::path mod = chosen_mod_directory(request.mod_dir, request.base_game, values);
+    std::error_code failure;
+    if (!mod.empty() && !fs::is_directory(mod, failure))
+        mod.clear();
+    if (!mod.empty())
+        folders.push_back(mod);
+    for (const std::string& id : choice.expansions) {
+        const oa::data::content_bundles::Bundle* bundle =
+            oa::data::content_bundles::find_bundle(id);
+        if (bundle == nullptr)
+            continue;
+        const fs::path expansion = bundle_directory(request.user_folder, *bundle);
+        if (fs::is_directory(expansion, failure))
+            folders.push_back(expansion);
+    }
+    const fs::path installation = bundle_directory(request.user_folder, *base);
+    folders.push_back(installation);
+
+    ModChoice mod_choice{};
+    mod_choice.folder = mod;
+    mod_choice.profile_file = request.mod_file;
+    mod_choice.accept_unimplemented_hacks = request.accept_unimplemented_hacks;
+    mod_choice.preferences = &values;
+    auto resolved_profile = resolve_folder_profile(folders, mod_choice);
+    if (!resolved_profile.errors.empty()) {
+        std::string message = "the mod profile cannot be used:";
+        for (const std::string& line : resolved_profile.errors)
+            message += "\n  " + line;
+        throw std::runtime_error(message);
+    }
+
+    GameInstall install{};
+    install.folder = true;
+    install.folders = folders;
+    install.profile = std::move(resolved_profile.profile);
+    install.profile_warnings = std::move(resolved_profile.warnings);
+    discover_archives(installation, install, resolved_profile.file);
+    if (!install.profile_errors.empty()) {
+        std::string message = "the mod profile cannot be used:";
+        for (const std::string& line : install.profile_errors)
+            message += "\n  " + line;
+        throw std::runtime_error(message);
+    }
+    if (install.archives.empty()) {
+        if (!request.content.empty())
+            throw std::runtime_error("Open Annihilation has not copied " + choice.base_game + ".");
+        return std::nullopt;
+    }
+
+    GameDirectory directory{};
+    directory.path = installation;
+    directory.archives = std::move(install.archives);
+    directory.source = GameDirectorySource::managed;
+    directory.installation = std::move(install.installation);
+    directory.folders = std::move(install.folders);
+    directory.profile = std::move(install.profile);
+    directory.profile_warnings = std::move(install.profile_warnings);
+    directory.mod_layered = !mod.empty();
+    return directory;
+}
+
+bool roots_hold_movies(std::span<const fs::path> roots) {
+    std::error_code failure;
+    for (const auto& root : roots)
+        for (const auto& folder : fs::directory_iterator(root, failure)) {
+            std::string name = path_to_utf8(folder.path().filename());
+            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char character) {
+                return static_cast<char>(std::tolower(character));
+            });
+            if (name != "data" || !folder.is_directory(failure))
+                continue;
+            for (const auto& file : fs::directory_iterator(folder.path(), failure)) {
+                std::string extension = path_to_utf8(file.path().extension());
+                std::transform(
+                    extension.begin(),
+                    extension.end(),
+                    extension.begin(),
+                    [](unsigned char character) {
+                        return static_cast<char>(std::tolower(character));
+                    }
+                );
+                if (extension == ".zrb")
+                    return true;
+            }
+        }
+    return false;
+}
+
+oa::data::content_bundles::ContentChoice content_choice_from_preferences(
+    const oa::platform::preferences::Values& values,
+    std::span<const std::string_view> copied,
+    std::string_view command_line
+) {
+    namespace bundles = oa::data::content_bundles;
+    namespace settings = oa::ui::engine_settings;
+    bundles::StoredContent stored;
+    std::string base_text;
+    std::string expansions_stored;
+    const auto base = values.find(std::string(settings::key::base_game));
+    if (base != values.end()) {
+        base_text = base->second;
+        stored.base_game = base_text;
+        const auto expansions =
+            values.find(std::string(settings::key::expansions_prefix) + base_text);
+        if (expansions != values.end()) {
+            expansions_stored = expansions->second;
+            stored.expansions = expansions_stored;
+        }
+    }
+    return bundles::resolve_content_choice(stored, copied, command_line);
+}
+
+void remember_content_choice(
+    oa::platform::preferences::Values& values,
+    const oa::data::content_bundles::ContentChoice& choice
+) {
+    namespace settings = oa::ui::engine_settings;
+    values[std::string(settings::key::base_game)] = choice.base_game;
+    values[std::string(settings::key::expansions_prefix) + choice.base_game] =
+        oa::data::content_bundles::expansions_text(choice.expansions);
+}
+
+bool store_content_change(
+    oa::platform::preferences::Values& values,
+    const oa::data::content_bundles::ContentChangeResult& result
+) {
+    namespace bundles = oa::data::content_bundles;
+    namespace settings = oa::ui::engine_settings;
+    if (!result.applied)
+        return false;
+    remember_content_choice(values, result.choice);
+    if (result.mod_cleared == bundles::ModClearReason::none)
+        return true;
+    remember_mod_directory(values, {});
+    values.erase(std::string(settings::key::picked_mod_directory));
+    if (result.mod_cleared == bundles::ModClearReason::required_expansion_off) {
+        values[std::string(settings::key::content_note)] =
+            std::string(bundles::required_expansion_note);
+    }
+    return true;
 }
 
 std::optional<GameDirectory>

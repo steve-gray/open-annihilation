@@ -5,6 +5,10 @@
 // keyed by the engine's English. The game reads this file the same way
 // it reads a language pack's interface.tdf.
 
+
+
+
+
 [,]
 	{
 	de=,;
@@ -45,6 +49,14 @@
 	it=1 file;
 	}
 
+[1 file differs]
+	{
+	de=1 Datei weicht ab;
+	fr=1 fichier diffère;
+	es=1 archivo difiere;
+	it=1 file è diverso;
+	}
+
 [1 file was added]
 	{
 	de=1 Datei wurde hinzugefügt;
@@ -75,6 +87,14 @@
 	fr=1 mod;
 	es=1 mod;
 	it=1 mod;
+	}
+
+[1 of {total} files differs]
+	{
+	de=1 von {total} Dateien weicht ab;
+	fr=1 fichier sur {total} diffère;
+	es=1 de {total} archivos difiere;
+	it=1 di {total} file è diverso;
 	}
 
 [1 player]
@@ -149,6 +169,14 @@
 	it=5–10;
 	}
 
+[A]
+	{
+	de=A;
+	fr=A;
+	es=A;
+	it=A;
+	}
+
 [A dark backdrop under each chat line.]
 	{
 	de=Ein dunkler Hintergrund unter jeder Chatzeile.;
@@ -171,6 +199,22 @@
 	fr=Une ombre sombre sous les polices modernes.;
 	es=Una sombra oscura bajo las fuentes modernas.;
 	it=Un'ombra scura sotto i caratteri moderni.;
+	}
+
+[A drag draws a selection box; two fingers scroll the map.]
+	{
+	de=Ein Ziehen zeichnet einen Auswahlrahmen, zwei Finger scrollen die Karte.;
+	fr=Un glissement trace un cadre de sélection, deux doigts font défiler la carte.;
+	es=Un arrastre dibuja un marco de selección, dos dedos desplazan el mapa.;
+	it=Un trascinamento disegna un riquadro di selezione, due dita scorrono la mappa.;
+	}
+
+[A drag scrolls the map; hold, then drag, for a selection box.]
+	{
+	de=Ein Ziehen verschiebt die Karte, halten, dann ziehen, für einen Auswahlrahmen.;
+	fr=Un glissement fait défiler la carte, maintiens, puis glisse, pour un cadre de sélection.;
+	es=Un arrastre desplaza el mapa, mantén y luego arrastra, para un marco de selección.;
+	it=Un trascinamento scorre la mappa, tieni premuto, poi trascina, per un riquadro di selezione.;
 	}
 
 [A failed graphics driver is skipped.]
@@ -275,6 +319,38 @@
 	fr=Une table du pack ne se lit pas.;
 	es=Una tabla del paquete no se puede leer.;
 	it=Una tabella nel pacchetto non si legge.;
+	}
+
+[A tapped QUEUE, ADD or x5 stays on until it is tapped again.]
+	{
+	de=Ein angetipptes WARTESCHLANGE, HINZUFÜGEN oder x5 bleibt an bis es erneut angetippt wird.;
+	fr=Une pression sur FILE, AJOUTER ou x5 reste active jusqu'à ce qu'il soit touché à nouveau.;
+	es=Un toque en COLA, AÑADIR o x5 permanece activo hasta que se toque de nuevo.;
+	it=Un tocco su CODA, AGGIUNGI o x5 resta attivo finché non viene toccato di nuovo.;
+	}
+
+[A tapped QUEUE, ADD or x5 turns off after the next order or selection.]
+	{
+	de=Ein angetipptes WARTESCHLANGE, HINZUFÜGEN oder x5 geht aus nach dem nächsten Befehl oder der nächsten Auswahl.;
+	fr=Une pression sur FILE, AJOUTER ou x5 s'éteint après le prochain ordre ou la prochaine sélection.;
+	es=Un toque en COLA, AÑADIR o x5 se apaga después de la siguiente orden o selección.;
+	it=Un tocco su CODA, AGGIUNGI o x5 si spegne dopo l'ordine o la selezione successiva.;
+	}
+
+[A window hides its title bar and borders while a game is played; menus show them.]
+	{
+	de=Ein Fenster verbirgt Titelleiste und Ränder während eine Partie gespielt wird. Menüs zeigen sie.;
+	fr=Une fenêtre cache sa barre de titre et ses bords pendant qu'une partie se joue. Les menus les montrent.;
+	es=Una ventana oculta su barra de título y sus bordes mientras se juega una partida. Los menús los muestran.;
+	it=Una finestra nasconde la barra del titolo e i bordi mentre si gioca una partita. I menu li mostrano.;
+	}
+
+[A window shows its title bar and borders on every screen, a game's included.]
+	{
+	de=Ein Fenster zeigt Titelleiste und Ränder auf jedem Bildschirm, ein Spiel ist dabei.;
+	fr=Une fenêtre montre sa barre de titre et ses bords sur chaque écran, une partie est incluse.;
+	es=Una ventana muestra su barra de título y sus bordes en cada pantalla, hay una partida.;
+	it=Una finestra mostra la barra del titolo e i bordi su ogni schermo, c'è una partita.;
 	}
 
 [ADD]
@@ -383,7 +459,7 @@
 
 [ARM ORDER]
 	{
-	de=BEFEHL SCHÄRFEN;
+	de=BEFEHL WÄHLEN;
 	fr=ARMER L'ORDRE;
 	es=ARMAR ORDEN;
 	it=ARMA ORDINE;
@@ -415,7 +491,7 @@
 
 [ATTACK: tap to arm it, then tap the unit or ground to fire at.]
 	{
-	de=ANGREIFEN: tippe, um den Befehl zu schärfen, dann tippe die Einheit oder den Boden, auf die gefeuert wird.;
+	de=ANGREIFEN: tippe, um den Befehl zu wählen, dann tippe die Einheit oder den Boden, auf die gefeuert wird.;
 	fr=ATTAQUER : touche pour armer l'ordre, puis touche l'unité ou le sol à prendre pour cible.;
 	es=ATACAR: toca para armar la orden, luego toca la unidad o el suelo al que disparar.;
 	it=ATTACCA: tocca per armare l'ordine, poi tocca l'unità o il terreno a cui sparare.;
@@ -493,6 +569,14 @@
 	it=Aggiungi {registry} per ottenere {pack};
 	}
 
+[After restoring this {device} from a backup, add the game files again.]
+	{
+	de=Nach dem Wiederherstellen dieses {device} aus einer Sicherung, füg die Spieldateien erneut hinzu.;
+	fr=Après la restauration de ce {device} depuis une sauvegarde, ajoute à nouveau les fichiers du jeu.;
+	es=Tras restaurar este {device} desde una copia de seguridad, añade de nuevo los archivos del juego.;
+	it=Dopo aver ripristinato questo {device} da un backup, aggiungi di nuovo i file di gioco.;
+	}
+
 [After zoom]
 	{
 	de=Nach dem Zoom;
@@ -515,6 +599,14 @@
 	fr=Tout;
 	es=Todo;
 	it=Tutto;
+	}
+
+[All files match]
+	{
+	de=Alle Dateien stimmen überein;
+	fr=Tous les fichiers correspondent;
+	es=Todos los archivos coinciden;
+	it=Tutti i file corrispondono;
 	}
 
 [Alliance Menu Everywhere]
@@ -597,6 +689,14 @@
 	it=Un'altra copia di Open Annihilation sta modificando la tua cartella dei mod. Riprova quando ha finito.;
 	}
 
+[Applications]
+	{
+	de=Programme;
+	fr=Applications;
+	es=Aplicaciones;
+	it=Applicazioni;
+	}
+
 [Applies at next match]
 	{
 	de=Gilt ab dem nächsten Gefecht;
@@ -611,6 +711,14 @@
 	fr=Des archives sont en vrac dans le dossier d'Open Annihilation. Les rassembler dans Total Annihilation ?;
 	es=Hay archivos sueltos en la carpeta de Open Annihilation. ¿Reunirlos en Total Annihilation?;
 	it=Gli archivi sono sparsi nella cartella di Open Annihilation. Riunirli in Total Annihilation?;
+	}
+
+[As far as the view always went: 1/6 of normal size with Full hardware acceleration, else 1/2.]
+	{
+	de=So weit, wie die Ansicht immer ging: 1/6 der normalen Größe mit Hardwarebeschleunigung Voll, sonst 1/2.;
+	fr=Aussi loin que la vue allait toujours : 1/6 de la normale taille avec l'accélération matérielle Complet, sinon 1/2.;
+	es=Tan lejos como la vista siempre llegaba: 1/6 de lo normal tamaño con aceleración por hardware Completo, si no 1/2.;
+	it=Fin dove la vista arrivava sempre: 1/6 del normale dimensione con accelerazione hardware Completo, altrimenti 1/2.;
 	}
 
 [Assist only]
@@ -669,6 +777,14 @@
 	it=Automatico;
 	}
 
+[Automatic: a selection box on a tablet, scrolling on a phone.]
+	{
+	de=Automatisch: ein Auswahlrahmen auf einem Tablet, Scrollen auf einem Telefon.;
+	fr=Automatique : un cadre de sélection sur une tablette, défilement sur un téléphone.;
+	es=Automático: un marco de selección en una tableta, desplazamiento en un teléfono.;
+	it=Automatico: un riquadro di selezione su un tablet, scorrimento su un telefono.;
+	}
+
 [Automatically]
 	{
 	de=Automatisch;
@@ -685,12 +801,28 @@
 	it=Pausa automatica: solo l'host può riprendere;
 	}
 
+[B]
+	{
+	de=B;
+	fr=B;
+	es=B;
+	it=B;
+	}
+
 [BACK]
 	{
 	de=ZURÜCK;
 	fr=RETOUR;
 	es=ATRÁS;
 	it=INDIETRO;
+	}
+
+[BASE GAME]
+	{
+	de=BASISSPIEL;
+	fr=JEU DE BASE;
+	es=JUEGO BASE;
+	it=GIOCO BASE;
 	}
 
 [BLAST]
@@ -763,22 +895,6 @@
 	fr=Base;
 	es=Base;
 	it=Base;
-	}
-
-[Base Game]
-	{
-	de=Grundspiel;
-	fr=Jeu de base;
-	es=Juego base;
-	it=Gioco di base;
-	}
-
-[Base Game (Disable Mods)]
-	{
-	de=Grundspiel (Mods ausschalten);
-	fr=Jeu de base (désactiver les mods);
-	es=Juego base (desactivar mods);
-	it=Gioco di base (disattiva i mod);
 	}
 
 [Base game]
@@ -893,12 +1009,12 @@
 	it=Battle Tactics;
 	}
 
-[Battle room · Total Annihilation 3.1c]
+[Battle room · No Mod]
 	{
-	de=Gefechtsraum · Total Annihilation 3.1c;
-	fr=Salle de bataille · Total Annihilation 3.1c;
-	es=Sala de batalla · Total Annihilation 3.1c;
-	it=Sala di battaglia · Total Annihilation 3.1c;
+	de=Gefechtsraum · Kein Mod;
+	fr=Salle de bataille · Aucun mod;
+	es=Sala de batalla · Ningún mod;
+	it=Sala di battaglia · Nessun mod;
 	}
 
 [Battle room · playing {mod}]
@@ -925,20 +1041,20 @@
 	it=Entrambi;
 	}
 
+[Bottles]
+	{
+	de=Bottles;
+	fr=Bottles;
+	es=Bottles;
+	it=Bottles;
+	}
+
 [Box]
 	{
 	de=Rahmen;
 	fr=Cadre;
 	es=Marco;
 	it=Riquadro;
-	}
-
-[Browse…]
-	{
-	de=Durchsuchen…;
-	fr=Parcourir…;
-	es=Explorar…;
-	it=Sfoglia…;
 	}
 
 [Build Preview]
@@ -1055,7 +1171,7 @@
 
 [CAPTURE: tap to arm it, then tap the unit to capture.]
 	{
-	de=EROBERN: tippe, um den Befehl zu schärfen, dann tippe die Einheit, die erobert wird.;
+	de=EROBERN: tippe, um den Befehl zu wählen, dann tippe die Einheit, die erobert wird.;
 	fr=CAPTURER : touche pour armer l'ordre, puis touche l'unité à capturer.;
 	es=CAPTURAR: toca para armar la orden, luego toca la unidad que capturar.;
 	it=CATTURA: tocca per armare l'ordine, poi tocca l'unità da catturare.;
@@ -1091,6 +1207,14 @@
 	fr=CHANGER CE QUI EST COPIÉ;
 	es=CAMBIAR LO QUE SE COPIA;
 	it=CAMBIA CIÒ CHE VIENE COPIATO;
+	}
+
+[CHANGE…]
+	{
+	de=WECHSELN…;
+	fr=CHANGER…;
+	es=CAMBIAR…;
+	it=CAMBIA…;
 	}
 
 [CHAT]
@@ -1199,7 +1323,7 @@
 
 [CLEAR: takes back the armed order or the building being placed, else clears the selection.]
 	{
-	de=LEEREN: nimmt den geschärften Befehl oder das platzierte Gebäude zurück, sonst leert es die Auswahl.;
+	de=LEEREN: nimmt den gewählten Befehl oder das platzierte Gebäude zurück, sonst leert es die Auswahl.;
 	fr=EFFACER : retire l'ordre armé ou le bâtiment en cours de placement, sinon efface la sélection.;
 	es=BORRAR: retira la orden armada o el edificio que se coloca, si no, borra la selección.;
 	it=AZZERA: ritira l'ordine armato o l'edificio in posizionamento, altrimenti azzera la selezione.;
@@ -1277,6 +1401,14 @@
 	it=Condivisione della camera;
 	}
 
+[Campaign]
+	{
+	de=Kampagne;
+	fr=Campagne;
+	es=Campaña;
+	it=Campagna;
+	}
+
 [Campaign complete. This game includes no further missions.]
 	{
 	de=Kampagne abgeschlossen. Dieses Spiel enthält keine weiteren Missionen.;
@@ -1301,6 +1433,22 @@
 	it=Annulla il download;
 	}
 
+[Cavedog tilesets]
+	{
+	de=Cavedog-Tilesets;
+	fr=Tilesets Cavedog;
+	es=Tilesets de Cavedog;
+	it=Tileset Cavedog;
+	}
+
+[Cavedog units]
+	{
+	de=Cavedog-Einheiten;
+	fr=Unités Cavedog;
+	es=Unidades de Cavedog;
+	it=Unità Cavedog;
+	}
+
 [Cells a metal extractor snaps to metal.]
 	{
 	de=Zellen, an denen ein Metallextraktor auf Metall einrastet.;
@@ -1323,6 +1471,14 @@
 	fr=Canal d'extension de discussion;
 	es=Canal de extensión del chat;
 	it=Canale di estensione della chat;
+	}
+
+[Chat in any language with players who have it; others see ? for letters they lack.]
+	{
+	de=Chatte in jeder Sprache mit Spielern, die es eingeschaltet haben, andere sehen ? für Buchstaben, die ihnen fehlen.;
+	fr=Discute dans n'importe quelle langue avec les joueurs qui l'ont, les autres voient ? pour les lettres qui leur manquent.;
+	es=Chatea en cualquier idioma con jugadores que lo tienen, otros ven ? para las letras que les faltan.;
+	it=Chatta in qualsiasi lingua con i giocatori che ce l'hanno, gli altri vedono ? per le lettere che non hanno.;
 	}
 
 [Check for content updates]
@@ -1451,30 +1607,6 @@
 	fr=Choisis-le avec JOUER dans la Bibliothèque pour y jouer.;
 	es=Elígelo con JUGAR AHORA en la Biblioteca para jugarlo.;
 	it=Sceglilo con GIOCA ORA nella Biblioteca per giocarlo.;
-	}
-
-[Choose the folder in the system's own window.]
-	{
-	de=Wähle den Ordner im eigenen Fenster des Systems.;
-	fr=Choisis le dossier dans la fenêtre du système.;
-	es=Elige la carpeta en la ventana del sistema.;
-	it=Scegli la cartella nella finestra del sistema.;
-	}
-
-[Choose the folder its installer is in, usually Downloads.]
-	{
-	de=Wähle den Ordner, in dem sein Installationsprogramm liegt, meist Downloads.;
-	fr=Choisis le dossier de son installateur, en général Téléchargements.;
-	es=Elige la carpeta de su instalador, normalmente Descargas.;
-	it=Scegli la cartella del suo installer, di solito Download.;
-	}
-
-[Choose the folder that holds totala1.hpi, or the folder that holds the installer of the Total Annihilation demo (1997).]
-	{
-	de=Wähle den Ordner mit totala1.hpi oder den Ordner mit dem Installationsprogramm der Total Annihilation-Demo (1997).;
-	fr=Choisis le dossier qui contient totala1.hpi, ou celui qui contient l'installateur de la démo Total Annihilation (1997).;
-	es=Elige la carpeta que contiene totala1.hpi, o la carpeta que contiene el instalador de la demo de Total Annihilation (1997).;
-	it=Scegli la cartella che contiene totala1.hpi, o la cartella che contiene l'installer della demo di Total Annihilation (1997).;
 	}
 
 [Choose the folder that holds totala1.hpi.]
@@ -1831,7 +1963,7 @@
 
 [D-GUN: tap to arm it, then tap where the commander fires it.]
 	{
-	de=D-GUN: tippe, um den Befehl zu schärfen, dann tippe dorthin, wo der Kommandant feuert.;
+	de=D-GUN: tippe, um den Befehl zu wählen, dann tippe dorthin, wo der Kommandant feuert.;
 	fr=D-GUN : touche pour armer l'ordre, puis touche l'endroit où le commandant tire.;
 	es=D-GUN: toca para armar la orden, luego toca donde dispara el comandante.;
 	it=D-GUN: tocca per armare l'ordine, poi tocca dove spara il comandante.;
@@ -1891,6 +2023,14 @@
 	fr=DÉTAILS;
 	es=DETALLES;
 	it=DETTAGLI;
+	}
+
+[DETAILS…]
+	{
+	de=DETAILS…;
+	fr=DÉTAILS…;
+	es=DETALLES…;
+	it=DETTAGLI…;
 	}
 
 [DEVELOPER]
@@ -1957,6 +2097,14 @@
 	it=TRASCINA PER MUOVERE · DOPPIO TOCCO O TIENI PREMUTO PER POSIZIONARE;
 	}
 
+[Demo]
+	{
+	de=Demo;
+	fr=Démo;
+	es=Demo;
+	it=Demo;
+	}
+
 [Desktop]
 	{
 	de=Schreibtisch;
@@ -1997,6 +2145,14 @@
 	it=Modalità di schermo;
 	}
 
+[Documents]
+	{
+	de=Dokumente;
+	fr=Documents;
+	es=Documentos;
+	it=Documenti;
+	}
+
 [Doesn't fit]
 	{
 	de=Passt nicht;
@@ -2027,6 +2183,62 @@
 	fr=Points;
 	es=Puntos;
 	it=Punti;
+	}
+
+[Dots farther out than 1/12 of normal size. Closer in, units are drawn as models.]
+	{
+	de=Punkte weiter draußen als 1/12 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
+	fr=Des points plus loin que 1/12 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
+	es=Puntos más lejos que 1/12 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
+	it=Punti più lontani di 1/12 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
+	}
+
+[Dots farther out than 1/16 of normal size. Closer in, units are drawn as models.]
+	{
+	de=Punkte weiter draußen als 1/16 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
+	fr=Des points plus loin que 1/16 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
+	es=Puntos más lejos que 1/16 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
+	it=Punti più lontani di 1/16 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
+	}
+
+[Dots farther out than 1/2 of normal size. Closer in, units are drawn as models.]
+	{
+	de=Punkte weiter draußen als 1/2 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
+	fr=Des points plus loin que 1/2 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
+	es=Puntos más lejos que 1/2 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
+	it=Punti più lontani di 1/2 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
+	}
+
+[Dots farther out than 1/3 of normal size. Closer in, units are drawn as models.]
+	{
+	de=Punkte weiter draußen als 1/3 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
+	fr=Des points plus loin que 1/3 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
+	es=Puntos más lejos que 1/3 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
+	it=Punti più lontani di 1/3 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
+	}
+
+[Dots farther out than 1/4 of normal size. Closer in, units are drawn as models.]
+	{
+	de=Punkte weiter draußen als 1/4 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
+	fr=Des points plus loin que 1/4 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
+	es=Puntos más lejos que 1/4 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
+	it=Punti più lontani di 1/4 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
+	}
+
+[Dots farther out than 1/6 of normal size. Closer in, units are drawn as models.]
+	{
+	de=Punkte weiter draußen als 1/6 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
+	fr=Des points plus loin que 1/6 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
+	es=Puntos más lejos que 1/6 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
+	it=Punti più lontani di 1/6 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
+	}
+
+[Dots farther out than 1/8 of normal size. Closer in, units are drawn as models.]
+	{
+	de=Punkte weiter draußen als 1/8 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
+	fr=Des points plus loin que 1/8 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
+	es=Puntos más lejos que 1/8 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
+	it=Punti più lontani di 1/8 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
 	}
 
 [Download]
@@ -2181,6 +2393,22 @@
 	it=LIMITI DEL MOTORE;
 	}
 
+[EXPANSIONS]
+	{
+	de=ERWEITERUNGEN;
+	fr=EXTENSIONS;
+	es=EXPANSIONES;
+	it=ESPANSIONI;
+	}
+
+[EXPANSIONS · {on} OF {count} ON]
+	{
+	de=ERWEITERUNGEN · {on} VON {count} AN;
+	fr=EXTENSIONS · {on} SUR {count} ACTIVÉES;
+	es=EXPANSIONES · {on} DE {count} ACTIVAS;
+	it=ESPANSIONI · {on} DI {count} ATTIVE;
+	}
+
 [Each frame waits for the display: no tearing.]
 	{
 	de=Jedes Bild wartet auf die Anzeige: kein Zerreißen.;
@@ -2301,6 +2529,30 @@
 	it=Lampo di esplosione;
 	}
 
+[Explosions do not light up the ground, whatever a mod asks for.]
+	{
+	de=Explosionen leuchten den Boden nicht an, was auch immer ein Mod verlangt.;
+	fr=Les explosions n'éclairent pas le sol, tout ce qu'un mod demande.;
+	es=Las explosiones no iluminan el suelo, lo que pida un mod.;
+	it=Le esplosioni non illuminano il terreno, qualunque cosa chieda un mod.;
+	}
+
+[Explosions light up the ground as the game drew it, or less where a mod asks.]
+	{
+	de=Explosionen leuchten den Boden an wie das Spiel es gezeichnet hat, oder weniger, wo ein Mod es verlangt.;
+	fr=Les explosions éclairent le sol comme le jeu l'a dessiné, ou moins là où un mod le demande.;
+	es=Las explosiones iluminan el suelo como el juego lo dibujó, o menos donde un mod lo pide.;
+	it=Le esplosioni illuminano il terreno come il gioco lo ha disegnato, o meno dove un mod lo chiede.;
+	}
+
+[Explosions light up the ground at half strength, or less where a mod asks.]
+	{
+	de=Explosionen leuchten den Boden zur Hälfte an Stärke, oder weniger, wo ein Mod es verlangt.;
+	fr=Les explosions éclairent le sol à moitié force, ou moins là où un mod le demande.;
+	es=Las explosiones iluminan el suelo a la mitad fuerza, o menos donde un mod lo pide.;
+	it=Le esplosioni illuminano il terreno a metà forza, o meno dove un mod lo chiede.;
+	}
+
 [External Exports]
 	{
 	de=Externe Exporte;
@@ -2381,6 +2633,14 @@
 	it=FORZA: Ctrl per ordini e selezione finché è tenuto, così un clic forza il fuoco sul terreno o su un alleato.;
 	}
 
+[FOUND]
+	{
+	de=GEFUNDEN;
+	fr=TROUVÉS;
+	es=ENCONTRADOS;
+	it=TROVATI;
+	}
+
 [Factory Tick Filter]
 	{
 	de=Fabrik-Tickfilter;
@@ -2419,6 +2679,30 @@
 	fr=Les fichiers ajoutés à son dossier, ou modifiés, depuis son installation sont remplacés ou retirés.;
 	es=Los archivos añadidos a su carpeta, o cambiados, desde que se instaló se reemplazan o se quitan.;
 	it=I file aggiunti alla sua cartella, o modificati, da quando è stato installato vengono sostituiti o rimossi.;
+	}
+
+[Files that differ:]
+	{
+	de=Dateien, die abweichen:;
+	fr=Fichiers qui diffèrent :;
+	es=Archivos que difieren:;
+	it=File che differiscono:;
+	}
+
+[Filter]
+	{
+	de=Filter;
+	fr=Filtrer;
+	es=Filtrar;
+	it=Filtra;
+	}
+
+[Finder's Get Info › Open with chooses another opener.]
+	{
+	de=Finder: Informationen › Öffnen mit wählt ein anderes Programm zum Öffnen.;
+	fr=Lire les informations du Finder › Ouvrir avec choisit un autre ouvreur.;
+	es=Obtener información del Finder › Abrir con elige otro programa para abrir.;
+	it=Ottieni informazioni del Finder › Apri con sceglie un altro programma per aprire.;
 	}
 
 [Finishes when you leave {name}.]
@@ -2589,20 +2873,20 @@
 	it=Anelli completi;
 	}
 
+[Full screen at this size, or a window of it. Applies when you press OK.]
+	{
+	de=Vollbild in dieser Größe oder ein Fenster davon. Gilt, wenn du OK drückst.;
+	fr=Plein écran à cette taille, ou une fenêtre de celle-ci. S'applique quand tu appuies sur OK.;
+	es=Pantalla completa a este tamaño, o una ventana de ella. Se aplica cuando pulsas OK.;
+	it=Schermo intero a questa dimensione, o una finestra di essa. Si applica quando premi OK.;
+	}
+
 [GAME FILES]
 	{
 	de=SPIELDATEIEN;
 	fr=FICHIERS DU JEU;
 	es=ARCHIVOS DEL JUEGO;
 	it=FILE DI GIOCO;
-	}
-
-[GAME FOLDER]
-	{
-	de=SPIELORDNER;
-	fr=DOSSIER DU JEU;
-	es=CARPETA DEL JUEGO;
-	it=CARTELLA DI GIOCO;
 	}
 
 [GAME FOLDER FOUND]
@@ -2619,6 +2903,22 @@
 	fr=MENU DU JEU;
 	es=MENÚ DEL JUEGO;
 	it=MENU DI GIOCO;
+	}
+
+[GAMES]
+	{
+	de=SPIELE;
+	fr=JEUX;
+	es=JUEGOS;
+	it=GIOCHI;
+	}
+
+[GAMES ON THIS DECK]
+	{
+	de=SPIELE AUF DIESEM DECK;
+	fr=JEUX SUR CE DECK;
+	es=JUEGOS EN ESTE DECK;
+	it=GIOCHI SU QUESTO DECK;
 	}
 
 [GATHER THEM]
@@ -2661,6 +2961,54 @@
 	it=DAI;
 	}
 
+[GOG installer (Windows)]
+	{
+	de=GOG-Installer (Windows);
+	fr=Installateur GOG (Windows);
+	es=Instalador de GOG (Windows);
+	it=Installer GOG (Windows);
+	}
+
+[GOG installer (macOS)]
+	{
+	de=GOG-Installer (macOS);
+	fr=Installateur GOG (macOS);
+	es=Instalador de GOG (macOS);
+	it=Installer GOG (macOS);
+	}
+
+[GOG installer (older Macs)]
+	{
+	de=GOG-Installer (ältere Macs);
+	fr=Installateur GOG (anciens Mac);
+	es=Instalador de GOG (Mac antiguos);
+	it=Installer GOG (Mac meno recenti);
+	}
+
+[GOG installer for Windows]
+	{
+	de=GOG-Installer für Windows;
+	fr=Installateur GOG pour Windows;
+	es=Instalador de GOG para Windows;
+	it=Installer GOG per Windows;
+	}
+
+[GOG installer for macOS]
+	{
+	de=GOG-Installer für macOS;
+	fr=Installateur GOG pour macOS;
+	es=Instalador de GOG para macOS;
+	it=Installer GOG per macOS;
+	}
+
+[GOG installer for older Macs]
+	{
+	de=GOG-Installer für ältere Macs;
+	fr=Installateur GOG pour anciens Mac;
+	es=Instalador de GOG para Mac antiguos;
+	it=Installer GOG per Mac meno recenti;
+	}
+
 [GRAPHICS]
 	{
 	de=GRAFIK;
@@ -2679,7 +3027,7 @@
 
 [GUARD: tap to arm it, then tap the unit to guard.]
 	{
-	de=BEWACHEN: tippe, um den Befehl zu schärfen, dann tippe die Einheit, die bewacht wird.;
+	de=BEWACHEN: tippe, um den Befehl zu wählen, dann tippe die Einheit, die bewacht wird.;
 	fr=GARDER : touche pour armer l'ordre, puis touche l'unité à garder.;
 	es=PROTEGER: toca para armar la orden, luego toca la unidad que proteger.;
 	it=PROTEGGI: tocca per armare l'ordine, poi tocca l'unità da proteggere.;
@@ -2731,6 +3079,14 @@
 	fr=Archives du jeu;
 	es=Archivos comprimidos del juego;
 	it=Archivi di gioco;
+	}
+
+[Game content]
+	{
+	de=Spielinhalt;
+	fr=Contenu du jeu;
+	es=Contenido del juego;
+	it=Contenuto di gioco;
 	}
 
 [Game files]
@@ -2909,6 +3265,14 @@
 	it=Qui la vista è disegnata come quando è spento.;
 	}
 
+[Heroic]
+	{
+	de=Heroic;
+	fr=Heroic;
+	es=Heroic;
+	it=Heroic;
+	}
+
 [Hidden in play]
 	{
 	de=Im Spiel verborgen;
@@ -2957,6 +3321,22 @@
 	it=Tieni premuto per autodistruggerti;
 	}
 
+[Holds {bundles}.]
+	{
+	de=Enthält {bundles}.;
+	fr=Contient {bundles}.;
+	es=Contiene {bundles}.;
+	it=Contiene {bundles}.;
+	}
+
+[Home]
+	{
+	de=Benutzerordner;
+	fr=Dossier personnel;
+	es=Carpeta personal;
+	it=Inizio;
+	}
+
 [Host Stays as Watcher]
 	{
 	de=Der Gastgeber bleibt Zuschauer;
@@ -2979,6 +3359,14 @@
 	fr=De combien le pointeur bouge pour un glissement.;
 	es=Cuánto se mueve el puntero con un deslizamiento.;
 	it=Quanto si muove il puntatore con uno scorrimento.;
+	}
+
+[How large Open Annihilation's own screens are drawn. Auto suits the window's height.]
+	{
+	de=Wie groß die eigenen Bildschirme von Open Annihilation werden gezeichnet. Auto passt zur Höhe des Fensters.;
+	fr=La taille des écrans propres à Open Annihilation sont dessinées. Auto convient à la hauteur de la fenêtre.;
+	es=Qué tamaño tienen las pantallas propias de Open Annihilation se dibujan. Auto se ajusta a la altura de la ventana.;
+	it=Quanto sono grandi le schermate proprie di Open Annihilation vengono disegnate. Auto si adatta all'altezza della finestra.;
 	}
 
 [How long a finger or button is held for a hold.]
@@ -3115,6 +3503,102 @@
 	fr=Ignorer les morts de l'unité 0;
 	es=Ignorar las muertes de la unidad 0;
 	it=Ignora le morti dell'unità 0;
+	}
+
+[In Full the card draws 16x16 samples a pixel and scales them down for smoother edges.]
+	{
+	de=Bei Voll zeichnet die Karte 16x16 Abtastungen je Pixel und skaliert sie für glattere Kanten herunter.;
+	fr=En Complet la carte dessine 16x16 échantillons par pixel et les réduit pour des bords plus lisses.;
+	es=En Completo la tarjeta dibuja 16x16 muestras por píxel y las reduce para bordes más suaves.;
+	it=In Completo la scheda disegna 16x16 campioni per pixel e le riduce per bordi più lisci.;
+	}
+
+[In Full the card draws 16x16 samples a pixel the most this window allows, scaled down.]
+	{
+	de=Bei Voll zeichnet die Karte 16x16 Abtastungen je Pixel das meiste, was dieses Fenster erlaubt, herunterskaliert.;
+	fr=En Complet la carte dessine 16x16 échantillons par pixel le plus que cette fenêtre permet, réduit.;
+	es=En Completo la tarjeta dibuja 16x16 muestras por píxel lo máximo que permite esta ventana, reducido.;
+	it=In Completo la scheda disegna 16x16 campioni per pixel il massimo che questa finestra permette, ridotto.;
+	}
+
+[In Full the card draws 2x2 samples a pixel and scales them down for smoother edges.]
+	{
+	de=Bei Voll zeichnet die Karte 2x2 Abtastungen je Pixel und skaliert sie für glattere Kanten herunter.;
+	fr=En Complet la carte dessine 2x2 échantillons par pixel et les réduit pour des bords plus lisses.;
+	es=En Completo la tarjeta dibuja 2x2 muestras por píxel y las reduce para bordes más suaves.;
+	it=In Completo la scheda disegna 2x2 campioni per pixel e le riduce per bordi più lisci.;
+	}
+
+[In Full the card draws 2x2 samples a pixel the most this window allows, scaled down.]
+	{
+	de=Bei Voll zeichnet die Karte 2x2 Abtastungen je Pixel das meiste, was dieses Fenster erlaubt, herunterskaliert.;
+	fr=En Complet la carte dessine 2x2 échantillons par pixel le plus que cette fenêtre permet, réduit.;
+	es=En Completo la tarjeta dibuja 2x2 muestras por píxel lo máximo que permite esta ventana, reducido.;
+	it=In Completo la scheda disegna 2x2 campioni per pixel il massimo che questa finestra permette, ridotto.;
+	}
+
+[In Full the card draws 4x4 samples a pixel and scales them down for smoother edges.]
+	{
+	de=Bei Voll zeichnet die Karte 4x4 Abtastungen je Pixel und skaliert sie für glattere Kanten herunter.;
+	fr=En Complet la carte dessine 4x4 échantillons par pixel et les réduit pour des bords plus lisses.;
+	es=En Completo la tarjeta dibuja 4x4 muestras por píxel y las reduce para bordes más suaves.;
+	it=In Completo la scheda disegna 4x4 campioni per pixel e le riduce per bordi più lisci.;
+	}
+
+[In Full the card draws 4x4 samples a pixel the most this window allows, scaled down.]
+	{
+	de=Bei Voll zeichnet die Karte 4x4 Abtastungen je Pixel das meiste, was dieses Fenster erlaubt, herunterskaliert.;
+	fr=En Complet la carte dessine 4x4 échantillons par pixel le plus que cette fenêtre permet, réduit.;
+	es=En Completo la tarjeta dibuja 4x4 muestras por píxel lo máximo que permite esta ventana, reducido.;
+	it=In Completo la scheda disegna 4x4 campioni per pixel il massimo che questa finestra permette, ridotto.;
+	}
+
+[In Full the card draws 8x8 samples a pixel and scales them down for smoother edges.]
+	{
+	de=Bei Voll zeichnet die Karte 8x8 Abtastungen je Pixel und skaliert sie für glattere Kanten herunter.;
+	fr=En Complet la carte dessine 8x8 échantillons par pixel et les réduit pour des bords plus lisses.;
+	es=En Completo la tarjeta dibuja 8x8 muestras por píxel y las reduce para bordes más suaves.;
+	it=In Completo la scheda disegna 8x8 campioni per pixel e le riduce per bordi più lisci.;
+	}
+
+[In Full the card draws 8x8 samples a pixel the most this window allows, scaled down.]
+	{
+	de=Bei Voll zeichnet die Karte 8x8 Abtastungen je Pixel das meiste, was dieses Fenster erlaubt, herunterskaliert.;
+	fr=En Complet la carte dessine 8x8 échantillons par pixel le plus que cette fenêtre permet, réduit.;
+	es=En Completo la tarjeta dibuja 8x8 muestras por píxel lo máximo que permite esta ventana, reducido.;
+	it=In Completo la scheda disegna 8x8 campioni per pixel il massimo che questa finestra permette, ridotto.;
+	}
+
+[In Full the graphics card draws the view 1:1; a level draws it finer for smoother edges.]
+	{
+	de=Bei Voll zeichnet die Grafikkarte die Ansicht 1:1. eine Stufe zeichnet es feiner für glattere Kanten.;
+	fr=En Complet la carte graphique dessine la vue en 1:1. un niveau le dessine plus fin pour des bords plus lisses.;
+	es=En Completo la tarjeta gráfica dibuja la vista a 1:1. un nivel lo dibuja más fino para bordes más suaves.;
+	it=In Completo la scheda grafica disegna la vista 1:1. un livello lo disegna più fine per bordi più lisci.;
+	}
+
+[In to 2x normal size at most. The wheel, a pinch and a controller stop there.]
+	{
+	de=Hinein bis höchstens 2x der normalen Größe. Das Rad, ein Zwicken und ein Controller hören dort auf.;
+	fr=Jusqu'à 2x la taille normale au plus. La molette, un pincement et une manette s'arrêtent là.;
+	es=Hasta 2x el tamaño normal como máximo. La rueda, un pellizco y un mando se detienen ahí.;
+	it=Fino a 2x la dimensione normale al massimo. La rotella, una pizzicata e un controller si fermano lì.;
+	}
+
+[In to 3x normal size at most. The wheel, a pinch and a controller stop there.]
+	{
+	de=Hinein bis höchstens 3x der normalen Größe. Das Rad, ein Zwicken und ein Controller hören dort auf.;
+	fr=Jusqu'à 3x la taille normale au plus. La molette, un pincement et une manette s'arrêtent là.;
+	es=Hasta 3x el tamaño normal como máximo. La rueda, un pellizco y un mando se detienen ahí.;
+	it=Fino a 3x la dimensione normale al massimo. La rotella, una pizzicata e un controller si fermano lì.;
+	}
+
+[In to 4x normal size at most. The wheel, a pinch and a controller stop there.]
+	{
+	de=Hinein bis höchstens 4x der normalen Größe. Das Rad, ein Zwicken und ein Controller hören dort auf.;
+	fr=Jusqu'à 4x la taille normale au plus. La molette, un pincement et une manette s'arrêtent là.;
+	es=Hasta 4x el tamaño normal como máximo. La rueda, un pellizco y un mando se detienen ahí.;
+	it=Fino a 4x la dimensione normale al massimo. La rotella, una pizzicata e un controller si fermano lì.;
 	}
 
 [In use]
@@ -3807,7 +4291,7 @@
 
 [LOAD: tap to arm it, then tap the unit to load.]
 	{
-	de=VERLADEN: tippe, um ihn zu schärfen, dann tippe die Einheit zum Verladen.;
+	de=VERLADEN: tippe, um ihn zu wählen, dann tippe die Einheit zum Verladen.;
 	fr=EMBARQUER : touche pour l'armer, puis touche l'unité à embarquer.;
 	es=CARGAR: toca para armarla, luego toca la unidad a cargar.;
 	it=CARICA: tocca per armarlo, poi tocca l'unità da caricare.;
@@ -3965,6 +4449,14 @@
 	it=Caricamento anteprima;
 	}
 
+[Locate the game]
+	{
+	de=Spiel finden;
+	fr=Localiser le jeu;
+	es=Localizar el juego;
+	it=Individua il gioco;
+	}
+
 [Locked during a game]
 	{
 	de=Während einer Partie gesperrt;
@@ -3987,14 +4479,6 @@
 	fr=Verrouillé pendant une partie. Choisis le mod dans le menu principal.;
 	es=Bloqueado durante una partida. Elige el mod en el menú principal.;
 	it=Bloccato durante una partita. Scegli il mod dal menu principale.;
-	}
-
-[Look through this computer's folders, drives and SD cards.]
-	{
-	de=Sieh die Ordner, Laufwerke und SD-Karten dieses Computers durch.;
-	fr=Parcours les dossiers, lecteurs et cartes SD de cet ordinateur.;
-	es=Revisa las carpetas, unidades y tarjetas SD de este ordenador.;
-	it=Sfoglia le cartelle, le unità e le schede SD di questo computer.;
 	}
 
 [Looking at the file]
@@ -4035,6 +4519,14 @@
 	fr=Baisse-le pour économiser l'énergie.;
 	es=Bájalo para ahorrar energía.;
 	it=Abbassalo per risparmiare energia.;
+	}
+
+[Lutris]
+	{
+	de=Lutris;
+	fr=Lutris;
+	es=Lutris;
+	it=Lutris;
 	}
 
 [M]
@@ -4223,7 +4715,7 @@
 
 [MOVE: tap to arm it, then tap where the selection goes.]
 	{
-	de=BEWEGEN: tippe, um ihn zu schärfen, dann tippe, wohin die Auswahl geht.;
+	de=BEWEGEN: tippe, um ihn zu wählen, dann tippe, wohin die Auswahl geht.;
 	fr=DÉPLACER : touche pour l'armer, puis touche où va la sélection.;
 	es=MOVER: toca para armarla, luego toca adónde va la selección.;
 	it=MUOVI: tocca per armarlo, poi tocca dove va la selezione.;
@@ -4373,6 +4865,14 @@
 	it=Mirror di {name};
 	}
 
+[Mirrors the roles: the left pad points, the right pad moves the map, triggers and grips swap.]
+	{
+	de=Tauscht die Rollen: das linke Pad zeigt, das rechte Pad bewegt die Karte, Trigger und Griffe tauschen.;
+	fr=Inverse les rôles : le pad gauche pointe, le droit le pad déplace la carte, les gâchettes et les poignées s'échangent.;
+	es=Invierte los papeles: el pad izquierdo apunta, el derecho el pad mueve el mapa, los gatillos y los agarres se intercambian.;
+	it=Scambia i ruoli: il pad sinistro punta, il destro il pad muove la mappa, grilletti e impugnature si scambiano.;
+	}
+
 [Mobile Unit Yard Maps]
 	{
 	de=Grundrisse mobiler Einheiten;
@@ -4403,6 +4903,14 @@
 	fr=mod : {name};
 	es=mod: {name};
 	it=mod: {name};
+	}
+
+[Modern fonts for in-game text, including internationalization.]
+	{
+	de=Moderne Schriften für Text im Spiel, einschließlich Internationalisierung.;
+	fr=Polices modernes pour le texte en jeu, y compris l'internationalisation.;
+	es=Fuentes modernas para el texto del juego, incluida la internacionalización.;
+	it=Font moderni per il testo di gioco, inclusa l'internazionalizzazione.;
 	}
 
 [Mods]
@@ -4467,6 +4975,14 @@
 	fr=n/d;
 	es=N/D;
 	it=N/D;
+	}
+
+[NAME]
+	{
+	de=NAME;
+	fr=NOM;
+	es=NOMBRE;
+	it=NOME;
 	}
 
 [NEXT PAGE]
@@ -4597,6 +5113,14 @@
 	it=Mai;
 	}
 
+[Never closer than normal size. The wheel, a pinch and a controller stop there.]
+	{
+	de=Nie näher als die normale Größe. Das Rad, ein Zwicken und ein Controller hören dort auf.;
+	fr=Jamais plus près que la taille normale. La molette, un pincement et une manette s'arrêtent là.;
+	es=Nunca más cerca que el tamaño normal. La rueda, un pellizco y un mando se detienen ahí.;
+	it=Mai più vicino della dimensione normale. La rotella, una pizzicata e un controller si fermano lì.;
+	}
+
 [New]
 	{
 	de=Neu;
@@ -4691,14 +5215,6 @@
 	fr=Aucun pack de cartes n'est installé.;
 	es=No hay paquetes de mapas instalados.;
 	it=Non ci sono pacchetti di mappe installati.;
-	}
-
-[No mod: the game as it was made]
-	{
-	de=Kein Mod: das Spiel, wie es gemacht wurde;
-	fr=Aucun mod : le jeu tel qu'il a été fait;
-	es=Sin mod: el juego tal como se hizo;
-	it=Nessun mod: il gioco come è stato fatto;
 	}
 
 [No oamod.yaml present]
@@ -5197,6 +5713,14 @@
 	it=Solo quando apro la Biblioteca;
 	}
 
+[Open]
+	{
+	de=Öffnen;
+	fr=Ouvrir;
+	es=Abrir;
+	it=Apri;
+	}
+
 [Open Annihilation]
 	{
 	de=Open Annihilation;
@@ -5285,6 +5809,14 @@
 	it=Open Annihilation, o un'altra copia, sta ancora cambiando la sua cartella. Riprova tra un momento.;
 	}
 
+[Open these files with the game from your file manager.]
+	{
+	de=Diese Dateien mit dem Spiel öffnen aus deinem Dateimanager.;
+	fr=Ouvrir ces fichiers avec le jeu depuis ton gestionnaire de fichiers.;
+	es=Abrir estos archivos con el juego desde tu gestor de archivos.;
+	it=Apri questi file con il gioco dal tuo gestore di file.;
+	}
+
 [Optimize DT rows]
 	{
 	de=DT-Zeilen optimieren;
@@ -5301,17 +5833,9 @@
 	it=Finestra delle opzioni;
 	}
 
-[Or find the folder yourself:]
-	{
-	de=Oder such den Ordner selbst:;
-	fr=Ou trouve le dossier toi-même :;
-	es=O encuentra la carpeta tú mismo:;
-	it=Oppure trova tu la cartella:;
-	}
-
 [Order: tap to arm it, then tap where it goes; tap again to take it back.]
 	{
-	de=Befehl: tippe, um ihn zu schärfen, dann tippe, wohin er geht. Tippe noch einmal, um ihn zurückzunehmen.;
+	de=Befehl: tippe, um ihn zu wählen, dann tippe, wohin er geht. Tippe noch einmal, um ihn zurückzunehmen.;
 	fr=Ordre : touche pour l'armer, puis touche où il va. Touche encore pour le reprendre.;
 	es=Orden: toca para armarla, luego toca adónde va. Toca otra vez para retirarla.;
 	it=Ordine: tocca per armarlo, poi tocca dove va. Tocca di nuovo per riprenderlo.;
@@ -5333,12 +5857,52 @@
 	it=Le altre lingue si scaricano da Core Prime. Il primo download crea un ID di installazione casuale, che il passo successivo spiega.;
 	}
 
-[PARENT FOLDER]
+[Out to 1/16 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
 	{
-	de=ÜBERGEORDNETER ORDNER;
-	fr=DOSSIER PARENT;
-	es=CARPETA SUPERIOR;
-	it=CARTELLA SUPERIORE;
+	de=Heraus bis auf 1/16 der normalen Größe oder die ganze Karte. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
+	fr=Jusqu'à 1/16 de la taille normale, ou toute la carte. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
+	es=Hasta 1/16 del tamaño normal, o el mapa entero. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
+	it=Fino a 1/16 della dimensione normale, o l'intera mappa. In Grafica, Unità allontanate dice come appaiono le unità.;
+	}
+
+[Out to 1/2 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
+	{
+	de=Heraus bis auf 1/2 der normalen Größe oder die ganze Karte. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
+	fr=Jusqu'à 1/2 de la taille normale, ou toute la carte. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
+	es=Hasta 1/2 del tamaño normal, o el mapa entero. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
+	it=Fino a 1/2 della dimensione normale, o l'intera mappa. In Grafica, Unità allontanate dice come appaiono le unità.;
+	}
+
+[Out to 1/32 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
+	{
+	de=Heraus bis auf 1/32 der normalen Größe oder die ganze Karte. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
+	fr=Jusqu'à 1/32 de la taille normale, ou toute la carte. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
+	es=Hasta 1/32 del tamaño normal, o el mapa entero. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
+	it=Fino a 1/32 della dimensione normale, o l'intera mappa. In Grafica, Unità allontanate dice come appaiono le unità.;
+	}
+
+[Out to 1/4 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
+	{
+	de=Heraus bis auf 1/4 der normalen Größe oder die ganze Karte. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
+	fr=Jusqu'à 1/4 de la taille normale, ou toute la carte. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
+	es=Hasta 1/4 del tamaño normal, o el mapa entero. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
+	it=Fino a 1/4 della dimensione normale, o l'intera mappa. In Grafica, Unità allontanate dice come appaiono le unità.;
+	}
+
+[Out to 1/8 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
+	{
+	de=Heraus bis auf 1/8 der normalen Größe oder die ganze Karte. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
+	fr=Jusqu'à 1/8 de la taille normale, ou toute la carte. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
+	es=Hasta 1/8 del tamaño normal, o el mapa entero. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
+	it=Fino a 1/8 della dimensione normale, o l'intera mappa. In Grafica, Unità allontanate dice come appaiono le unità.;
+	}
+
+[Out until the whole map fits the view. Graphics' Zoomed out units says how units look.]
+	{
+	de=Heraus, bis die ganze Karte in die Ansicht passt. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
+	fr=Jusqu'à ce que toute la carte tienne dans la vue. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
+	es=Hasta que el mapa entero quepa en la vista. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
+	it=Fino a che l'intera mappa entra nella vista. In Grafica, Unità allontanate dice come appaiono le unità.;
 	}
 
 [PATROL]
@@ -5351,7 +5915,7 @@
 
 [PATROL: tap to arm it, then tap the points to patrol between.]
 	{
-	de=PATROUILLIEREN: tippe, um ihn zu schärfen, dann tippe die Punkte, zwischen denen patrouilliert wird.;
+	de=PATROUILLIEREN: tippe, um ihn zu wählen, dann tippe die Punkte, zwischen denen patrouilliert wird.;
 	fr=PATROUILLER : touche pour l'armer, puis touche les points à patrouiller.;
 	es=PATRULLAR: toca para armarla, luego toca los puntos entre los que patrullar.;
 	it=PATTUGLIA: tocca per armarlo, poi tocca i punti da pattugliare.;
@@ -5397,6 +5961,14 @@
 	it=POSIZIONA;
 	}
 
+[PLACES]
+	{
+	de=ORTE;
+	fr=EMPLACEMENTS;
+	es=LUGARES;
+	it=POSIZIONI;
+	}
+
 [PLAY]
 	{
 	de=SPIELEN;
@@ -5411,14 +5983,6 @@
 	fr=JOUER;
 	es=JUGAR AHORA;
 	it=GIOCA ORA;
-	}
-
-[PLAY THIS FOLDER]
-	{
-	de=DIESEN ORDNER SPIELEN;
-	fr=JOUER CE DOSSIER;
-	es=JUGAR ESTA CARPETA;
-	it=GIOCA QUESTA CARTELLA;
 	}
 
 [PLAYERS]
@@ -5451,6 +6015,14 @@
 	fr=PRÉC. : montre la page de construction avant celle-ci.;
 	es=ANT.: muestra la página de construcción anterior.;
 	it=PREC.: mostra la pagina di costruzione precedente.;
+	}
+
+[Past After zoom, each unit is a dot of its owner's colour, framed while selected.]
+	{
+	de=Jenseits von Nach dem Zoom ist jede Einheit ein Punkt ihrer Farbe des Besitzers, umrahmt solange gewählt.;
+	fr=Au-delà d'Après le zoom, chaque unité est un point de sa couleur du propriétaire, encadrée tant qu'elle est sélectionnée.;
+	es=Más allá de Tras el zoom, cada unidad es un punto de su color del dueño, enmarcada mientras está seleccionada.;
+	it=Oltre Dopo lo zoom, ogni unità è un punto del suo colore del proprietario, incorniciata mentre è selezionata.;
 	}
 
 [Pathfinding cycles]
@@ -5581,6 +6153,14 @@
 	it=Precedente;
 	}
 
+[Program Files]
+	{
+	de=Program Files;
+	fr=Program Files;
+	es=Program Files;
+	it=Program Files;
+	}
+
 [Putting the files in place...]
 	{
 	de=Die Dateien werden abgelegt...;
@@ -5621,14 +6201,6 @@
 	it=CODA: l'ordine scelto dopo viene messo in coda agli ordini della selezione.;
 	}
 
-[QUIT]
-	{
-	de=BEENDEN;
-	fr=QUITTER;
-	es=SALIR;
-	it=ESCI;
-	}
-
 [RECLAIM]
 	{
 	de=RECYCELN;
@@ -5639,7 +6211,7 @@
 
 [RECLAIM: tap to arm it, then tap the wreck or unit to reclaim.]
 	{
-	de=RECYCELN: tippe, um ihn zu schärfen, dann tippe das Wrack oder die Einheit zum Recyceln.;
+	de=RECYCELN: tippe, um ihn zu wählen, dann tippe das Wrack oder die Einheit zum Recyceln.;
 	fr=RÉCUPÉRER : touche pour l'armer, puis touche l'épave ou l'unité à récupérer.;
 	es=RECUPERAR: toca para armarla, luego toca el resto o la unidad a recuperar.;
 	it=RECUPERA: tocca per armarlo, poi tocca il relitto o l'unità da recuperare.;
@@ -5743,7 +6315,7 @@
 
 [REPAIR: tap to arm it, then tap the unit to repair or help build.]
 	{
-	de=REPARIEREN: tippe, um ihn zu schärfen, dann tippe die Einheit zum Reparieren oder zum Mitbauen.;
+	de=REPARIEREN: tippe, um ihn zu wählen, dann tippe die Einheit zum Reparieren oder zum Mitbauen.;
 	fr=RÉPARER : touche pour l'armer, puis touche l'unité à réparer ou à aider à construire.;
 	es=REPARAR: toca para armarla, luego toca la unidad a reparar o a ayudar a construir.;
 	it=RIPARA: tocca per armarlo, poi tocca l'unità da riparare o da aiutare a costruire.;
@@ -6269,6 +6841,14 @@
 	it=SELEZIONA: seleziona tutte le unità, i costruttori, le fabbriche, gli aerei, le unità sullo schermo, il comandante o lo stesso tipo.;
 	}
 
+[SELECTED]
+	{
+	de=AUSGEWÄHLT;
+	fr=SÉLECTION;
+	es=SELECCIONADO;
+	it=SELEZIONATO;
+	}
+
 [SELF-DESTRUCT]
 	{
 	de=SELBSTZERSTÖRUNG;
@@ -6549,6 +7129,14 @@
 	it=Seleziona;
 	}
 
+[Select a folder or an installer.]
+	{
+	de=Wähle einen Ordner oder einen Installer.;
+	fr=Choisis un dossier ou un installateur.;
+	es=Elige una carpeta o un instalador.;
+	it=Scegli una cartella o un installer.;
+	}
+
 [Select groups without Alt]
 	{
 	de=Gruppen ohne Alt wählen;
@@ -6765,12 +7353,12 @@
 	it=Salta la configurazione;
 	}
 
-[Skirmish · Total Annihilation 3.1c]
+[Skirmish · No Mod]
 	{
-	de=Gefecht · Total Annihilation 3.1c;
-	fr=Escarmouche · Total Annihilation 3.1c;
-	es=Escaramuza · Total Annihilation 3.1c;
-	it=Schermaglia · Total Annihilation 3.1c;
+	de=Gefecht · Kein Mod;
+	fr=Escarmouche · Aucun mod;
+	es=Escaramuza · Ningún mod;
+	it=Schermaglia · Nessun mod;
 	}
 
 [Skirmish · playing {mod}]
@@ -6949,6 +7537,14 @@
 	it=Steam Input è attivo: i trackpad e le impugnature posteriori arrivano al gioco come mouse e tasti di Steam. Disattiva Steam Input per Open Annihilation nelle impostazioni controller di Steam per usarli qui.;
 	}
 
+[Steam · Proton]
+	{
+	de=Steam · Proton;
+	fr=Steam · Proton;
+	es=Steam · Proton;
+	it=Steam · Proton;
+	}
+
 [Sticks]
 	{
 	de=Sticks;
@@ -7013,6 +7609,14 @@
 	it=TA 3.1c;
 	}
 
+[TA demo installer]
+	{
+	de=TA-Demo-Installer;
+	fr=Installateur de la démo de TA;
+	es=Instalador de la demo de TA;
+	it=Installer della demo di TA;
+	}
+
 [TAGS]
 	{
 	de=STICHWORTE;
@@ -7069,6 +7673,14 @@
 	it=RIPROVA;
 	}
 
+[TURN OFF]
+	{
+	de=AUSSCHALTEN;
+	fr=ÉTEINDRE;
+	es=APAGAR;
+	it=SPEGNI;
+	}
+
 [TYPE]
 	{
 	de=TYP;
@@ -7111,7 +7723,7 @@
 
 [Takes back the armed order.]
 	{
-	de=Nimmt den geschärften Befehl zurück.;
+	de=Nimmt den gewählten Befehl zurück.;
 	fr=Reprend l'ordre armé.;
 	es=Retira la orden armada.;
 	it=Riprende l'ordine armato.;
@@ -7325,6 +7937,14 @@
 	it=I dati estratti della demo ({size}) non si usano più.;
 	}
 
+[The display's own pixel density (Retina on a Mac). Applies from the next start.]
+	{
+	de=Die eigene Pixeldichte des Bildschirms (Retina auf einem Mac). Gilt ab dem nächsten Start.;
+	fr=La densité de pixels propre à l'écran (Retina sur un Mac). S'applique dès le prochain démarrage.;
+	es=La densidad de píxeles propia de la pantalla (Retina en un Mac). Se aplica desde el próximo inicio.;
+	it=La densità di pixel propria dello schermo (Retina su un Mac). Si applica dal prossimo avvio.;
+	}
+
 [The download could not start: {reason}]
 	{
 	de=Der Download konnte nicht starten: {reason};
@@ -7363,6 +7983,14 @@
 	fr=Les fichiers de {title} {version} ont été installés à nouveau.;
 	es=Los archivos de {title} {version} se instalaron de nuevo.;
 	it=I file di {title} {version} sono stati installati di nuovo.;
+	}
+
+[The first press clears the selection, the second opens the menu.]
+	{
+	de=Der erste Druck leert die Auswahl, der zweite öffnet das Menü.;
+	fr=La première pression vide la sélection, le second ouvre le menu.;
+	es=La primera pulsación vacía la selección, el segundo abre el menú.;
+	it=La prima pressione svuota la selezione, il secondo apre il menu.;
 	}
 
 [The folder can no longer be read]
@@ -7453,6 +8081,14 @@
 	it=La cartella {tag} non contiene questa lingua. Sostituirla con {endonym} ({english}) da {file}? Viene tenuta e si può riportare.;
 	}
 
+[The following content for your game does not match our expected sizes:]
+	{
+	de=Der folgende Inhalt deines Spiels entspricht nicht unseren erwarteten Größen:;
+	fr=Le contenu suivant de ton jeu ne correspond pas aux tailles que nous attendons :;
+	es=El siguiente contenido de tu juego no coincide con los tamaños que esperamos:;
+	it=I seguenti contenuti del tuo gioco non corrispondono alle dimensioni che ci aspettiamo:;
+	}
+
 [The game is shown in {name}. Choose another language in Settings › Language first, then uninstall it.]
 	{
 	de=Das Spiel wird in {name} gezeigt. Wähl zuerst eine andere Sprache unter Einstellungen › Sprache, dann deinstalliere sie.;
@@ -7475,6 +8111,22 @@
 	fr=Le jeu recharge ses données pour le mod et revient au menu principal.;
 	es=El juego recarga sus datos para el mod y vuelve al menú principal.;
 	it=Il gioco ricarica i dati per il mod e torna al menu principale.;
+	}
+
+[The game still plays with these files, but network games with other players may not start, and recordings may not replay the same. Copy the content again from another source to fix it.]
+	{
+	de=Das Spiel läuft mit diesen Dateien weiter, aber Netzwerkspiele mit anderen Spielern starten vielleicht nicht, und Aufzeichnungen spielen vielleicht nicht gleich ab. Kopiere den Inhalt erneut aus einer anderen Quelle, um das zu beheben.;
+	fr=Le jeu se lance quand même avec ces fichiers, mais les parties en réseau avec d'autres joueurs peuvent ne pas démarrer, et les enregistrements peuvent ne pas se rejouer pareil. Copie à nouveau le contenu depuis une autre source pour corriger ça.;
+	es=El juego sigue funcionando con estos archivos, pero las partidas en red con otros jugadores pueden no empezar, y las grabaciones pueden no repetirse igual. Vuelve a copiar el contenido desde otro origen para corregirlo.;
+	it=Il gioco funziona comunque con questi file, ma le partite in rete con altri giocatori possono non iniziare, e le registrazioni possono non ripetersi allo stesso modo. Copia di nuovo i contenuti da un'altra fonte per sistemarli.;
+	}
+
+[The game's own text and unit names, where its data has them in the language.]
+	{
+	de=Der eigene Text des Spiels und die Einheitennamen, wo seine Daten hat sie in der Sprache.;
+	fr=Le texte propre du jeu et les noms d'unités, là où ses les données les ont dans la langue.;
+	es=El texto propio del juego y los nombres de unidad, donde sus los datos los tienen en el idioma.;
+	it=Il testo proprio del gioco e i nomi delle unità, dove i suoi i dati li hanno nella lingua.;
 	}
 
 [The graphics card could not be used, so the processor draws the game. You can try it again under Graphics in the OA settings.]
@@ -7501,12 +8153,52 @@
 	it=La versione dell'host di {pack} non è più offerta da {registry}.;
 	}
 
+[The installer of the Total Annihilation demo (1997).]
+	{
+	de=Der Installer der Demo von Total Annihilation (1997).;
+	fr=L'installateur de la démo de Total Annihilation (1997).;
+	es=El instalador de la demo de Total Annihilation (1997).;
+	it=L'installer della demo di Total Annihilation (1997).;
+	}
+
+[The largest whole-number scale that fits: smaller menus, every pixel square.]
+	{
+	de=Der größte ganzzahlige Maßstab, der passt: kleinere Menüs, jedes Pixel quadratisch.;
+	fr=La plus grande échelle entière qui tient : menus plus petits, chaque pixel carré.;
+	es=La mayor escala entera que cabe: menús más pequeños, cada píxel cuadrado.;
+	it=La scala intera più grande che entra: menu più piccoli, ogni pixel quadrato.;
+	}
+
 [The map list does not hold this map.]
 	{
 	de=Die Kartenliste enthält diese Karte nicht.;
 	fr=La liste des cartes ne contient pas cette carte.;
 	es=La lista de mapas no contiene este mapa.;
 	it=L'elenco delle mappe non contiene questa mappa.;
+	}
+
+[The menus fill the window, every pixel as wide as the next.]
+	{
+	de=Die Menüs füllen das Fenster, jedes Pixel so breit wie die nächste.;
+	fr=Les menus remplissent la fenêtre, chaque pixel aussi large que la suivante.;
+	es=Los menús llenan la ventana, cada píxel tan ancha como la siguiente.;
+	it=I menu riempiono la finestra, ogni pixel larga quanto la successiva.;
+	}
+
+[The menus fill the window, unfiltered, as the game always drew them.]
+	{
+	de=Die Menüs füllen das Fenster, ungefiltert, wie das Spiel sie immer gezeichnet hat.;
+	fr=Les menus remplissent la fenêtre, sans filtre, comme le jeu les a toujours dessinées.;
+	es=Los menús llenan la ventana, sin filtrar, como el juego siempre las dibujó.;
+	it=I menu riempiono la finestra, non filtrati, come il gioco le ha sempre disegnate.;
+	}
+
+[The minimap and the thumb controls on the right, the orders on the left.]
+	{
+	de=Die Minikarte und die Daumensteuerungen auf dem rechts, die Befehle links.;
+	fr=La minicarte et les commandes au pouce sur le à droite, les ordres à gauche.;
+	es=El minimapa y los controles de pulgar en el a la derecha, las órdenes a la izquierda.;
+	it=La minimappa e i controlli del pollice sul a destra, gli ordini a sinistra.;
 	}
 
 [The new game files are used from the next start of Open Annihilation. Adding or removing files waits until then.]
@@ -7605,6 +8297,70 @@
 	it=Lo stick destro non fa nulla.;
 	}
 
+[The right stick moves the pointer and the left stick the map.]
+	{
+	de=Der rechte Stick bewegt den Zeiger und der linke Stick die Karte.;
+	fr=Le stick droit déplace le pointeur et le gauche stick la carte.;
+	es=El stick derecho mueve el puntero y el izquierdo stick el mapa.;
+	it=Lo stick destro muove il puntatore e il sinistro stick la mappa.;
+	}
+
+[The right stick moves the pointer, as in the Sticks scheme.]
+	{
+	de=Der rechte Stick bewegt den Zeiger, wie im Stick-Schema.;
+	fr=Le stick droit déplace le pointeur, comme dans le schéma Sticks.;
+	es=El stick derecho mueve el puntero, como en el esquema Sticks.;
+	it=Lo stick destro muove il puntatore, come nello schema Sticks.;
+	}
+
+[The right trackpad points and the left one moves the map; a pad without trackpads plays Sticks.]
+	{
+	de=Das rechte Trackpad zeigt und das linke bewegt die Karte. Ein Pad ohne Trackpads spielt Sticks.;
+	fr=Le pavé droit pointe et le gauche déplace la carte. Un pad sans pavés joue Sticks.;
+	es=El trackpad derecho apunta y el izquierdo mueve el mapa. Un pad sin trackpads juega Sticks.;
+	it=Il trackpad destro punta e il sinistro muove la mappa. Un pad senza trackpad gioca Sticks.;
+	}
+
+[The side panel and bars grow with the window, up to twice the original game's size.]
+	{
+	de=Seitenleiste und Balken wachsen mit dem Fenster, bis zum Doppelten der Größe des ursprünglichen Spiels.;
+	fr=Le panneau latéral et les barres grandissent avec la fenêtre, jusqu'à deux fois la taille du jeu d'origine.;
+	es=El panel lateral y las barras crecen con la ventana, hasta el doble del tamaño del juego original.;
+	it=Il pannello laterale e le barre crescono con la finestra, fino al doppio della dimensione del gioco originale.;
+	}
+
+[The side panel and bars keep the original game's size on every window.]
+	{
+	de=Seitenleiste und Balken behalten das ursprüngliche Spielgröße auf jedem Fenster.;
+	fr=Le panneau latéral et les barres gardent l'original taille du jeu sur chaque fenêtre.;
+	es=El panel lateral y las barras mantienen el original tamaño del juego en cada ventana.;
+	it=Il pannello laterale e le barre tengono l'originale dimensione del gioco su ogni finestra.;
+	}
+
+[The size of game text in the modern fonts. Larger sizes are easier to read.]
+	{
+	de=Die Größe des Spieltexts in den modernen Schriften. Größere Größen sind leichter zu lesen.;
+	fr=La taille du texte du jeu dans les polices modernes. Les plus grandes tailles sont plus faciles à lire.;
+	es=El tamaño del texto del juego en las fuentes modernas. Los tamaños mayores se leen mejor.;
+	it=La dimensione del testo di gioco nei font moderni. Le dimensioni maggiori si leggono meglio.;
+	}
+
+[The size of game text in the modern fonts. The game's own fonts have fixed sizes.]
+	{
+	de=Die Größe des Spieltexts in den modernen Schriften. Die eigenen Schriften des Spiels haben feste Größen.;
+	fr=La taille du texte du jeu dans les polices modernes. Les polices propres du jeu ont des tailles fixes.;
+	es=El tamaño del texto del juego en las fuentes modernas. Las fuentes propias del juego tienen tamaños fijos.;
+	it=La dimensione del testo di gioco nei font moderni. I font propri del gioco hanno dimensioni fisse.;
+	}
+
+[The size of the touch controls; the game's own screens keep theirs.]
+	{
+	de=Die Größe der Berührungssteuerung. Die eigene des Spiels Bildschirme behalten ihre.;
+	fr=La taille des commandes tactiles. Celles propres au jeu les écrans gardent les leurs.;
+	es=El tamaño de los controles táctiles. Los propios del juego las pantallas mantienen las suyas.;
+	it=La dimensione dei controlli tattili. Quelli propri del gioco gli schermi tengono le loro.;
+	}
+
 [The stick pointer settles on a lone unit near it.]
 	{
 	de=Der Stick-Zeiger setzt sich auf eine einzelne Einheit in der Nähe.;
@@ -7685,6 +8441,14 @@
 	it=La versione tenuta, {backup}, resta.;
 	}
 
+[The view stays on the map, as the game kept it. With more than the map in view, it is centred.]
+	{
+	de=Die Ansicht bleibt auf der Karte, wie das Spiel sie gehalten hat. Mit mehr als der Karte in der Ansicht wird sie zentriert.;
+	fr=La vue reste sur la carte, comme le jeu la gardait. Avec plus que la carte dans la vue, elle est centrée.;
+	es=La vista se queda en el mapa, como el juego la mantenía. Con más que el mapa en la vista, se centra.;
+	it=La vista resta sulla mappa, come il gioco la teneva. Con più della mappa nella vista, viene centrata.;
+	}
+
 [Then {package} · {phase}]
 	{
 	de=Dann {package} · {phase};
@@ -7733,14 +8497,6 @@
 	it=Questo file;
 	}
 
-[This folder can be played: {folder}]
-	{
-	de=Dieser Ordner lässt sich spielen: {folder};
-	fr=Ce dossier peut être joué : {folder};
-	es=Esta carpeta se puede jugar: {folder};
-	it=Questa cartella si può giocare: {folder};
-	}
-
 [This folder does not hold a Total Annihilation installation]
 	{
 	de=Dieser Ordner enthält keine Installation von Total Annihilation;
@@ -7771,6 +8527,14 @@
 	fr=Ce dossier contient {size}, bien plus qu'une installation de Total Annihilation (environ 1.1 GB avec tout).;
 	es=Esta carpeta contiene {size}, mucho más que una instalación de Total Annihilation (unos 1.1 GB con todo).;
 	it=Questa cartella contiene {size}, molto più di un'installazione di Total Annihilation (circa 1.1 GB con tutto).;
+	}
+
+[This game has no expansions.]
+	{
+	de=Dieses Spiel hat keine Erweiterungen.;
+	fr=Ce jeu n'a aucune extension.;
+	es=Este juego no tiene expansiones.;
+	it=Questo gioco non ha espansioni.;
 	}
 
 [This game includes no multiplayer maps, so multiplayer is not available.]
@@ -7877,28 +8641,28 @@
 	it=Total Annihilation 3.1c;
 	}
 
-[Total Annihilation 3.1c as it was made, with no mod]
+[Total Annihilation demo]
 	{
-	de=Total Annihilation 3.1c, wie es gemacht wurde, ohne Mod;
-	fr=Total Annihilation 3.1c tel qu'il a été fait, sans mod;
-	es=Total Annihilation 3.1c tal como se hizo, sin mod;
-	it=Total Annihilation 3.1c come è stato fatto, senza mod;
+	de=Demo von Total Annihilation;
+	fr=Démo de Total Annihilation;
+	es=Demo de Total Annihilation;
+	it=Demo di Total Annihilation;
 	}
 
-[Total Annihilation is on this computer in more than one place. Choose the one to play.]
+[Total Annihilation demo (1997)]
 	{
-	de=Total Annihilation liegt auf diesem Computer an mehr als einem Ort. Wähl den, der gespielt wird.;
-	fr=Total Annihilation est sur cet ordinateur à plus d'un endroit. Choisis celui à jouer.;
-	es=Total Annihilation está en este ordenador en más de un sitio. Elige cuál jugar.;
-	it=Total Annihilation è su questo computer in più di un posto. Scegli quale giocare.;
+	de=Demo von Total Annihilation (1997);
+	fr=Démo de Total Annihilation (1997);
+	es=Demo de Total Annihilation (1997);
+	it=Demo di Total Annihilation (1997);
 	}
 
-[Total Annihilation was found on this computer. Play it, or choose another folder.]
+[Total Annihilation: Commander Pack. Recognised by its size. The game is read out of it; nothing is installed.]
 	{
-	de=Total Annihilation wurde auf diesem Computer gefunden. Spiel es, oder wähl einen anderen Ordner.;
-	fr=Total Annihilation a été trouvé sur cet ordinateur. Joue-le, ou choisis un autre dossier.;
-	es=Se encontró Total Annihilation en este ordenador. Juega, o elige otra carpeta.;
-	it=Total Annihilation è stato trovato su questo computer. Giocalo, o scegli un'altra cartella.;
+	de=Total Annihilation: Commander Pack. An seiner Größe erkannt. Das Spiel wird daraus gelesen, nichts wird installiert.;
+	fr=Total Annihilation: Commander Pack. Reconnu à sa taille. Le jeu y est lu directement, rien n'est installé.;
+	es=Total Annihilation: Commander Pack. Reconocido por su tamaño. El juego se lee de él, no se instala nada.;
+	it=Total Annihilation: Commander Pack. Riconosciuto dalla dimensione. Il gioco viene letto da lì, non si installa nulla.;
 	}
 
 [Touch]
@@ -7939,6 +8703,14 @@
 	fr=Réessayer;
 	es=Reintentar;
 	it=Riprova;
+	}
+
+[Turn off {name}?]
+	{
+	de={name} ausschalten?;
+	fr=Éteindre {name} ?;
+	es=¿Apagar {name}?;
+	it=Spegnere {name}?;
 	}
 
 [Turn on online features]
@@ -8015,7 +8787,7 @@
 
 [UNLOAD: tap to arm it, then tap where the transport unloads.]
 	{
-	de=ABLADEN: tippe, um ihn zu schärfen, dann tippe, wohin der Transporter ablädt.;
+	de=ABLADEN: tippe, um ihn zu wählen, dann tippe, wohin der Transporter ablädt.;
 	fr=DÉCHARGER : touche pour l'armer, puis touche où le transport décharge.;
 	es=DESCARGAR: toca para armarla, luego toca dónde descarga el transporte.;
 	it=SCARICA: tocca per armarlo, poi tocca dove il trasporto scarica.;
@@ -8165,6 +8937,46 @@
 	it=Unità;
 	}
 
+[Units are drawn as models at every zoom. Far out on a large map, needs a fast CPU.]
+	{
+	de=Einheiten werden bei jedem Zoom als Modelle gezeichnet. Weit draußen auf einer großen Karte, braucht eine schnelle CPU.;
+	fr=Les unités sont dessinées comme des modèles à chaque zoom. Très loin sur une grande carte, demande un processeur rapide.;
+	es=Las unidades se dibujan como modelos en cada zoom. Muy lejos en un mapa grande, necesita una CPU rápida.;
+	it=Le unità sono disegnate come modelli a ogni zoom. Molto lontano su una mappa grande, serve una CPU veloce.;
+	}
+
+[Units drawn at 16x and scaled down. Needs a fast CPU.]
+	{
+	de=Einheiten, gezeichnet mit 16x und herunterskaliert. Braucht eine schnelle CPU.;
+	fr=Unités dessinées à 16x et réduites. Requiert un processeur rapide.;
+	es=Unidades dibujadas a 16x y reducidas. Necesita una CPU rápida.;
+	it=Unità disegnate a 16x e ridotte. Richiede una CPU veloce.;
+	}
+
+[Units drawn at 8x and scaled down. Needs a fast CPU.]
+	{
+	de=Einheiten, gezeichnet mit 8x und herunterskaliert. Braucht eine schnelle CPU.;
+	fr=Unités dessinées à 8x et réduites. Requiert un processeur rapide.;
+	es=Unidades dibujadas a 8x y reducidas. Necesita una CPU rápida.;
+	it=Unità disegnate a 8x e ridotte. Richiede una CPU veloce.;
+	}
+
+[Units drawn at higher resolution and scaled down for smoother edges.]
+	{
+	de=Einheiten, in höherer Auflösung gezeichnet und herunterskaliert für glattere Kanten.;
+	fr=Unités dessinées en plus haute résolution et réduites pour des bords plus lisses.;
+	es=Unidades dibujadas a mayor resolución y reducidas para bordes más suaves.;
+	it=Unità disegnate a risoluzione più alta e ridotte per bordi più lisci.;
+	}
+
+[Units each player can have. Applies from the next game.]
+	{
+	de=Einheiten, die jeder Spieler haben kann. Gilt ab dem nächsten Spiel.;
+	fr=Unités que chaque joueur peut avoir. S'applique dès la prochaine partie.;
+	es=Unidades que puede tener cada jugador. Se aplica desde la próxima partida.;
+	it=Unità che ogni giocatore può avere. Si applica dalla prossima partita.;
+	}
+
 [Unpacking the demo's game data ({size})…]
 	{
 	de=Die Spieldaten der Demo werden entpackt ({size})…;
@@ -8179,6 +8991,38 @@
 	fr=Décompression de {title} {version}...;
 	es=Descomprimiendo {title} {version}...;
 	it=Estrazione di {title} {version}...;
+	}
+
+[Up]
+	{
+	de=Nach oben;
+	fr=Remonter;
+	es=Subir;
+	it=Su;
+	}
+
+[Up and down zoom about the pointer; a flick left or right turns the build page while building.]
+	{
+	de=Hoch und runter zoomt um den Zeiger. Ein Schnipsen nach links oder rechts blättert die Baulseite beim Bauen.;
+	fr=Haut et bas zooment autour du pointeur. Un geste vers la gauche ou droite tourne la page de construction pendant la construction.;
+	es=Arriba y abajo hacen zoom alrededor del puntero. Un golpe a la izquierda o derecha pasa la página de construcción al construir.;
+	it=Su e giù zoomano intorno al puntatore. Uno scatto a sinistra o destra gira la pagina di costruzione mentre si costruisce.;
+	}
+
+[Up to a quarter of the battlefield past the map's edges, however the view moves.]
+	{
+	de=Bis zu einem Viertel des Schlachtfelds über den Kartenränder, wie auch immer sich die Ansicht bewegt.;
+	fr=Jusqu'à un quart du champ de bataille au-delà du bords de la carte, quel que soit le mouvement de la vue.;
+	es=Hasta un cuarto del campo de batalla más allá del bordes del mapa, se mueva como se mueva la vista.;
+	it=Fino a un quarto del campo di battaglia oltre il bordi della mappa, comunque si muova la vista.;
+	}
+
+[Up to half the battlefield past the map's edges; a zoom keeps the ground under the pointer.]
+	{
+	de=Bis zur Hälfte des Schlachtfelds über die Kartenränder hinaus. ein Zoom hält den Boden unter dem Zeiger.;
+	fr=Jusqu'à la moitié du champ de bataille au-delà des bords de la carte. un zoom garde le sol sous le pointeur.;
+	es=Hasta la mitad del campo de batalla más allá de los bordes del mapa. un zoom mantiene el suelo bajo el puntero.;
+	it=Fino a metà del campo di battaglia oltre i bordi della mappa. uno zoom tiene il suolo sotto il puntatore.;
 	}
 
 [Upd]
@@ -8253,12 +9097,28 @@
 	it=Usa font moderni per il testo di gioco;
 	}
 
-[Use the desktop's folder dialog]
+[Use the system picker…]
 	{
-	de=Den Ordnerdialog des Schreibtischs verwenden;
-	fr=Utiliser le dialogue de dossier du bureau;
-	es=Usar el diálogo de carpeta del escritorio;
-	it=Usa la finestra delle cartelle della scrivania;
+	de=Systemauswahl verwenden…;
+	fr=Utiliser le sélecteur du système…;
+	es=Usar el selector del sistema…;
+	it=Usa il selettore di sistema…;
+	}
+
+[Use this folder]
+	{
+	de=Diesen Ordner verwenden;
+	fr=Utiliser ce dossier;
+	es=Usar esta carpeta;
+	it=Usa questa cartella;
+	}
+
+[Use this installer]
+	{
+	de=Diesen Installer verwenden;
+	fr=Utiliser cet installateur;
+	es=Usar este instalador;
+	it=Usa questo installer;
 	}
 
 [User Interface]
@@ -8283,6 +9143,14 @@
 	fr=Utilise {size} sur ce {device}.;
 	es=Usa {size} en este {device}.;
 	it=Usa {size} su questo {device}.;
+	}
+
+[VOLUMES]
+	{
+	de=LAUFWERKE;
+	fr=VOLUMES;
+	es=VOLÚMENES;
+	it=VOLUMI;
 	}
 
 [Verifying]
@@ -8413,6 +9281,14 @@
 	it=BENVENUTO;
 	}
 
+[WHAT IT IS]
+	{
+	de=WAS ES IST;
+	fr=CE QUE C'EST;
+	es=QUÉ ES;
+	it=COS'È;
+	}
+
 [WHY]
 	{
 	de=WARUM;
@@ -8493,6 +9369,22 @@
 	it=Benvenuto in Open Annihilation;
 	}
 
+[What guarding builders do. Applies from the next game.]
+	{
+	de=Was bewachende Bauer tun. Gilt ab dem nächsten Spiel.;
+	fr=Ce que font les bâtisseurs en garde. S'applique dès la prochaine partie.;
+	es=Qué hacen los constructores que protegen. Se aplica desde la próxima partida.;
+	it=Cosa fanno i costruttori di guardia. Si applica dalla prossima partita.;
+	}
+
+[What patrolling builders do. Applies from the next game.]
+	{
+	de=Was patrouillierende Bauer tun. Gilt ab dem nächsten Spiel.;
+	fr=Ce que font les bâtisseurs en patrouille. S'applique dès la prochaine partie.;
+	es=Qué hacen los constructores de patrulla. Se aplica desde la próxima partida.;
+	it=Cosa fanno i costruttori in pattuglia. Si applica dalla prossima partita.;
+	}
+
 [Where the files are]
 	{
 	de=Wo die Dateien sind;
@@ -8571,6 +9463,22 @@
 	fr=Rayon d'aimantation des épaves;
 	es=Radio de ajuste de restos;
 	it=Raggio di aggancio dei relitti;
+	}
+
+[X]
+	{
+	de=X;
+	fr=X;
+	es=X;
+	it=X;
+	}
+
+[Y]
+	{
+	de=Y;
+	fr=Y;
+	es=Y;
+	it=Y;
 	}
 
 [You are playing {name}. Switch it off first with SWITCH OFF, then uninstall it.]
@@ -8821,6 +9729,14 @@
 	it=ovunque arrivi il selettore di file;
 	}
 
+[archive]
+	{
+	de=Archiv;
+	fr=archive;
+	es=archivo comprimido;
+	it=archivio;
+	}
+
 [at least {size}]
 	{
 	de=mindestens {size};
@@ -8973,6 +9889,22 @@
 	it=non riuscito;
 	}
 
+[file]
+	{
+	de=Datei;
+	fr=fichier;
+	es=archivo;
+	it=file;
+	}
+
+[folder]
+	{
+	de=Ordner;
+	fr=dossier;
+	es=carpeta;
+	it=cartella;
+	}
+
 [fps]
 	{
 	de=fps;
@@ -9093,6 +10025,14 @@
 	it=elenco di {age};
 	}
 
+[macOS asks once before an app reads Desktop, Documents or Downloads.]
+	{
+	de=macOS fragt einmal, bevor eine App Schreibtisch, Dokumente oder Downloads liest.;
+	fr=macOS demande une fois avant qu'une app lise Bureau, Documents ou Téléchargements.;
+	es=macOS pregunta una vez antes de que una app lea Escritorio, Documentos o Descargas.;
+	it=macOS chiede una volta prima che un'app legga Scrivania, Documenti o Download.;
+	}
+
 [macOS kept Open Annihilation as the opener of {types}. To choose another, select a {types} file in Finder, then File › Get Info › Open with › Change All.]
 	{
 	de=macOS hat Open Annihilation als Programm zum Öffnen von {types} behalten. Um ein anderes zu wählen, wähl eine {types}-Datei im Finder, dann Ablage › Informationen › Öffnen mit › Alle ändern.;
@@ -9107,6 +10047,14 @@
 	fr=macOS a gardé Open Annihilation comme ouvreur de {types}. Pour en choisir un autre, sélectionne l'un d'eux dans le Finder, puis Fichier › Lire les informations › Ouvrir avec › Tout modifier.;
 	es=macOS mantuvo Open Annihilation como programa para abrir {types}. Para elegir otro, selecciona uno de ellos en el Finder y luego Archivo › Obtener información › Abrir con › Cambiar todo.;
 	it=macOS ha tenuto Open Annihilation come programma per aprire {types}. Per sceglierne un altro, selezionane uno nel Finder, poi Archivio › Ottieni informazioni › Apri con › Cambia tutto.;
+	}
+
+[microSD card]
+	{
+	de=microSD-Karte;
+	fr=carte microSD;
+	es=tarjeta microSD;
+	it=scheda microSD;
 	}
 
 [mods]
@@ -9645,6 +10593,22 @@
 	it={count} giorni fa;
 	}
 
+[{count} file differs]
+	{
+	de={count} Datei weicht ab;
+	fr={count} fichier diffère;
+	es={count} archivo difiere;
+	it={count} file è diverso;
+	}
+
+[{count} files differ]
+	{
+	de={count} Dateien weichen ab;
+	fr={count} fichiers diffèrent;
+	es={count} archivos difieren;
+	it={count} file sono diversi;
+	}
+
 [{count} h ago]
 	{
 	de=vor {count} h;
@@ -9691,6 +10655,14 @@
 	fr={count} mods;
 	es={count} mods;
 	it={count} mod;
+	}
+
+[{count} of {total} files differ]
+	{
+	de={count} von {total} Dateien weichen ab;
+	fr={count} fichiers sur {total} diffèrent;
+	es={count} de {total} archivos difieren;
+	it={count} di {total} file sono diversi;
 	}
 
 [{count} player]
@@ -9853,6 +10825,14 @@
 	it={from} → {to} · cambia le regole del gioco. I salvataggi di {old} non si caricano con {new};
 	}
 
+[{game} as it was made]
+	{
+	de={game}, wie es gemacht wurde;
+	fr={game} tel qu'il a été fait;
+	es={game} tal como se hizo;
+	it={game} come è stato fatto;
+	}
+
 [{game} change the game · {view} view only]
 	{
 	de={game} ändern das Spiel · nur Ansicht {view};
@@ -9965,6 +10945,14 @@
 	it={map} · {players} · {size};
 	}
 
+[{mod} needs {name}, so it is unloaded and the game plays with No Mod.]
+	{
+	de={mod} braucht {name}, also wird es entladen und das Spiel läuft mit Kein Mod.;
+	fr={mod} a besoin de {name}, donc il est retiré et le jeu se joue avec Aucun mod.;
+	es={mod} necesita {name}, así que se quita y el juego se juega con Ningún mod.;
+	it={mod} ha bisogno di {name}, quindi viene tolto e il gioco si gioca con Nessun mod.;
+	}
+
 [{names} and {count} more]
 	{
 	de={names} und {count} mehr;
@@ -9981,12 +10969,44 @@
 	it={name} da {installed} è installato. Sostituirlo con {name} da {new}? Quello da {installed} viene tenuto, e RIPRISTINA lo riporta.;
 	}
 
+[{name} needs {need}.]
+	{
+	de={name} braucht {need}.;
+	fr={name} a besoin de {need}.;
+	es={name} necesita {need}.;
+	it={name} ha bisogno di {need}.;
+	}
+
 [{name} only]
 	{
 	de=nur {name};
 	fr={name} seulement;
 	es=solo {name};
 	it=solo {name};
+	}
+
+[{name} turns off too: it needs {need}.]
+	{
+	de={name} wird auch ausgeschaltet: es braucht {need}.;
+	fr={name} s'éteint aussi : il a besoin de {need}.;
+	es={name} también se apaga: necesita {need}.;
+	it={name} si spegne anch'esso: ha bisogno di {need}.;
+	}
+
+[{name} turns off when the Library closes.]
+	{
+	de={name} wird ausgeschaltet, wenn die Bibliothek schließt.;
+	fr={name} s'éteint à la fermeture de la bibliothèque.;
+	es={name} se apaga cuando se cierra la Biblioteca.;
+	it={name} si spegne quando la Biblioteca si chiude.;
+	}
+
+[{name} turns on when the Library closes.]
+	{
+	de={name} wird eingeschaltet, wenn die Bibliothek schließt.;
+	fr={name} s'allume à la fermeture de la bibliothèque.;
+	es={name} se enciende cuando se cierra la Biblioteca.;
+	it={name} si accende quando la Biblioteca si chiude.;
 	}
 
 [{name} was not uninstalled. {reason}]
@@ -10029,6 +11049,14 @@
 	it={name} {version} · revisione {from} → {to};
 	}
 
+[{name} · ADD FROM…]
+	{
+	de={name} · HINZUFÜGEN AUS…;
+	fr={name} · AJOUTER DEPUIS…;
+	es={name} · AÑADIR DESDE…;
+	it={name} · AGGIUNGI DA…;
+	}
+
 [{name} · rules changed]
 	{
 	de={name} · Regeln geändert;
@@ -10043,6 +11071,14 @@
 	fr={name} · {phase};
 	es={name} · {phase};
 	it={name} · {phase};
+	}
+
+[{name}'s maps and campaigns leave the lists until you turn it on again. Nothing is deleted.]
+	{
+	de=Die Karten und Feldzüge von {name} verlassen die Listen, bis du es wieder einschaltest. Nichts wird gelöscht.;
+	fr=Les cartes et les campagnes de {name} quittent les listes jusqu'à ce que tu le rallumes. Rien n'est effacé.;
+	es=Los mapas y las campañas de {name} salen de las listas hasta que lo enciendas de nuevo. No se borra nada.;
+	it=Le mappe e le campagne di {name} escono dalle liste finché non lo riaccendi. Non viene cancellato nulla.;
 	}
 
 [{n} GB]
@@ -10239,7 +11275,7 @@
 
 [{order} armed]
 	{
-	de={order} geschärft;
+	de={order} bereit;
 	fr={order} armé;
 	es={order} armada;
 	it={order} armato;
@@ -10669,6 +11705,14 @@
 	it={version} · {size};
 	}
 
+[{version} · {source}]
+	{
+	de={version} · {source};
+	fr={version} · {source};
+	es={version} · {source};
+	it={version} · {source};
+	}
+
 [{version}+]
 	{
 	de={version}+;
@@ -10715,579 +11759,4 @@
 	fr=✓;
 	es=✓;
 	it=✓;
-	}
-[In Full the card draws 2x2 samples a pixel and scales them down for smoother edges.]
-	{
-	de=Bei Voll zeichnet die Karte 2x2 Abtastungen je Pixel und skaliert sie für glattere Kanten herunter.;
-	fr=En Complet la carte dessine 2x2 échantillons par pixel et les réduit pour des bords plus lisses.;
-	es=En Completo la tarjeta dibuja 2x2 muestras por píxel y las reduce para bordes más suaves.;
-	it=In Completo la scheda disegna 2x2 campioni per pixel e le riduce per bordi più lisci.;
-	}
-
-[In Full the card draws 2x2 samples a pixel the most this window allows, scaled down.]
-	{
-	de=Bei Voll zeichnet die Karte 2x2 Abtastungen je Pixel das meiste, was dieses Fenster erlaubt, herunterskaliert.;
-	fr=En Complet la carte dessine 2x2 échantillons par pixel le plus que cette fenêtre permet, réduit.;
-	es=En Completo la tarjeta dibuja 2x2 muestras por píxel lo máximo que permite esta ventana, reducido.;
-	it=In Completo la scheda disegna 2x2 campioni per pixel il massimo che questa finestra permette, ridotto.;
-	}
-
-[In Full the card draws 4x4 samples a pixel and scales them down for smoother edges.]
-	{
-	de=Bei Voll zeichnet die Karte 4x4 Abtastungen je Pixel und skaliert sie für glattere Kanten herunter.;
-	fr=En Complet la carte dessine 4x4 échantillons par pixel et les réduit pour des bords plus lisses.;
-	es=En Completo la tarjeta dibuja 4x4 muestras por píxel y las reduce para bordes más suaves.;
-	it=In Completo la scheda disegna 4x4 campioni per pixel e le riduce per bordi più lisci.;
-	}
-
-[In Full the card draws 4x4 samples a pixel the most this window allows, scaled down.]
-	{
-	de=Bei Voll zeichnet die Karte 4x4 Abtastungen je Pixel das meiste, was dieses Fenster erlaubt, herunterskaliert.;
-	fr=En Complet la carte dessine 4x4 échantillons par pixel le plus que cette fenêtre permet, réduit.;
-	es=En Completo la tarjeta dibuja 4x4 muestras por píxel lo máximo que permite esta ventana, reducido.;
-	it=In Completo la scheda disegna 4x4 campioni per pixel il massimo che questa finestra permette, ridotto.;
-	}
-
-[In Full the card draws 8x8 samples a pixel and scales them down for smoother edges.]
-	{
-	de=Bei Voll zeichnet die Karte 8x8 Abtastungen je Pixel und skaliert sie für glattere Kanten herunter.;
-	fr=En Complet la carte dessine 8x8 échantillons par pixel et les réduit pour des bords plus lisses.;
-	es=En Completo la tarjeta dibuja 8x8 muestras por píxel y las reduce para bordes más suaves.;
-	it=In Completo la scheda disegna 8x8 campioni per pixel e le riduce per bordi più lisci.;
-	}
-
-[In Full the card draws 8x8 samples a pixel the most this window allows, scaled down.]
-	{
-	de=Bei Voll zeichnet die Karte 8x8 Abtastungen je Pixel das meiste, was dieses Fenster erlaubt, herunterskaliert.;
-	fr=En Complet la carte dessine 8x8 échantillons par pixel le plus que cette fenêtre permet, réduit.;
-	es=En Completo la tarjeta dibuja 8x8 muestras por píxel lo máximo que permite esta ventana, reducido.;
-	it=In Completo la scheda disegna 8x8 campioni per pixel il massimo che questa finestra permette, ridotto.;
-	}
-
-[In Full the card draws 16x16 samples a pixel and scales them down for smoother edges.]
-	{
-	de=Bei Voll zeichnet die Karte 16x16 Abtastungen je Pixel und skaliert sie für glattere Kanten herunter.;
-	fr=En Complet la carte dessine 16x16 échantillons par pixel et les réduit pour des bords plus lisses.;
-	es=En Completo la tarjeta dibuja 16x16 muestras por píxel y las reduce para bordes más suaves.;
-	it=In Completo la scheda disegna 16x16 campioni per pixel e le riduce per bordi più lisci.;
-	}
-
-[In Full the card draws 16x16 samples a pixel the most this window allows, scaled down.]
-	{
-	de=Bei Voll zeichnet die Karte 16x16 Abtastungen je Pixel das meiste, was dieses Fenster erlaubt, herunterskaliert.;
-	fr=En Complet la carte dessine 16x16 échantillons par pixel le plus que cette fenêtre permet, réduit.;
-	es=En Completo la tarjeta dibuja 16x16 muestras por píxel lo máximo que permite esta ventana, reducido.;
-	it=In Completo la scheda disegna 16x16 campioni per pixel il massimo che questa finestra permette, ridotto.;
-	}
-
-[In Full the graphics card draws the view 1:1; a level draws it finer for smoother edges.]
-	{
-	de=Bei Voll zeichnet die Grafikkarte die Ansicht 1:1. eine Stufe zeichnet es feiner für glattere Kanten.;
-	fr=En Complet la carte graphique dessine la vue en 1:1. un niveau le dessine plus fin pour des bords plus lisses.;
-	es=En Completo la tarjeta gráfica dibuja la vista a 1:1. un nivel lo dibuja más fino para bordes más suaves.;
-	it=In Completo la scheda grafica disegna la vista 1:1. un livello lo disegna più fine per bordi più lisci.;
-	}
-
-[Units drawn at 16x and scaled down. Needs a fast CPU.]
-	{
-	de=Einheiten, gezeichnet mit 16x und herunterskaliert. Braucht eine schnelle CPU.;
-	fr=Unités dessinées à 16x et réduites. Requiert un processeur rapide.;
-	es=Unidades dibujadas a 16x y reducidas. Necesita una CPU rápida.;
-	it=Unità disegnate a 16x e ridotte. Richiede una CPU veloce.;
-	}
-
-[Units drawn at 8x and scaled down. Needs a fast CPU.]
-	{
-	de=Einheiten, gezeichnet mit 8x und herunterskaliert. Braucht eine schnelle CPU.;
-	fr=Unités dessinées à 8x et réduites. Requiert un processeur rapide.;
-	es=Unidades dibujadas a 8x y reducidas. Necesita una CPU rápida.;
-	it=Unità disegnate a 8x e ridotte. Richiede una CPU veloce.;
-	}
-
-[Units drawn at higher resolution and scaled down for smoother edges.]
-	{
-	de=Einheiten, in höherer Auflösung gezeichnet und herunterskaliert für glattere Kanten.;
-	fr=Unités dessinées en plus haute résolution et réduites pour des bords plus lisses.;
-	es=Unidades dibujadas a mayor resolución y reducidas para bordes más suaves.;
-	it=Unità disegnate a risoluzione più alta e ridotte per bordi più lisci.;
-	}
-
-[The size of game text in the modern fonts. Larger sizes are easier to read.]
-	{
-	de=Die Größe des Spieltexts in den modernen Schriften. Größere Größen sind leichter zu lesen.;
-	fr=La taille du texte du jeu dans les polices modernes. Les plus grandes tailles sont plus faciles à lire.;
-	es=El tamaño del texto del juego en las fuentes modernas. Los tamaños mayores se leen mejor.;
-	it=La dimensione del testo di gioco nei font moderni. Le dimensioni maggiori si leggono meglio.;
-	}
-
-[The size of game text in the modern fonts. The game's own fonts have fixed sizes.]
-	{
-	de=Die Größe des Spieltexts in den modernen Schriften. Die eigenen Schriften des Spiels haben feste Größen.;
-	fr=La taille du texte du jeu dans les polices modernes. Les polices propres du jeu ont des tailles fixes.;
-	es=El tamaño del texto del juego en las fuentes modernas. Las fuentes propias del juego tienen tamaños fijos.;
-	it=La dimensione del testo di gioco nei font moderni. I font propri del gioco hanno dimensioni fisse.;
-	}
-
-[Out until the whole map fits the view. Graphics' Zoomed out units says how units look.]
-	{
-	de=Heraus, bis die ganze Karte in die Ansicht passt. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
-	fr=Jusqu'à ce que toute la carte tienne dans la vue. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
-	es=Hasta que el mapa entero quepa en la vista. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
-	it=Fino a che l'intera mappa entra nella vista. In Grafica, Unità allontanate dice come appaiono le unità.;
-	}
-
-[Out to 1/32 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
-	{
-	de=Heraus bis auf 1/32 der normalen Größe oder die ganze Karte. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
-	fr=Jusqu'à 1/32 de la taille normale, ou toute la carte. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
-	es=Hasta 1/32 del tamaño normal, o el mapa entero. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
-	it=Fino a 1/32 della dimensione normale, o l'intera mappa. In Grafica, Unità allontanate dice come appaiono le unità.;
-	}
-
-[Out to 1/16 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
-	{
-	de=Heraus bis auf 1/16 der normalen Größe oder die ganze Karte. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
-	fr=Jusqu'à 1/16 de la taille normale, ou toute la carte. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
-	es=Hasta 1/16 del tamaño normal, o el mapa entero. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
-	it=Fino a 1/16 della dimensione normale, o l'intera mappa. In Grafica, Unità allontanate dice come appaiono le unità.;
-	}
-
-[Out to 1/8 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
-	{
-	de=Heraus bis auf 1/8 der normalen Größe oder die ganze Karte. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
-	fr=Jusqu'à 1/8 de la taille normale, ou toute la carte. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
-	es=Hasta 1/8 del tamaño normal, o el mapa entero. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
-	it=Fino a 1/8 della dimensione normale, o l'intera mappa. In Grafica, Unità allontanate dice come appaiono le unità.;
-	}
-
-[Out to 1/4 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
-	{
-	de=Heraus bis auf 1/4 der normalen Größe oder die ganze Karte. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
-	fr=Jusqu'à 1/4 de la taille normale, ou toute la carte. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
-	es=Hasta 1/4 del tamaño normal, o el mapa entero. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
-	it=Fino a 1/4 della dimensione normale, o l'intera mappa. In Grafica, Unità allontanate dice come appaiono le unità.;
-	}
-
-[Out to 1/2 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
-	{
-	de=Heraus bis auf 1/2 der normalen Größe oder die ganze Karte. Unter Grafik sagt Herausgezoomte Einheiten, wie Einheiten aussehen.;
-	fr=Jusqu'à 1/2 de la taille normale, ou toute la carte. Dans Graphismes, Unités éloignées indique l'aspect des unités.;
-	es=Hasta 1/2 del tamaño normal, o el mapa entero. En Gráficos, Unidades alejadas dice cómo se ven las unidades.;
-	it=Fino a 1/2 della dimensione normale, o l'intera mappa. In Grafica, Unità allontanate dice come appaiono le unità.;
-	}
-
-[Never closer than normal size. The wheel, a pinch and a controller stop there.]
-	{
-	de=Nie näher als die normale Größe. Das Rad, ein Zwicken und ein Controller hören dort auf.;
-	fr=Jamais plus près que la taille normale. La molette, un pincement et une manette s'arrêtent là.;
-	es=Nunca más cerca que el tamaño normal. La rueda, un pellizco y un mando se detienen ahí.;
-	it=Mai più vicino della dimensione normale. La rotella, una pizzicata e un controller si fermano lì.;
-	}
-
-[In to 2x normal size at most. The wheel, a pinch and a controller stop there.]
-	{
-	de=Hinein bis höchstens 2x der normalen Größe. Das Rad, ein Zwicken und ein Controller hören dort auf.;
-	fr=Jusqu'à 2x la taille normale au plus. La molette, un pincement et une manette s'arrêtent là.;
-	es=Hasta 2x el tamaño normal como máximo. La rueda, un pellizco y un mando se detienen ahí.;
-	it=Fino a 2x la dimensione normale al massimo. La rotella, una pizzicata e un controller si fermano lì.;
-	}
-
-[In to 3x normal size at most. The wheel, a pinch and a controller stop there.]
-	{
-	de=Hinein bis höchstens 3x der normalen Größe. Das Rad, ein Zwicken und ein Controller hören dort auf.;
-	fr=Jusqu'à 3x la taille normale au plus. La molette, un pincement et une manette s'arrêtent là.;
-	es=Hasta 3x el tamaño normal como máximo. La rueda, un pellizco y un mando se detienen ahí.;
-	it=Fino a 3x la dimensione normale al massimo. La rotella, una pizzicata e un controller si fermano lì.;
-	}
-
-[In to 4x normal size at most. The wheel, a pinch and a controller stop there.]
-	{
-	de=Hinein bis höchstens 4x der normalen Größe. Das Rad, ein Zwicken und ein Controller hören dort auf.;
-	fr=Jusqu'à 4x la taille normale au plus. La molette, un pincement et une manette s'arrêtent là.;
-	es=Hasta 4x el tamaño normal como máximo. La rueda, un pellizco y un mando se detienen ahí.;
-	it=Fino a 4x la dimensione normale al massimo. La rotella, una pizzicata e un controller si fermano lì.;
-	}
-
-[Dots farther out than 1/2 of normal size. Closer in, units are drawn as models.]
-	{
-	de=Punkte weiter draußen als 1/2 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
-	fr=Des points plus loin que 1/2 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
-	es=Puntos más lejos que 1/2 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
-	it=Punti più lontani di 1/2 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
-	}
-
-[Dots farther out than 1/3 of normal size. Closer in, units are drawn as models.]
-	{
-	de=Punkte weiter draußen als 1/3 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
-	fr=Des points plus loin que 1/3 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
-	es=Puntos más lejos que 1/3 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
-	it=Punti più lontani di 1/3 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
-	}
-
-[Dots farther out than 1/4 of normal size. Closer in, units are drawn as models.]
-	{
-	de=Punkte weiter draußen als 1/4 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
-	fr=Des points plus loin que 1/4 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
-	es=Puntos más lejos que 1/4 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
-	it=Punti più lontani di 1/4 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
-	}
-
-[Dots farther out than 1/6 of normal size. Closer in, units are drawn as models.]
-	{
-	de=Punkte weiter draußen als 1/6 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
-	fr=Des points plus loin que 1/6 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
-	es=Puntos más lejos que 1/6 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
-	it=Punti più lontani di 1/6 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
-	}
-
-[Dots farther out than 1/8 of normal size. Closer in, units are drawn as models.]
-	{
-	de=Punkte weiter draußen als 1/8 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
-	fr=Des points plus loin que 1/8 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
-	es=Puntos más lejos que 1/8 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
-	it=Punti più lontani di 1/8 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
-	}
-
-[Dots farther out than 1/12 of normal size. Closer in, units are drawn as models.]
-	{
-	de=Punkte weiter draußen als 1/12 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
-	fr=Des points plus loin que 1/12 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
-	es=Puntos más lejos que 1/12 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
-	it=Punti più lontani di 1/12 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
-	}
-
-[Dots farther out than 1/16 of normal size. Closer in, units are drawn as models.]
-	{
-	de=Punkte weiter draußen als 1/16 der normalen Größe. Näher heran werden Einheiten als Modelle gezeichnet.;
-	fr=Des points plus loin que 1/16 de la taille normale. De plus près, les unités sont dessinées comme des modèles.;
-	es=Puntos más lejos que 1/16 del tamaño normal. Más de cerca, las unidades se dibujan como modelos.;
-	it=Punti più lontani di 1/16 della dimensione normale. Più da vicino, le unità sono disegnate come modelli.;
-	}
-
-[As far as the view always went: 1/6 of normal size with Full hardware acceleration, else 1/2.]
-	{
-	de=So weit, wie die Ansicht immer ging: 1/6 der normalen Größe mit Hardwarebeschleunigung Voll, sonst 1/2.;
-	fr=Aussi loin que la vue allait toujours : 1/6 de la normale taille avec l'accélération matérielle Complet, sinon 1/2.;
-	es=Tan lejos como la vista siempre llegaba: 1/6 de lo normal tamaño con aceleración por hardware Completo, si no 1/2.;
-	it=Fin dove la vista arrivava sempre: 1/6 del normale dimensione con accelerazione hardware Completo, altrimenti 1/2.;
-	}
-
-[The view stays on the map, as the game kept it. With more than the map in view, it is centred.]
-	{
-	de=Die Ansicht bleibt auf der Karte, wie das Spiel sie gehalten hat. Mit mehr als der Karte in der Ansicht wird sie zentriert.;
-	fr=La vue reste sur la carte, comme le jeu la gardait. Avec plus que la carte dans la vue, elle est centrée.;
-	es=La vista se queda en el mapa, como el juego la mantenía. Con más que el mapa en la vista, se centra.;
-	it=La vista resta sulla mappa, come il gioco la teneva. Con più della mappa nella vista, viene centrata.;
-	}
-
-[Up to a quarter of the battlefield past the map's edges, however the view moves.]
-	{
-	de=Bis zu einem Viertel des Schlachtfelds über den Kartenränder, wie auch immer sich die Ansicht bewegt.;
-	fr=Jusqu'à un quart du champ de bataille au-delà du bords de la carte, quel que soit le mouvement de la vue.;
-	es=Hasta un cuarto del campo de batalla más allá del bordes del mapa, se mueva como se mueva la vista.;
-	it=Fino a un quarto del campo di battaglia oltre il bordi della mappa, comunque si muova la vista.;
-	}
-
-[Up to half the battlefield past the map's edges; a zoom keeps the ground under the pointer.]
-	{
-	de=Bis zur Hälfte des Schlachtfelds über die Kartenränder hinaus. ein Zoom hält den Boden unter dem Zeiger.;
-	fr=Jusqu'à la moitié du champ de bataille au-delà des bords de la carte. un zoom garde le sol sous le pointeur.;
-	es=Hasta la mitad del campo de batalla más allá de los bordes del mapa. un zoom mantiene el suelo bajo el puntero.;
-	it=Fino a metà del campo di battaglia oltre i bordi della mappa. uno zoom tiene il suolo sotto il puntatore.;
-	}
-
-[The menus fill the window, every pixel as wide as the next.]
-	{
-	de=Die Menüs füllen das Fenster, jedes Pixel so breit wie die nächste.;
-	fr=Les menus remplissent la fenêtre, chaque pixel aussi large que la suivante.;
-	es=Los menús llenan la ventana, cada píxel tan ancha como la siguiente.;
-	it=I menu riempiono la finestra, ogni pixel larga quanto la successiva.;
-	}
-
-[The largest whole-number scale that fits: smaller menus, every pixel square.]
-	{
-	de=Der größte ganzzahlige Maßstab, der passt: kleinere Menüs, jedes Pixel quadratisch.;
-	fr=La plus grande échelle entière qui tient : menus plus petits, chaque pixel carré.;
-	es=La mayor escala entera que cabe: menús más pequeños, cada píxel cuadrado.;
-	it=La scala intera più grande che entra: menu più piccoli, ogni pixel quadrato.;
-	}
-
-[The menus fill the window, unfiltered, as the game always drew them.]
-	{
-	de=Die Menüs füllen das Fenster, ungefiltert, wie das Spiel sie immer gezeichnet hat.;
-	fr=Les menus remplissent la fenêtre, sans filtre, comme le jeu les a toujours dessinées.;
-	es=Los menús llenan la ventana, sin filtrar, como el juego siempre las dibujó.;
-	it=I menu riempiono la finestra, non filtrati, come il gioco le ha sempre disegnate.;
-	}
-
-[Explosions do not light up the ground, whatever a mod asks for.]
-	{
-	de=Explosionen leuchten den Boden nicht an, was auch immer ein Mod verlangt.;
-	fr=Les explosions n'éclairent pas le sol, tout ce qu'un mod demande.;
-	es=Las explosiones no iluminan el suelo, lo que pida un mod.;
-	it=Le esplosioni non illuminano il terreno, qualunque cosa chieda un mod.;
-	}
-
-[Explosions light up the ground at half strength, or less where a mod asks.]
-	{
-	de=Explosionen leuchten den Boden zur Hälfte an Stärke, oder weniger, wo ein Mod es verlangt.;
-	fr=Les explosions éclairent le sol à moitié force, ou moins là où un mod le demande.;
-	es=Las explosiones iluminan el suelo a la mitad fuerza, o menos donde un mod lo pide.;
-	it=Le esplosioni illuminano il terreno a metà forza, o meno dove un mod lo chiede.;
-	}
-
-[Explosions light up the ground as the game drew it, or less where a mod asks.]
-	{
-	de=Explosionen leuchten den Boden an wie das Spiel es gezeichnet hat, oder weniger, wo ein Mod es verlangt.;
-	fr=Les explosions éclairent le sol comme le jeu l'a dessiné, ou moins là où un mod le demande.;
-	es=Las explosiones iluminan el suelo como el juego lo dibujó, o menos donde un mod lo pide.;
-	it=Le esplosioni illuminano il terreno come il gioco lo ha disegnato, o meno dove un mod lo chiede.;
-	}
-
-[Units are drawn as models at every zoom. Far out on a large map, needs a fast CPU.]
-	{
-	de=Einheiten werden bei jedem Zoom als Modelle gezeichnet. Weit draußen auf einer großen Karte, braucht eine schnelle CPU.;
-	fr=Les unités sont dessinées comme des modèles à chaque zoom. Très loin sur une grande carte, demande un processeur rapide.;
-	es=Las unidades se dibujan como modelos en cada zoom. Muy lejos en un mapa grande, necesita una CPU rápida.;
-	it=Le unità sono disegnate come modelli a ogni zoom. Molto lontano su una mappa grande, serve una CPU veloce.;
-	}
-
-[Past After zoom, each unit is a dot of its owner's colour, framed while selected.]
-	{
-	de=Jenseits von Nach dem Zoom ist jede Einheit ein Punkt ihrer Farbe des Besitzers, umrahmt solange gewählt.;
-	fr=Au-delà d'Après le zoom, chaque unité est un point de sa couleur du propriétaire, encadrée tant qu'elle est sélectionnée.;
-	es=Más allá de Tras el zoom, cada unidad es un punto de su color del dueño, enmarcada mientras está seleccionada.;
-	it=Oltre Dopo lo zoom, ogni unità è un punto del suo colore del proprietario, incorniciata mentre è selezionata.;
-	}
-
-[A window hides its title bar and borders while a game is played; menus show them.]
-	{
-	de=Ein Fenster verbirgt Titelleiste und Ränder während eine Partie gespielt wird. Menüs zeigen sie.;
-	fr=Une fenêtre cache sa barre de titre et ses bords pendant qu'une partie se joue. Les menus les montrent.;
-	es=Una ventana oculta su barra de título y sus bordes mientras se juega una partida. Los menús los muestran.;
-	it=Una finestra nasconde la barra del titolo e i bordi mentre si gioca una partita. I menu li mostrano.;
-	}
-
-[A window shows its title bar and borders on every screen, a game's included.]
-	{
-	de=Ein Fenster zeigt Titelleiste und Ränder auf jedem Bildschirm, ein Spiel ist dabei.;
-	fr=Une fenêtre montre sa barre de titre et ses bords sur chaque écran, une partie est incluse.;
-	es=Una ventana muestra su barra de título y sus bordes en cada pantalla, hay una partida.;
-	it=Una finestra mostra la barra del titolo e i bordi su ogni schermo, c'è una partita.;
-	}
-
-[The side panel and bars grow with the window, up to twice the original game's size.]
-	{
-	de=Seitenleiste und Balken wachsen mit dem Fenster, bis zum Doppelten der Größe des ursprünglichen Spiels.;
-	fr=Le panneau latéral et les barres grandissent avec la fenêtre, jusqu'à deux fois la taille du jeu d'origine.;
-	es=El panel lateral y las barras crecen con la ventana, hasta el doble del tamaño del juego original.;
-	it=Il pannello laterale e le barre crescono con la finestra, fino al doppio della dimensione del gioco originale.;
-	}
-
-[The side panel and bars keep the original game's size on every window.]
-	{
-	de=Seitenleiste und Balken behalten das ursprüngliche Spielgröße auf jedem Fenster.;
-	fr=Le panneau latéral et les barres gardent l'original taille du jeu sur chaque fenêtre.;
-	es=El panel lateral y las barras mantienen el original tamaño del juego en cada ventana.;
-	it=Il pannello laterale e le barre tengono l'originale dimensione del gioco su ogni finestra.;
-	}
-
-[Automatic: a selection box on a tablet, scrolling on a phone.]
-	{
-	de=Automatisch: ein Auswahlrahmen auf einem Tablet, Scrollen auf einem Telefon.;
-	fr=Automatique : un cadre de sélection sur une tablette, défilement sur un téléphone.;
-	es=Automático: un marco de selección en una tableta, desplazamiento en un teléfono.;
-	it=Automatico: un riquadro di selezione su un tablet, scorrimento su un telefono.;
-	}
-
-[A drag draws a selection box; two fingers scroll the map.]
-	{
-	de=Ein Ziehen zeichnet einen Auswahlrahmen, zwei Finger scrollen die Karte.;
-	fr=Un glissement trace un cadre de sélection, deux doigts font défiler la carte.;
-	es=Un arrastre dibuja un marco de selección, dos dedos desplazan el mapa.;
-	it=Un trascinamento disegna un riquadro di selezione, due dita scorrono la mappa.;
-	}
-
-[A drag scrolls the map; hold, then drag, for a selection box.]
-	{
-	de=Ein Ziehen verschiebt die Karte, halten, dann ziehen, für einen Auswahlrahmen.;
-	fr=Un glissement fait défiler la carte, maintiens, puis glisse, pour un cadre de sélection.;
-	es=Un arrastre desplaza el mapa, mantén y luego arrastra, para un marco de selección.;
-	it=Un trascinamento scorre la mappa, tieni premuto, poi trascina, per un riquadro di selezione.;
-	}
-
-[A tapped QUEUE, ADD or x5 turns off after the next order or selection.]
-	{
-	de=Ein angetipptes WARTESCHLANGE, HINZUFÜGEN oder x5 geht aus nach dem nächsten Befehl oder der nächsten Auswahl.;
-	fr=Une pression sur FILE, AJOUTER ou x5 s'éteint après le prochain ordre ou la prochaine sélection.;
-	es=Un toque en COLA, AÑADIR o x5 se apaga después de la siguiente orden o selección.;
-	it=Un tocco su CODA, AGGIUNGI o x5 si spegne dopo l'ordine o la selezione successiva.;
-	}
-
-[A tapped QUEUE, ADD or x5 stays on until it is tapped again.]
-	{
-	de=Ein angetipptes WARTESCHLANGE, HINZUFÜGEN oder x5 bleibt an bis es erneut angetippt wird.;
-	fr=Une pression sur FILE, AJOUTER ou x5 reste active jusqu'à ce qu'il soit touché à nouveau.;
-	es=Un toque en COLA, AÑADIR o x5 permanece activo hasta que se toque de nuevo.;
-	it=Un tocco su CODA, AGGIUNGI o x5 resta attivo finché non viene toccato di nuovo.;
-	}
-
-[The right stick moves the pointer and the left stick the map.]
-	{
-	de=Der rechte Stick bewegt den Zeiger und der linke Stick die Karte.;
-	fr=Le stick droit déplace le pointeur et le gauche stick la carte.;
-	es=El stick derecho mueve el puntero y el izquierdo stick el mapa.;
-	it=Lo stick destro muove il puntatore e il sinistro stick la mappa.;
-	}
-
-[The right trackpad points and the left one moves the map; a pad without trackpads plays Sticks.]
-	{
-	de=Das rechte Trackpad zeigt und das linke bewegt die Karte. Ein Pad ohne Trackpads spielt Sticks.;
-	fr=Le pavé droit pointe et le gauche déplace la carte. Un pad sans pavés joue Sticks.;
-	es=El trackpad derecho apunta y el izquierdo mueve el mapa. Un pad sin trackpads juega Sticks.;
-	it=Il trackpad destro punta e il sinistro muove la mappa. Un pad senza trackpad gioca Sticks.;
-	}
-
-[Up and down zoom about the pointer; a flick left or right turns the build page while building.]
-	{
-	de=Hoch und runter zoomt um den Zeiger. Ein Schnipsen nach links oder rechts blättert die Baulseite beim Bauen.;
-	fr=Haut et bas zooment autour du pointeur. Un geste vers la gauche ou droite tourne la page de construction pendant la construction.;
-	es=Arriba y abajo hacen zoom alrededor del puntero. Un golpe a la izquierda o derecha pasa la página de construcción al construir.;
-	it=Su e giù zoomano intorno al puntatore. Uno scatto a sinistra o destra gira la pagina di costruzione mentre si costruisce.;
-	}
-
-[The right stick moves the pointer, as in the Sticks scheme.]
-	{
-	de=Der rechte Stick bewegt den Zeiger, wie im Stick-Schema.;
-	fr=Le stick droit déplace le pointeur, comme dans le schéma Sticks.;
-	es=El stick derecho mueve el puntero, como en el esquema Sticks.;
-	it=Lo stick destro muove il puntatore, come nello schema Sticks.;
-	}
-
-[After restoring this {device} from a backup, add the game files again.]
-	{
-	de=Nach dem Wiederherstellen dieses {device} aus einer Sicherung, füg die Spieldateien erneut hinzu.;
-	fr=Après la restauration de ce {device} depuis une sauvegarde, ajoute à nouveau les fichiers du jeu.;
-	es=Tras restaurar este {device} desde una copia de seguridad, añade de nuevo los archivos del juego.;
-	it=Dopo aver ripristinato questo {device} da un backup, aggiungi di nuovo i file di gioco.;
-	}
-
-[What patrolling builders do. Applies from the next game.]
-	{
-	de=Was patrouillierende Bauer tun. Gilt ab dem nächsten Spiel.;
-	fr=Ce que font les bâtisseurs en patrouille. S'applique dès la prochaine partie.;
-	es=Qué hacen los constructores de patrulla. Se aplica desde la próxima partida.;
-	it=Cosa fanno i costruttori in pattuglia. Si applica dalla prossima partita.;
-	}
-
-[What guarding builders do. Applies from the next game.]
-	{
-	de=Was bewachende Bauer tun. Gilt ab dem nächsten Spiel.;
-	fr=Ce que font les bâtisseurs en garde. S'applique dès la prochaine partie.;
-	es=Qué hacen los constructores que protegen. Se aplica desde la próxima partida.;
-	it=Cosa fanno i costruttori di guardia. Si applica dalla prossima partita.;
-	}
-
-[The first press clears the selection, the second opens the menu.]
-	{
-	de=Der erste Druck leert die Auswahl, der zweite öffnet das Menü.;
-	fr=La première pression vide la sélection, le second ouvre le menu.;
-	es=La primera pulsación vacía la selección, el segundo abre el menú.;
-	it=La prima pressione svuota la selezione, il secondo apre il menu.;
-	}
-
-[Units each player can have. Applies from the next game.]
-	{
-	de=Einheiten, die jeder Spieler haben kann. Gilt ab dem nächsten Spiel.;
-	fr=Unités que chaque joueur peut avoir. S'applique dès la prochaine partie.;
-	es=Unidades que puede tener cada jugador. Se aplica desde la próxima partida.;
-	it=Unità che ogni giocatore può avere. Si applica dalla prossima partita.;
-	}
-
-[Full screen at this size, or a window of it. Applies when you press OK.]
-	{
-	de=Vollbild in dieser Größe oder ein Fenster davon. Gilt, wenn du OK drückst.;
-	fr=Plein écran à cette taille, ou une fenêtre de celle-ci. S'applique quand tu appuies sur OK.;
-	es=Pantalla completa a este tamaño, o una ventana de ella. Se aplica cuando pulsas OK.;
-	it=Schermo intero a questa dimensione, o una finestra di essa. Si applica quando premi OK.;
-	}
-
-[Modern fonts for in-game text, including internationalization.]
-	{
-	de=Moderne Schriften für Text im Spiel, einschließlich Internationalisierung.;
-	fr=Polices modernes pour le texte en jeu, y compris l'internationalisation.;
-	es=Fuentes modernas para el texto del juego, incluida la internacionalización.;
-	it=Font moderni per il testo di gioco, inclusa l'internazionalizzazione.;
-	}
-
-[Chat in any language with players who have it; others see ? for letters they lack.]
-	{
-	de=Chatte in jeder Sprache mit Spielern, die es eingeschaltet haben, andere sehen ? für Buchstaben, die ihnen fehlen.;
-	fr=Discute dans n'importe quelle langue avec les joueurs qui l'ont, les autres voient ? pour les lettres qui leur manquent.;
-	es=Chatea en cualquier idioma con jugadores que lo tienen, otros ven ? para las letras que les faltan.;
-	it=Chatta in qualsiasi lingua con i giocatori che ce l'hanno, gli altri vedono ? per le lettere che non hanno.;
-	}
-
-[The minimap and the thumb controls on the right, the orders on the left.]
-	{
-	de=Die Minikarte und die Daumensteuerungen auf dem rechts, die Befehle links.;
-	fr=La minicarte et les commandes au pouce sur le à droite, les ordres à gauche.;
-	es=El minimapa y los controles de pulgar en el a la derecha, las órdenes a la izquierda.;
-	it=La minimappa e i controlli del pollice sul a destra, gli ordini a sinistra.;
-	}
-
-[The size of the touch controls; the game's own screens keep theirs.]
-	{
-	de=Die Größe der Berührungssteuerung. Die eigene des Spiels Bildschirme behalten ihre.;
-	fr=La taille des commandes tactiles. Celles propres au jeu les écrans gardent les leurs.;
-	es=El tamaño de los controles táctiles. Los propios del juego las pantallas mantienen las suyas.;
-	it=La dimensione dei controlli tattili. Quelli propri del gioco gli schermi tengono le loro.;
-	}
-
-[Mirrors the roles: the left pad points, the right pad moves the map, triggers and grips swap.]
-	{
-	de=Tauscht die Rollen: das linke Pad zeigt, das rechte Pad bewegt die Karte, Trigger und Griffe tauschen.;
-	fr=Inverse les rôles : le pad gauche pointe, le droit le pad déplace la carte, les gâchettes et les poignées s'échangent.;
-	es=Invierte los papeles: el pad izquierdo apunta, el derecho el pad mueve el mapa, los gatillos y los agarres se intercambian.;
-	it=Scambia i ruoli: il pad sinistro punta, il destro il pad muove la mappa, grilletti e impugnature si scambiano.;
-	}
-
-[The display's own pixel density (Retina on a Mac). Applies from the next start.]
-	{
-	de=Die eigene Pixeldichte des Bildschirms (Retina auf einem Mac). Gilt ab dem nächsten Start.;
-	fr=La densité de pixels propre à l'écran (Retina sur un Mac). S'applique dès le prochain démarrage.;
-	es=La densidad de píxeles propia de la pantalla (Retina en un Mac). Se aplica desde el próximo inicio.;
-	it=La densità di pixel propria dello schermo (Retina su un Mac). Si applica dal prossimo avvio.;
-	}
-
-[How large Open Annihilation's own screens are drawn. Auto suits the window's height.]
-	{
-	de=Wie groß die eigenen Bildschirme von Open Annihilation werden gezeichnet. Auto passt zur Höhe des Fensters.;
-	fr=La taille des écrans propres à Open Annihilation sont dessinées. Auto convient à la hauteur de la fenêtre.;
-	es=Qué tamaño tienen las pantallas propias de Open Annihilation se dibujan. Auto se ajusta a la altura de la ventana.;
-	it=Quanto sono grandi le schermate proprie di Open Annihilation vengono disegnate. Auto si adatta all'altezza della finestra.;
-	}
-
-[Open these files with the game from your file manager.]
-	{
-	de=Diese Dateien mit dem Spiel öffnen aus deinem Dateimanager.;
-	fr=Ouvrir ces fichiers avec le jeu depuis ton gestionnaire de fichiers.;
-	es=Abrir estos archivos con el juego desde tu gestor de archivos.;
-	it=Apri questi file con il gioco dal tuo gestore di file.;
-	}
-
-[Finder's Get Info › Open with chooses another opener.]
-	{
-	de=Finder: Informationen › Öffnen mit wählt ein anderes Programm zum Öffnen.;
-	fr=Lire les informations du Finder › Ouvrir avec choisit un autre ouvreur.;
-	es=Obtener información del Finder › Abrir con elige otro programa para abrir.;
-	it=Ottieni informazioni del Finder › Apri con sceglie un altro programma per aprire.;
-	}
-
-[The game's own text and unit names, where its data has them in the language.]
-	{
-	de=Der eigene Text des Spiels und die Einheitennamen, wo seine Daten hat sie in der Sprache.;
-	fr=Le texte propre du jeu et les noms d'unités, là où ses les données les ont dans la langue.;
-	es=El texto propio del juego y los nombres de unidad, donde sus los datos los tienen en el idioma.;
-	it=Il testo proprio del gioco e i nomi delle unità, dove i suoi i dati li hanno nella lingua.;
 	}

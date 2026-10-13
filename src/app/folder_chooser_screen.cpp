@@ -17,9 +17,13 @@
 #include "render_state.hpp"
 #include "window_pixels.hpp"
 
+#include "oa/app/demo_installer.hpp"
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/game_files_import.hpp"
+#include "oa/data/content_bundles.hpp"
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/platform/game_installs.hpp"
+#include "oa/platform/machine.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/ui/folder_chooser.hpp"
 #include "oa/ui/game_files.hpp"
@@ -27,11 +31,13 @@
 #include "oa/ui/pad_controls.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
+#include <cstdint>
 #include <exception>
+#include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -54,10 +60,10 @@ namespace text_font = oa::platform::text_font;
 constexpr int32_t frame_wait_ms = 16;
 /// The most entries of a folder the browser reads.
 constexpr std::size_t browse_listing_limit = 8192;
-/// The most folders the browser lists.
+/// The most files and folders the browser lists.
 constexpr std::size_t most_browse_entries = 1000;
-/// The most folders the browser looks into for the game's first archive, to mark them.
-constexpr std::size_t most_marked_entries = 256;
+/// The most files read inside one folder while saying what it holds.
+constexpr std::size_t most_child_files = 64;
 /// The largest value of a gamepad's stick axis.
 constexpr float stick_axis_range = 32767.0F;
 /// The share of the left stick's travel past which it moves the focus.
@@ -70,8 +76,8 @@ constexpr float scroll_dead_share = 0.2F;
 constexpr float stick_scroll_points_per_second = 1200.0F;
 /// Milliseconds in a second.
 constexpr float ms_per_second = 1000.0F;
-/// The folder under the home folder that the 1997 demo's installer is usually downloaded to.
-constexpr std::string_view downloads_folder_name = "Downloads";
+/// The most characters the filter keeps.
+constexpr std::size_t most_filter_characters = 64;
 
 /// A direction the focus moves in.
 enum class Direction : uint8_t {
@@ -139,43 +145,12 @@ std::string folded(std::string_view name) {
     return lowered;
 }
 
-/// Returns the words a found folder's check gives when it can be played: the parts its
-/// archives hold, as the Game files screen says them, or the 1997 demo.
+/// Returns one of the locator's words in the installed language.
 ///
-/// @param directory the resolved folder
-/// @return "Total Annihilation 3.1c with Core Contingency." and the like
-std::string verdict_of(const GameDirectory& directory) {
-    std::array<bool, 11> parts{};
-    const bool demo = directory.demo.outcome == DemoOutcome::ready;
-    for (const fs::path& archive : directory.archives) {
-        const auto part = game_files::part_of(path_to_utf8(archive.filename()), 0, true, {});
-        view::PartKind kind = view::PartKind::game_archives;
-        switch (part) {
-        case game_files::Part::game_archives:
-            kind = view::PartKind::game_archives;
-            break;
-        case game_files::Part::update_31c:
-            kind = view::PartKind::update_31c;
-            break;
-        case game_files::Part::core_contingency:
-            kind = view::PartKind::core_contingency;
-            break;
-        case game_files::Part::battle_tactics:
-            kind = view::PartKind::battle_tactics;
-            break;
-        case game_files::Part::extra:
-            kind = view::PartKind::extra;
-            break;
-        case game_files::Part::music:
-        case game_files::Part::movies:
-        case game_files::Part::mods:
-        case game_files::Part::other:
-        case game_files::Part::demo:
-            continue;
-        }
-        parts[static_cast<std::size_t>(kind)] = true;
-    }
-    return view::ready_text(parts, demo);
+/// @param english the words as the source writes them
+/// @return their translation, or the words themselves
+std::string tr(std::string_view english) {
+    return std::string(oa::data::languages::interface_text(english));
 }
 
 /// Tells whether nobody watches a run: --unattended and the scripted runs, a headless check,
@@ -191,6 +166,115 @@ bool nobody_watches(const Options& options) {
                ci == nullptr ? std::string_view{} : std::string_view(ci),
                driver == nullptr ? std::string_view{} : std::string_view(driver)
            );
+}
+
+/// A folder as an absolute path with a trailing separator removed.
+///
+/// @param folder the folder
+/// @return the absolute folder
+fs::path absolute_folder(const fs::path& folder) {
+    std::error_code error;
+    fs::path shown = fs::absolute(folder, error).lexically_normal();
+    if (error)
+        shown = folder;
+    if (!shown.has_filename() && shown.has_relative_path())
+        shown = shown.parent_path();
+    return shown;
+}
+
+/// Makes an empty file of a size, sparse where the file system allows it.
+///
+/// @param path the file
+/// @param size its size, in bytes
+/// @return true when the file has that size
+bool sparse_file(const fs::path& path, uint64_t size) {
+    std::error_code error;
+    if (!path.parent_path().empty())
+        fs::create_directories(path.parent_path(), error);
+    if (error)
+        return false;
+    {
+        std::ofstream created(path, std::ios::binary | std::ios::trunc);
+        if (!created)
+            return false;
+    }
+    fs::resize_file(path, static_cast<uintmax_t>(size), error);
+    return !error;
+}
+
+/// The scratch home the picture check browses, and the places it shows. The places are the
+/// fixed ones the tests use. Nothing outside `root` is read or created.
+struct PictureScene {
+    fs::path root{};                  ///< removed when the check ends
+    fs::path home{};                  ///< Desktop, Documents, Downloads and Games
+    fs::path install{};               ///< Games/Total Annihilation
+    installs::LocatorFacts desktop{}; ///< the desktop sidebar
+    installs::LocatorFacts deck{};    ///< one card and one Steam prefix
+};
+
+/// Builds the scratch home: the three usual folders, a Total Annihilation of empty files
+/// named and sized from the built-in table, and the Windows installer beside it.
+///
+/// @param root where the home is made; replaced if it is already there
+/// @param[out] scene the home, the install and the sidebars
+/// @return true when the files were made
+bool build_picture_scene(const fs::path& root, PictureScene& scene) {
+    namespace bundles = oa::data::content_bundles;
+    std::error_code error;
+    fs::remove_all(root, error);
+    error.clear();
+    scene.root = root;
+    const fs::path home = root / "home";
+    fs::create_directories(home / "Desktop", error);
+    if (error)
+        return false;
+    fs::create_directories(home / "Documents", error);
+    if (error)
+        return false;
+    fs::create_directories(home / "Downloads", error);
+    if (error)
+        return false;
+    const fs::path games = home / "Games";
+    const fs::path install = games / "Total Annihilation";
+    fs::create_directories(install, error);
+    if (error)
+        return false;
+    for (const bundles::Bundle& bundle : bundles::bundles()) {
+        for (const bundles::ContentFile& file : bundle.files) {
+            if (!sparse_file(install / std::string(file.copy_name), file.size))
+                return false;
+        }
+    }
+    const bundles::Installer* windows = nullptr;
+    for (const bundles::Installer& installer : bundles::installers()) {
+        if (installer.kind == bundles::InstallerKind::windows)
+            windows = &installer;
+    }
+    if (windows == nullptr || !sparse_file(games / std::string(windows->file_name), windows->size))
+        return false;
+    scene.home = absolute_folder(home);
+    scene.install = absolute_folder(install);
+    scene.desktop.home = scene.home;
+    scene.desktop.desktop = scene.home / "Desktop";
+    scene.desktop.documents = scene.home / "Documents";
+    scene.desktop.downloads = scene.home / "Downloads";
+    scene.desktop.applications = "/Applications";
+    scene.desktop.volumes = {"/", "/Volumes/TOTALA"};
+    scene.desktop.steam = "/home/play/.local/share/Steam/steamapps/compatdata/298030/pfx";
+    scene.desktop.heroic = "/home/play/Games/Heroic";
+    scene.deck.deck = true;
+    scene.deck.home = scene.home;
+    scene.deck.sd_cards = {"/run/media/mmcblk0p1"};
+    scene.deck.steam = scene.desktop.steam;
+    return true;
+}
+
+/// Removes a picture scene. Failure to remove it does not change the check's result.
+///
+/// @param root the scene's root
+void remove_picture_scene(const fs::path& root) {
+    std::error_code error;
+    fs::remove_all(root, error);
 }
 
 /// The chooser on the game's window: its loop, its model and what its commands do.
@@ -266,7 +350,11 @@ class ChooserScreen {
             SDL_free(ids);
         }
         model_.version = game_files_version_text();
-        model_.offers_dialog = needed_.dialog_offered;
+        model_.deck = oa::platform::running_in_steam_game_mode();
+        model_.offers_dialog = needed_.dialog_offered && !model_.deck;
+#if defined(__APPLE__)
+        model_.permission_note = model_.offers_dialog;
+#endif
         std::string notice;
         if (!needed_.stored_folder.empty())
             notice = "The Total Annihilation folder chosen earlier can no longer be used:\n" +
@@ -277,21 +365,14 @@ class ChooserScreen {
             notice += "The system's folder dialog did not open: " + needed_.dialog_problem;
         }
         model_.notice = std::move(notice);
-        for (const FoundInstall& install : needed_.found) {
-            chooser::InstallRow row;
-            row.folder = path_to_utf8(install.folder);
-            row.source = std::string(installs::source_words(install.source, install.removable));
-            std::string problem;
-            if (const auto checked = take_chosen_folder(options_, install.folder, &problem)) {
-                row.usable = true;
-                row.verdict = verdict_of(*checked);
-            } else {
-                row.verdict = problem;
-            }
-            model_.installs.push_back(std::move(row));
-        }
-        home_ = installs::home_folder();
+        model_.choose_label = tr("Use this folder");
+        if (home_.empty())
+            home_ = installs::home_folder();
         refresh_viewport();
+        std::error_code error;
+        const fs::path start =
+            !home_.empty() && fs::is_directory(home_, error) ? home_ : fs::path{};
+        browse_to(start.empty() ? start_folder() : start);
         dirty_ = true;
     }
 
@@ -376,6 +457,9 @@ class ChooserScreen {
             return;
         case SDL_EVENT_KEY_DOWN:
             take_key(event.key);
+            return;
+        case SDL_EVENT_TEXT_INPUT:
+            take_text(event.text.text);
             return;
         case SDL_EVENT_GAMEPAD_ADDED:
             open_pad(event.gdevice.which);
@@ -500,12 +584,24 @@ class ChooserScreen {
             press_key(chooser::Key::enter);
             return;
         case SDLK_ESCAPE:
-            press_key(chooser::Key::escape);
+            go_back();
             return;
         case SDLK_BACKSPACE:
-            // In the browser Backspace goes up a folder, as file managers do.
-            if (model_.view == chooser::View::browse && model_.has_parent)
+            if (filter_focused_ && !model_.filter.empty()) {
+                model_.filter.pop_back();
+                show_filtered();
+                return;
+            }
+            if (model_.has_parent)
                 act({chooser::Command::parent_folder, 0});
+            return;
+        case SDLK_X:
+            if (!filter_focused_)
+                press_key(chooser::Key::choose);
+            return;
+        case SDLK_Y:
+            if (!filter_focused_)
+                press_key(chooser::Key::filter);
             return;
         case SDLK_UP:
             press_key(chooser::Key::up);
@@ -590,7 +686,13 @@ class ChooserScreen {
             press_key(chooser::Key::enter);
             return;
         case SDL_GAMEPAD_BUTTON_EAST:
-            press_key(chooser::Key::escape);
+            go_back();
+            return;
+        case SDL_GAMEPAD_BUTTON_WEST:
+            press_key(chooser::Key::choose);
+            return;
+        case SDL_GAMEPAD_BUTTON_NORTH:
+            press_key(chooser::Key::filter);
             return;
         case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
             press_key(chooser::Key::page_up);
@@ -691,36 +793,39 @@ class ChooserScreen {
         last_tick_ms_ = now;
     }
 
+    /// Clears a filter that holds text. Otherwise goes up a folder, or cancels.
+    void go_back() {
+        if (!model_.filter.empty()) {
+            model_.filter.clear();
+            filter_focused_ = false;
+            SDL_StopTextInput(window_);
+            show_filtered();
+            return;
+        }
+        filter_focused_ = false;
+        press_key(chooser::Key::escape);
+    }
+
+    /// Appends typed text to the filter while it is taking text.
+    ///
+    /// @param text the characters
+    void take_text(const char* text) {
+        if (!filter_focused_ || text == nullptr || text[0] == '\0')
+            return;
+        if (model_.filter.size() >= most_filter_characters)
+            return;
+        model_.filter += text;
+        if (model_.filter.size() > most_filter_characters)
+            model_.filter.resize(most_filter_characters);
+        show_filtered();
+    }
+
     /// Carries out what a press or a key asks.
     ///
     /// @param outcome the command
     void act(chooser::Outcome outcome) {
         switch (outcome.command) {
         case chooser::Command::none:
-            return;
-        case chooser::Command::play_install:
-            if (outcome.index < needed_.found.size())
-                pick(needed_.found[outcome.index].folder, outcome.index);
-            return;
-        case chooser::Command::open_browser:
-            model_.hint.clear();
-            browse_to(browsed_.empty() ? start_folder() : browsed_);
-            return;
-        case chooser::Command::find_demo: {
-            const fs::path downloads = home_ / downloads_folder_name;
-            std::error_code error;
-            model_.hint = "Open the folder that holds the installer of the Total Annihilation demo "
-                          "(1997), then Play this folder.";
-            browse_to(
-                !home_.empty() && fs::is_directory(downloads, error) ? downloads : start_folder()
-            );
-            return;
-        }
-        case chooser::Command::use_dialog:
-            use_dialog();
-            return;
-        case chooser::Command::quit:
-            finish(false);
             return;
         case chooser::Command::open_place:
             if (outcome.index < places_.size())
@@ -730,23 +835,64 @@ class ChooserScreen {
             if (model_.has_parent)
                 browse_to(browsed_.parent_path());
             return;
-        case chooser::Command::enter_folder:
-            if (outcome.index < entries_.size())
-                browse_to(entries_[outcome.index]);
+        case chooser::Command::activate_entry:
+            if (outcome.index < shown_paths_.size()) {
+                if (model_.entries[outcome.index].directory)
+                    browse_to(shown_paths_[outcome.index]);
+                else
+                    select_row(outcome.index);
+            }
             return;
-        case chooser::Command::choose_folder:
-            if (model_.folder_usable)
-                pick(browsed_, std::nullopt);
+        case chooser::Command::select_entry:
+            select_row(outcome.index);
             return;
-        case chooser::Command::back_to_list:
-            model_.view = chooser::View::list;
-            model_.notice = list_notice_;
-            ui_.scroll_points = 0;
-            ui_.focus = 0;
-            stale_ = true;
+        case chooser::Command::choose:
+            choose_current();
+            return;
+        case chooser::Command::use_dialog:
+            use_dialog();
+            return;
+        case chooser::Command::cancel:
+            finish(false);
+            return;
+        case chooser::Command::toggle_filter:
+            filter_focused_ = !filter_focused_;
+            if (filter_focused_)
+                SDL_StartTextInput(window_);
+            else
+                SDL_StopTextInput(window_);
             dirty_ = true;
             return;
         }
+    }
+
+    /// Points the side panel at a row and says whether it can be used.
+    ///
+    /// @param index the row
+    void select_row(uint16_t index) {
+        if (index >= model_.entries.size())
+            return;
+        model_.selected = static_cast<int32_t>(index);
+        sync_choice();
+        stale_ = true;
+        dirty_ = true;
+    }
+
+    /// Uses the selected installer or folder, or the folder being shown when that is the game.
+    void choose_current() {
+        if (model_.selected >= 0 &&
+            static_cast<std::size_t>(model_.selected) < model_.entries.size() &&
+            static_cast<std::size_t>(model_.selected) < shown_paths_.size() &&
+            model_.entries[static_cast<std::size_t>(model_.selected)].choosable) {
+            const chooser::Entry& entry = model_.entries[static_cast<std::size_t>(model_.selected)];
+            if (entry.directory)
+                pick(shown_paths_[static_cast<std::size_t>(model_.selected)]);
+            else
+                pick(browsed_);
+            return;
+        }
+        if (folder_choosable_)
+            pick(browsed_);
     }
 
     /// Returns the folder the browser opens at first: the home folder, else the folder the game
@@ -764,8 +910,11 @@ class ChooserScreen {
     /// Plays a folder when its check passes, else says why it cannot be played.
     ///
     /// @param folder the folder
-    /// @param row the found folder's row it came from; none for the browser
-    void pick(const fs::path& folder, std::optional<uint16_t> row) {
+    void pick(const fs::path& folder) {
+        last_asked_ = folder;
+        // The picture check's files are empty. Choosing records the folder and does not read them.
+        if (picture_check_)
+            return;
         std::string problem;
         if (auto taken = take_chosen_folder(options_, folder, &problem)) {
             chosen_ = std::move(taken);
@@ -773,44 +922,37 @@ class ChooserScreen {
             return;
         }
         model_.notice = "This folder cannot be played:\n" + path_to_utf8(folder) + "\n" + problem;
-        if (row && *row < model_.installs.size()) {
-            model_.installs[*row].usable = false;
-            model_.installs[*row].verdict = problem;
-            list_notice_ = model_.notice;
-        }
-        if (model_.view == chooser::View::browse) {
-            model_.folder_usable = false;
-            model_.folder_verdict = problem;
-        }
+        model_.can_choose = folder_choosable_;
         stale_ = true;
         dirty_ = true;
     }
 
-    /// Opens the system's folder dialog and plays the folder picked; a dialog that cannot
-    /// open is said in the notice and no longer offered.
+    /// Opens the system's folder dialog and plays the folder picked. Game Mode never opens it.
+    /// A dialog that cannot open is said in the notice and no longer offered.
     void use_dialog() {
+        if (!model_.offers_dialog || model_.deck)
+            return;
         fs::path chosen;
         std::string error;
-        const fs::path start = model_.view == chooser::View::browse ? browsed_ : start_folder();
+        const fs::path start = browsed_.empty() ? start_folder() : browsed_;
         const FolderPick picked = pick_game_folder_with_dialog(start, &chosen, &error);
         dirty_ = true;
         stale_ = true;
         switch (picked) {
         case FolderPick::chosen:
-            pick(chosen, std::nullopt);
+            pick(chosen);
             return;
         case FolderPick::cancelled:
             return;
         case FolderPick::unavailable:
             model_.notice = "The system's folder dialog did not open: " + error;
-            list_notice_ = model_.notice;
             model_.offers_dialog = false;
+            model_.permission_note = false;
             return;
         }
     }
 
-    /// Shows a folder in the browser: its places, its folders (hidden ones left out, in name
-    /// order, game folders marked) and what the check finds there.
+    /// Shows a folder: its places, its files and folders, and what each one is.
     ///
     /// @param folder the folder
     void browse_to(const fs::path& folder) {
@@ -818,97 +960,221 @@ class ChooserScreen {
         fs::path shown = fs::absolute(folder, error).lexically_normal();
         if (error)
             shown = folder;
-        // A folder named "a/b/" keeps no empty last part.
         if (!shown.has_filename() && shown.has_relative_path())
             shown = shown.parent_path();
-        if (model_.view == chooser::View::list)
-            list_notice_ = model_.notice;
-        model_.view = chooser::View::browse;
-        model_.notice.clear();
         browsed_ = shown;
-        model_.folder = path_to_utf8(shown);
+        model_.path = installs::path_under_home(home_, shown);
         model_.has_parent = shown.has_relative_path() && shown.parent_path() != shown;
+        model_.filter.clear();
+        filter_focused_ = false;
         fill_places();
         fill_entries();
-        std::string problem;
-        if (const auto checked = take_chosen_folder(options_, shown, &problem)) {
-            model_.folder_usable = true;
-            model_.folder_verdict = verdict_of(*checked);
-        } else {
-            model_.folder_usable = false;
-            model_.folder_verdict = problem;
-        }
+        show_filtered();
         ui_.scroll_points = 0;
         ui_.pressed = -1;
-        // The keys and a pad start on the first folder, else the first place.
+        ui_.focus_shown = false;
         lay_out_now();
         ui_.focus = 0;
-        for (std::size_t index = 0; index < layout_.focus_order.size(); ++index)
-            if (layout_.focus_order[index].kind == chooser::TargetKind::entry) {
+        for (std::size_t index = 0; index < layout_.focus_order.size(); ++index) {
+            const chooser::Target target = layout_.focus_order[index];
+            if (target.kind == chooser::TargetKind::entry &&
+                target.index == static_cast<uint16_t>(std::max(model_.selected, 0))) {
                 ui_.focus = static_cast<int32_t>(index);
                 break;
             }
+        }
         stale_ = true;
         dirty_ = true;
     }
 
-    /// Fills the browser's places: Home, Downloads and each drive.
+    /// Fills the sidebar: the machine's places, then the installs already found, in the
+    /// found band between the places and the volumes.
     void fill_places() {
         places_.clear();
-        model_.place_labels.clear();
-        std::error_code error;
-        if (!home_.empty() && fs::is_directory(home_, error)) {
-            places_.push_back(home_);
-            model_.place_labels.push_back("HOME");
-            const fs::path downloads = home_ / downloads_folder_name;
-            if (fs::is_directory(downloads, error)) {
-                places_.push_back(downloads);
-                model_.place_labels.push_back("DOWNLOADS");
+        model_.places.clear();
+        const installs::LocatorFacts facts =
+            staged_facts_ ? *staged_facts_ : installs::locator_place_facts(model_.deck);
+        const std::vector<installs::LocatorPlace> listed = installs::locator_places(facts);
+        bool found_added = false;
+        const auto add_found = [this, &found_added]() {
+            if (found_added)
+                return;
+            found_added = true;
+            for (const FoundInstall& install : needed_.found) {
+                places_.push_back(install.folder);
+                chooser::Place place;
+                place.label = path_to_utf8(install.folder.filename());
+                if (place.label.empty())
+                    place.label = path_to_utf8(install.folder);
+                place.group = chooser::PlaceGroup::found;
+                model_.places.push_back(std::move(place));
             }
+        };
+        for (const installs::LocatorPlace& fact : listed) {
+            if (fact.group != installs::LocatorGroup::places)
+                add_found();
+            places_.push_back(fact.folder);
+            chooser::Place place;
+            place.label = tr(fact.label);
+            switch (fact.group) {
+            case installs::LocatorGroup::places:
+                place.group = chooser::PlaceGroup::places;
+                break;
+            case installs::LocatorGroup::volumes:
+                place.group = chooser::PlaceGroup::volumes;
+                break;
+            case installs::LocatorGroup::deck_games:
+                place.group = chooser::PlaceGroup::deck_games;
+                break;
+            }
+            model_.places.push_back(std::move(place));
         }
-        for (const fs::path& drive : installs::drive_folders()) {
-            places_.push_back(drive);
-            const std::string name = path_to_utf8(drive.filename());
-            model_.place_labels.push_back(name.empty() ? path_to_utf8(drive) : name);
+        add_found();
+        model_.place = -1;
+        for (std::size_t index = 0; index < places_.size(); ++index) {
+            if (places_[index] == browsed_)
+                model_.place = static_cast<int32_t>(index);
         }
     }
 
-    /// Fills the browser's folders: at most most_browse_entries of the first
-    /// browse_listing_limit entries, hidden ones left out, in name order, the first
-    /// most_marked_entries marked when they hold the game's first archive.
+    /// Reads up to most_child_files files in a folder, and the files in its music folder.
+    ///
+    /// @param folder the folder
+    /// @return the files, by name and size
+    [[nodiscard]] std::vector<chooser::ChildFile> child_files(const fs::path& folder) const {
+        std::vector<chooser::ChildFile> files;
+        const auto take = [&files](const fs::path& directory, std::string prefix) {
+            std::error_code error;
+            fs::directory_iterator entry(
+                directory, fs::directory_options::skip_permission_denied, error
+            );
+            for (; !error && entry != fs::directory_iterator() && files.size() < most_child_files;
+                 entry.increment(error)) {
+                std::error_code kind_error;
+                if (!entry->is_regular_file(kind_error) || kind_error)
+                    continue;
+                const std::string name = path_to_utf8(entry->path().filename());
+                if (name.empty() || name.front() == '.')
+                    continue;
+                std::error_code size_error;
+                const auto size = entry->file_size(size_error);
+                if (size_error)
+                    continue;
+                chooser::ChildFile child;
+                child.name = prefix + name;
+                child.size = static_cast<uint64_t>(size);
+                files.push_back(std::move(child));
+            }
+        };
+        take(folder, {});
+        take(folder / "music", "music/");
+        return files;
+    }
+
+    /// One file or folder read from the folder being shown.
+    struct Listed {
+        fs::path path{};        ///< where it is
+        chooser::Entry shown{}; ///< what the row says
+        bool directory{};       ///< it is a folder, for sorting
+    };
+
+    /// Fills the folder's rows, files and folders, hidden names left out.
     void fill_entries() {
-        entries_.clear();
-        model_.entries.clear();
-        std::vector<std::pair<std::string, fs::path>> found;
+        listed_.clear();
         std::error_code error;
         fs::directory_iterator entry(
             browsed_, fs::directory_options::skip_permission_denied, error
         );
         std::size_t seen = 0;
+        std::vector<chooser::ChildFile> here;
         for (; !error && entry != fs::directory_iterator(); entry.increment(error)) {
-            if (++seen > browse_listing_limit || found.size() >= most_browse_entries)
+            if (++seen > browse_listing_limit || listed_.size() >= most_browse_entries)
                 break;
-            std::error_code kind_error;
-            if (!entry->is_directory(kind_error) || kind_error)
-                continue;
-            std::string name = path_to_utf8(entry->path().filename());
+            const fs::path path = entry->path();
+            const std::string name = path_to_utf8(path.filename());
             if (name.empty() || name.front() == '.')
                 continue;
-            found.emplace_back(std::move(name), entry->path());
+            std::error_code kind_error;
+            const bool directory = entry->is_directory(kind_error) && !kind_error;
+            const bool file = !directory && entry->is_regular_file(kind_error) && !kind_error;
+            if (!directory && !file)
+                continue;
+            uint64_t size = 0;
+            std::vector<chooser::ChildFile> children;
+            if (file) {
+                std::error_code size_error;
+                const auto bytes = entry->file_size(size_error);
+                if (!size_error)
+                    size = static_cast<uint64_t>(bytes);
+                if (here.size() < most_child_files)
+                    here.push_back(chooser::ChildFile{name, size});
+            } else {
+                children = child_files(path);
+            }
+            const chooser::SourceAccount account =
+                chooser::describe_source(name, size, directory, children, demo_1997.installer_size);
+            Listed row;
+            row.path = path;
+            row.directory = directory;
+            row.shown.name = name;
+            row.shown.what = account.what;
+            row.shown.title = account.title.empty() ? name : account.title;
+            row.shown.account = account.account;
+            row.shown.bundles = account.bundles;
+            row.shown.directory = directory;
+            row.shown.recognised = account.recognised;
+            row.shown.choosable = account.choosable;
+            if (file && size > 0)
+                row.shown.size_label = view::size_text(size);
+            listed_.push_back(std::move(row));
         }
-        std::sort(found.begin(), found.end(), [](const auto& left, const auto& right) {
-            const std::string a = folded(left.first);
-            const std::string b = folded(right.first);
-            return a != b ? a < b : left.first < right.first;
+        std::sort(listed_.begin(), listed_.end(), [](const Listed& a, const Listed& b) {
+            if (a.directory != b.directory)
+                return a.directory;
+            const std::string folded_a = folded(a.shown.name);
+            const std::string folded_b = folded(b.shown.name);
+            return folded_a != folded_b ? folded_a < folded_b : a.shown.name < b.shown.name;
         });
-        for (std::size_t index = 0; index < found.size(); ++index) {
-            chooser::FolderEntry shown;
-            shown.name = found[index].first;
-            shown.game_folder =
-                index < most_marked_entries && installs::holds_game_archive(found[index].second);
-            model_.entries.push_back(std::move(shown));
-            entries_.push_back(std::move(found[index].second));
+        const chooser::SourceAccount folder_account = chooser::describe_source(
+            path_to_utf8(browsed_.filename()), 0, true, here, demo_1997.installer_size
+        );
+        folder_choosable_ = folder_account.choosable;
+    }
+
+    /// Applies the filter and points the side panel at the first row that can be used.
+    void show_filtered() {
+        model_.entries.clear();
+        shown_paths_.clear();
+        const std::string needle = folded(model_.filter);
+        for (const Listed& row : listed_) {
+            if (!needle.empty() && folded(row.shown.name).find(needle) == std::string::npos &&
+                folded(row.shown.what).find(needle) == std::string::npos)
+                continue;
+            model_.entries.push_back(row.shown);
+            shown_paths_.push_back(row.path);
         }
+        model_.selected = model_.entries.empty() ? -1 : 0;
+        for (std::size_t index = 0; index < model_.entries.size(); ++index) {
+            if (model_.entries[index].choosable) {
+                model_.selected = static_cast<int32_t>(index);
+                break;
+            }
+        }
+        sync_choice();
+        stale_ = true;
+        dirty_ = true;
+    }
+
+    /// Sets the accent button from the selection, or from the folder being shown.
+    void sync_choice() {
+        const bool row_ok = model_.selected >= 0 &&
+                            static_cast<std::size_t>(model_.selected) < model_.entries.size() &&
+                            model_.entries[static_cast<std::size_t>(model_.selected)].choosable;
+        model_.can_choose = row_ok || folder_choosable_;
+        if (row_ok && !model_.entries[static_cast<std::size_t>(model_.selected)].directory)
+            model_.choose_label = tr("Use this installer");
+        else
+            model_.choose_label = tr("Use this folder");
     }
 
     /// Ends the chooser.
@@ -997,19 +1263,165 @@ class ChooserScreen {
     float stick_x_{};                            ///< the left stick across, -1 to 1
     float stick_y_{};                            ///< the left stick down, -1 to 1
     float scroll_stick_{};                       ///< the right stick down, -1 to 1
-    float scroll_carry_{};            ///< the part of a point the right stick has scrolled
-    uint64_t last_tick_ms_{};         ///< when the gamepads' timers last moved on
-    fs::path home_{};                 ///< the player's home folder
-    fs::path browsed_{};              ///< the folder the browser shows
-    std::vector<fs::path> places_{};  ///< the browser's places, by Model::place_labels
-    std::vector<fs::path> entries_{}; ///< the browser's folders, by Model::entries
-    std::string list_notice_{};       ///< the list's notice, kept while the browser shows
+    float scroll_carry_{};                ///< the part of a point the right stick has scrolled
+    uint64_t last_tick_ms_{};             ///< when the gamepads' timers last moved on
+    fs::path home_{};                     ///< the player's home folder
+    fs::path browsed_{};                  ///< the folder being shown
+    std::vector<fs::path> places_{};      ///< the sidebar, by Model::places
+    std::vector<Listed> listed_{};        ///< every row of the folder, before the filter
+    std::vector<fs::path> shown_paths_{}; ///< the rows on screen, by Model::entries
+    bool folder_choosable_{};             ///< the folder being shown is itself a game
+    bool filter_focused_{};               ///< typed text goes into the filter
+    /// Places the picture check shows instead of this machine's. Empty in ordinary play.
+    std::optional<installs::LocatorFacts> staged_facts_{};
+    fs::path last_asked_{}; ///< the folder the choose key last asked to use
+    bool picture_check_{};  ///< choosing records the folder and does not read its files
+
+  public:
+
+    /// Builds a scratch home, drives the locator with Tab onto its install, writes the
+    /// desktop and Deck pictures when asked, then chooses that folder with the choose key.
+    ///
+    /// @param desktop_picture the desktop picture; empty writes none
+    /// @param deck_picture the Deck picture; empty writes none
+    /// @return true when the choose key asked for the staged install
+    bool drive(const fs::path& desktop_picture, const fs::path& deck_picture) {
+        const fs::path root = !options_.user_folder || options_.user_folder->empty()
+                                  ? fs::temp_directory_path() / "oa-folder-chooser-scene"
+                                  : *options_.user_folder / "locator-scene";
+
+        struct Wiper {
+            fs::path folder;
+
+            ~Wiper() { remove_picture_scene(folder); }
+        } wiper{root};
+
+        PictureScene scene;
+        if (!build_picture_scene(root, scene)) {
+            std::cerr << "open-annihilation: folder chooser check: the staged folder could not "
+                         "be made\n";
+            return false;
+        }
+        picture_check_ = true;
+        home_ = scene.home;
+        staged_facts_ = scene.desktop;
+        start();
+        model_.deck = false;
+        model_.offers_dialog = true;
+#if defined(__APPLE__)
+        model_.permission_note = true;
+#endif
+        if (window_ != nullptr) {
+            SDL_SetWindowFullscreen(window_, false);
+            SDL_SetWindowSize(window_, 1280, 720);
+        }
+        refresh_viewport();
+        browse_to(scene.home / "Games");
+        ui_.focus = 0;
+        ui_.focus_shown = false;
+        const fs::path fixture = scene.install;
+        int target = -1;
+        for (std::size_t index = 0; index < shown_paths_.size(); ++index) {
+            std::error_code same;
+            if (shown_paths_[index] == fixture ||
+                fs::equivalent(shown_paths_[index], fixture, same))
+                target = static_cast<int32_t>(index);
+        }
+        if (target < 0) {
+            std::cerr << "open-annihilation: folder chooser check: the staged install is not in "
+                      << model_.path << '\n';
+            return false;
+        }
+        const int limit = static_cast<int>(layout_.focus_order.size()) + 3;
+        for (int step = 0; step < limit; ++step) {
+            press_key(chooser::Key::tab);
+            if (ui_.focus < 0 || static_cast<std::size_t>(ui_.focus) >= layout_.focus_order.size())
+                continue;
+            const chooser::Target focused =
+                layout_.focus_order[static_cast<std::size_t>(ui_.focus)];
+            if (focused.kind == chooser::TargetKind::entry &&
+                focused.index == static_cast<uint16_t>(target))
+                break;
+        }
+        if (model_.selected != target) {
+            std::cerr << "open-annihilation: folder chooser check: the keys did not reach the "
+                         "staged install\n";
+            return false;
+        }
+        if (!desktop_picture.empty() && !write_picture(desktop_picture))
+            return false;
+        const int32_t kept_row = model_.selected;
+        model_.deck = true;
+        model_.offers_dialog = false;
+        model_.permission_note = false;
+        staged_facts_ = scene.deck;
+        fill_places();
+        model_.selected = kept_row;
+        sync_choice();
+        if (window_ != nullptr)
+            SDL_SetWindowSize(window_, 1280, 800);
+        refresh_viewport();
+        stale_ = true;
+        dirty_ = true;
+        if (!deck_picture.empty() && !write_picture(deck_picture))
+            return false;
+        press_key(chooser::Key::choose);
+        std::error_code same;
+        const bool matched = last_asked_ == fixture || fs::equivalent(last_asked_, fixture, same);
+        if (!matched) {
+            std::cerr << "open-annihilation: folder chooser check: the choose key did not ask for "
+                         "the staged install\n";
+            return false;
+        }
+        std::cout << "folder chooser check: passed\n";
+        return true;
+    }
+
+    /// Paints the locator and writes it as a PNG.
+    ///
+    /// @param file the picture
+    /// @return true when it was written
+    bool write_picture(const fs::path& file) {
+        dirty_ = true;
+        repaint();
+        if (canvas_.width <= 0 || canvas_.height <= 0) {
+            std::cerr << "open-annihilation: folder chooser check: the window has no picture\n";
+            return false;
+        }
+        std::string error;
+        if (!write_game_files_png(file, canvas_, &error)) {
+            std::cerr << "open-annihilation: folder chooser check: " << error << '\n';
+            return false;
+        }
+        return true;
+    }
 };
 
 } // namespace
 
 bool folder_chooser_offered(const Options& options) {
     return !nobody_watches(options) && !game_files_import_offered(game_files_hooks());
+}
+
+bool run_folder_chooser_key_check(
+    const Options& options, const FolderChooserDisplayHooks& display, const fs::path& picture
+) {
+    SDL_Window* window = display.window != nullptr ? display.window(display.context) : nullptr;
+    SDL_Renderer* renderer = window != nullptr && display.renderer != nullptr
+                                 ? display.renderer(display.context)
+                                 : nullptr;
+    if (window == nullptr || renderer == nullptr) {
+        std::cerr << "open-annihilation: folder chooser check: the window cannot open\n";
+        return false;
+    }
+    RendererHost* host = display.host != nullptr ? display.host(display.context) : nullptr;
+    fs::path deck;
+    if (!picture.empty()) {
+        const std::string name = picture.stem().string() + "-deck" + picture.extension().string();
+        deck = picture.parent_path() / name;
+    }
+    ChooserScreen screen(options, host, window, renderer, GameFilesNeeded{});
+    return screen.drive(picture, deck);
 }
 
 bool run_folder_chooser_until_resolved(

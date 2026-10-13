@@ -55,8 +55,9 @@ manifest's `id`, never by the file's name.
 ## 3. The manifest
 
 `oamap` is `1`. A key that is not in this table is refused. `homepage`,
-`tags` and `requires.engine` use the same rules as a mod profile and a
-language pack; they are not defined a second time for maps.
+`tags`, `requires.engine`, `supportedGames` and `requiredExpansions` use
+the same rules as a mod profile and a language pack; they are not defined
+a second time for maps.
 
 | Key | Required | Rule |
 | --- | --- | --- |
@@ -67,6 +68,8 @@ language pack; they are not defined a second time for maps.
 | `description` | no | one line, at most 120 characters |
 | `homepage` | no | an `http` or `https` address, the shared package rule |
 | `tags` | no | a list of lower-case kebab-case tags, the shared package rule. An empty list is refused; leave the key out |
+| `supportedGames` | no | base-game ids, `totala` and `totala-demo`. Leaving the key out means `[totala]`. An empty list is refused. At most 16, none repeated |
+| `requiredExpansions` | no | expansion ids that must be on. Leaving the key out, or `[]`, means none. Each must extend a supported game. At most 16, none repeated |
 | `author.name` | yes | 1 to 128 bytes. `unknown` when nobody is known |
 | `author.email` | no | an e-mail address, such as `name@example.com` |
 | `packaging.revision` | yes | an integer from 1 to 65535. It rises when the same version is packed again |
@@ -76,6 +79,8 @@ language pack; they are not defined a second time for maps.
 | `requires.engine` | no | the shared engine requirement, written in quotes. An unquoted `>` starts a block scalar, which is refused. Reading the manifest does not ask whether this Open Annihilation meets it |
 | `maps` | yes | 1 to 256 map entries in a packed manifest. A folder may leave the key out. [4. The index](#4-the-index) |
 
+`requires.base: ta-3.1c`, when `supportedGames` is omitted, reads as
+`[totala]`. When both are written, `supportedGames` is the list.
 `requires` holds `base` and `engine` and nothing else. `author` holds `name`
 and `email` and nothing else. `packaging` holds `revision`, `date` and
 `packager` and nothing else.

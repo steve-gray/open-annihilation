@@ -149,4 +149,65 @@ struct SearchRoots {
 /// @return the folders
 [[nodiscard]] std::vector<std::filesystem::path> drive_folders();
 
+/// Which band of the locator's sidebar a place belongs to. Found installs are added by the
+/// screen, not by locator_places.
+enum class LocatorGroup : uint8_t {
+    places,     ///< Home, Desktop, Documents, Downloads, Applications, and a Deck's cards
+    volumes,    ///< disks and other drives
+    deck_games, ///< Steam, Heroic, Lutris and Bottles
+};
+
+/// One place the locator can open, before it is checked against the disk.
+struct LocatorPlace {
+    std::filesystem::path folder{};           ///< the folder
+    std::string label{};                      ///< "Downloads", "Steam · Proton"
+    LocatorGroup group{LocatorGroup::places}; ///< which band
+};
+
+/// The folders a machine might offer the locator. An empty path is left out.
+struct LocatorFacts {
+    std::filesystem::path home{};         ///< the home folder
+    std::filesystem::path desktop{};      ///< the desktop
+    std::filesystem::path documents{};    ///< documents
+    std::filesystem::path downloads{};    ///< downloads
+    std::filesystem::path applications{}; ///< Applications, or Program Files
+    bool program_files{};                 ///< applications is Program Files
+    /// Disks and other drives. On a Steam Deck these are the microSD cards instead, and
+    /// `sd_cards` is used.
+    std::vector<std::filesystem::path> volumes{};
+    /// Removable cards on a Steam Deck.
+    std::vector<std::filesystem::path> sd_cards{};
+    std::filesystem::path steam{};   ///< a Steam Proton prefix
+    std::filesystem::path heroic{};  ///< Heroic's games folder
+    std::filesystem::path lutris{};  ///< Lutris's games folder
+    std::filesystem::path bottles{}; ///< Bottles' bottles folder
+    bool deck{};                     ///< Steam Deck: cards under places, no volumes
+};
+
+/// Returns the places a locator shows, in sidebar order, leaving out every empty path.
+///
+/// Home, Desktop, Documents, Downloads and Applications come first. On a Steam Deck the cards
+/// follow them, labelled "microSD card". Elsewhere the volumes follow, each labelled with its
+/// last name, or "System" for the root folder. Steam, Heroic, Lutris and Bottles come last.
+///
+/// @param facts the folders; empty ones are skipped
+/// @return the places
+[[nodiscard]] std::vector<LocatorPlace> locator_places(const LocatorFacts& facts);
+
+/// Gathers the places that exist on this machine. A path that is not a folder is left empty,
+/// so locator_places leaves it out. Nothing is created.
+///
+/// @param deck this is a Steam Deck, so removable drives are cards and volumes are left out
+/// @return the facts
+[[nodiscard]] LocatorFacts locator_place_facts(bool deck);
+
+/// Writes a folder the way a player can share it. A folder under `home` is `~` or `~/…`,
+/// so a screenshot does not name whose computer it was. Any other folder is written as it is.
+///
+/// @param home the player's home folder; empty leaves `folder` unchanged
+/// @param folder the folder
+/// @return the path to show
+[[nodiscard]] std::string
+path_under_home(const std::filesystem::path& home, const std::filesystem::path& folder);
+
 } // namespace oa::platform::game_installs

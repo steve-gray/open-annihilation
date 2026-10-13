@@ -6,6 +6,8 @@
 add_library(oa-formats-oamod src/number.cpp src/reader.cpp src/package_keys.cpp)
 add_library(oa::formats::oamod ALIAS oa-formats-oamod)
 target_include_directories(oa-formats-oamod PUBLIC include)
+# The reader asks the built-in bundle table which id is a base game or an
+# expansion. PRIVATE: the header does not mention that table.
 target_link_libraries(oa-formats-oamod PRIVATE oa-options)
 target_compile_features(oa-formats-oamod PUBLIC cxx_std_20)
 

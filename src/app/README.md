@@ -2707,9 +2707,13 @@ folders it looked at, why each cannot be played, and the platform's advice
 installer of the Total Annihilation demo (1997) is usable too:
 `demo_installer.cpp` recognises the installer by its size and SHA-256, never
 by its name, and unpacks the game data archive it carries, checked by its
-SHA-256, into `demo-1997` in the per-user data folder (`--data-dir` names
-another), where later starts check it and use it again; while it passes that
-check the installer is recognised by its size alone, since only unpacking
+SHA-256, into `games/totala-demo` in the player's Open Annihilation folder
+(`--data-dir` names another folder only when the player's folder is not
+known), with its `.oa-content` record, where later starts check it and use
+it again. An earlier unpack in `demo-1997` of the per-user data folder is
+copied from once, sharing disk blocks where the volume can, and left there.
+While the archive passes that check the installer is recognised by its size
+alone, since only unpacking
 reads it. That folder is the installation, with the checked archive as its
 only archive whatever else the folder holds, and the folder the player chose
 is the one remembered. Temporary files an unpacking that stopped part way
@@ -2720,13 +2724,13 @@ is reported the same way.
 `DemoRelease` holds everything that identifies the release, in one place, so
 that the tests (`demo_installer_test.cpp`) substitute a synthetic one.
 
-Where the system's folder dialog cannot show, as in Steam's Game Mode, or
-when several folders are found or the remembered one has gone, the
-in-engine folder chooser picks the folder (`folder_chooser_screen.*`, over
-the model of the module in src/ui/folder-chooser): the folders
-found on this machine, a folder browser driven by touch, a gamepad, the keys
-or the pointer, the 1997 demo's folder and, outside Game Mode, the
-desktop's dialog. Like the Game files screen, the chooser is laid out, hit
+Where the in-engine locator is offered, it asks instead of opening the
+system's folder dialog (`folder_chooser_screen.*`, over the model in
+src/ui/folder-chooser). The player browses places, found installs, volumes
+and launcher prefixes, and the column says what each folder or file is.
+Touch, a pointer, the keys or a gamepad drive it. On the desktop the system's
+dialog stays a button on that screen. Steam's Game Mode does not offer the
+button and never opens the dialog. Like the Game files screen, the chooser is laid out, hit
 tested and focused by the UI kit, so every OA screen is one UI stack, and it
 reads the window, shows its frame and reads the pointer through the same
 window-pixel code (`window_pixels.*`, below); its gamepad handling is its
