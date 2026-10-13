@@ -7,7 +7,7 @@
 
 #include "oa/formats/zip/stream.hpp"
 
-#include "inflater.hpp"
+#include "oa/formats/zip/inflate.hpp"
 #include "records.hpp"
 
 #include <algorithm>

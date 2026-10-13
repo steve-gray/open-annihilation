@@ -209,6 +209,8 @@ add_subdirectory(src/formats/lzma)
 add_subdirectory(src/formats/inno-setup)
 add_subdirectory(src/formats/udif)
 add_subdirectory(src/formats/hfsplus)
+add_subdirectory(src/formats/xar)
+add_subdirectory(src/formats/cpio)
 add_subdirectory(src/sim/sprite-animation)
 add_subdirectory(src/formats/tnt)
 add_subdirectory(src/formats/ota)
@@ -330,11 +332,12 @@ target_link_libraries(oa-app-mod-profile PUBLIC oa-app-headers oa-data-mod-profi
 # implements, are content_copy.hpp.
 add_library(oa-app-game-files src/app/game_files_import.cpp src/app/game_files_scan.cpp
   src/app/game_files_run.cpp src/app/game_files_state.cpp src/app/content_copy.cpp
-  src/app/windows_installer.cpp src/app/disk_image_source.cpp)
+  src/app/windows_installer.cpp src/app/disk_image_source.cpp src/app/macos_installer.cpp)
 add_library(oa::app::game_files ALIAS oa-app-game-files)
 target_link_libraries(oa-app-game-files PUBLIC oa-app-headers oa-app-game-directory oa-app-mod-profile
   oa-base-threads oa-data-content-bundles PRIVATE oa-formats-zip oa-formats-inno-setup oa-formats-udif
-  oa-formats-hfsplus oa-base-sha256 oa-platform-preferences oa-platform-shims oa-options)
+  oa-formats-hfsplus oa-formats-xar oa-formats-cpio oa-base-sha256 oa-platform-preferences
+  oa-platform-shims oa-options)
 # The player's own folder: where it is, the folders it holds, a folder for
 # each mod in Saves, Screenshots, Films and Recordings, the one-time moves
 # of saved games from beside the preferences file and loose in Saves, and of
@@ -774,6 +777,13 @@ if(BUILD_TESTING)
   target_compile_definitions(oa-app-disk-image-test PRIVATE
     OA_UDIF_FIXTURE="${CMAKE_SOURCE_DIR}/src/formats/udif/tests/data/fixture.dmg")
   add_test(NAME app-disk-image COMMAND oa-app-disk-image-test)
+  # The macOS installer reader: a small package copied in one pass, and the
+  # check that reports its files.
+  add_executable(oa-app-macos-installer-test src/app/macos_installer_test.cpp)
+  target_link_libraries(oa-app-macos-installer-test PRIVATE oa-app-game-files oa-platform-shims
+    ZLIB::ZLIB oa-test-support oa-options)
+  add_test(NAME app-macos-installer COMMAND oa-app-macos-installer-test)
+  set_tests_properties(app-macos-installer PROPERTIES TIMEOUT 60)
   # The renderer records by table: the text of every key and value, values
   # that cannot be read, strikes that become records and what clears them,
   # and the native-density key a run writes or erases as it ends.

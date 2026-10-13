@@ -1502,6 +1502,9 @@ bool managed_base_present(const fs::path& user_folder, std::span<const bundles::
 }
 
 CopyResult copy_content(ContentSource& source, const CopyRequest& request) {
+    CopyResult together;
+    if (source.copy_together(request, together))
+        return together;
     CopyResult result;
     try {
         SourceDescription described;
@@ -2207,6 +2210,8 @@ int run_installer_check(const fs::path& file) {
     const bundles::Installer* known = error ? nullptr : bundles::find_installer(size);
     if (known != nullptr && known->kind == bundles::InstallerKind::older_mac)
         return run_older_mac_installer_check(file);
+    if (known != nullptr && known->kind == bundles::InstallerKind::macos)
+        return run_macos_installer_check(file);
     return run_windows_installer_check(file);
 }
 
