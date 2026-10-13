@@ -391,7 +391,7 @@ void Match::release_target_observers(sim::simulation_state::Unit& target) {
     if (found == target_observers_.end())
         return;
     auto* entry = found->second;
-    std::size_t steps = overlay_order_budget;
+    std::size_t steps = orders_.size();
     while (entry != nullptr && steps-- > 0) {
         auto* next = entry->observer_next;
         lose_target(*entry, target);
@@ -430,7 +430,9 @@ void Match::link_target_observer(RuntimeOrder& entry, sim::simulation_state::Uni
 void Match::unlink_target_observer(RuntimeOrder& entry) {
     if (entry.attack.target != nullptr) {
         auto** link = &target_observers_[entry.attack.target];
-        std::size_t steps = overlay_order_budget;
+        // Every order may watch one unit, so the list is never longer than
+        // the orders there are; the bound only stops a damaged list looping.
+        std::size_t steps = orders_.size();
         while (*link != nullptr && *link != &entry && steps-- > 0)
             link = &(*link)->observer_next;
         if (*link == &entry)
