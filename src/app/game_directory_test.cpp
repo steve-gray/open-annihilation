@@ -1161,11 +1161,10 @@ void check_found_installs() {
         const auto result =
             resolve_game_directory(found_request(path_to_utf8(kMoved), {from_broken}), h, &needed);
         expect(
-            result && result->path == kCd && result->source == GameDirectorySource::chosen &&
-                !needed.needed && host.notices.size() == 1 &&
-                contains(host.notices[0], "chosen earlier") && host.starts.size() == 1 &&
-                host.starts[0] == kMoved,
-            "a remembered folder that has gone with nothing usable found asks with the dialog"
+            !result && needed.needed && needed.chooser && needed.dialog_offered &&
+                needed.stored_folder == kMoved && needed.found.empty() && host.starts.empty() &&
+                host.notices.empty(),
+            "a remembered folder that has gone opens the locator, with the system picker offered"
         );
     }
     {
@@ -1176,11 +1175,9 @@ void check_found_installs() {
         GameFilesNeeded needed;
         const auto result = resolve_game_directory(found_request(std::nullopt, {}), h, &needed);
         expect(
-            result && result->source == GameDirectorySource::chosen && !needed.needed &&
-                host.notices.size() == 1 &&
-                contains(host.notices[0], "needs your Total Annihilation installation") &&
-                host.starts.size() == 1,
-            "nothing found on a desktop with a dialog asks with the dialog, as before"
+            !result && needed.needed && needed.chooser && needed.dialog_offered &&
+                needed.dialog_problem.empty() && host.starts.empty() && host.notices.empty(),
+            "nothing found on a desktop opens the locator, with the system picker offered"
         );
     }
     {
@@ -1217,10 +1214,9 @@ void check_found_installs() {
         GameFilesNeeded needed;
         const auto result = resolve_game_directory(found_request(std::nullopt, {}), h, &needed);
         expect(
-            !result && needed.needed && needed.chooser && !needed.dialog_offered &&
-                needed.dialog_problem == "no portal" && host.starts.size() == 2 &&
-                host.notices.size() == 1,
-            "a dialog that cannot open hands over to the chooser with its reason"
+            !result && needed.needed && needed.chooser && needed.dialog_offered &&
+                needed.dialog_problem.empty() && host.starts.empty() && host.notices.empty(),
+            "the locator opens without trying the system dialog, which stays offered"
         );
     }
     {
@@ -1277,9 +1273,9 @@ void check_found_installs() {
         request.choose = true;
         const auto result = resolve_game_directory(request, h, &needed);
         expect(
-            result && result->source == GameDirectorySource::chosen && result->path == kCd &&
-                host.starts.size() == 1,
-            "--choose-game-dir opens the dialog over the one folder found"
+            !result && needed.needed && needed.chooser && needed.dialog_offered &&
+                needed.found.size() == 1 && host.starts.empty() && host.notices.empty(),
+            "--choose-game-dir opens the locator over the one folder found"
         );
     }
     {

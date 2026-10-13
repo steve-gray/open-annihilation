@@ -758,6 +758,12 @@ int run_once(
     // is resolved while the folder is inspected, before any archive is
     // mounted, so that one the engine cannot use stops the run with its
     // errors.
+    if (options.check_folder_chooser) {
+        ChooserDisplay chooser{&display, &options};
+        const bool passed =
+            run_folder_chooser_key_check(options, display_hooks(chooser), options.snapshot);
+        return passed ? 0 : 1;
+    }
     GameFilesNeeded needed;
     auto game_directory = find_game_directory(
         options, (game_files.offered || folder_chooser_offered(options)) ? &needed : nullptr

@@ -372,9 +372,9 @@ std::optional<GameDirectory> find_game_directory(const Options& options, GameFil
                              !options.no_game_files_screen &&
                              (!request.unattended || options.check_game_files);
     // A run someone watches that names no folder looks where Steam, Heroic,
-    // Lutris and Bottles put the game, and may show the in-engine chooser,
-    // before the system's dialog in Steam's Game Mode. Scripted runs resolve
-    // as they always have.
+    // Lutris and Bottles put the game, and shows the in-engine locator.
+    // chooser_first is Steam's Game Mode, where the locator does not offer
+    // the system's dialog. Scripted runs resolve as they always have.
     if (!request.unattended && request.argument.empty()) {
         request.found = oa::platform::game_installs::find_candidates(
             oa::platform::game_installs::default_search_roots()
