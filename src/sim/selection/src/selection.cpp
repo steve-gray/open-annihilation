@@ -528,10 +528,10 @@ void assign_squad(World& world, int32_t squad, const Hooks& hooks) {
 bool select_squad(World& world, int32_t squad, bool add, const TypeMask& skip, const Hooks& hooks) {
     const bool skip_types =
         squad_has_type(world, squad, skip) && squad_has_armed_unit(world, squad);
-    // A recall whose result is already the selection centres the view. 3.1c
-    // does this on a second press, however long after the first, and the
-    // point is the average of the units' map positions: the signed high
-    // words, divided as integers. It does not start following a unit.
+    // A recall of a squad that is already exactly the selection centres the
+    // view on the average of the units' map positions (the signed high words,
+    // divided as integers), however long after the first press, and stops
+    // following a unit. 3.1c's recall leaves the camera alone; this is OA's.
     bool already = true;
     int32_t sum_x = 0;
     int32_t sum_z = 0;
@@ -544,14 +544,7 @@ bool select_squad(World& world, int32_t squad, bool add, const TypeMask& skip, c
                                  data::defs::category_mask_contains(&skip, unit.type_index);
             const bool chosen = live && in_squad && !skipped;
             const bool selected_now = (unit.flags & OA_UNIT_FLAG_SELECTED) != 0;
-            bool selected_after = selected_now;
-            if (live) {
-                if (in_squad)
-                    selected_after = !skipped;
-                else if (!add)
-                    selected_after = false;
-            }
-            if (selected_after != selected_now)
+            if (live && selected_now != chosen)
                 already = false;
             if (chosen) {
                 sum_x += whole(unit.position.x);

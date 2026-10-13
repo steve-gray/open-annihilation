@@ -12,7 +12,7 @@ picks a build button.
 The first press selects the group, or adds it when Shift is held. A later
 press, at once or after a pause, centres the view on the group when that
 group is already exactly the selection. The view goes to the average of
-the units' positions, the same place 3.1c uses, and the camera does not
+the units' positions, and the camera does not
 start following a unit. T follows the selection. Home centres on the
 selected unit and does not follow it.
 

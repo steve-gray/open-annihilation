@@ -270,9 +270,9 @@ void assign_squad(World& world, int32_t squad, const Hooks& hooks);
 /// While the squad holds both a `skip` type and an armed unit, its `skip` members are
 /// deselected instead. When that result is already exactly the selection, the camera
 /// moves to the average of those units' map positions and the follow stops. The
-/// average is the signed high words added, then divided by the count, as 3.1c does
-/// on a second press of the group's key. A press that changes the selection does
-/// not move the camera.
+/// average is the signed high words added, then divided by the count. 3.1c leaves
+/// the camera alone; this is OA's. A press whose squad is not exactly the selection
+/// does not move the camera.
 ///
 /// @param[in,out] world units, players and game fields
 /// @param squad squad number
