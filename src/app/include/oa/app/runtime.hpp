@@ -990,6 +990,15 @@ class Runtime final : public menu::Host,
     /// @return the announcement
     [[nodiscard]] PresenceAnnouncement presence_announcement() const;
 
+    /// Writes the content note beside a save or a recording. Network play
+    /// calls it for the recording it writes.
+    ///
+    /// The save or the recording itself is unchanged, so an older build still
+    /// reads it. The note names the base game and the rule-changing expansions.
+    ///
+    /// @param path the save or the recording
+    void note_content_beside(const fs::path& path) const;
+
   private:
 
     /// Runs one pass of the idle loop.
@@ -12499,14 +12508,6 @@ class Runtime final : public menu::Host,
     /// @param path savegame file
     /// @return false when the save cannot be started
     bool load_saved_game(const fs::path& path);
-
-    /// Writes the content note beside a save or a recording.
-    ///
-    /// The save or the recording itself is unchanged, so an older build still
-    /// reads it. The note names the base game and the rule-changing expansions.
-    ///
-    /// @param path the save or the recording
-    void note_content_beside(const fs::path& path) const;
 
     /// Writes the content note in a film's folder, once for that folder.
     ///
