@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // The sticky window edge: held while the pointer rests on an edge, let go
-// by a firm push or a flick, and held again only from inside the window.
+// by a firm push past it or by a quick approach, and held again only from
+// inside the window.
 #include "oa/app/sticky_edge.hpp"
 
 #include <algorithm>
@@ -40,12 +41,12 @@ void disarm(StickyEdge& state) {
     state.flick_next = 0;
 }
 
-/// Remembers one sample's outward movement, merging the oldest two when
-/// the list is full so their sum is kept.
+/// Remembers one sample's movement toward the edges, merging the oldest
+/// two when the list is full so their sum is kept.
 ///
 /// @param state what earlier samples decided
 /// @param time_ms when the movement arrived
-/// @param outward outward points on each edge; an edge with none stays 0
+/// @param outward points toward each edge; an edge with none stays 0
 void remember_flick(StickyEdge& state, uint64_t time_ms, const std::array<float, 4>& outward) {
     constexpr int slots = StickyEdge::kFlickSlots;
     if (state.flick_count == slots) {
@@ -63,12 +64,12 @@ void remember_flick(StickyEdge& state, uint64_t time_ms, const std::array<float,
     ++state.flick_count;
 }
 
-/// Sums the outward movement still inside the flick's time.
+/// Sums the movement toward the edges still inside the flick's time.
 ///
 /// @param state what earlier samples decided
 /// @param time_ms the time now
 /// @param window_ms how far back movement counts
-/// @return outward points on each edge within the time
+/// @return points toward each edge within the time
 std::array<float, 4> flick_sum(const StickyEdge& state, uint64_t time_ms, uint64_t window_ms) {
     std::array<float, 4> sum{};
     constexpr int slots = StickyEdge::kFlickSlots;
@@ -82,6 +83,18 @@ std::array<float, 4> flick_sum(const StickyEdge& state, uint64_t time_ms, uint64
             sum[side] += sample.outward[side];
     }
     return sum;
+}
+
+/// The distance past one end of a span.
+///
+/// The place's own overshoot and the desktop distance are the same push
+/// told two ways, so the greater one counts once.
+///
+/// @param overshoot how far the place is past this end, or 0
+/// @param field how far the desktop pointer is past this end, or 0
+/// @return the push past this end
+float push_past(float overshoot, float field) {
+    return std::max(overshoot, field);
 }
 
 } // namespace
@@ -110,54 +123,63 @@ StickyHold sticky_edge(
         state.holding = true;
         return StickyHold::hold;
     }
-    if (outside) {
-        disarm(state);
-        return StickyHold::let_go;
-    }
-    const std::array<bool, 4> on_side{
-        sample.x <= 0.0F,
-        sample.x >= width - 1.0F,
-        sample.y <= 0.0F,
-        sample.y >= height - 1.0F,
-    };
-    // Only movement past the edge counts, and only in that edge's direction.
-    // Movement along the edge, and movement back into the window, adds nothing.
-    std::array<float, 4> outward{};
-    if (on_side[0] && sample.motion_x < 0.0F)
-        outward[0] = -sample.motion_x;
-    if (on_side[1] && sample.motion_x > 0.0F)
-        outward[1] = sample.motion_x;
-    if (on_side[2] && sample.motion_y < 0.0F)
-        outward[2] = -sample.motion_y;
-    if (on_side[3] && sample.motion_y > 0.0F)
-        outward[3] = sample.motion_y;
-    const bool any_outward =
-        outward[0] > 0.0F || outward[1] > 0.0F || outward[2] > 0.0F || outward[3] > 0.0F;
-    const bool any_side = on_side[0] || on_side[1] || on_side[2] || on_side[3];
-    if (!any_side) {
-        state.push = {};
-        state.flick_count = 0;
-        state.flick_next = 0;
-        return StickyHold::hold;
-    }
-    if (any_outward)
-        remember_flick(state, sample.time_ms, outward);
+    // Toward an edge, wherever the pointer is, so the approach before the
+    // edge is part of the flick. Along an edge, and back into the window,
+    // this edge's own direction stays zero.
+    std::array<float, 4> toward{};
+    if (sample.motion_x < 0.0F)
+        toward[static_cast<std::size_t>(Side::left)] = -sample.motion_x;
+    if (sample.motion_x > 0.0F)
+        toward[static_cast<std::size_t>(Side::right)] = sample.motion_x;
+    if (sample.motion_y < 0.0F)
+        toward[static_cast<std::size_t>(Side::top)] = -sample.motion_y;
+    if (sample.motion_y > 0.0F)
+        toward[static_cast<std::size_t>(Side::bottom)] = sample.motion_y;
+    const bool any_toward =
+        toward[0] > 0.0F || toward[1] > 0.0F || toward[2] > 0.0F || toward[3] > 0.0F;
+    if (any_toward)
+        remember_flick(state, sample.time_ms, toward);
     const float flick_points =
         limits.flick_points_per_s * static_cast<float>(limits.flick_window_ms) / 1000.0F;
     const std::array<float, 4> flicked = flick_sum(state, sample.time_ms, limits.flick_window_ms);
+    const float last_x = width - 1.0F;
+    const float last_y = height - 1.0F;
+    const std::array<float, 4> past{
+        push_past(sample.x < 0.0F ? -sample.x : 0.0F, sample.past_x < 0.0F ? -sample.past_x : 0.0F),
+        push_past(
+            sample.x > last_x ? sample.x - last_x : 0.0F,
+            sample.past_x > 0.0F ? sample.past_x : 0.0F
+        ),
+        push_past(sample.y < 0.0F ? -sample.y : 0.0F, sample.past_y < 0.0F ? -sample.past_y : 0.0F),
+        push_past(
+            sample.y > last_y ? sample.y - last_y : 0.0F,
+            sample.past_y > 0.0F ? sample.past_y : 0.0F
+        ),
+    };
+    const std::array<bool, 4> on_side{
+        sample.x <= 0.0F,
+        sample.x >= last_x,
+        sample.y <= 0.0F,
+        sample.y >= last_y,
+    };
     for (std::size_t side = 0; side < on_side.size(); ++side) {
-        if (!on_side[side]) {
+        // On the edge, or already past it. Inside, away from this edge, the
+        // push ends. The approach stays, so it still counts on arrival.
+        const bool at_edge = on_side[side] || past[side] > 0.0F;
+        if (!at_edge) {
             state.push[side] = {};
             continue;
         }
-        if (outward[side] > 0.0F) {
+        // A distance of zero adds nothing and does not start the time again.
+        if (past[side] > 0.0F) {
             StickyEdge::Push& push = state.push[side];
-            if (!push.running || sample.time_ms - push.started_ms > limits.push_window_ms) {
+            if (!push.running || sample.time_ms < push.started_ms ||
+                sample.time_ms - push.started_ms > limits.push_window_ms) {
                 push.points = 0.0F;
                 push.started_ms = sample.time_ms;
                 push.running = true;
             }
-            push.points += outward[side];
+            push.points += past[side];
         }
         if (state.push[side].points >= limits.push_points || flicked[side] >= flick_points) {
             disarm(state);

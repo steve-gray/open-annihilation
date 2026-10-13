@@ -739,7 +739,7 @@ void Runtime::dispatch_event(SDL_Event& event, bool& running) {
     } sticky{*this};
 
     if (event.type == SDL_EVENT_MOUSE_MOTION && event.motion.which != SDL_TOUCH_MOUSEID &&
-        sticky_edge_wanted()) {
+        !sticky_ignores_motion(event) && sticky_edge_wanted()) {
         const uint64_t time_ms = event.motion.timestamp != 0
                                      ? event.motion.timestamp / 1'000'000ULL
                                      : static_cast<uint64_t>(SDL_GetTicks());
@@ -748,7 +748,14 @@ void Runtime::dispatch_event(SDL_Event& event, bool& running) {
         );
         sticky_wanted_ = true;
     }
-    if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE || event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
+    // The focus always lets the pointer go. On a soft wall a leave is the
+    // pointer crossing the edge, and it is put back; Wayland's leave is the
+    // confinement giving way.
+    if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
+        sticky.force_release = true;
+    else if (
+        event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE && !(sticky_soft_wall() && sticky_edge_.holding)
+    )
         sticky.force_release = true;
     // The inactive-loop check's wake ends the run. It is not a focus change,
     // and it must not be read as one.

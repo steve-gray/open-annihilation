@@ -23,16 +23,24 @@ selects the group and a second tap centres on it. See
 ## The window's edge
 
 In a window, while a match's battlefield shows, **Window edge** Sticky (the
-default, under Settings > Controls) holds the pointer on the window's edges.
+default, under Settings > Controls) keeps the pointer on the window's edges.
 It rests on the last pixel and the view scrolls, as it does in full screen.
-A firm push outward, or a flick onto the edge, lets it leave. After that it
-is held again only once it has come back in and moved about 24 points away
-from the edges. Motion along an edge does not let it go. Menus, the pause
-screen, a window without the focus and Free leave the pointer free. Full
-screen keeps its own hold.
+A firm push outward, or arriving at the edge quickly, lets it leave. After
+that it is held again only once it has come back in and moved about 24
+points away from the edges. Motion along an edge does not let it go. Menus,
+the pause screen, a window without the focus and Free leave the pointer
+free. Full screen keeps its own hold. Losing the focus, with Alt+Tab,
+Command+Tab or a dialog of the system's, lets the pointer go.
 
-Through SDL 3, macOS, Windows, X11 and Wayland do not report movement while
-the pointer is held at the edge. A flick is how it leaves on each of them:
-arrive at the edge fast, or pull back in and flick out. A slow rest stays
-held and the view scrolls. Where a window system does report movement past
-the edge, a push of that movement lets the pointer go too.
+On macOS, Windows and X11 the pointer stays free to move. When it crosses
+an edge the game puts it back on that edge's last pixel and reads how far
+past the edge the desktop pointer had gone. That distance adds up while
+the push continues. About 120 points within half a second lets it go, and
+the game stops putting it back until the pointer has come in from the edge.
+Resting on the edge adds nothing, so the view keeps scrolling.
+
+On Wayland a program cannot place the pointer, so the game confines it to
+the window while it should hold. The flick is the approach: the movement
+toward an edge over the last tenth of a second, including the movement
+before the pointer reached the edge. Arriving at about 2500 points a
+second lets it go. A slow arrival stays held and the view scrolls.

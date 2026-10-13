@@ -87,8 +87,9 @@ void Runtime::handle_sdl_event(SDL_Event& event, bool& running) {
         return;
     }
     // The pointer outside the window has no place on the screen until it
-    // comes back.
-    if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE)
+    // comes back. A soft wall puts it back on the edge it crossed, and the
+    // view keeps scrolling from that last pixel.
+    if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE && !(sticky_soft_wall() && sticky_edge_.holding))
         match_pointer_known_ = false;
     // The character a quick key types after its press answered a panel over
     // the match goes nowhere, though the panel is closed by then; while the

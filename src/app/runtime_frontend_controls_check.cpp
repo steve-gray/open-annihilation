@@ -7,7 +7,7 @@
 // screen shows for it before Start, the help line follows the pointer, and the
 // chosen options tab shows pressed. Alt+Enter switches the window to full
 // screen and back on a menu and in a match. In a match's window the pointer
-// is held on an edge until a flick lets it go, and Window edge Free leaves
+// is put back on an edge until a push lets it go, and Window edge Free leaves
 // it free.
 #include "engine_settings_state.hpp"
 #include "oa/app/runtime.hpp"
@@ -1441,8 +1441,9 @@ void Runtime::check_frontend_controls() {
     key(SDL_EVENT_KEY_DOWN, SDLK_ESCAPE, SDL_KMOD_NONE, false);
     expect(!chat_composing_, "Escape did not close the chat line");
 
-    // A window holds the pointer on its edges while the battlefield shows,
-    // so the view scrolls, and a flick lets it go. Free leaves it free.
+    // A window puts the pointer back on its edges while the battlefield
+    // shows, so the view scrolls, and a push lets it go. Free leaves it free.
+    // This driver is not Wayland, so the pointer stays free of a grab.
     {
         const bool sticky_started_full = full_screen();
         if (sticky_started_full)
@@ -1475,19 +1476,32 @@ void Runtime::check_frontend_controls() {
                 moved.motion.timestamp = sticky_time_ms * 1'000'000ULL;
                 dispatch_event(moved, running);
             };
-        const auto grabbed = [&] { return SDL_GetWindowMouseGrab(sdl_.window); };
+        const auto held = [&] {
+            return sticky_edge_.holding && !SDL_GetWindowMouseGrab(sdl_.window);
+        };
         float sticky_x = static_cast<float>(sticky_width / 2);
         sticky_move(sticky_x, sticky_mid_y, 0.0F, 0.0F, 50);
-        expect(grabbed(), "the pointer at the middle of a match window was not held");
+        expect(held(), "the pointer at the middle of a match window was not held");
         while (sticky_x + 10.0F < sticky_right) {
             sticky_move(sticky_x + 10.0F, sticky_mid_y, 10.0F, 0.0F, 50);
             sticky_x += 10.0F;
         }
         sticky_move(sticky_right, sticky_mid_y, sticky_right - sticky_x, 0.0F, 50);
-        expect(grabbed(), "a slow move onto the edge let the pointer go");
+        expect(held(), "a slow move onto the edge let the pointer go");
         for (int rest = 0; rest < 40; ++rest)
             sticky_move(sticky_right, sticky_mid_y, 0.0F, 0.0F, 50);
-        expect(grabbed(), "resting on the edge let the pointer go");
+        expect(held(), "resting on the edge let the pointer go");
+        // A leave forgets the place. While the pointer rests on the edge the
+        // view still scrolls from that last pixel.
+        SDL_Event sticky_leave{};
+        sticky_leave.type = SDL_EVENT_WINDOW_MOUSE_LEAVE;
+        sticky_leave.window.windowID = SDL_GetWindowID(sdl_.window);
+        dispatch_event(sticky_leave, running);
+        expect(
+            match_pointer_known_ && match_pointer_x_ > sticky_right - 1.0F &&
+                match_pointer_x_ < sticky_right + 1.0F,
+            "a leave while the pointer rests on the edge hid it from edge scrolling"
+        );
         const auto saved_camera_x = match_camera_x_;
         const auto saved_camera_z = match_camera_z_;
         const auto saved_clock = scroll_clock_;
@@ -1503,15 +1517,31 @@ void Runtime::check_frontend_controls() {
         match_camera_z_ = saved_camera_z;
         scroll_clock_ = saved_clock;
         frame_time_ns_ = saved_frame;
-        for (int flick = 0; flick < 4; ++flick)
-            sticky_move(sticky_right, sticky_mid_y, 80.0F, 0.0F, 10);
-        expect(!grabbed(), "a flick on the edge did not let the pointer go");
+        // Past the last pixel, and put back on it. Three such steps are the push.
+        sticky_move(sticky_right + 40.0F, sticky_mid_y, 0.0F, 0.0F, 50);
+        float placed_x = 0.0F;
+        float placed_y = 0.0F;
+        std::ignore = SDL_GetMouseState(&placed_x, &placed_y);
+        expect(
+            held() && placed_x > sticky_right - 1.0F && placed_x < sticky_right + 1.0F,
+            "the pointer was not put back on the edge"
+        );
+        expect(
+            match_pointer_known_ && match_pointer_x_ > sticky_right - 1.0F &&
+                match_pointer_x_ < sticky_right + 1.0F,
+            "edge scrolling does not see the pointer on the edge"
+        );
+        sticky_move(sticky_right + 40.0F, sticky_mid_y, 0.0F, 0.0F, 50);
+        expect(held(), "a push under the threshold let the pointer go");
+        sticky_move(sticky_right + 40.0F, sticky_mid_y, 0.0F, 0.0F, 50);
+        expect(!sticky_edge_.holding, "a push past the threshold did not let the pointer go");
+        expect(!SDL_GetWindowMouseGrab(sdl_.window), "letting the pointer go grabbed the window");
         const float sticky_near = sticky_right - 23.0F;
         sticky_move(sticky_near, sticky_mid_y, sticky_near - sticky_right, 0.0F, 50);
-        expect(!grabbed(), "coming back within 24 points of the edge held the pointer");
+        expect(!sticky_edge_.holding, "coming back within 24 points of the edge held the pointer");
         const float sticky_rearm = sticky_right - 24.0F;
         sticky_move(sticky_rearm, sticky_mid_y, sticky_rearm - sticky_near, 0.0F, 50);
-        expect(grabbed(), "moving 24 points in from the edge did not hold the pointer");
+        expect(held(), "moving 24 points in from the edge did not hold the pointer");
         const auto saved_edge = engine_settings_state().current.window_edge;
         engine_settings_state().current.window_edge = oa::ui::engine_settings::WindowEdge::free;
         sticky_x = static_cast<float>(sticky_width / 2);
@@ -1520,13 +1550,14 @@ void Runtime::check_frontend_controls() {
             sticky_move(sticky_x + 10.0F, sticky_mid_y, 10.0F, 0.0F, 50);
             sticky_x += 10.0F;
         }
-        sticky_move(sticky_right, sticky_mid_y, sticky_right - sticky_x, 0.0F, 50);
-        expect(!grabbed(), "Window edge Free held the pointer");
+        sticky_move(sticky_right + 40.0F, sticky_mid_y, 40.0F, 0.0F, 50);
+        expect(!sticky_edge_.holding, "Window edge Free held the pointer");
+        expect(!SDL_GetWindowMouseGrab(sdl_.window), "Window edge Free grabbed the pointer");
         engine_settings_state().current.window_edge = saved_edge;
         if (sticky_started_full)
             alt_enter(SDLK_RETURN, 0);
-        std::cout
-            << "frontend controls check: a window holds the pointer on its edge until a flick\n";
+        std::cout << "frontend controls check: a window puts the pointer back on its edge until "
+                     "a push\n";
     }
 
     // The in-match Options' Visuals draws the same Screen Size. Choosing one

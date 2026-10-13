@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Whether the pointer is held at a window's edges. The function reads only
-// the pointer's place, its motion and the time, and remembers what it needs
-// in StickyEdge. It does not ask the window system for anything: the runtime
-// confines the pointer while the answer is hold, and lets it go on let_go.
+// the sample and remembers what it needs in StickyEdge. It does not ask the
+// window system for anything. The runtime puts the pointer back on the last
+// pixel while the answer is hold, or confines it where a program cannot
+// place the pointer, and leaves it free on let_go.
 #pragma once
 
 #include <array>
@@ -12,9 +13,9 @@
 
 namespace oa::app {
 
-/// Whether the pointer is held inside the window or free to leave it.
+/// Whether the pointer is held at the window's edges or free to leave.
 enum class StickyHold : uint8_t {
-    hold,   ///< confined, so it can rest on an edge and the view scrolls
+    hold,   ///< stays at the edge, so it can rest there and the view scrolls
     let_go, ///< free, until it has moved back in away from the edges
 };
 
@@ -25,19 +26,26 @@ struct StickySample {
     float motion_x{};   ///< movement across since the previous sample
     float motion_y{};   ///< movement down since the previous sample
     uint64_t time_ms{}; ///< the sample's time, in milliseconds
+    /// How far the desktop pointer is past the window, in the window's
+    /// points. Positive is past the right, negative past the left. Zero is
+    /// on the edge or inside. This is the push. Movement is not.
+    float past_x{};
+    /// How far the desktop pointer is past the window. Positive is past the
+    /// bottom, negative past the top. Zero is on the edge or inside.
+    float past_y{};
 };
 
 /// How hard a push or a flick has to be before the pointer is let go, and
 /// how far back in it must come before it is held again.
 struct StickyLimits {
-    /// Outward movement, in one edge's direction, that lets the pointer go
-    /// when it arrives within push_window_ms.
+    /// Desktop distance past one edge, added while the push continues, that
+    /// lets the pointer go when it arrives within push_window_ms.
     float push_points = 120.0F;
-    /// How long a push is remembered. Movement after this starts a new push.
+    /// How long a push is remembered. A later push starts again.
     uint64_t push_window_ms = 500;
     /// Arrival speed, in points per second, that lets the pointer go.
     float flick_points_per_s = 2500.0F;
-    /// How far back an arrival's movement counts toward a flick.
+    /// How far back the approach toward an edge counts toward a flick.
     uint64_t flick_window_ms = 100;
     /// How far from every edge the pointer must be, after it was let go,
     /// before it is held again.
@@ -50,23 +58,23 @@ struct StickyEdge {
     /// The pointer is held. False after let go, until it has moved back in.
     bool holding = false;
 
-    /// Per-edge push: outward points since the push started, and when.
+    /// Per-edge push: desktop distance past that edge since the push started.
     struct Push {
-        float points = 0.0F;     ///< outward points in this push
-        uint64_t started_ms = 0; ///< when the push's first point arrived
+        float points = 0.0F;     ///< distance past this edge in this push
+        uint64_t started_ms = 0; ///< when the push's first distance arrived
         bool running = false;    ///< a push is open on this edge
     };
 
     /// Left, right, top, bottom.
     std::array<Push, 4> push{};
-    /// Recent outward movement while the pointer was on an edge, so a flick
-    /// can be summed. Oldest samples merge into the next when the list is
-    /// full, so a fast stream of small movements is not forgotten.
+    /// Recent movement toward each edge, including the approach before the
+    /// pointer reached it, so a flick can be summed. Oldest samples merge
+    /// into the next when the list is full.
     static constexpr int kFlickSlots = 16;
 
     struct Flick {
         uint64_t time_ms = 0;           ///< when this movement arrived
-        std::array<float, 4> outward{}; ///< outward points on each edge
+        std::array<float, 4> outward{}; ///< points toward each edge
     };
 
     std::array<Flick, kFlickSlots> flick{};
@@ -76,22 +84,29 @@ struct StickyEdge {
 
 /// Decides whether the pointer stays held at the window's edges.
 ///
-/// Resting on an edge, with no movement, stays held however long it lasts.
-/// Movement past an edge counts only in that edge's direction: along an
-/// edge it counts nothing. It lets go when that movement adds up to the
-/// push, within the push's time, or when the pointer arrives at the edge
-/// at the flick's speed over the flick's time. After it lets go, it holds
-/// again only once the pointer is inside the window and at least the rearm
-/// distance from every edge. A window too small for that distance re-arms
-/// at its middle.
+/// Resting on an edge, with no movement and no distance past it, stays held
+/// however long it lasts. The push is the distance past an edge, from
+/// past_x and past_y, and from a place that is itself past the last pixel.
+/// Those are one distance told two ways, so the greater one is counted
+/// once, and only in that edge's direction. It lets go when the distance
+/// adds up to the push within the push's time. The flick is the movement
+/// toward an edge over the flick's time, including the samples from before
+/// the pointer reached the edge, and it lets go when that sum reaches the
+/// flick as the pointer arrives. Movement along an edge counts for neither.
+/// A distance of zero never grows a push and never starts its time again.
+/// After it lets go, it holds again only once the pointer is inside the
+/// window and at least the rearm distance from every edge. A window too
+/// small for that distance re-arms at its middle.
 ///
 /// @param state what earlier samples decided; updated
-/// @param sample where the pointer is, how it moved and when
+/// @param sample where the pointer is, how it moved, how far past the edge
+///        the desktop pointer is, and when
 /// @param width the window's width in points, the same units as sample
 /// @param height the window's height in points
 /// @param limits how hard a push or a flick lets go, and how far back in
 ///        the pointer must come
-/// @return hold while the pointer should be confined, let_go when it is free
+/// @return hold while the pointer should stay at the edges, let_go when it
+///         is free
 [[nodiscard]] StickyHold sticky_edge(
     StickyEdge& state, StickySample sample, float width, float height, StickyLimits limits = {}
 );

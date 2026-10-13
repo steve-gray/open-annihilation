@@ -1972,7 +1972,8 @@ hosts them on the OA layer.
   go, and coming back to full screen with the focus holds it again. A window
   holds the pointer at its edges only while a match's battlefield shows, the window has the focus and the
   pointer, and Window edge is Sticky (`sticky_edge.hpp`): the pointer rests on the last pixel and the view
-  edge-scrolls, and a firm push or a flick lets it go. Menus, the pause screen, a window without the focus
+  edge-scrolls. On macOS, Windows and X11 it stays free and is put back on that pixel until a firm push
+  lets it go; on Wayland it is confined, and a quick approach lets it go. Menus, the pause screen, a window without the focus
   and Window edge Free leave it free. The window events that may change this
   (`changes_pointer_bounds`) settle it in every event loop that takes
   Alt+Enter (the movies, a match loading and the game), and the window's own
