@@ -11,6 +11,7 @@
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/platform_hooks.hpp"
 #include "oa/app/user_folder.hpp"
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/platform/game_installs.hpp"
 #include "oa/platform/machine.hpp"
 #include <SDL3/SDL.h>
@@ -32,7 +33,6 @@ namespace {
 constexpr bool kNativeFolderDialog = OA_NATIVE_FOLDER_DIALOG != 0;
 constexpr const char* kMessageTitle = "Open Annihilation";
 #if OA_NATIVE_FOLDER_DIALOG
-constexpr const char* kDialogTitle = "Choose your Total Annihilation folder";
 constexpr Uint32 kDialogPollMs = 50;
 #endif
 
@@ -123,9 +123,13 @@ FolderPick pick_folder(void* context, const fs::path& start, fs::path* chosen, s
         return FolderPick::unavailable;
     }
     // A property SDL cannot store leaves the dialog with SDL's own title,
-    // starting folder or choice of one folder; it still opens.
+    // starting folder or choice of one folder; it still opens. The title
+    // says which folder qualifies. SDL copies it during Show.
+    const std::string title = std::string(
+        oa::data::languages::interface_text("Choose the folder that holds totala1.hpi.")
+    );
     std::ignore =
-        SDL_SetStringProperty(properties, SDL_PROP_FILE_DIALOG_TITLE_STRING, kDialogTitle);
+        SDL_SetStringProperty(properties, SDL_PROP_FILE_DIALOG_TITLE_STRING, title.c_str());
     const auto location = dialog_location(start);
     if (!location.empty()) {
         std::ignore = SDL_SetStringProperty(

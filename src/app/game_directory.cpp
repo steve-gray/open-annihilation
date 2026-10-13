@@ -197,7 +197,7 @@ resolved(const fs::path& folder, GameInstall&& install, GameDirectorySource sour
 /// folder that has gone and why, the platform's folder and why, whether the system's dialog
 /// may be offered beside it and why it failed.
 ///
-/// @param request whether the chooser comes before the dialog (Game Mode)
+/// @param request the ask; chooser_first hides the system's dialog (Game Mode)
 /// @param platform the platform's default folder and why it cannot be played; none when it is
 ///     not there
 /// @param stored the folder chosen earlier and why it can no longer be used; none when there is
@@ -722,9 +722,10 @@ std::optional<GameDirectory> resolve_game_directory(
             };
         }
     }
-    // One usable folder is played and remembered. Otherwise, where the locator
-    // can be shown, it asks: the system's dialog is a button on the desktop
-    // and is not opened from here. Game Mode does not offer that button.
+    // One usable folder is played and remembered. Otherwise the system's
+    // dialog asks, on macOS, Windows and a Linux desktop whose portal is
+    // there. The locator asks only in Steam's Game Mode, in a build with no
+    // dialog, and when that dialog cannot open.
     const bool chooser = request.chooser_offered && needed != nullptr;
     std::vector<FoundInstall> usable_found;
     std::optional<GameDirectory> only_found;
@@ -743,10 +744,10 @@ std::optional<GameDirectory> resolve_game_directory(
     }
     if (!request.choose && usable_found.size() == 1 && !stored_refused)
         return only_found;
-    // The locator is the ask whenever it can be shown. The system's dialog is
-    // not opened here: on the desktop it stays a button (dialog_offered), and
-    // in Game Mode dialog_offered stays false so the button is absent.
-    if (chooser) {
+    // Game Mode, and a build with no dialog, open the locator and never the
+    // system's dialog. Everywhere else the dialog asks first; when it cannot
+    // open, the loop below hands the same folders to the locator.
+    if (chooser && (request.chooser_first || !dialog)) {
         ask_for_chooser(
             request, platform_refused, stored_refused, std::move(usable_found), dialog, {}, *needed
         );

@@ -101,13 +101,15 @@ cd open-annihilation-<version>-linux-x86_64
 - **On a desktop:** the first time, it looks for Total Annihilation where
   Steam, Heroic and Lutris put it. When it finds exactly one usable copy, it
   plays it without asking and says on the main menu where it found it.
-  Otherwise it asks in its own locator: Home, Desktop, Documents, Downloads
-  and the other places on this computer, with a column that says what each
-  folder or file is. **Use the system picker…** opens your desktop's file
-  chooser when you want that instead. Choose the folder from step 4. It
-  remembers your choice.
+  Otherwise it opens your desktop's folder chooser, with a title that says
+  to choose the folder that holds `totala1.hpi`. That chooser is the
+  desktop portal's when one is there. When the portal is not there, the
+  game asks in its own locator: a title and a line saying what qualifies,
+  then Home, Desktop, Documents, Downloads and the other places, each file
+  or folder on its own row with an icon, a name and a size. Typing filters
+  the names. Choose the folder from step 4. It remembers your choice.
 
-  ![The locator on a desktop](../images/folder-chooser/desktop.png)
+  ![The locator, when the desktop's folder chooser cannot open](../images/folder-chooser/desktop.png)
 
   To choose another folder later, start it with
   `--choose-game-dir`; a folder named with `--game-dir`, or one you chose
