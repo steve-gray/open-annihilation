@@ -4156,6 +4156,14 @@ class Runtime final : public menu::Host,
     /// @return the map; null for any name that is not an installed pack map
     [[nodiscard]] const PackMap* pack_map(std::string_view name);
 
+    /// The words a screen shows for a pack map: its title, or its own name,
+    /// with the pack's name in brackets when another listed map uses the
+    /// same words. Empty when `key` is not a pack map's name.
+    ///
+    /// @param key the map's name, `name@package`
+    /// @return those words
+    [[nodiscard]] std::string pack_map_shown_name(std::string_view key);
+
     /// Returns how a pack map fits the game and the mod being played.
     ///
     /// Checks the map's files in its pack's folder, whatever layer is

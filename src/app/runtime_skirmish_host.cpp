@@ -5,6 +5,7 @@
 #include "oa/app/runtime.hpp"
 #include "map_packs.hpp"
 #include "map_picture_state.hpp"
+#include "oa/data/map_pack/map_name.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -23,6 +24,40 @@
 #include <vector>
 
 namespace oa::app {
+
+std::string Runtime::pack_map_shown_name(std::string_view key) {
+    const auto split = oa::data::map_pack::split_pack_map_name(key);
+    if (!split)
+        return {};
+    std::string plain(split->stem);
+    std::string mark(split->id);
+    if (const PackMap* map = pack_map(key)) {
+        if (!map->title.empty())
+            plain = map->title;
+        if (!map->pack_name.empty())
+            mark = map->pack_name;
+    }
+    const std::vector<std::string> names = copy_map_names();
+    bool shared = false;
+    for (const std::string& other : names) {
+        if (other == key)
+            continue;
+        std::string other_plain = other;
+        if (const auto other_split = oa::data::map_pack::split_pack_map_name(other)) {
+            other_plain.assign(other_split->stem);
+            if (const PackMap* other_map = pack_map(other);
+                other_map != nullptr && !other_map->title.empty())
+                other_plain = other_map->title;
+        }
+        if (other_plain == plain) {
+            shared = true;
+            break;
+        }
+    }
+    if (!shared || mark.empty())
+        return plain;
+    return plain + " (" + mark + ")";
+}
 
 oa::ui::gui_layout::Gadget* Runtime::widget(std::string_view name) {
     const auto found = std::find_if(
@@ -137,7 +172,16 @@ void Runtime::set_text(
     auto* gadget = widget(name);
     if (gadget == nullptr)
         return;
-    const std::string shown = translate_ui(text);
+    // Current Map on the skirmish screen, and the name under a map list. The
+    // stored name stays name@package; only the words on the gadget change.
+    std::string_view written = text;
+    std::string replaced;
+    if ((name == "MapName" || name == "MAPNAME") && oa::data::map_pack::split_pack_map_name(text)) {
+        replaced = pack_map_shown_name(text);
+        if (!replaced.empty())
+            written = replaced;
+    }
+    const std::string shown = translate_ui(written);
     if (auto* button = std::get_if<oa::ui::gui_layout::ButtonFields>(&gadget->fields))
         button->text = shown;
     else if (auto* label = std::get_if<oa::ui::gui_layout::LabelFields>(&gadget->fields))
@@ -337,9 +381,15 @@ bool Runtime::has_map_name_widget() {
 }
 
 std::string Runtime::map_display_name() {
-    if (const PackMap* installed = pack_map(selected_map_name_runtime_);
-        installed != nullptr && !installed->title.empty())
-        return installed->title;
+    if (const PackMap* installed = pack_map(selected_map_name_runtime_); installed != nullptr) {
+        if (installed->title.empty() && selected_map_metadata_ &&
+            !selected_map_metadata_->mission_name.empty() &&
+            !oa::data::map_pack::split_pack_map_name(selected_map_metadata_->mission_name))
+            return selected_map_metadata_->mission_name;
+        const std::string shown = pack_map_shown_name(selected_map_name_runtime_);
+        if (!shown.empty())
+            return shown;
+    }
     return selected_map_metadata_ ? selected_map_metadata_->mission_name : std::string{};
 }
 

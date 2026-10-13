@@ -10,6 +10,7 @@
 
 #include "oa/base/game_loop.hpp"
 #include "oa/data/campaign/campaign_assets.hpp"
+#include "oa/data/map_pack/map_name.hpp"
 #include "oa/data/defs/layout.hpp"
 #include "oa/data/defs/unit_header.hpp"
 #include "oa/data/languages/unit_texts.hpp"
@@ -4233,6 +4234,8 @@ std::vector<std::string> multiplayer_map_texts(std::span<const std::string> name
         });
         MapListFact fact;
         fact.key = key;
+        if (found == maps.end() && oa::data::map_pack::split_pack_map_name(key))
+            fact.pack = true;
         if (found != maps.end()) {
             fact.title = found->title;
             fact.file_title = found->file_title;
@@ -4246,6 +4249,28 @@ std::vector<std::string> multiplayer_map_texts(std::span<const std::string> name
     if (texts.size() != names.size())
         texts.assign(names.begin(), names.end());
     return texts;
+}
+
+std::string multiplayer_shown_map_name(const char* key) {
+    if (key == nullptr)
+        return {};
+    load_maps();
+    const std::string wanted(key);
+    std::vector<std::string> names;
+    names.reserve(ui().maps.size() + 1);
+    bool listed = false;
+    for (const MapInfo& info : ui().maps) {
+        names.push_back(info.name);
+        if (info.name == wanted)
+            listed = true;
+    }
+    if (!listed)
+        names.push_back(wanted);
+    const std::vector<std::string> texts = multiplayer_map_texts(names);
+    for (std::size_t index = 0; index < names.size() && index < texts.size(); ++index)
+        if (names[index] == wanted)
+            return texts[index];
+    return wanted;
 }
 
 void multiplayer_fill_map_names(Panel& panel, const std::vector<std::string>& names) {

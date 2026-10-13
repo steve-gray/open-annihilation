@@ -610,13 +610,25 @@ void multiplayer_reload_maps();
 /// The words a map list shows for each name, in the same order.
 ///
 /// A pack map shows the title its index gives, or the map file's title when
-/// the source already holds one, and a shared title adds the pack's name in
-/// brackets. A base map's row is its file name. A name the list does not
-/// hold is shown as itself.
+/// the source already holds one, or its own name when neither is known. A
+/// shared title adds the pack's name in brackets. The `name@package` key is
+/// not shown. A base map's row is its file name. A name the list does not
+/// hold is shown as its own name when it is a pack map, and as itself
+/// otherwise.
 ///
 /// @param names the maps' names, in list order
 /// @return one string per name
 [[nodiscard]] std::vector<std::string> multiplayer_map_texts(std::span<const std::string> names);
+
+/// The words a screen shows for one map.
+///
+/// A pack map uses the same words as its row in the map list, so the name
+/// has no `@`. A base map's name is returned as given. The key the game
+/// stores is unchanged.
+///
+/// @param key the map's name, as selection and the battle room carry it
+/// @return the words to show; empty when `key` is null
+[[nodiscard]] std::string multiplayer_shown_map_name(const char* key);
 
 /// Fills MAPNAMES with the words `multiplayer_map_texts` gives `names`, and
 /// keeps `names` as the rows' keys.
