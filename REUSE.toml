@@ -132,7 +132,8 @@ SPDX-License-Identifier = "CC-BY-4.0"
 # icon, from the Open Annihilation branding repository, the icons
 # tools/make_icons.py makes from the icon, which the builds put in the game,
 # and the settings and mods icons at 256 pixels, which the game embeds for
-# its settings and Library buttons. All
+# its settings and Library buttons, and the same icons at 512 pixels, which
+# a large window draws. All
 # rights reserved: no licence to use, copy, modify or distribute them is
 # granted, under the project's licence or otherwise, without the holder's
 # prior written permission
@@ -140,10 +141,13 @@ SPDX-License-Identifier = "CC-BY-4.0"
 [[annotations]]
 path = [
     "branding/open-annihilation-256.png",
+    "branding/open-annihilation-512.png",
     "branding/open-annihilation-icon.png",
     "branding/open-annihilation-mods-256.png",
+    "branding/open-annihilation-mods-512.png",
     "branding/open-annihilation-mods-icon.png",
     "branding/open-annihilation-settings-256.png",
+    "branding/open-annihilation-settings-512.png",
     "branding/open-annihilation-settings-icon.png",
     "branding/open-annihilation.icns",
     "branding/open-annihilation.ico",

@@ -2136,6 +2136,39 @@ void the_zoomed_out_units_default_read_and_round_trip() {
 /// before it reads the default; each word reads its way and any other text
 /// the default; Always shown written alone and read back, and Restore
 /// defaults then OK erases the key.
+/// Window edge: Sticky everywhere by default; "sticky" and "free" read
+/// their choices and round-trip alone; any other text reads Sticky; writing
+/// Free leaves every other key as it is, and Restore defaults then OK
+/// erases the key.
+void the_window_edge_default_read_and_round_trip() {
+    CHECK(settings::key::window_edge == "open-annihilation.window-edge");
+    settings::Inputs own_mac = players_own_on_linux;
+    own_mac.macos = true;
+    for (const auto& inputs : {settings::Inputs{}, players_own_on_linux, own_mac}) {
+        const auto defaults = settings::default_settings(inputs);
+        CHECK(defaults.window_edge == settings::WindowEdge::sticky);
+        CHECK(settings::read_settings({}, inputs, false) == defaults);
+    }
+    const auto edge = [](const char* text) {
+        return read_one(settings::key::window_edge, text).window_edge;
+    };
+    CHECK(edge("sticky") == settings::WindowEdge::sticky);
+    CHECK(edge("free") == settings::WindowEdge::free);
+    for (const char* text : {"", "Free", "sticky ", "1", "always"})
+        CHECK(edge(text) == settings::WindowEdge::sticky);
+
+    const auto defaults = settings::default_settings(players_own_on_linux);
+    auto loose = defaults;
+    loose.window_edge = settings::WindowEdge::free;
+    Values values;
+    settings::write_settings(values, defaults, loose, defaults, false);
+    CHECK(values.size() == 1);
+    CHECK(values.at(std::string{settings::key::window_edge}) == "free");
+    CHECK(settings::read_settings(values, players_own_on_linux, false) == loose);
+    settings::write_settings(values, loose, defaults, defaults, true);
+    CHECK(values.empty());
+}
+
 void the_window_frame_default_read_and_round_trip() {
     CHECK(settings::key::window_frame == "open-annihilation.window-frame");
     settings::Inputs own_mac = players_own_on_linux;
@@ -2506,6 +2539,7 @@ int main() {
     menu_scaling_and_native_density_default_read_and_round_trip();
     explosion_flash_default_read_and_round_trip();
     the_zoomed_out_units_default_read_and_round_trip();
+    the_window_edge_default_read_and_round_trip();
     the_window_frame_default_read_and_round_trip();
     the_hud_scaling_default_read_and_round_trip();
     the_interface_size_default_read_and_round_trip();

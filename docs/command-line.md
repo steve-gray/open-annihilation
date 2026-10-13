@@ -112,3 +112,17 @@ has its id and name. The shape is in
 
 `--list-content` without `--json`, or `--json` without `--list-content`,
 is refused.
+
+## `--status-stdout`, `--status-file` and `--quit-after-game`
+
+`--status-stdout` writes what the game is doing, and how it ended for
+each player, as one JSON object a line on standard output. The game's
+own log goes to the log folder, so the lines are the only text there.
+`--status-file PATH` writes the same lines to a file. Both options
+together write every line to both. `--quit-after-game` leaves once the
+game has ended. `--quit-after-game=after-score` waits until the player
+has left the score screen.
+
+A missing file, or a file the game cannot open, is refused, and the game
+ends as it does for any other refused option, before the first line.
+See [what a game reports as it is played](multiplayer/status.md).

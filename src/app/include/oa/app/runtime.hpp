@@ -10,6 +10,7 @@
 #include "frame_pacing.hpp"
 #include "middle_pan.hpp"
 #include "full_screen.hpp"
+#include "sticky_edge.hpp"
 #include "match_model_draws.hpp"
 #include "megamap_state.hpp"
 #include "platform_hooks.hpp"
@@ -4718,6 +4719,22 @@ class Runtime final : public menu::Host,
     /// overlays, drawn into the main menu's picture.
     void register_engine_settings_button();
 
+    /// When the window shows the main menu's OA buttons larger than the
+    /// picture's squares, copies the frame with those squares put back to
+    /// the menu. The icons are drawn by present_menu_icon_buttons.
+    ///
+    /// @param[out] frame the copy, when this returns true
+    /// @return true when frame holds that copy
+    bool replace_menu_button_pixels(std::vector<uint8_t>& frame);
+
+    /// Draws the main menu's OA buttons in the window's pixels, over the
+    /// scaled picture and under the OA layer's screens.
+    void present_menu_icon_buttons();
+
+    /// Destroys the main menu buttons' window-pixel textures, while the
+    /// renderer that made them is still alive.
+    void release_menu_button_textures() noexcept;
+
     /// Opens the dialog over the darkened main menu, as the OA layer's
     /// settings screen.
     void open_engine_settings_from_menu();
@@ -6066,6 +6083,7 @@ class Runtime final : public menu::Host,
         HudRect unit_metal_use{350, 468, 0, 8};
         HudRect unit_energy_make{400, 458, 0, 8};
         HudRect unit_energy_use{400, 468, 0, 8};
+        HudRect logo{132, 5, 21, 21};          // SIDEDATA LOGO: the viewed player's colour
         HudRect logo2{132, 455, 21, 21};       // SIDEDATA LOGO2: the cursor unit owner's logo
         HudRect mission_text{385, 449, 16, 2}; // MISSIONTEXT: head order status, centred on x
         HudRect unit_name2{555, 452, 1, 9};    // UNITNAME2: the second unit, centred on x
@@ -6173,6 +6191,16 @@ class Runtime final : public menu::Host,
     /// @param height rectangle height
     /// @param palette_index match palette colour
     void fill_source_rect(int x, int y, int width, int height, uint8_t palette_index);
+
+    /// Draws one player's colour mark into a HUD rectangle.
+    ///
+    /// The mark is the frame of the logo sheet that the player's colour names,
+    /// fitted to `at` the same way the unit panel fits its owner's mark. An
+    /// empty rectangle, or a player with no frame, draws nothing.
+    ///
+    /// @param player player whose colour is drawn
+    /// @param at rectangle in HUD source space
+    void draw_player_mark(const oa::Player& player, const HudRect& at);
 
     /// Draws a SIDEDATA resource trough: the fill to the shown amount and the share threshold's
     /// marker.
@@ -8861,6 +8889,114 @@ class Runtime final : public menu::Host,
     /// @param x canvas column
     /// @param y canvas row
     void update_pointer(float x, float y);
+
+    /// Feeds one pointer sample to the sticky window edge.
+    ///
+    /// The place is in window points, before the frame's letterbox moves
+    /// it. Called only while the battlefield wants the rule. On macOS,
+    /// Windows and X11 the desktop distance past the edge is the push, and
+    /// the pointer is put back on the last pixel while the rule holds.
+    ///
+    /// @param x place across the window
+    /// @param y place down the window
+    /// @param motion_x movement across since the previous sample
+    /// @param motion_y movement down since the previous sample
+    /// @param time_ms the sample's time, in milliseconds
+    void note_sticky_motion(float x, float y, float motion_x, float motion_y, uint64_t time_ms);
+
+    /// Tells whether a match's battlefield in a focused window wants the
+    /// pointer held at the window's edges.
+    ///
+    /// Menus, the pause screen, a settings dialog, a message box, a window
+    /// without the focus, full screen and Window edge Free do not. Full
+    /// screen keeps its own rule. While a soft wall is holding, the pointer
+    /// may be past the edge for the moment it is put back, so the mouse
+    /// focus is not required then.
+    ///
+    /// @param require_mouse the pointer has to be inside the window; false
+    ///        while a soft wall is putting it back
+    /// @return true while the sticky edge should keep the pointer at the edges
+    [[nodiscard]] bool sticky_edge_wanted(bool require_mouse = true);
+
+    /// Tells whether this window system leaves the pointer free, so the
+    /// game puts it back on an edge itself.
+    ///
+    /// Wayland cannot place the pointer, and keeps SDL's confinement. Every
+    /// other driver, including macOS, Windows and X11, is a soft wall.
+    ///
+    /// @return true when the pointer is put back instead of confined
+    [[nodiscard]] bool sticky_soft_wall() const;
+
+    /// Tells whether a motion is the one just posted to put the pointer back.
+    ///
+    /// That motion is the game's, so it is not a push and not a flick. The
+    /// first matching motion is consumed.
+    ///
+    /// @param event the event about to be fed to the rule
+    /// @return true when the rule should ignore it
+    [[nodiscard]] bool sticky_ignores_motion(const SDL_Event& event);
+
+    /// Keeps the pointer at the window's edges, or lets it go, as the rule says.
+    ///
+    /// Full screen is left to keeps_pointer_on_screen. A window that does
+    /// not want the rule, or force_release, lets the pointer go until it
+    /// has moved back in. Becoming wanted samples the pointer once with no
+    /// movement, so a pointer already on an edge is not trapped. A soft
+    /// wall puts the pointer back on the last pixel while the rule holds.
+    /// Wayland confines it.
+    ///
+    /// @param force_release let go for this call even when the battlefield
+    ///        still looks wanted, as when the focus is lost and the window's
+    ///        flags have not caught up
+    void apply_sticky_edge(bool force_release = false);
+
+    /// Forgets a hold, so the next apply holds again only from inside.
+    void forget_sticky_edge();
+
+    /// Tells whether the desktop pointer's place is a real distance past the
+    /// window. The dummy driver reports the window's own pointer there.
+    ///
+    /// @return true on macOS, Windows and X11
+    [[nodiscard]] bool sticky_trust_global() const;
+
+    /// Tells whether the desktop pointer has moved since the push was last read.
+    ///
+    /// A place that has not moved reports no new push, so one rest is not
+    /// added on every frame. The place is remembered.
+    ///
+    /// @return true when the desktop pointer is in a new place
+    [[nodiscard]] bool sticky_global_moved();
+
+    /// Reads how far the desktop pointer is past the window.
+    ///
+    /// @param past_x set past the left (negative) or the right, or to zero
+    /// @param past_y set past the top (negative) or the bottom, or to zero
+    void sticky_global_past(float& past_x, float& past_y) const;
+
+    /// Remembers the desktop pointer's place, so the warp that put it back
+    /// is not itself a push.
+    void remember_sticky_global();
+
+    /// Puts the pointer back on the edge it has crossed, while the rule holds.
+    ///
+    /// @param x place across the window, which may be past the edge
+    /// @param y place down the window, which may be past the edge
+    /// @param fed the sample was already given to the rule, so this only
+    ///        puts the pointer back
+    void restore_sticky_pointer(float x, float y, bool fed);
+
+    /// Puts the pointer on one pixel of the window and drops the motion
+    /// that the warp posts, which is not the player's.
+    ///
+    /// @param x place across the window
+    /// @param y place down the window
+    void warp_pointer_to_edge(float x, float y);
+
+    /// Drops a queued warp motion at this place, when the warp posted one.
+    ///
+    /// @param x the place the pointer was put
+    /// @param y the place the pointer was put
+    void drop_warp_motion(float x, float y);
 
     /// Tells whether a press on a gadget of the current screen selects it: a grayed-out button
     /// takes no press, as in the game's panels.
@@ -15778,6 +15914,28 @@ class Runtime final : public menu::Host,
     /// other screen has shown and the match's screen has kept its size.
     /// Until then the screen's edges do not scroll the camera.
     bool match_pointer_known_ = false;
+    /// The sticky window edge's memory. The runtime puts the pointer back,
+    /// or confines it on Wayland, while it holds, and only on a match's window.
+    StickyEdge sticky_edge_{};
+    /// The battlefield wanted the sticky edge the last time it was applied,
+    /// so a change to wanting it samples the pointer once before it holds.
+    bool sticky_wanted_ = false;
+    /// The window is confined for the sticky edge, so letting go clears it.
+    /// A soft wall leaves this false: the pointer stays free.
+    bool sticky_confined_ = false;
+    /// The desktop place last read for the push. A repeat of it adds nothing.
+    bool sticky_global_known_ = false;
+    /// Desktop place last read, across the desktop.
+    float sticky_global_x_ = 0;
+    /// Desktop place last read, down the desktop.
+    float sticky_global_y_ = 0;
+    /// The next motion at sticky_warp_x_ and sticky_warp_y_ with no timestamp
+    /// is the warp, and the rule ignores it.
+    bool sticky_drop_warp_motion_ = false;
+    /// Where the pointer was last put back, across the window.
+    float sticky_warp_x_ = 0;
+    /// Where the pointer was last put back, down the window.
+    float sticky_warp_y_ = 0;
     /// A middle-click pan: idle, a click still deciding, or a drag. The
     /// anchor is a screen point.
     middle_pan::State middle_pan_{};

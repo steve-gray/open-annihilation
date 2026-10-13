@@ -41,12 +41,22 @@ struct ListenAddress {
     uint16_t port{}; ///< 0 lets the system choose one
 };
 
+/// When --quit-after-game ends the run.
+enum class QuitAfter : uint8_t {
+    none,  ///< --quit-after-game was not given
+    game,  ///< once the game has ended
+    score, ///< once the player leaves the score screen
+};
+
 /// What the command line asked of the endpoint.
 struct EndpointOptions {
-    bool enabled{};                            ///< --fark was given
-    std::optional<std::string> address;        ///< --fark-address as given
-    std::optional<std::filesystem::path> file; ///< --fark-file as given
-    ListenAddress listen{};                    ///< the address check_options read
+    bool enabled{};                                   ///< --fark was given
+    std::optional<std::string> address;               ///< --fark-address as given
+    std::optional<std::filesystem::path> file;        ///< --fark-file as given
+    ListenAddress listen{};                           ///< the address check_options read
+    bool status_stdout{};                             ///< --status-stdout was given
+    std::optional<std::filesystem::path> status_file; ///< --status-file as given
+    QuitAfter quit_after{QuitAfter::none};            ///< --quit-after-game
 };
 
 /// Reads a listen address: 127.0.0.1:PORT or [::1]:PORT, PORT from 0 to 65535.
@@ -72,6 +82,31 @@ struct EndpointOptions {
 ///        check_options and text are set
 /// @param[in,out] options what the hooks read and write; becomes table.context
 void fill_option_hooks(Extension& table, EndpointOptions& options);
+
+/// Tells whether the checked command line asked for status on standard output.
+///
+/// @return true after check_options when --status-stdout was given
+[[nodiscard]] bool command_status_stdout() noexcept;
+
+/// Tells whether the checked command line asked for status lines.
+///
+/// @return true for --status-stdout or --status-file
+[[nodiscard]] bool command_status_lines() noexcept;
+
+/// Tells whether the checked command line follows the match for a launcher.
+///
+/// @return true for status lines or --quit-after-game
+[[nodiscard]] bool command_status_following() noexcept;
+
+/// Returns the file the checked command line named for status lines.
+///
+/// @return the path; nothing when --status-file was not given
+[[nodiscard]] const std::optional<std::filesystem::path>& command_status_file() noexcept;
+
+/// Returns when the checked command line leaves after a game.
+///
+/// @return the option; none when it was not given
+[[nodiscard]] QuitAfter command_quit_after() noexcept;
 
 /// Names the engine option a run with the endpoint cannot be used with:
 /// one that runs no main loop or owns it (--headless-check, the checks,

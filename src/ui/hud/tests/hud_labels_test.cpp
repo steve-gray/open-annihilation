@@ -322,7 +322,9 @@ void test_installed_side_layouts(const AssetStore& assets) {
         CHECK(layout.metal_bar.width == 128 && layout.metal_bar.height == 3);
         CHECK(layout.metal_num_x == 278 && layout.metal_num_y == 18);
         CHECK(layout.energy_bar.width > 0);
-        // The unit panel's second line, logo and build readout.
+        // The team colour block left of metal, and the unit panel's logo.
+        CHECK(layout.logo.x == 132 && layout.logo.y == 5 && layout.logo.width == 21);
+        CHECK(layout.logo.height == 21);
         CHECK(layout.logo2.x == 132 && layout.logo2.y == 455 && layout.logo2.width == 21);
         CHECK(layout.mission_text.x == 385 && layout.mission_text.y == 449);
         CHECK(layout.unit_name2.x == 555 && layout.unit_name2.y == 452);

@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace oa {
 struct Game;
@@ -90,5 +91,51 @@ void write_room(JsonWriter& json, oa::ui::frontend_multiplayer::Lobby* lobby, bo
 /// @return the local player when it won; otherwise the one player still
 ///         with units, when there is one; nothing else
 [[nodiscard]] std::optional<uint8_t> match_winner(const oa::Game& game) noexcept;
+
+/// One seat of a finished match, as every machine reports it.
+///
+/// The outcome is won, lost, drawn, left or watcher. It is computed from
+/// the shared simulation, not from this machine's own victory or defeat.
+struct SeatResult {
+    uint8_t slot{};              ///< the seat, 0 to 9
+    std::string name;            ///< the player's name
+    std::optional<uint8_t> team; ///< the team, when the player has one
+    uint8_t side{};              ///< the side's index, as the match answer's side
+    std::string outcome;         ///< won, lost, drawn, left or watcher
+    uint16_t units{};            ///< units still on the field
+    int16_t kills{};             ///< units destroyed
+    int16_t losses{};            ///< units lost
+};
+
+/// How a match ended for every seat, the same on every machine.
+struct MatchResults {
+    std::vector<SeatResult> seats;     ///< one entry per seat that took part
+    std::optional<std::string> winner; ///< the one player still with units, or nothing
+    uint32_t tick{};                   ///< the match's tick
+};
+
+/// Computes how the match ended for each seat, from the world alone.
+///
+/// A seat is listed when it is in play, when it left, or when it produced
+/// units. A watcher is a watcher. Anyone who left is left. The rest are
+/// grouped by team and by a mutual alliance: when one group still has units
+/// its members won, including a teammate with none left, and the others
+/// lost; when none or more than one group still has units, they drew. The
+/// winner is the one of them who still has units, and nothing when several
+/// do or none does.
+///
+/// @param world the match
+/// @return the seats, the winner and the tick
+[[nodiscard]] MatchResults match_results(const oa::World& world);
+
+/// Writes a match's results, and its tick, into an open object.
+///
+/// `winner` is written only when `write_winner` is set. A game_over event
+/// already has its own winner, this machine's, and keeps it.
+///
+/// @param[in,out] json the object, open
+/// @param results the match's results
+/// @param write_winner also write winner
+void write_result_fields(JsonWriter& json, const MatchResults& results, bool write_winner);
 
 } // namespace oa::app::automation

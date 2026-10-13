@@ -703,6 +703,7 @@ void Runtime::load_side_hud() {
         side_hud_.unit_metal_use = rect(layout.unit_metal_use);
         side_hud_.unit_energy_make = rect(layout.unit_energy_make);
         side_hud_.unit_energy_use = rect(layout.unit_energy_use);
+        side_hud_.logo = rect(layout.logo);
         side_hud_.logo2 = rect(layout.logo2);
         side_hud_.mission_text = rect(layout.mission_text);
         side_hud_.unit_name2 = rect(layout.unit_name2);
@@ -928,6 +929,26 @@ void Runtime::fill_source_rect(int x, int y, int width, int height, uint8_t pale
     );
 }
 
+void Runtime::draw_player_mark(const oa::Player& player, const HudRect& at) {
+    if (at.width <= 0 || at.height <= 0)
+        return;
+    const auto logo = player_logo_frame(player);
+    if (!logo || logo->width == 0 || logo->height == 0)
+        return;
+    const auto width = std::max(1, at.width);
+    const auto height = std::max(1, at.height);
+    for (int row = 0; row < height; ++row) {
+        for (int column = 0; column < width; ++column) {
+            const auto source =
+                static_cast<std::size_t>(row * static_cast<int>(logo->height) / height) *
+                    logo->width +
+                static_cast<std::size_t>(column * static_cast<int>(logo->width) / width);
+            if (source < logo->coverage.size() && logo->coverage[source] != 0)
+                fill_source_rect(at.x + column, at.y + row, 1, 1, logo->pixels[source]);
+        }
+    }
+}
+
 void Runtime::draw_sidedata_bar(
     const HudRect& bar, float shown, float capacity, float threshold, float store, uint8_t color
 ) {
@@ -959,7 +980,9 @@ void Runtime::draw_resource_readout() {
     for (uint32_t ease = take_readout_eases(); ease != 0; --ease)
         oa::ui::hud::update_resource_readout(readout, player, game.tick);
     // PANELTOP already contains the METAL/ENERGY chrome; SIDEDATA.TDF names the
-    // fill troughs, stored/capacity numbers, and produced/consumed readouts.
+    // colour block, the fill troughs, the stored and capacity numbers, and
+    // the produced and consumed readouts.
+    draw_player_mark(player, side_hud_.logo);
     const auto text_color = oa::ui::hud::readout_color(game, oa::ui::hud::kReadoutTextColor);
     const auto whole = [](float value) { return std::to_string(static_cast<int>(value)); };
     const auto label = [this](int x, int y, const oa::ui::hud::RateText& rate) {
@@ -1216,24 +1239,8 @@ void Runtime::draw_unit_panel() {
         return;
     if (panel.show_damage)
         meter(side_hud_.damage_bar, unit->health, static_cast<int32_t>(def->max_damage));
-    if (panel.logo_player < OA_PLAYER_COUNT) {
-        if (const auto logo = player_logo_frame(world.game.players[panel.logo_player]);
-            logo && logo->width > 0 && logo->height > 0) {
-            // The logo is fitted to the LOGO2 rectangle.
-            const auto& at = side_hud_.logo2;
-            const auto width = std::max(1, at.width);
-            const auto height = std::max(1, at.height);
-            for (int row = 0; row < height; ++row)
-                for (int column = 0; column < width; ++column) {
-                    const auto source =
-                        static_cast<std::size_t>(row * static_cast<int>(logo->height) / height) *
-                            logo->width +
-                        static_cast<std::size_t>(column * static_cast<int>(logo->width) / width);
-                    if (source < logo->coverage.size() && logo->coverage[source] != 0)
-                        fill_source_rect(at.x + column, at.y + row, 1, 1, logo->pixels[source]);
-                }
-        }
-    }
+    if (panel.logo_player < OA_PLAYER_COUNT)
+        draw_player_mark(world.game.players[panel.logo_player], side_hud_.logo2);
     // The status line, lowered to keep within the bar, takes the rate
     // figures under it down as far and one outline further, so that its
     // outline and shadow fall clear of their letters.

@@ -1576,7 +1576,7 @@ int run_once(
 // When the log cannot be opened they stay where they were, and standard error
 // says why.
 void start_log_in(const fs::path& folder) {
-    if (!oa::platform::log_files::begin(folder))
+    if (!oa::platform::log_files::begin(folder) && !oa::platform::log_files::lines_held_for_log())
         std::cerr << "open-annihilation: cannot open a log in " << path_to_utf8(folder)
                   << "; the output stays here\n";
 }
@@ -1587,7 +1587,8 @@ void start_log() {
     try {
         start_log_in(oa::platform::preferences::data_directory() / "logs");
     } catch (const std::exception& error) {
-        std::cerr << "open-annihilation: no log: " << error.what() << '\n';
+        if (!oa::platform::log_files::lines_held_for_log())
+            std::cerr << "open-annihilation: no log: " << error.what() << '\n';
     }
 }
 
@@ -1783,7 +1784,9 @@ bool hand_over_or_lock(const Options& options, std::unique_ptr<package_install::
             break;
         oa::base::threads::sleep_ms(kHandoffPollMs);
     }
-    std::cerr << "open-annihilation: the files went to the copy already running\n";
+    if (!oa::platform::log_files::lines_held_for_log() ||
+        !oa::platform::log_files::current_file().empty())
+        std::cerr << "open-annihilation: the files went to the copy already running\n";
     return true;
 }
 
@@ -1794,6 +1797,11 @@ void report_fatal(const std::string& message) {
     const auto line = "open-annihilation: " + message + "\n";
     if (!oa::platform::log_files::current_file().empty())
         std::fputs(line.c_str(), stderr);
+    // Status lines own standard output. With no log yet, the message would
+    // land on that stream, so it is kept off it.
+    if (oa::platform::log_files::lines_held_for_log() &&
+        oa::platform::log_files::current_file().empty())
+        return;
     // With neither a terminal nor a box, the log holds the message.
     if (!oa::platform::log_files::write_to_terminal(line))
         std::ignore = SDL_ShowSimpleMessageBox(
@@ -1842,6 +1850,15 @@ void publish_managed_copy(
 
 using namespace oa::app;
 
+namespace oa::app::automation {
+bool status_stdout_wanted() noexcept;
+bool status_following() noexcept;
+void capture_status_stdout();
+void begin_status_lines(std::string_view version);
+void finish_status_lines(int played);
+int status_exit_code(int played) noexcept;
+} // namespace oa::app::automation
+
 int main(int argc, char** argv) {
     // --version prints one line and leaves before the log folder, the
     // preferences, the game data or a window are touched. Other options on
@@ -1861,6 +1878,7 @@ int main(int argc, char** argv) {
     error_log_folder = oa::platform::error_log_directory(oa::platform::program_directory().c_str());
     std::set_new_handler(handle_out_of_memory);
     oa::base::float_precision::program_float_control().hooks.changed = report_float_control_change;
+    namespace automation = oa::app::automation;
     try {
         // Every registered extension fills its table before the command
         // line is parsed; the runtime gets the table that combines them.
@@ -1890,23 +1908,34 @@ int main(int argc, char** argv) {
             return run_content_copy_check(parsed.check_content_copy);
         if (!parsed.check_installer.empty())
             return run_installer_check(parsed.check_installer);
+        // --status-stdout keeps the standard output the process was started
+        // with, then the log takes both streams, so the status lines are the
+        // only text on that output. --log-dir names the folder for any run.
         // A game started for play, from a terminal or the desktop, logs to the
         // logs folder. Checks, benchmarks and other scripted runs keep their
         // output where it goes, and so does a run whose output another
-        // program captures, such as a test or a script. --log-dir names the
-        // folder for any run.
+        // program captures, such as a test or a script.
+        if (automation::status_stdout_wanted()) {
+            automation::capture_status_stdout();
+            oa::platform::log_files::hold_lines_for_log();
+        }
         if (parsed.log_dir)
             start_log_in(*parsed.log_dir);
         else if (
-            !parsed.headless_check && !parsed.unattended &&
-            !oa::platform::log_files::output_captured()
+            automation::status_stdout_wanted() || (!parsed.headless_check && !parsed.unattended &&
+                                                   !oa::platform::log_files::output_captured())
         )
             start_log();
+        if (automation::status_following())
+            automation::begin_status_lines(running_engine_version_line());
         // The files the start carries are opened once the main menu shows,
         // unless another copy already runs and takes them.
         std::unique_ptr<package_install::FileLock> instance_lock;
-        if (hand_over_or_lock(parsed, instance_lock))
-            return 0;
+        if (hand_over_or_lock(parsed, instance_lock)) {
+            const int code = automation::status_exit_code(0);
+            automation::finish_status_lines(code);
+            return code;
+        }
         for (const auto& file : parsed.open_files)
             package_install::post_opened_file(file);
         register_file_types_for_player(parsed);
@@ -1955,7 +1984,9 @@ int main(int argc, char** argv) {
             change.hooks.wait = wait_pumping;
             if (status != kSoftRestartStatus) {
                 package_install::finish_pending_change(change);
-                return status;
+                const int code = automation::status_exit_code(status);
+                automation::finish_status_lines(code);
+                return code;
             }
             package_install::finish_pending_change(change);
         }
@@ -1968,11 +1999,13 @@ int main(int argc, char** argv) {
         const auto reason = error.code() == std::errc::filename_too_long
                                 ? path_length_problem(error.path1())
                                 : std::string();
+        automation::finish_status_lines(1);
         report_fatal(
             reason.empty() ? std::string(error.what()) : path_to_utf8(error.path1()) + ": " + reason
         );
         return 1;
     } catch (const std::exception& error) {
+        automation::finish_status_lines(1);
         report_fatal(error.what());
         return 1;
     }

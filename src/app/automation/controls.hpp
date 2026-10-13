@@ -19,6 +19,17 @@ namespace oa::app::automation {
 /// Collects the controls of the windows extensions show, then of the screen
 /// shown and of the dialog over it, the dialog's first among the screen's.
 ///
+/// @param check the check host, which names the screen
+/// @param host the automation host, which lists the controls
+/// @param[out] controls replaced by the controls
+void collect_controls(
+    const oa::app::CheckHost& check,
+    const oa::app::AutomationHost& host,
+    std::vector<AutomationControl>& controls
+);
+
+/// Collects the controls the endpoint's hosts see.
+///
 /// @param endpoint the endpoint, served
 /// @param[out] controls replaced by the controls
 void collect_controls(const Endpoint& endpoint, std::vector<AutomationControl>& controls);

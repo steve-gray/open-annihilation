@@ -181,12 +181,14 @@ enum class Setting : uint8_t {
     middle_click_pan,  ///< Middle-click pans: a switch
     escape_opens_menu, ///< Escape opens the game menu: a switch
     switch_alt,        ///< Select groups without Alt: a switch
-    unit_limit,        ///< Unit limit: a slider
-    max_frame_rate,    ///< Maximum frame rate: a slider
-    anti_aliasing,     ///< Enhanced anti-aliasing: a strip of levels
-    screen_size,       ///< Screen size: a slider
-    developer_mode,    ///< Enable Developer Mode: a switch
-    frame_stats,       ///< Show performance statistics: a switch
+    /// Window edge: a strip of Sticky and Free
+    window_edge,
+    unit_limit,     ///< Unit limit: a slider
+    max_frame_rate, ///< Maximum frame rate: a slider
+    anti_aliasing,  ///< Enhanced anti-aliasing: a strip of levels
+    screen_size,    ///< Screen size: a slider
+    developer_mode, ///< Enable Developer Mode: a switch
+    frame_stats,    ///< Show performance statistics: a switch
     /// Hardware acceleration: a strip of Off, Basic and Full whose two hint
     /// lines are its status
     hardware_acceleration,

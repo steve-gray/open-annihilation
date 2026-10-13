@@ -9,6 +9,7 @@
 
 #include "oa/app/app.hpp"
 #include "oa/core/game_state.h"
+#include "oa/platform/log_files.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -259,8 +260,10 @@ void Endpoint::open(const ListenAddress& address, const fs::path& file) {
     address_ = served;
     token_ = *token;
     // The token goes to the file alone, never to the log.
-    std::cout << "automation: serving on " << address_ << '\n'
-              << "automation: the address and token are in " << utf8_of(file) << std::endl;
+    oa::platform::log_files::write_line("automation: serving on " + address_);
+    oa::platform::log_files::write_line(
+        "automation: the address and token are in " + utf8_of(file)
+    );
 }
 
 bool Endpoint::listening() const noexcept {
@@ -484,7 +487,7 @@ void Endpoint::greet(Connection& connection, const Frame& frame) {
         token = string_field(*request, "token");
     }
     if (op == nullptr || *op != "hello" || token == nullptr || !token_matches(*token, token_)) {
-        std::cout << "automation: a connection was denied" << std::endl;
+        oa::platform::log_files::write_line("automation: a connection was denied");
         refuse(connection, id, "denied", "the first request is a hello with the run's token");
         return;
     }
@@ -513,7 +516,7 @@ void Endpoint::greet(Connection& connection, const Frame& frame) {
     connection.socket = sock::invalid_socket;
     subscriptions_ = 0;
     events_sent_ = 0;
-    std::cout << "automation: client connected" << std::endl;
+    oa::platform::log_files::write_line("automation: client connected");
     Request hello{*id, *op, *request};
     Answer answer = begin_answer(hello.id);
     answer_hello(*this, hello, answer);
@@ -660,7 +663,11 @@ void Endpoint::write_client() {
 void Endpoint::drop_client(std::string_view why) noexcept {
     if (!client_)
         return;
-    std::cout << "automation: client " << why << std::endl;
+    // This function does not throw. A log line is not worth ending the process.
+    try {
+        oa::platform::log_files::write_line(std::string("automation: client ").append(why));
+    } catch (...) {
+    }
     close(*client_);
     client_.reset();
     held_.reset();

@@ -51,15 +51,16 @@ constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::welcome_
 // The sections' rows.
 
 /// Controls' rows: the zoom's limits right under the switch for the wheel,
-/// how far past the map's edges the view goes under them, and middle-click
-/// panning under that.
-constexpr std::array<Setting, 6> kControlsRows{
+/// how far past the map's edges the view goes under them, middle-click
+/// panning, and whether a window holds the pointer on its edges.
+constexpr std::array<Setting, 7> kControlsRows{
     Setting::wheel_zoom,
     Setting::max_zoom_out,
     Setting::max_zoom_in,
     Setting::view_past_map_edge,
     Setting::middle_click_pan,
     Setting::switch_alt,
+    Setting::window_edge,
 };
 /// Engine Limits' rows: the unit limit, then pathfinding.
 constexpr std::array<Setting, 2> kEngineLimitsRows{
@@ -351,6 +352,12 @@ constexpr std::array<std::string_view, 3> kZoomedOutUnitsCaptions{"Rendered", "D
 static_assert(
     kZoomedOutUnitsCaptions.size() == zoomed_out_units_choices.size(),
     "every way of Zoomed out units has its caption"
+);
+/// Window edge's captions, in window_edge_choices' order.
+constexpr std::array<std::string_view, 2> kWindowEdgeCaptions{"Sticky", "Free"};
+static_assert(
+    kWindowEdgeCaptions.size() == window_edge_choices.size(),
+    "every way of Window edge has its caption"
 );
 /// Window frame's captions, in window_frame_choices' order.
 constexpr std::array<std::string_view, 2> kWindowFrameCaptions{"Hidden in play", "Always shown"};
@@ -1584,6 +1591,18 @@ std::string zoomed_out_after_hint(const SettingsModel& model, std::size_t line) 
     return {};
 }
 
+/// Returns a line of Window edge's hint, by the way chosen.
+std::string window_edge_hint(const SettingsModel& model, std::size_t line) {
+    // Whether a window holds the pointer on its edges while a battlefield shows.
+    switch (model.settings->window_edge) {
+    case WindowEdge::sticky:
+        return line_of({"The pointer rests on the edge so the view scrolls.", {}}, line);
+    case WindowEdge::free:
+        return line_of({"The pointer leaves a window's edge, as before.", {}}, line);
+    }
+    return {};
+}
+
 /// Returns a line of Window frame's hint, by the way chosen.
 std::string window_frame_hint(const SettingsModel& model, std::size_t line) {
     // When a window shows its frame; full screen has none.
@@ -2096,6 +2115,11 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
     {.setting = S::switch_alt,
      .spec = engine_switch<&E::switch_alt>("switch-alt", "Select groups without Alt",
                                            {"A number key selects its group on its own.", {}})},
+    {.setting = S::window_edge,
+     .spec = changing(kit::levels("window-edge", "Window edge",
+                                  LevelStrip<WindowEdge, 2, window_edge_choices, &E::window_edge, kWindowEdgeCaptions, &table_word<window_edge_words, WindowEdge>>::stepper(),
+                                  window_edge_level_width),
+                      &window_edge_hint, &lines<1>)},
     {.setting = S::unit_limit,
      .spec = slider("unit-limit", "Unit limit",
                     {&unit_limit_stops, &unit_limit_stop, &set_unit_limit_stop,
@@ -2369,6 +2393,7 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "middle-click-pan",
     "escape-opens-menu",
     "switch-alt",
+    "window-edge",
     "unit-limit",
     "max-frame-rate",
     "anti-aliasing",

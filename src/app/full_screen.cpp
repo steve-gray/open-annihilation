@@ -278,9 +278,11 @@ void keep_pointer_on_screen(SDL_Window* window) {
 
 void release_pointer(SDL_Window* window) {
     // A grab the window system will not release ends when the window
-    // closes.
-    if (window != nullptr)
-        std::ignore = SDL_SetWindowMouseGrab(window, false);
+    // closes. The rect is the one a sticky edge set.
+    if (window == nullptr)
+        return;
+    std::ignore = SDL_SetWindowMouseGrab(window, false);
+    std::ignore = SDL_SetWindowMouseRect(window, nullptr);
 }
 
 bool take_full_screen_event(

@@ -87,6 +87,26 @@ void prune(
     const std::filesystem::path& current
 );
 
+/// Holds lines written with write_line until begin() has succeeded.
+///
+/// A launcher reading status lines on standard output must not see the
+/// game's own lines. write_line drops them until the log has the streams.
+void hold_lines_for_log();
+
+/// Tells whether hold_lines_for_log has been called.
+///
+/// @return true after it has
+[[nodiscard]] bool lines_held_for_log() noexcept;
+
+/// Writes one line to the game's standard output, which is the log once
+/// begin() has succeeded.
+///
+/// A newline is added. The line is flushed. After hold_lines_for_log, and
+/// until begin() has succeeded, the line is dropped.
+///
+/// @param text the line, without a newline
+void write_line(std::string_view text);
+
 /// Returns whether another program reads the game's output.
 ///
 /// True when standard output or standard error is a pipe or a file, as when a

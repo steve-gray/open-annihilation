@@ -12,6 +12,7 @@
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/components.hpp"
 #include "oa/ui/kit/text.hpp"
+#include "oa/ui/paint/painter.hpp"
 
 #include <array>
 #include <cstdint>
@@ -22,6 +23,7 @@
 namespace {
 
 namespace kit = oa::ui::kit;
+namespace paint = oa::ui::paint;
 namespace renderer = oa::ui::frontend_renderer;
 
 renderer::Surface black(int32_t width, int32_t height) {
@@ -1220,6 +1222,79 @@ void refresh_turn_follows_time() {
     OA_CHECK(kit::refresh_check_ease(kit::refresh_check_ms) == 0);
 }
 
+/// The main menu's window-pixel button is the icon: a clear corner stays
+/// clear, the centre is the icon's colour, and hover draws the accent ring
+/// along the top edge without filling the corner.
+void menu_icon_button_is_the_icon() {
+    constexpr int icon_side = 64;
+    constexpr int canvas_side = 72;
+    std::vector<uint8_t> icon(static_cast<std::size_t>(icon_side * icon_side * 4), 0);
+    for (int row = 0; row < icon_side; ++row) {
+        for (int column = 0; column < icon_side; ++column) {
+            if (column < 8 || row < 8 || column >= icon_side - 8 || row >= icon_side - 8)
+                continue;
+            uint8_t* pixel =
+                icon.data() + (static_cast<std::size_t>(row * icon_side + column) * 4U);
+            pixel[0] = 20;
+            pixel[1] = 180;
+            pixel[2] = 40;
+            pixel[3] = 255;
+        }
+    }
+    const auto draw = [&icon](kit::OaButtonState state) {
+        paint::Canvas pixels = paint::make_canvas(canvas_side, canvas_side);
+        paint::Painter painter(pixels);
+        kit::Canvas canvas;
+        canvas.smooth.painter = &painter;
+        canvas.smooth.scale_percent = 150;
+        canvas.icon = {static_cast<uint32_t>(icon_side), static_cast<uint32_t>(icon_side), icon};
+        kit::draw_menu_icon_button(canvas, 48, state, false, {});
+        return pixels;
+    };
+    const paint::Canvas resting = draw(kit::OaButtonState::idle);
+    const paint::Rgba corner = paint::pixel_at(resting, 0, 0);
+    OA_CHECK(corner.a == 0);
+    const paint::Rgba centre = paint::pixel_at(resting, canvas_side / 2, canvas_side / 2);
+    OA_CHECK(centre.r == 20 && centre.g == 180 && centre.b == 40 && centre.a == 255);
+    const paint::Canvas hovered = draw(kit::OaButtonState::hovered);
+    const paint::Rgba hovered_corner = paint::pixel_at(hovered, 0, 0);
+    OA_CHECK(hovered_corner.a == 0);
+    const paint::Rgba ring = paint::pixel_at(hovered, canvas_side / 2, 1);
+    OA_CHECK(
+        ring.r == kit::colour::accent.r && ring.g == kit::colour::accent.g &&
+        ring.b == kit::colour::accent.b && ring.a == 255
+    );
+
+    // The 640 picture has no painter. The same icon is filtered into the
+    // 48-pixel square and a clear corner stays the picture behind it.
+    const auto draw_crisp = [&icon](kit::OaButtonState state, bool focused) {
+        renderer::Surface surface = black(48, 48);
+        kit::Canvas canvas;
+        canvas.surface = &surface;
+        canvas.placement = {0, 0, 1};
+        canvas.icon = {static_cast<uint32_t>(icon_side), static_cast<uint32_t>(icon_side), icon};
+        kit::draw_menu_icon_button(canvas, 48, state, focused, {});
+        return surface;
+    };
+    const renderer::Surface crisp = draw_crisp(kit::OaButtonState::idle, false);
+    expect(crisp, 0, 0, 0, 0, 0);
+    expect(crisp, 24, 24, 20, 180, 40);
+    const renderer::Surface crisp_hover = draw_crisp(kit::OaButtonState::hovered, false);
+    expect(crisp_hover, 0, 0, 0, 0, 0);
+    expect(crisp_hover, 24, 1, kit::colour::accent.r, kit::colour::accent.g, kit::colour::accent.b);
+    const renderer::Surface crisp_focus = draw_crisp(kit::OaButtonState::idle, true);
+    expect(crisp_focus, 24, 1, kit::colour::accent.r, kit::colour::accent.g, kit::colour::accent.b);
+    const renderer::Surface crisp_held = draw_crisp(kit::OaButtonState::pressed, false);
+    expect(
+        crisp_held,
+        24,
+        1,
+        kit::colour::accent_held.r,
+        kit::colour::accent_held.g,
+        kit::colour::accent_held.b
+    );
+}
+
 } // namespace
 
 int main() {
@@ -1240,5 +1315,6 @@ int main() {
     paint_matches_each_control(2);
     later_items_cover_earlier_ones();
     geometry_matches_the_start_commit();
+    menu_icon_button_is_the_icon();
     return oa::test::check_exit_status();
 }

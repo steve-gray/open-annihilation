@@ -375,14 +375,15 @@ if(BUILD_TESTING)
   target_link_libraries(oa-app-view-rules-test PRIVATE oa-app-view-rules oa-test-support oa-options)
   add_test(NAME app-view-rules COMMAND oa-app-view-rules-test)
 endif()
-# The game's three icons at 256 by 256 pixels (branding/, made by
-# tools/make_icons.py), each embedded as a PNG file. The app icon is the
+# The game's three icons (branding/, made by tools/make_icons.py), each
+# embedded as a PNG file. The 256-pixel pictures: the app icon is the
 # window icon, decoded when the window opens, and the badge of every OA
 # dialog and notice but Settings and the Library. The settings icon, the
 # plates over two gears, is what the Settings button, the in-game menu's
 # OA button and the Settings dialog's header draw. The mods icon, the
 # plates over drive bays, is what the Library button and the Library's
-# header draw.
+# header draw. The 512-pixel settings and mods pictures are what the main
+# menu's buttons draw when the window shows them larger than 256 pixels.
 set(oa_window_icon_png "${CMAKE_CURRENT_SOURCE_DIR}/branding/open-annihilation-256.png")
 set(oa_window_icon_source "${CMAKE_CURRENT_BINARY_DIR}/generated/window_icon_png.cpp")
 add_custom_command(OUTPUT "${oa_window_icon_source}"
@@ -409,8 +410,27 @@ add_custom_command(OUTPUT "${oa_mods_icon_source}"
   DEPENDS "${oa_mods_icon_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
   COMMENT "Embedding the mods icon"
   VERBATIM)
+set(oa_settings_icon_512_png "${CMAKE_CURRENT_SOURCE_DIR}/branding/open-annihilation-settings-512.png")
+set(oa_settings_icon_512_source "${CMAKE_CURRENT_BINARY_DIR}/generated/settings_icon_512_png.cpp")
+add_custom_command(OUTPUT "${oa_settings_icon_512_source}"
+  COMMAND ${CMAKE_COMMAND} "-DINPUT=${oa_settings_icon_512_png}" "-DOUTPUT=${oa_settings_icon_512_source}"
+    -DFUNCTION=settings_icon_512_png
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  DEPENDS "${oa_settings_icon_512_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  COMMENT "Embedding the 512-pixel settings icon"
+  VERBATIM)
+set(oa_mods_icon_512_png "${CMAKE_CURRENT_SOURCE_DIR}/branding/open-annihilation-mods-512.png")
+set(oa_mods_icon_512_source "${CMAKE_CURRENT_BINARY_DIR}/generated/mods_icon_512_png.cpp")
+add_custom_command(OUTPUT "${oa_mods_icon_512_source}"
+  COMMAND ${CMAKE_COMMAND} "-DINPUT=${oa_mods_icon_512_png}" "-DOUTPUT=${oa_mods_icon_512_source}"
+    -DFUNCTION=mods_icon_512_png
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  DEPENDS "${oa_mods_icon_512_png}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OaEmbedWindowIcon.cmake"
+  COMMENT "Embedding the 512-pixel mods icon"
+  VERBATIM)
 add_library(oa-app-window-icon src/app/window_icon.cpp "${oa_window_icon_source}"
-  "${oa_settings_icon_source}" "${oa_mods_icon_source}")
+  "${oa_settings_icon_source}" "${oa_mods_icon_source}"
+  "${oa_settings_icon_512_source}" "${oa_mods_icon_512_source}")
 add_library(oa::app::window_icon ALIAS oa-app-window-icon)
 target_link_libraries(oa-app-window-icon PUBLIC oa-app-headers PRIVATE oa-formats-png oa-options)
 # The Full tier's fog of war on the card (full_fog.hpp): the fog grid's
@@ -886,6 +906,13 @@ if(BUILD_TESTING)
   target_link_libraries(oa-app-frame-pacing-test PRIVATE oa-app-headers oa-base-game-loop oa-ui-hud
     oa-options)
   add_test(NAME app-frame-pacing COMMAND oa-app-frame-pacing-test)
+  # The sticky window edge over a made-up pointer: resting on an edge stays
+  # held, a push past the threshold or a flick lets the pointer go, movement
+  # along an edge does not, and coming back in near an edge stays free until
+  # the pointer has moved in away from the edges.
+  add_executable(oa-app-sticky-edge-test src/app/sticky_edge_test.cpp src/app/sticky_edge.cpp)
+  target_link_libraries(oa-app-sticky-edge-test PRIVATE oa-app-headers oa-test-support oa-options)
+  add_test(NAME app-sticky-edge COMMAND oa-app-sticky-edge-test)
   # A middle click's pan: its states, the dead zone and the top speed, and
   # the setting off leaving a press alone.
   add_executable(oa-app-middle-pan-test src/app/middle_pan_test.cpp src/app/middle_pan.cpp)
@@ -996,6 +1023,7 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_match_hud.cpp src/app/runtime_match_menus.cpp src/app/runtime_load_game.cpp
   src/app/runtime_order_panel.cpp
   src/app/runtime_match_render.cpp src/app/runtime_messages.cpp src/app/runtime_pointer.cpp
+  src/app/sticky_edge.cpp
   src/app/runtime_present.cpp src/app/runtime_display.cpp
   src/app/runtime_accelerated.cpp src/app/runtime_render_tier.cpp src/app/runtime_tier_watch.cpp
   src/app/runtime_full.cpp src/app/runtime_full_sprites.cpp src/app/runtime_full_overlays.cpp

@@ -7,6 +7,7 @@
 #include "controls.hpp"
 #include "reports.hpp"
 #include "requests.hpp"
+#include "status.hpp"
 
 #include "oa/ui/frontend_multiplayer/lobby.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
@@ -36,6 +37,30 @@ EventHooks endpoint_hooks(Endpoint& endpoint) {
         static_cast<Endpoint*>(context)->send_event(event);
     };
     return hooks;
+}
+
+/// Reads what the game holds now.
+///
+/// @param check the check host
+/// @param host the automation host
+/// @param shown the screen shown, by the endpoint's name for it
+/// @param dialogs also read the dialogs over the screen
+/// @return the moment
+Observed
+observe_game(const CheckHost& check, const AutomationHost& host, std::string shown, bool dialogs) {
+    Observed now;
+    now.screen = std::move(shown);
+    const ScreenId screen = check.screen(check.context);
+    if (host.match_world != nullptr)
+        now.match = host.match_world(host.context);
+    if (screen == mp::kScreenBattleroom && mp::multiplayer_lobby().game != nullptr)
+        now.room = &mp::multiplayer_lobby();
+    if (dialogs) {
+        std::vector<AutomationControl> controls;
+        collect_controls(check, host, controls);
+        now.dialogs = dialog_names(controls);
+    }
+    return now;
 }
 
 } // namespace
@@ -106,33 +131,42 @@ void send_frame_events(Endpoint& endpoint, FrameStage stage) {
     if (stage != FrameStage::pump)
         return;
     const CheckHost& check = endpoint.check_host();
-    const ScreenId screen = check.screen(check.context);
     const AutomationHost& host = endpoint.automation_host();
-    Observed now;
-    now.screen = screen_name(screen);
-    now.match = host.match_world(host.context);
-    if (screen == mp::kScreenBattleroom && mp::multiplayer_lobby().game != nullptr)
-        now.room = &mp::multiplayer_lobby();
+    const std::string shown = screen_name(check.screen(check.context));
     EventWatch& watch = endpoint_event_watch();
     // The dialogs are read from the screen's controls, only for the frame
-    // whose screen event names them.
-    if (screen_event_due(watch, now.screen)) {
-        std::vector<AutomationControl> controls;
-        collect_controls(endpoint, controls);
-        now.dialogs = dialog_names(controls);
-    }
+    // whose screen event names them. The status stream may name the screen
+    // on a frame the endpoint does not.
+    const bool dialogs =
+        screen_event_due(watch, shown) || (status_following() && status_screen_due(shown));
+    const Observed now = observe_game(check, host, shown, dialogs);
     watch_events(watch, now, endpoint_hooks(endpoint));
+    if (status_following())
+        status_on_observed(now);
 }
 
 void send_loading_events(Endpoint& endpoint, std::span<const uint8_t> rows) {
     const AutomationHost& host = endpoint.automation_host();
-    watch_loading(
-        endpoint_event_watch(), host.match_world(host.context), rows, endpoint_hooks(endpoint)
-    );
+    const oa::World* match = host.match_world != nullptr ? host.match_world(host.context) : nullptr;
+    watch_loading(endpoint_event_watch(), match, rows, endpoint_hooks(endpoint));
+    if (status_following())
+        status_on_loading(match, rows);
 }
 
 void send_match_gone(Endpoint& endpoint) {
     watch_match_gone(endpoint_event_watch(), endpoint_hooks(endpoint));
+    if (status_following())
+        status_on_match_gone();
+}
+
+void report_status_frame(Runtime& runtime) {
+    if (!status_following())
+        return;
+    const CheckHost check = oa::app::check_host(runtime);
+    const AutomationHost host = oa::app::automation_host(runtime);
+    const std::string shown = screen_name(check.screen(check.context));
+    const Observed now = observe_game(check, host, shown, status_screen_due(shown));
+    status_on_observed(now);
 }
 
 } // namespace oa::app::automation

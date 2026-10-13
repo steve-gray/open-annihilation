@@ -13,6 +13,7 @@
 // program through them. An extension built on network play reaches it
 // through oa/app/netgame/extension_api.hpp, whose hooks this extension calls.
 #include "oa/app/runtime.hpp"
+#include "oa/platform/log_files.hpp"
 #include "oa/app/game_directory.hpp"
 #include "battle_lines.hpp"
 #include "close_handlers.hpp"
@@ -189,7 +190,7 @@ void report_launch_battle_room(mp::Lobby& lobby) {
         return;
     const auto& info = mp::local_info(lobby);
     const std::string map(info.map_name, ::strnlen(info.map_name, sizeof info.map_name));
-    std::cout << "multiplayer: battle room map: " << map << std::endl;
+    oa::platform::log_files::write_line("multiplayer: battle room map: " + map);
     const auto commander = (info.options & mp::option::commander_mask) >> 11;
     const char* commander_name = "continues";
     if (commander == 1)
@@ -206,26 +207,27 @@ void report_launch_battle_room(mp::Lobby& lobby) {
     const char* cheats = (info.options & mp::option::cheats_allowed) != 0 ? "on" : "off";
     const char* watchers = (info.options & mp::option::watching_allowed) != 0 ? "on" : "off";
     const int32_t players = mp::lobby_session_players(*lobby.game);
-    std::cout << "multiplayer: battle room rules: commander " << commander_name << ", metal "
-              << static_cast<int>(info.metal_hundreds) * 100 << ", energy "
-              << static_cast<int>(info.energy_hundreds) * 100;
+    std::string rules = "multiplayer: battle room rules: commander " + std::string(commander_name) +
+                        ", metal " + std::to_string(static_cast<int>(info.metal_hundreds) * 100) +
+                        ", energy " + std::to_string(static_cast<int>(info.energy_hundreds) * 100);
     if (net_launch_switches().block.max_units != 0)
-        std::cout << ", units " << net_launch_switches().block.max_units;
-    std::cout << ", los " << sight << ", mapping " << mapping_name << ", starts " << starts
-              << ", cheats " << cheats << ", watchers " << watchers << ", player limit " << players
-              << std::endl;
+        rules += ", units " + std::to_string(net_launch_switches().block.max_units);
+    rules += ", los " + std::string(sight) + ", mapping " + mapping_name + ", starts " + starts +
+             ", cheats " + cheats + ", watchers " + watchers + ", player limit " +
+             std::to_string(players);
+    oa::platform::log_files::write_line(rules);
 }
 
 /// Runs the part of a frame that follows the game --host or --join asked for.
 ///
 /// Until a multiplayer screen first shows, each frame asks for a frontend
 /// pass, so multiplayer opens without input, for kDirectGameOpeningFrames
-/// frames at most. Standard output reports, each
-/// line once and flushed at once: the battle room opening, with the game's
-/// name and the local player's; when a launch file opened the room, the map
-/// and the rules; the players the battle room lists, whenever
-/// they change while it shows; and a join or a game the screens refused,
-/// with the notice they showed. The password is not written.
+/// frames at most. Each of these is reported once, as its own flushed line,
+/// through the log so it is not mixed into a launcher's status stream: the
+/// battle room opening, with the game's name and the local player's; when a
+/// launch file opened the room, the map and the rules; the players the battle
+/// room lists, whenever they change while it shows; and a join or a game the
+/// screens refused, with the notice they showed. The password is not written.
 void direct_game_frame() {
     const auto& game = net_options().direct_game;
     if (game.kind == mp::DirectGame::Kind::none)
@@ -242,18 +244,23 @@ void direct_game_frame() {
     if (progress.reached != report.reported) {
         report.reported = progress.reached;
         if (progress.reached == mp::DirectGameStep::battle_room) {
-            std::cout << "multiplayer: in the battle room of \"" << progress.game_name << "\" as "
-                      << progress.player_name << std::endl;
+            oa::platform::log_files::write_line(
+                "multiplayer: in the battle room of \"" + progress.game_name + "\" as " +
+                progress.player_name
+            );
             if (net_options().launch_from_file)
                 report_launch_battle_room(mp::multiplayer_lobby());
         } else if (
             progress.reached == mp::DirectGameStep::failed &&
             game.kind == mp::DirectGame::Kind::join
         )
-            std::cout << "multiplayer: could not join " << game.address << ": " << progress.notice
-                      << std::endl;
+            oa::platform::log_files::write_line(
+                "multiplayer: could not join " + game.address + ": " + progress.notice
+            );
         else if (progress.reached == mp::DirectGameStep::failed)
-            std::cout << "multiplayer: could not host the game: " << progress.notice << std::endl;
+            oa::platform::log_files::write_line(
+                "multiplayer: could not host the game: " + progress.notice
+            );
     }
     // A local player the host refused is on its way out, and lists no one.
     auto& lobby = mp::multiplayer_lobby();
@@ -264,7 +271,7 @@ void direct_game_frame() {
     if (players.empty() || players == report.players)
         return;
     report.players = std::move(players);
-    std::cout << "multiplayer: battle room players: " << report.players << std::endl;
+    oa::platform::log_files::write_line("multiplayer: battle room players: " + report.players);
 }
 
 /// Keeps the screen host and services an overlay's create is given.

@@ -2978,6 +2978,14 @@
 	it=Tempi di fotogramma e di tick sopra il campo di battaglia.;
 	}
 
+[Free]
+	{
+	de=Frei;
+	fr=Libre;
+	es=Libre;
+	it=Libero;
+	}
+
 [Free up space on this device]
 	{
 	de=Schaffe Platz auf diesem Gerät;
@@ -7850,6 +7858,14 @@
 	it=Sticks;
 	}
 
+[Sticky]
+	{
+	de=Haftend;
+	fr=Fixe;
+	es=Fijo;
+	it=Fisso;
+	}
+
 [Stop copying?]
 	{
 	de=Kopieren beenden?;
@@ -8642,12 +8658,28 @@
 	it=Il puntatore continua dopo uno scatto rapido.;
 	}
 
+[The pointer leaves a window's edge, as before.]
+	{
+	de=Der Zeiger verlässt den Fensterrand, wie bisher.;
+	fr=Le pointeur quitte le bord de la fenêtre, comme avant.;
+	es=El puntero sale del borde de la ventana, como antes.;
+	it=Il puntatore esce dal bordo della finestra, come prima.;
+	}
+
 [The pointer moves as the thumb slides.]
 	{
 	de=Der Zeiger bewegt sich, wie der Daumen gleitet.;
 	fr=Le pointeur bouge quand le pouce glisse.;
 	es=El puntero se mueve al deslizar el pulgar.;
 	it=Il puntatore si muove mentre il pollice scorre.;
+	}
+
+[The pointer rests on the edge so the view scrolls.]
+	{
+	de=Der Zeiger bleibt am Rand, damit die Ansicht rollt.;
+	fr=Le pointeur reste au bord pour faire défiler la vue.;
+	es=El puntero se queda en el borde y la vista se desplaza.;
+	it=Il puntatore resta sul bordo e la visuale scorre.;
 	}
 
 [The preview {name} is larger than 2 MiB.]
@@ -9944,6 +9976,14 @@
 	fr=Paliers entiers;
 	es=Pasos enteros;
 	it=Passi interi;
+	}
+
+[Window edge]
+	{
+	de=Fensterrand;
+	fr=Bord de fenêtre;
+	es=Borde de la ventana;
+	it=Bordo della finestra;
 	}
 
 [Window frame]

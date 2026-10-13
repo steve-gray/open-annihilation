@@ -95,8 +95,9 @@ void Runtime::handle_sdl_event(SDL_Event& event, bool& running) {
         return;
     }
     // The pointer outside the window has no place on the screen until it
-    // comes back.
-    if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE)
+    // comes back. A soft wall puts it back on the edge it crossed, and the
+    // view keeps scrolling from that last pixel.
+    if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE && !(sticky_soft_wall() && sticky_edge_.holding))
         match_pointer_known_ = false;
     // Leaving the window ends a middle-click pan. The focus event itself
     // still reaches the window.
@@ -632,7 +633,9 @@ void Runtime::show_unsupported(std::string_view message) {
     std::cerr << "unsupported operation: " << message << '\n';
     if (sdl_.window != nullptr) {
         // The box needs the pointer; full screen holds it again once the
-        // box has closed and the window has the focus back.
+        // box has closed and the window has the focus back. The sticky
+        // edge is forgotten so the pointer is held again only from inside.
+        forget_sticky_edge();
         release_pointer(sdl_.window);
         SDL_ShowSimpleMessageBox(
             SDL_MESSAGEBOX_INFORMATION, "Open Annihilation", status_.c_str(), sdl_.window
