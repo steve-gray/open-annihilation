@@ -276,6 +276,7 @@ inline constexpr std::string_view interface_words[] = {
     "x5",
     "{count} files differ",
     "{count} of {total} files differ",
+    "{held} of {total} tracks",
     "{file} cannot be installed.",
     "{folder} is a folder of your own, not {name}. Move or rename it, then RETRY.",
     "{name} from {installed} is installed. Replace it with {name} from {new}? The one from "

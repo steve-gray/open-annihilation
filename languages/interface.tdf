@@ -11640,6 +11640,14 @@
 	it={hacks} · {count} in più;
 	}
 
+[{held} of {total} tracks]
+	{
+	de={held} von {total} Titeln;
+	fr={held} morceaux sur {total};
+	es={held} de {total} pistas;
+	it={held} di {total} tracce;
+	}
+
 [{kinds} ({size})]
 	{
 	de={kinds} ({size});

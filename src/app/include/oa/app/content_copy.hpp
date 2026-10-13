@@ -371,6 +371,9 @@ struct MissingContentFile {
     std::string bundle_id;
     /// The name the bundle stores it under.
     std::string copy_name;
+    /// The source has this name at a different size. It is not filled from
+    /// another file, and it is not recorded as absent.
+    bool different_size{};
 };
 
 /// What a source holds, before anything is copied.
@@ -696,7 +699,10 @@ struct ContentBundleCheck {
     /// How many files the table gives the bundle.
     uint32_t file_count{};
     /// How many of those files differ: missing, or not a hash the table knows.
+    /// A music file the source never held is not one of these.
     uint32_t files_differ{};
+    /// Files the source did not hold. Older records name none.
+    uint32_t files_not_in_source{};
     /// The files that differ, in the table's order.
     std::vector<ContentFileDifference> differing;
 };
@@ -770,6 +776,23 @@ struct ContentNoticeCopy {
 /// @return the line, in the language the interface shows
 [[nodiscard]] std::string content_match_line(uint32_t files_differ);
 
+/// "{held} of {total} tracks", for a music bundle the source did not finish.
+///
+/// @param held tracks the source held
+/// @param total tracks the table names
+/// @return the line, in the language the interface shows
+[[nodiscard]] std::string content_tracks_line(uint32_t held, uint32_t total);
+
+/// The line under a bundle's name in the content check.
+///
+/// A bundle with differing files uses the file counts. Music the source
+/// left short, with nothing damaged, uses content_tracks_line. Anything
+/// else that matches is "All files match".
+///
+/// @param bundle one bundle from the check
+/// @return the line, in the language the interface shows
+[[nodiscard]] std::string content_bundle_line(const ContentBundleCheck& bundle);
+
 /// Checks every copied bundle in the player's folder.
 ///
 /// A bundle with no readable record, or a record of another id, or a record
@@ -779,8 +802,10 @@ struct ContentNoticeCopy {
 /// whole, and the record then stores that size, time and SHA-256, so the
 /// next start does not read it again while they still match. A missing file
 /// is named and not hashed. A SHA-256 the table does not know marks the
-/// bundle as differing and names the file. An empty `table` uses the
-/// built-in table.
+/// bundle as differing and names the file. A music file the record says the
+/// source never held is left out of that count while it is still absent; a
+/// music file that is present and not a known hash is still named. An empty
+/// `table` uses the built-in table.
 ///
 /// @param user_folder the player's folder
 /// @param table the bundles to check; empty uses the built-in table

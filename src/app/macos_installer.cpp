@@ -11,6 +11,7 @@
 #include "oa/base/sha256.hpp"
 #include "oa/formats/cpio.hpp"
 #include "oa/formats/xar.hpp"
+#include "oa/platform/file_clone.hpp"
 #include "oa/platform/files.hpp"
 
 #include <algorithm>
@@ -409,6 +410,10 @@ struct Slot {
     uint64_t prefix{};
     oa::base::sha256::Digest digest{};
     bool have_digest{};
+    /// Set when the bytes come from another file of this bundle.
+    std::string_view filled_from{};
+    /// The installer has this name at a different, non-empty size.
+    bool different_size{};
 };
 
 struct Target {
@@ -755,13 +760,14 @@ struct Pump {
         return true;
     }
 
-    [[nodiscard]] bool remember(Slot& slot, int64_t modified) {
+    [[nodiscard]] bool remember(Slot& slot, int64_t modified, bool not_in_source) {
         ContentRecord& record = records[slot.bundle_index];
         ContentRecordFile stored;
         stored.copy_name = std::string(slot.file->copy_name);
-        stored.size = slot.file->size;
-        stored.modified = modified;
-        stored.digest = slot.digest;
+        stored.size = not_in_source ? 0 : slot.file->size;
+        stored.modified = not_in_source ? 0 : modified;
+        stored.digest = not_in_source ? oa::base::sha256::Digest{} : slot.digest;
+        stored.not_in_source = not_in_source;
         bool replaced = false;
         for (ContentRecordFile& item : record.files) {
             if (item.copy_name == stored.copy_name) {
@@ -843,7 +849,7 @@ struct Pump {
         }
         if (!stamp(slot.dest, cpio_modified, stored_time))
             return false;
-        if (!remember(slot, stored_time))
+        if (!remember(slot, stored_time, false))
             return false;
         const uint64_t fresh = target.rewound ? slot.file->size : slot.file->size - target.prefix;
         add_bytes(result->bytes_copied, fresh);
@@ -863,6 +869,106 @@ struct Pump {
         }
         active.on = false;
         active.targets.clear();
+        return true;
+    }
+
+    [[nodiscard]] bool bundle_held(const Slot& slot) const {
+        for (const Slot& other : slots) {
+            if (other.bundle != slot.bundle)
+                continue;
+            if (other.complete || (other.seen && other.have_digest && other.filled_from.empty()))
+                return true;
+        }
+        return false;
+    }
+
+    // A file the installer did not hold can be the bytes of another file in
+    // the same bundle, when that file's size matches and its hash is one the
+    // table accepts for the missing name. A check names that file. A copy
+    // writes the bytes under the missing name. A file nothing can fill is
+    // recorded as not in the source.
+    [[nodiscard]] bool fill_gaps() {
+        if (job != Job::copy && job != Job::check)
+            return true;
+        for (Slot& slot : slots) {
+            if (slot.complete || slot.different_size || (slot.seen && slot.have_digest))
+                continue;
+            const Slot* donor = nullptr;
+            oa::base::sha256::Digest donor_digest{};
+            for (const Slot& other : slots) {
+                if (other.bundle != slot.bundle || other.file == slot.file)
+                    continue;
+                if (other.file->size != slot.file->size)
+                    continue;
+                bool have = false;
+                oa::base::sha256::Digest digest{};
+                if (other.seen && other.have_digest && other.filled_from.empty()) {
+                    digest = other.digest;
+                    have = true;
+                } else if (job == Job::copy && other.bundle_index < records.size()) {
+                    const ContentRecordFile* recorded =
+                        find_recorded(records[other.bundle_index], other.file->copy_name);
+                    if (recorded != nullptr && !recorded->not_in_source &&
+                        recorded->size == slot.file->size) {
+                        digest = recorded->digest;
+                        have = true;
+                    }
+                }
+                if (!have || !bundles::known_hash(*slot.file, digest))
+                    continue;
+                donor = &other;
+                donor_digest = digest;
+                break;
+            }
+            if (donor == nullptr) {
+                if (job != Job::copy || !bundle_held(slot))
+                    continue;
+                slot.digest = {};
+                if (!remember(slot, 0, true))
+                    return false;
+                continue;
+            }
+            slot.digest = donor_digest;
+            slot.have_digest = true;
+            slot.seen = true;
+            slot.filled_from =
+                donor->filled_from.empty() ? donor->file->copy_name : donor->filled_from;
+            if (job == Job::check)
+                continue;
+            std::error_code failure;
+            fs::create_directories(slot.dest.parent_path(), failure);
+            if (failure) {
+                fail("the folder could not be created");
+                return false;
+            }
+            remove_file(slot.dest);
+            std::string share_error;
+            bool stored =
+                oa::platform::blocks_can_be_shared(donor->dest, slot.dest.parent_path()) &&
+                oa::platform::share_file_blocks(donor->dest, slot.dest, &share_error);
+            if (!stored) {
+                fs::copy_file(
+                    donor->dest, slot.dest, fs::copy_options::overwrite_existing, failure
+                );
+                if (failure) {
+                    fail("a file could not be copied");
+                    return false;
+                }
+            }
+            int64_t stored_time = cpio_modified;
+            const ContentRecordFile* recorded =
+                find_recorded(records[donor->bundle_index], donor->file->copy_name);
+            if (recorded != nullptr)
+                stored_time = recorded->modified;
+            if (!stamp(slot.dest, stored_time, stored_time))
+                return false;
+            if (!remember(slot, stored_time, false))
+                return false;
+            if (result != nullptr) {
+                result->files_copied =
+                    narrow_count(static_cast<std::size_t>(result->files_copied) + 1);
+            }
+        }
         return true;
     }
 
@@ -900,6 +1006,8 @@ bool on_begin(void* context, const oa::formats::cpio::File& file, bool& take) {
             link.inode = file.inode;
             link.slot = named;
             pump->pending.push_back(link);
+        } else if (!slot.seen && file.bytes != slot.file->size && file.bytes != 0) {
+            slot.different_size = true;
         }
     }
     if (file.bytes > 0) {
@@ -961,7 +1069,9 @@ bool on_data(void* context, std::span<const uint8_t> bytes) {
 
 bool on_end(void* context) {
     auto* pump = static_cast<Pump*>(context);
-    return pump->finish_active();
+    if (!pump->finish_active())
+        return false;
+    return pump->fill_gaps();
 }
 
 [[nodiscard]] bool feed_cpio(
@@ -1354,7 +1464,10 @@ int MacosInstallerSource::write_check(std::ostream& out) {
                 out << ' ';
                 out.write(hex.data(), static_cast<std::streamsize>(hex.size()));
                 const bool known = bundles::known_hash(*slot.file, slot.digest);
-                out << (known ? " ok\n" : " unknown\n");
+                if (known && !slot.filled_from.empty())
+                    out << " ok (from " << slot.filled_from << ")\n";
+                else
+                    out << (known ? " ok\n" : " unknown\n");
                 passed = passed && known;
             }
         }

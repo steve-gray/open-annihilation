@@ -296,6 +296,11 @@ struct ContentSnapshot {
     /// How many of the base game's files differ. Unset omits the line.
     /// 0 is "All files match".
     std::optional<int32_t> files_differ{};
+    /// Tracks the music source held. Unset leaves the Music pill named Music.
+    /// Set with `music_track_count` when the source held fewer than the table.
+    std::optional<int32_t> music_tracks{};
+    /// Tracks the table names for music, when `music_tracks` is set.
+    int32_t music_track_count{};
     /// Bundle ids copied into the game folder, base game and expansions.
     std::vector<std::string> copied{};
     /// Expansion ids the stored choice has on, in the built-in order.
