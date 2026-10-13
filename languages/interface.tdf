@@ -704,6 +704,14 @@
 	it=Un'altra copia di Open Annihilation sta modificando la tua cartella dei mod. Riprova quando ha finito.;
 	}
 
+[Any]
+	{
+	de=Egal;
+	fr=N'importe;
+	es=Cualquiera;
+	it=Qualsiasi;
+	}
+
 [Applications]
 	{
 	de=Programme;
@@ -934,14 +942,6 @@
 	fr=Retour;
 	es=Atrás;
 	it=Indietro;
-	}
-
-[Base]
-	{
-	de=Basis;
-	fr=Base;
-	es=Base;
-	it=Base;
 	}
 
 [Base game]
@@ -2344,6 +2344,14 @@
 	it=Scarica e seleziona;
 	}
 
+[Downloaded]
+	{
+	de=Heruntergeladen;
+	fr=Téléchargé;
+	es=Descargado;
+	it=Scaricato;
+	}
+
 [Downloaded files]
 	{
 	de=Heruntergeladene Dateien;
@@ -3176,6 +3184,14 @@
 	it=COSTRUTTORI DI GUARDIA;
 	}
 
+[Game]
+	{
+	de=Spiel;
+	fr=Jeu;
+	es=Juego;
+	it=Gioco;
+	}
+
 [Game Recorder]
 	{
 	de=Spielaufzeichnung;
@@ -3782,14 +3798,6 @@
 	fr=Installé;
 	es=Instalado;
 	it=Installato;
-	}
-
-[Installed packs]
-	{
-	de=Installierte Pakete;
-	fr=Packs installés;
-	es=Paquetes instalados;
-	it=Pacchetti installati;
 	}
 
 [Installed {name}]
