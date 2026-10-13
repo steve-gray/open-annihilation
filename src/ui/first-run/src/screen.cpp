@@ -192,6 +192,43 @@ int32_t paragraph_height(
     return count * line_height;
 }
 
+/// The height of the band a step's title is centred in.
+constexpr int32_t kTitleHeight = 40;
+/// The rows between the title's band and the line under it.
+constexpr int32_t kTitleGap = 4;
+
+/// Lays a step's title and the line under it out the same way on every
+/// step: the title across the band in its prominent size, and the line in
+/// the small font, centred under it, wrapped where the band is narrow.
+///
+/// @param[in,out] scene the scene
+/// @param fonts the fonts; null estimates
+/// @param band the room under the header
+/// @param title the title
+/// @param line the words under it
+/// @return the row under the line
+int32_t add_title(
+    Scene& scene,
+    const kit::Fonts* fonts,
+    const Band& band,
+    std::string title,
+    std::string_view line
+) {
+    scene.title_text = std::move(title);
+    scene.title = {band.left, band.top, band.width, kTitleHeight};
+    return add_paragraph(
+        scene.list,
+        fonts,
+        band.left,
+        band.top + kTitleHeight + kTitleGap,
+        band.width,
+        line,
+        kit::FontRole::small,
+        kit::colour::hint,
+        kit::Align::centre
+    );
+}
+
 /// Adds a button the chrome does not draw, and remembers it for Tab.
 ///
 /// @param[in,out] list the display list
@@ -581,19 +618,14 @@ void lay_language(
 
     const Band band = content_band(width, height);
     const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
-    constexpr int32_t kTitle = 40;
-    scene.title_text = show("Welcome to Open Annihilation", preview);
-    scene.title = {band.left, band.top, band.width, kTitle};
-    int32_t row = band.top + kTitle + 4;
-    add_text(
-        scene.list,
-        {band.left, row, band.width, kit::compact_metrics.small_line},
-        show("Choose your language.", preview),
-        kit::FontRole::small,
-        kit::colour::hint,
-        kit::Align::centre
+    int32_t row = add_title(
+        scene,
+        fonts,
+        band,
+        show("Welcome to Open Annihilation", preview),
+        show("Choose your language.", preview)
     );
-    row += kit::compact_metrics.small_line + 8;
+    row += 8;
 
     constexpr int32_t kArrow = 28;
     const std::string note = show(
@@ -1086,20 +1118,12 @@ void lay_game(
     const int32_t text_w = std::max(column - kTextInset - kTextEnd, int32_t{1});
     const int32_t text_left = left + kTextInset;
 
-    int32_t row = band.top;
-    constexpr int32_t kTitle = 36;
-    scene.title_text = show("Where is Total Annihilation?");
-    scene.title = {left, row, column, kTitle};
-    row += kTitle + 4;
-    row = add_paragraph(
-        scene.list,
+    int32_t row = add_title(
+        scene,
         fonts,
-        left,
-        row,
-        column,
-        show("OA copies the game once. The installation is left as it is."),
-        kit::FontRole::regular,
-        kit::colour::hint
+        band,
+        show("Where is Total Annihilation?"),
+        show("OA copies the game once. The installation is left as it is.")
     );
     row += metrics.padding;
 
@@ -1263,11 +1287,6 @@ void lay_copying(
     const int32_t left = band.left + std::max((band.width - column) / 2, int32_t{0});
     const CopyView& copy = session.model.copy;
 
-    int32_t row = band.top;
-    constexpr int32_t kTitle = 36;
-    scene.title_text = show("Copying Total Annihilation");
-    scene.title = {left, row, column, kTitle};
-    row += kTitle + 4;
     std::string subtitle;
     if (!copy.from.empty()) {
         subtitle = show("From {place}…");
@@ -1280,9 +1299,7 @@ void lay_copying(
     } else {
         subtitle = show("Nothing is installed and your files are not changed.");
     }
-    row = add_paragraph(
-        scene.list, fonts, left, row, column, subtitle, kit::FontRole::small, kit::colour::hint
-    );
+    int32_t row = add_title(scene, fonts, band, show("Copying Total Annihilation"), subtitle);
     row += 8;
     if (!copy.overall.empty()) {
         add_text(
