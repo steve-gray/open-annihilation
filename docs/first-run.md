@@ -158,6 +158,12 @@ Everything else on this menu is the game's own."
 This step has no **Skip setup**. Escape and Enter do what **Start playing**
 does.
 
+The logo and the intro play after that finish, or after **Skip setup** when
+the walk will not return, and before the menu can be used. They do not play
+between the steps. A switch that skips the movies skips them on this start
+too. A start that does not show the setup plays the movies first, before
+the menu, as it always has.
+
 ## Keys and controllers
 
 Tab and the arrows move between the controls. Enter, or A on a controller,
