@@ -853,6 +853,15 @@ int32_t pill_width(const Fonts& fonts, const PillLook& look) {
     );
 }
 
+int32_t pill_width_of(const Canvas& canvas, const PillLook& look) {
+    int32_t words = measure_text(canvas, FontRole::small, look.text);
+    if (words <= 0 && canvas.fonts != nullptr)
+        words = text_width(*canvas.fonts, FontRole::small, look.text);
+    if (words < 0)
+        words = 0;
+    return std::max(words + 2 * pill_padding() + pill_icon_extra(look), kMetrics.chip_height);
+}
+
 void draw_pill(const Canvas& canvas, const Rect& rect, const PillLook& look) {
     if (!drawable(canvas) || rect.width <= 0 || rect.height <= 0)
         return;

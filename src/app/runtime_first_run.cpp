@@ -969,8 +969,12 @@ class FirstRunScreen final : public LayerScreen {
             session_.carousel.selected = index;
             bound_tag_ = current_tag;
             selection_set_ = true;
+            first_run::bind(session_);
+            // The language in use starts in the middle. A later move eases.
+            kit::carousel_settle(session_.carousel);
+        } else {
+            first_run::bind(session_);
         }
-        first_run::bind(session_);
         return changed || session_.carousel.selected != selected_before;
     }
 

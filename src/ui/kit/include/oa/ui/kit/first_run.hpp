@@ -22,7 +22,10 @@
 namespace oa::ui::kit {
 
 /// How far a carousel card turns, in degrees, for each step out from the centre.
-inline constexpr int32_t carousel_turn_degrees = 34;
+///
+/// Two steps is 36 degrees, little enough that the name on that card can
+/// still be read.
+inline constexpr int32_t carousel_turn_degrees = 18;
 
 /// How many cards show on each side of the centre. One further step fades out.
 inline constexpr int32_t carousel_visible_side = 2;
@@ -95,6 +98,14 @@ void carousel_go(CarouselModel& model, int32_t index) noexcept;
 /// @param dt_ms how much time passed, in milliseconds
 void carousel_tick(CarouselModel& model, uint32_t dt_ms) noexcept;
 
+/// Puts the centre on the selected card and leaves no move running.
+///
+/// A host uses this when the carousel is first shown, so the language in use
+/// starts in the middle instead of easing there from the first card.
+///
+/// @param[in,out] model the carousel
+void carousel_settle(CarouselModel& model) noexcept;
+
 /// Returns where the centre sits now, in thousandths of a card index.
 ///
 /// @param model the carousel
@@ -138,11 +149,13 @@ struct CarouselSlot {
 
 /// Places the cards that show.
 ///
-/// The centre card faces the player. Each step out turns carousel_turn_degrees,
-/// falls, shrinks and dims. Two steps show on each side and the third has
-/// faded out. With reduced motion the cards do not turn, shrink or fall; they
-/// still step sideways and dim. Far cards come first, so a nearer card is
-/// drawn over them. The place is a pure function of the centre.
+/// The centre card faces the player, in front of the others. Each step out
+/// turns carousel_turn_degrees, falls and shrinks. A card stays fully opaque
+/// through two steps, so its name can be read and the floor does not show
+/// through the face, and fades out over the third. With reduced motion the
+/// cards do not turn, shrink or fall; they still step sideways. Far cards
+/// come first, so a nearer card is drawn over them. The place is a pure
+/// function of the centre.
 ///
 /// @param area the band the cards share, in points
 /// @param geometry the card and the step

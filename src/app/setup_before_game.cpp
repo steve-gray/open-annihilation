@@ -12,6 +12,9 @@
 #include "render_host.hpp"
 #include "window_pixels.hpp"
 
+#include "oa/app/content/downloads.hpp"
+#include "oa/app/content/service.hpp"
+#include "oa/app/content/settings.hpp"
 #include "oa/app/content_copy.hpp"
 #include "oa/app/disk_image_source.hpp"
 #include "oa/app/game_directory.hpp"
@@ -19,6 +22,7 @@
 #include "language_packs.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/app/window_icon.hpp"
+#include "oa/data/catalogue/catalogue.hpp"
 #include "oa/data/content_bundles.hpp"
 #include "oa/data/languages.hpp"
 #include "oa/data/languages/interface_text.hpp"
@@ -29,6 +33,7 @@
 #include "oa/platform/system.hpp"
 #include "oa/platform/text_font.hpp"
 #include "oa/ui/engine_settings.hpp"
+#include "oa/ui/engine_settings/dialog.hpp"
 #include "oa/ui/frontend_renderer/artless.hpp"
 #include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/layout.hpp"
@@ -45,6 +50,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -60,6 +66,8 @@ namespace {
 
 namespace fs = std::filesystem;
 namespace bundles = oa::data::content_bundles;
+namespace catalogue = oa::data::catalogue;
+namespace content = oa::app::content;
 namespace first_run = oa::ui::first_run;
 namespace installs = oa::platform::game_installs;
 namespace kit = oa::ui::kit;
@@ -474,46 +482,577 @@ void fill_sources(
         model.source = 0;
 }
 
-/// The languages the step can offer before a pack is downloaded.
+/// Core Prime's registry id. The language step reads that catalogue.
+constexpr std::string_view kCorePrime = "coreprime";
+
+/// The registry `--check-first-run` serves. A played start never reads it.
+constexpr std::string_view kCheckRegistry = "ridge";
+
+/// The progress bar's whole, so a large pack never narrows into a byte count.
+constexpr int32_t kProgressWhole = 1000;
+
+/// Tells whether two language tags match.
 ///
-/// @param[in,out] model the model
-/// @param shown the tag in effect
-void fill_cards(first_run::Model& model, std::string_view shown) {
-    model.cards.clear();
-    for (const languages::Language* language : languages::known_languages()) {
-        if (language == nullptr || !languages::playable(*language))
+/// @param tag a tag
+/// @param other a tag
+/// @return true when they match
+bool same_language_tag(std::string_view tag, std::string_view other) noexcept {
+    return settings::language_notice_same_tag(tag, other);
+}
+
+/// A catalogue phrase as the player reads it.
+///
+/// @param english the English phrase
+/// @return the phrase in the language shown
+std::string looked_up(std::string_view english) {
+    return std::string(languages::interface_text(english));
+}
+
+/// The catalogues and the download queue for the language step.
+///
+/// The service is destroyed with this window. The menu's own service starts
+/// later and reads the same cache and the same saved queue.
+struct LanguageOffers {
+    preferences::Values values{};
+    fs::path preferences_path{};
+    std::unique_ptr<content::Service> service{};
+    std::unique_ptr<content::Downloads> downloads{};
+    uint64_t seen_catalogue{0};
+    uint64_t seen_downloads{0};
+    bool filled{false};
+    uint64_t download_item{0};
+    std::string pending_failure{};
+    std::string pending_failure_tag{};
+};
+
+/// Asks the next card rebuild to read the catalogue and the queue again.
+///
+/// @param[in,out] offers the catalogues
+void forget_language_view(LanguageOffers& offers) noexcept {
+    offers.seen_catalogue = 0;
+    offers.seen_downloads = 0;
+}
+
+/// Writes the preferences the language step changed.
+///
+/// @param offers the catalogues
+void store_language_preferences(const LanguageOffers& offers) {
+    if (offers.preferences_path.empty())
+        return;
+    try {
+        preferences::save(offers.preferences_path, offers.values, preferences::SyncFolder::no);
+    } catch (const std::exception& caught) {
+        std::cerr << "open-annihilation: the setup could not store a preference: " << caught.what()
+                  << '\n';
+    }
+}
+
+/// Passes each registry's stored install ID to the queue. None is made.
+///
+/// @param[in,out] offers the catalogues
+void pass_install_ids(LanguageOffers& offers) {
+    if (!offers.downloads || !offers.service)
+        return;
+    const std::shared_ptr<const content::Snapshot> catalogues = offers.service->snapshot();
+    if (!catalogues)
+        return;
+    for (const content::RegistryView& listed : catalogues->registries) {
+        const content::InstallId stored =
+            content::read_install_id(offers.values, listed.registry.descriptor.id);
+        std::optional<std::string> held;
+        if (stored.state == content::InstallIdState::on)
+            held = stored.text;
+        offers.downloads->set_install_id(listed.registry.descriptor.id, std::move(held));
+    }
+}
+
+/// Keeps a finished pack for the welcome that runs once the game is mounted.
+///
+/// Nothing can install a pack before then. Accepting the file leaves it in
+/// the queue instead of reporting that the install failed.
+///
+/// @return true so the queue waits, and keeps the file when this window closes
+bool keep_language_pack(
+    void* /*context*/,
+    uint64_t /*item*/,
+    const std::filesystem::path& /*file*/,
+    const content::InstallOrigin& /*origin*/
+) {
+    return true;
+}
+
+/// Opens the cached catalogues and the download queue. A check does not refresh.
+///
+/// @param options the parsed command line
+/// @param user the player's folder
+/// @param language_tag the language the window is speaking
+/// @return the catalogues; a failed open still leaves the built-in languages
+LanguageOffers
+open_language_offers(const Options& options, const fs::path& user, std::string language_tag) {
+    LanguageOffers offers;
+    try {
+        offers.preferences_path = preference_file(options.preferences_file);
+        std::error_code io_error;
+        if (fs::exists(offers.preferences_path, io_error) && !io_error)
+            offers.values = preferences::load(offers.preferences_path);
+    } catch (const std::exception& caught) {
+        std::cerr << "open-annihilation: the setup could not read preferences: " << caught.what()
+                  << '\n';
+    }
+
+    content::ServiceOptions service_options;
+    if (options.data_dir) {
+        service_options.data_folder = *options.data_dir;
+    } else {
+        try {
+            service_options.data_folder = preferences::data_directory();
+        } catch (const std::exception& caught) {
+            std::cerr << "open-annihilation: content: " << caught.what() << '\n';
+        }
+    }
+    const fs::path data_folder = service_options.data_folder;
+    service_options.player_folder = user;
+    const std::string program = oa::platform::program_directory();
+    if (!program.empty()) {
+        service_options.builtin_folder =
+            path_from_utf8(program) /
+            path_from_utf8(std::string(content::builtin_registries_folder_name));
+    }
+    service_options.developer_mode = false;
+    // A window check must not fetch: a catalogue that arrives mid-walk would
+    // move the cards the check is pressing. A player's start refreshes as
+    // the menu's welcome does, and the first snapshot is the cache.
+    service_options.automatic =
+        !options.check_setup_window && !options.unattended && !options.headless_check;
+    service_options.check = content::read_check_for_updates(offers.values);
+    try {
+        offers.service = std::make_unique<content::Service>(std::move(service_options));
+        offers.service->start();
+    } catch (const std::exception& caught) {
+        std::cerr << "open-annihilation: the setup could not read the catalogue: " << caught.what()
+                  << '\n';
+        offers.service.reset();
+    }
+
+    try {
+        content::DownloadsOptions queue_options;
+        queue_options.data_folder = data_folder;
+        queue_options.language = std::move(language_tag);
+        queue_options.handoff = keep_language_pack;
+        offers.downloads = std::make_unique<content::Downloads>(std::move(queue_options));
+        if (offers.service) {
+            const std::shared_ptr<const content::Snapshot> catalogues = offers.service->snapshot();
+            if (catalogues)
+                offers.downloads->start(*catalogues);
+        }
+        pass_install_ids(offers);
+    } catch (const std::exception& caught) {
+        std::cerr << "open-annihilation: the setup could not open downloads: " << caught.what()
+                  << '\n';
+        offers.downloads.reset();
+    }
+    return offers;
+}
+
+/// Tells whether Core Prime's downloads are on.
+///
+/// @param catalogues the snapshot
+/// @param values the preferences
+/// @return false when Core Prime's install ID is off
+bool downloads_on(const content::Snapshot& catalogues, const preferences::Values& values) {
+    for (const content::RegistryView& listed : catalogues.registries) {
+        if (listed.registry.descriptor.id != kCorePrime)
             continue;
-        if (language->source != languages::Source::built_in &&
-            language->source != languages::Source::installed)
+        const bool required =
+            listed.registry.descriptor.install_id == oa::data::registry::InstallIdUse::required;
+        if (required &&
+            content::read_install_id(values, kCorePrime).state == content::InstallIdState::off)
+            return false;
+        return true;
+    }
+    return true;
+}
+
+/// Tells whether a catalogue the setup reads can be read.
+///
+/// @param catalogues the snapshot
+/// @param check_registry true while `--check-first-run` may read its own registry
+/// @return true when the snapshot lists one with a catalogue and no error
+bool catalogue_readable(const content::Snapshot& catalogues, bool check_registry) {
+    bool check_catalogue = false;
+    for (const content::RegistryView& listed : catalogues.registries) {
+        const bool readable = listed.catalogue != nullptr && listed.last_error.empty();
+        if (!readable)
+            continue;
+        if (listed.registry.descriptor.id == kCorePrime)
+            return true;
+        if (check_registry && listed.registry.descriptor.id == kCheckRegistry)
+            check_catalogue = true;
+    }
+    return check_catalogue;
+}
+
+/// The English name a catalogue gives a language, or the tag.
+///
+/// @param tag the language's tag
+/// @param named the catalogue's English name; empty when it names none
+/// @return the name
+std::string catalogue_english_name(std::string_view tag, std::string_view named) {
+    if (!named.empty())
+        return std::string(named);
+    if (const languages::Language* known = languages::find_by_tag(tag);
+        known != nullptr && !known->english_name.empty())
+        return std::string(known->english_name);
+    return std::string(tag);
+}
+
+/// Scales a download into the progress bar.
+///
+/// @param[in,out] card the card
+/// @param done bytes held
+/// @param size the pack's size
+void set_pack_progress(first_run::Card& card, uint64_t done, uint64_t size) {
+    card.progress_done_text = settings::download_size_text(done);
+    card.progress_size_text = settings::download_size_text(size);
+    if (size == 0) {
+        card.progress_done = 0;
+        card.progress_whole = 0;
+        return;
+    }
+    const double share = static_cast<double>(done) / static_cast<double>(size);
+    const double clamped = share < 0.0 ? 0.0 : (share > 1.0 ? 1.0 : share);
+    long rounded = std::lround(clamped * static_cast<double>(kProgressWhole));
+    if (rounded < 0)
+        rounded = 0;
+    if (rounded > kProgressWhole)
+        rounded = kProgressWhole;
+    card.progress_done = static_cast<int32_t>(rounded);
+    card.progress_whole = kProgressWhole;
+}
+
+/// Puts a queued pack's state on its card.
+///
+/// @param[in,out] card the card
+/// @param item the queue's row
+void apply_queue(first_run::Card& card, const content::DownloadView& item) {
+    switch (item.state) {
+    case content::DownloadState::waiting:
+    case content::DownloadState::asking:
+    case content::DownloadState::challenge:
+    case content::DownloadState::downloading:
+    case content::DownloadState::paused_for_match:
+        card.pack = first_run::PackState::downloading;
+        set_pack_progress(card, item.done, item.target.size);
+        break;
+    case content::DownloadState::verifying:
+    case content::DownloadState::handing_over:
+    case content::DownloadState::installing:
+    case content::DownloadState::done:
+        card.pack = first_run::PackState::checking;
+        break;
+    case content::DownloadState::failed:
+    case content::DownloadState::cancelled:
+        card.pack = first_run::PackState::failed;
+        card.failure = looked_up(content::failure_text(item.failure));
+        break;
+    }
+}
+
+/// Reads the queue's row for a pack, when one is there.
+///
+/// @param offers the catalogues
+/// @param tag the pack's tag
+/// @param check_registry true while `--check-first-run` may read its own registry
+/// @param[out] item the row; unchanged when there is none
+/// @return true when the queue holds it
+bool queued_pack(
+    const LanguageOffers& offers,
+    std::string_view tag,
+    bool check_registry,
+    content::DownloadView& item
+) {
+    if (!offers.downloads)
+        return false;
+    const std::vector<content::DownloadView> items = offers.downloads->view();
+    for (const content::DownloadView& queued : items) {
+        const bool core_prime = queued.target.registry == kCorePrime;
+        const bool check = check_registry && queued.target.registry == kCheckRegistry;
+        if ((!core_prime && !check) || !same_language_tag(queued.target.key, tag))
+            continue;
+        item = queued;
+        return true;
+    }
+    return false;
+}
+
+/// Tells whether two cards show the same thing.
+///
+/// @param earlier a card
+/// @param later a card
+/// @return true when they do
+bool same_language_card(const first_run::Card& earlier, const first_run::Card& later) {
+    return earlier.tag == later.tag && earlier.own_name == later.own_name &&
+           earlier.english_name == later.english_name && earlier.kind == later.kind &&
+           earlier.pack == later.pack && earlier.current == later.current &&
+           earlier.size_text == later.size_text &&
+           earlier.progress_done_text == later.progress_done_text &&
+           earlier.progress_size_text == later.progress_size_text &&
+           earlier.progress_done == later.progress_done &&
+           earlier.progress_whole == later.progress_whole && earlier.failure == later.failure;
+}
+
+/// Rebuilds the language cards from the built-ins, the installed packs and the catalogue.
+///
+/// The selected card stays the one the player was on. The first list, and a
+/// list whose shape changed, puts that card in the centre with no move.
+///
+/// @param[in,out] session the language step
+/// @param[in,out] offers the catalogues
+/// @param shown the tag in effect
+/// @param check_registry true while `--check-first-run` may read its own registry
+/// @return true when what the step shows changed
+bool refresh_language_cards(
+    first_run::Session& session, LanguageOffers& offers, std::string_view shown, bool check_registry
+) {
+    const uint64_t catalogue_generation = offers.service ? offers.service->generation() : 0;
+    const uint64_t download_generation = offers.downloads ? offers.downloads->generation() : 0;
+    if (offers.filled && catalogue_generation == offers.seen_catalogue &&
+        download_generation == offers.seen_downloads)
+        return false;
+
+    const std::shared_ptr<const content::Snapshot> catalogues =
+        offers.service ? offers.service->snapshot() : nullptr;
+    const bool online = catalogues ? downloads_on(*catalogues, offers.values) : true;
+    const bool readable = catalogues && catalogue_readable(*catalogues, check_registry);
+    first_run::CatalogueNote note = first_run::CatalogueNote::none;
+    if (!online)
+        note = first_run::CatalogueNote::downloads_off;
+    else if (!readable)
+        note = first_run::CatalogueNote::unread;
+
+    std::string kept;
+    if (session.carousel.selected >= 0 &&
+        static_cast<std::size_t>(session.carousel.selected) < session.model.cards.size())
+        kept = session.model.cards[static_cast<std::size_t>(session.carousel.selected)].tag;
+
+    std::vector<first_run::Card> built;
+    for (const languages::Language* language : languages::known_languages()) {
+        if (language == nullptr || language->source != languages::Source::built_in)
             continue;
         first_run::Card card;
         card.tag = std::string(language->tag);
         card.own_name = std::string(language->endonym);
         card.english_name = std::string(language->english_name);
-        card.kind = language->source == languages::Source::installed
-                        ? first_run::CardKind::installed
-                        : first_run::CardKind::built_in;
-        card.current = language->tag == shown;
-        model.cards.push_back(std::move(card));
+        card.kind = first_run::CardKind::built_in;
+        card.current = same_language_tag(card.tag, shown);
+        built.push_back(std::move(card));
     }
+    for (const languages::Language* language : languages::known_languages()) {
+        if (language == nullptr || language->source != languages::Source::installed)
+            continue;
+        if (!languages::playable(*language))
+            continue;
+        first_run::Card card;
+        card.tag = std::string(language->tag);
+        card.own_name = std::string(language->endonym);
+        card.english_name = std::string(language->english_name);
+        card.kind = first_run::CardKind::installed;
+        card.current = same_language_tag(card.tag, shown);
+        built.push_back(std::move(card));
+    }
+    if (catalogues) {
+        for (const content::Entry& listed : catalogues->entries) {
+            if (listed.package == nullptr || listed.package->kind != catalogue::Kind::oalang)
+                continue;
+            const bool core_prime = listed.registry == kCorePrime;
+            const bool check = check_registry && listed.registry == kCheckRegistry;
+            if (!core_prime && !check)
+                continue;
+            const catalogue::Package& package = *listed.package;
+            if (package.id.empty())
+                continue;
+            bool already = false;
+            for (const first_run::Card& card : built) {
+                if (same_language_tag(card.tag, package.id))
+                    already = true;
+            }
+            if (already)
+                continue;
+            const languages::Language* known = languages::find_by_tag(package.id);
+            if (known != nullptr && languages::playable(*known))
+                continue;
+            first_run::Card card;
+            card.tag = package.id;
+            card.english_name = catalogue_english_name(package.id, package.english_name);
+            card.own_name = package.name.empty() ? card.english_name : package.name;
+            card.kind = first_run::CardKind::pack;
+            card.current = same_language_tag(card.tag, shown);
+            card.size_text = settings::download_size_text(package.size);
+            if (note != first_run::CatalogueNote::none) {
+                card.pack = first_run::PackState::offline;
+            } else {
+                content::DownloadView item;
+                if (queued_pack(offers, card.tag, check_registry, item)) {
+                    apply_queue(card, item);
+                    if (offers.download_item == 0 || same_language_tag(card.tag, kept))
+                        offers.download_item = item.item;
+                } else if (same_language_tag(offers.pending_failure_tag, card.tag)) {
+                    card.pack = first_run::PackState::failed;
+                    card.failure = offers.pending_failure;
+                }
+            }
+            built.push_back(std::move(card));
+        }
+    }
+
+    bool changed = note != session.model.catalogue || built.size() != session.model.cards.size();
+    for (std::size_t at = 0; !changed && at < built.size(); ++at)
+        changed = !same_language_card(built[at], session.model.cards[at]);
+    offers.seen_catalogue = catalogue_generation;
+    offers.seen_downloads = download_generation;
+    if (!changed && offers.filled)
+        return false;
+
+    int32_t index = 0;
+    const auto count = static_cast<int32_t>(built.size());
+    bool found = false;
+    if (!kept.empty()) {
+        for (int32_t at = 0; at < count; ++at) {
+            if (same_language_tag(built[static_cast<std::size_t>(at)].tag, kept)) {
+                index = at;
+                found = true;
+                break;
+            }
+        }
+    }
+    if (!found) {
+        for (int32_t card_at = 0; card_at < count; ++card_at) {
+            if (built[static_cast<std::size_t>(card_at)].current)
+                index = card_at;
+        }
+    }
+    const bool snap =
+        !offers.filled || index != session.carousel.selected || session.carousel.count != count;
+    session.model.cards = std::move(built);
+    session.model.catalogue = note;
+    session.carousel.selected = index;
+    first_run::bind(session);
+    if (snap)
+        kit::carousel_settle(session.carousel);
+    offers.filled = true;
+    return true;
+}
+
+/// Queues a pack. A refusal is kept on the card until a download replaces it.
+///
+/// @param[in,out] offers the catalogues
+/// @param tag the pack's tag
+void queue_language_pack(LanguageOffers& offers, std::string_view tag) {
+    offers.pending_failure.clear();
+    offers.pending_failure_tag.clear();
+    forget_language_view(offers);
+    const auto refuse = [&](std::string_view why) {
+        offers.pending_failure_tag = std::string(tag);
+        offers.pending_failure = looked_up(why);
+    };
+    if (!offers.service || !offers.downloads) {
+        refuse("the catalogue has no such package");
+        return;
+    }
+    const std::shared_ptr<const content::Snapshot> catalogues = offers.service->snapshot();
+    if (!catalogues) {
+        refuse("the catalogue has no such package");
+        return;
+    }
+    std::string registry_id;
+    for (const content::Entry& listed : catalogues->entries) {
+        if (listed.package == nullptr || listed.package->kind != catalogue::Kind::oalang)
+            continue;
+        if (!same_language_tag(listed.package->id, tag))
+            continue;
+        registry_id = listed.registry;
+        break;
+    }
+    if (registry_id.empty()) {
+        refuse("the catalogue has no such package");
+        return;
+    }
+    std::string why;
+    std::optional<content::DownloadTarget> target =
+        content::download_target(*catalogues, registry_id, tag, &why);
+    if (!target) {
+        refuse(why.empty() ? "the catalogue has no such package" : why);
+        return;
+    }
+    if (target->install_id == oa::data::registry::InstallIdUse::required) {
+        bool changed = false;
+        const std::optional<std::string> id =
+            content::ensure_install_id(offers.values, registry_id, changed);
+        if (changed)
+            store_language_preferences(offers);
+        if (!id) {
+            refuse(content::failure_text(content::DownloadFailure::install_id_off));
+            return;
+        }
+        offers.downloads->set_install_id(registry_id, id);
+    }
+    const std::optional<uint64_t> queued =
+        offers.downloads->queue(std::move(*target), content::DownloadReason::install, &why);
+    if (!queued) {
+        refuse(why.empty() ? "the catalogue has no such package" : why);
+        return;
+    }
+    offers.download_item = *queued;
+}
+
+/// Queues a failed pack again, or starts it when the queue has dropped it.
+///
+/// @param[in,out] offers the catalogues
+/// @param session the language step
+void retry_language_pack(LanguageOffers& offers, const first_run::Session& session) {
+    const int32_t picked = session.carousel.selected;
+    if (picked < 0 || static_cast<std::size_t>(picked) >= session.model.cards.size())
+        return;
+    const std::string tag = session.model.cards[static_cast<std::size_t>(picked)].tag;
+    offers.pending_failure.clear();
+    offers.pending_failure_tag.clear();
+    forget_language_view(offers);
+    if (offers.downloads) {
+        const std::vector<content::DownloadView> items = offers.downloads->view();
+        for (const content::DownloadView& item : items) {
+            if (!same_language_tag(item.target.key, tag))
+                continue;
+            if (item.state != content::DownloadState::failed &&
+                item.state != content::DownloadState::cancelled)
+                continue;
+            offers.downloads->retry(item.item);
+            offers.download_item = item.item;
+            return;
+        }
+    }
+    queue_language_pack(offers, tag);
 }
 
 /// Opens the centred card's language.
 ///
-/// @param session the language step
+/// @param[in,out] session the language step
 /// @param options the parsed command line
-void apply_selected_language(first_run::Session& session, const Options& options) {
-    const int32_t index = session.carousel.selected;
-    if (index < 0 || static_cast<std::size_t>(index) >= session.model.cards.size())
+/// @param[in,out] shown the tag in effect
+void apply_selected_language(
+    first_run::Session& session, const Options& options, std::string& shown
+) {
+    const int32_t picked = session.carousel.selected;
+    if (picked < 0 || static_cast<std::size_t>(picked) >= session.model.cards.size())
         return;
-    const first_run::Card& card = session.model.cards[static_cast<std::size_t>(index)];
+    const first_run::Card& card = session.model.cards[static_cast<std::size_t>(picked)];
     const languages::Language* known = languages::find_by_tag(card.tag);
     if (known == nullptr || !languages::playable(*known))
         return;
     apply_early_language(card.tag);
     write_preference(options, settings::key::language, known->tag);
+    shown = std::string(known->tag);
     for (first_run::Card& other : session.model.cards)
-        other.current = other.tag == card.tag;
+        other.current = same_language_tag(other.tag, shown);
 }
 
 /// Replaces `{token}` once.
@@ -1225,13 +1764,9 @@ SetupBefore run_setup_before_game(
     resume_state().leave_set = true;
     session.model.step = again ? first_run::Step::game : first_run::Step::language;
     session.model.controller = SDL_HasGamepad();
-    fill_cards(session.model, shown.tag);
-    session.carousel.selected = 0;
-    for (int32_t index = 0; index < static_cast<int32_t>(session.model.cards.size()); ++index) {
-        if (session.model.cards[static_cast<std::size_t>(index)].current)
-            session.carousel.selected = index;
-    }
-    first_run::bind(session);
+    std::string shown_tag(shown.tag);
+    LanguageOffers offers = open_language_offers(options, user, shown_tag);
+    static_cast<void>(refresh_language_cards(session, offers, shown_tag, options.check_first_run));
     if (session.model.step == first_run::Step::game) {
         fill_sources(session.model, user, found_install);
         if (options.check_setup_window)
@@ -1324,7 +1859,9 @@ SetupBefore run_setup_before_game(
             break;
         case first_run::Ask::advance:
             if (session.model.step == first_run::Step::language) {
-                apply_selected_language(session, options);
+                apply_selected_language(session, options, shown_tag);
+                if (offers.downloads)
+                    offers.downloads->set_language(shown_tag);
                 fill_sources(session.model, user, found_install);
                 if (options.check_setup_window)
                     setup_install_check_source(user, session.model);
@@ -1348,9 +1885,20 @@ SetupBefore run_setup_before_game(
                 return;
             }
             break;
-        case first_run::Ask::pick:
-            apply_selected_language(session, options);
+        case first_run::Ask::pick: {
+            const int32_t picked = session.carousel.selected;
+            apply_selected_language(session, options, shown_tag);
+            if (offers.downloads)
+                offers.downloads->set_language(shown_tag);
+            if (picked >= 0 && static_cast<std::size_t>(picked) < session.model.cards.size()) {
+                const first_run::Card& card = session.model.cards[static_cast<std::size_t>(picked)];
+                if (card.kind == first_run::CardKind::pack &&
+                    card.pack != first_run::PackState::downloading &&
+                    card.pack != first_run::PackState::checking)
+                    queue_language_pack(offers, card.tag);
+            }
             break;
+        }
         case first_run::Ask::locate:
             if (setup_locate_source(display.window, user, session.model))
                 session.focus_ready = false;
@@ -1372,7 +1920,13 @@ SetupBefore run_setup_before_game(
             }
             break;
         case first_run::Ask::cancel_download:
+            if (offers.downloads && offers.download_item != 0)
+                offers.downloads->cancel(offers.download_item);
+            forget_language_view(offers);
+            break;
         case first_run::Ask::retry_download:
+            retry_language_pack(offers, session);
+            break;
         case first_run::Ask::choose_on:
         case first_run::Ask::choose_off:
             break;
@@ -1479,7 +2033,15 @@ SetupBefore run_setup_before_game(
         if (last_ticks != 0 && now >= last_ticks)
             dt = static_cast<uint32_t>(std::min<uint64_t>(now - last_ticks, 1000ULL));
         last_ticks = now;
+        // The carousel's place is how long the move has been running. Draw
+        // every frame of that move: a single paint when the key arrives
+        // would hold the first frame until the move had already finished.
+        const uint32_t elapsed_before = session.carousel.elapsed_ms;
         first_run::tick(session, dt);
+        if (session.carousel.elapsed_ms != elapsed_before)
+            dirty = true;
+        if (refresh_language_cards(session, offers, shown_tag, options.check_first_run))
+            dirty = true;
         if (dirty) {
             scene = relayout(room);
             present();
