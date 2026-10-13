@@ -1363,14 +1363,15 @@ void Runtime::check_match_dialogs() {
     preferences_.game_speed = game.requested_speed;
     preferences_.current_game_speed = game.current_speed;
 
-    // VISUALS merges VISUALRT.GUI, which offers no display mode, and MUSIC
-    // MUSICRT.GUI.
+    // VISUALS merges VISUALRT.GUI, and MUSIC MUSICRT.GUI. 3.1c's VISUALRT.GUI
+    // offers no display mode; OA adds the screen-size slider, the same list
+    // as Settings'.
     activate_pause_gadget("PREFS");
     click_control("VISUALS", 50);
     require(
         hud_gadget("GAMMA") != nullptr && hud_gadget("VISUALSRT") != nullptr &&
-            hud_gadget("VIDSLDR") == nullptr,
-        "VISUALS did not merge VISUALRT.GUI"
+            hud_gadget("VIDSLDR") != nullptr,
+        "VISUALS did not merge VISUALRT.GUI with the screen-size slider"
     );
     click_control("MUSIC", 50);
     require(

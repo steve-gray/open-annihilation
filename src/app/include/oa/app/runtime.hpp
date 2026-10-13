@@ -8,6 +8,7 @@
 #include "director_presentation.hpp"
 #include "extension.hpp"
 #include "frame_pacing.hpp"
+#include "middle_pan.hpp"
 #include "full_screen.hpp"
 #include "match_model_draws.hpp"
 #include "megamap_state.hpp"
@@ -6081,6 +6082,7 @@ class Runtime final : public menu::Host,
         HudRect unit_metal_use{350, 468, 0, 8};
         HudRect unit_energy_make{400, 458, 0, 8};
         HudRect unit_energy_use{400, 468, 0, 8};
+        HudRect logo{132, 5, 21, 21};          // SIDEDATA LOGO: the viewed player's colour
         HudRect logo2{132, 455, 21, 21};       // SIDEDATA LOGO2: the cursor unit owner's logo
         HudRect mission_text{385, 449, 16, 2}; // MISSIONTEXT: head order status, centred on x
         HudRect unit_name2{555, 452, 1, 9};    // UNITNAME2: the second unit, centred on x
@@ -6188,6 +6190,16 @@ class Runtime final : public menu::Host,
     /// @param height rectangle height
     /// @param palette_index match palette colour
     void fill_source_rect(int x, int y, int width, int height, uint8_t palette_index);
+
+    /// Draws one player's colour mark into a HUD rectangle.
+    ///
+    /// The mark is the frame of the logo sheet that the player's colour names,
+    /// fitted to `at` the same way the unit panel fits its owner's mark. An
+    /// empty rectangle, or a player with no frame, draws nothing.
+    ///
+    /// @param player player whose colour is drawn
+    /// @param at rectangle in HUD source space
+    void draw_player_mark(const oa::Player& player, const HudRect& at);
 
     /// Draws a SIDEDATA resource trough: the fill to the shown amount and the share threshold's
     /// marker.
@@ -10056,12 +10068,19 @@ class Runtime final : public menu::Host,
     /// there. The settings dialog's ease about the centre keeps the follow,
     /// in play and under a menu, with the unit at the centre on every frame,
     /// and so for a unit in the map's corner, past the map's edges. A
-    /// scroll and moving the view from the minimap end the follow. Returns
+    /// scroll and moving the view from the minimap end the follow. A middle
+    /// click then pans toward the pointer, a left click ends that pan without
+    /// an order, and Home ends another without its command. Returns
     /// to the skirmish menu; throws std::runtime_error on a failure.
     /// [runtime_tracking_zoom_check.cpp]
     ///
     /// @param group the navigation check's group: all, zoom, or a window's zoom group
     void check_tracking_zoom(NavigationGroup group);
+
+    /// Checks a middle click pans the view toward the pointer, and that the
+    /// click and the key which end it give no order and run no command.
+    /// Throws std::runtime_error on a failure. The match is already running.
+    void check_middle_pan();
 
     /// Checks that every frame of a zoom keeps the map point under the
     /// pointer there, on the game's screen.
@@ -13057,6 +13076,36 @@ class Runtime final : public menu::Host,
     /// @param step screen pixels the frame scrolls, at or above 0
     void scroll_match_view(int32_t way_x, int32_t way_z, double step);
 
+    /// Scrolls the view by a screen distance this frame, through the same
+    /// limits as any scroll (held_view, View past the map's edge). A
+    /// distance other than zero stops tracking a unit, though the view is
+    /// already at its limit and stays as it is.
+    ///
+    /// @param screen_dx screen points to the right
+    /// @param screen_dy screen points downward
+    void scroll_match_view_by(double screen_dx, double screen_dy);
+
+    /// Takes a gesture for a middle-click pan, when one is running or a
+    /// middle press might start one.
+    ///
+    /// On the battlefield a middle click, or a middle press that moves,
+    /// starts the pan (middle_pan_). Another button, the wheel, a key or
+    /// the window losing focus ends it, and that press or key is consumed:
+    /// the matching button release is consumed too, so it gives no order.
+    /// The pointer moving only updates the pan.
+    ///
+    /// @param event the SDL event
+    /// @return true when the event must not reach the rest of the game
+    bool middle_pan_take(const SDL_Event& event);
+
+    /// Draws the pan's anchor, and an arrow at the pointer once it has left
+    /// the anchor. Both stay on the screen where the gesture put them.
+    void draw_middle_pan_marks();
+
+    /// Tells whether the pointer has left the anchor far enough to show the
+    /// pan's direction instead of the usual cursor.
+    [[nodiscard]] bool middle_pan_shows_direction() const;
+
     /// Returns the camera as the next frame draws it: held within the
     /// view's limits (held_camera), which let the view go past the map's
     /// edges as far as view_centre_span allows for View past the map's
@@ -15756,6 +15805,15 @@ class Runtime final : public menu::Host,
     /// other screen has shown and the match's screen has kept its size.
     /// Until then the screen's edges do not scroll the camera.
     bool match_pointer_known_ = false;
+    /// A middle-click pan: idle, a click still deciding, or a drag. The
+    /// anchor is a screen point.
+    middle_pan::State middle_pan_{};
+    /// The button whose press ended a pan. Its release is consumed too, so a
+    /// left press cannot give its order when the button comes up. Zero is none.
+    uint8_t middle_pan_swallow_button_{0};
+    /// The key that ended a pan also types a character. That character is
+    /// dropped, then this clears.
+    bool middle_pan_drop_text_{false};
     float pointer_x_ = 0;
     float pointer_y_ = 0;
     oa::formats::gaf::Archive cursor_gaf_{};

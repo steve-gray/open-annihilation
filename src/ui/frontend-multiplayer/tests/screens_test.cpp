@@ -1762,8 +1762,12 @@ void check_bound_base_maps(Driver& d) {
     std::sort(expected.begin(), expected.end());
     const bool other = std::find(listed.begin(), listed.end(), "Two Continents") != listed.end() ||
                        std::find(listed.begin(), listed.end(), "two continents") != listed.end();
+    // A pack map's row shows its own name; its key keeps the package.
+    std::vector<std::string> shown_names;
+    for (const std::string& key : keys)
+        shown_names.push_back(mp::multiplayer_shown_map_name(key.c_str()));
     expect(
-        listed == expected && keys == expected && !other,
+        listed == shown_names && keys == expected && !other,
         "the bound list is the supplied maps and no other installed map"
     );
     expect(
@@ -2018,7 +2022,8 @@ void check_pack_map_page(Driver& d) {
     expect(
         names->list_selection == pack_row &&
             map_row_key(*names, static_cast<std::size_t>(pack_row)) == "isle_one@oa-test-isles" &&
-            names->items[static_cast<std::size_t>(pack_row)] == "isle_one@oa-test-isles",
+            names->items[static_cast<std::size_t>(pack_row)] ==
+                mp::multiplayer_shown_map_name("isle_one@oa-test-isles"),
         "the pack map's row can be chosen once it is on the page"
     );
 }
@@ -2089,7 +2094,8 @@ void check_pack_maps(Driver& d) {
     });
     expect(listed == 1 && pack_row >= 0, "MAPNAMES lists the pack map once, among the base maps");
     expect(
-        pack_row >= 0 && names->items[static_cast<std::size_t>(pack_row)] == PackProbe::kName,
+        pack_row >= 0 && names->items[static_cast<std::size_t>(pack_row)] ==
+                             mp::multiplayer_shown_map_name(PackProbe::kName),
         "a pack map with no title shows its name"
     );
     expect(!looked_up, "the pack map's files are not read while the list is built");
@@ -2195,7 +2201,8 @@ void check_pack_maps(Driver& d) {
     expect(
         names->list_selection == pack_row &&
             map_row_key(*names, static_cast<std::size_t>(pack_row)) == PackProbe::kName &&
-            names->items[static_cast<std::size_t>(pack_row)] == PackProbe::kName &&
+            names->items[static_cast<std::size_t>(pack_row)] ==
+                mp::multiplayer_shown_map_name(PackProbe::kName) &&
             mp::panel_text(*modal, "DESCRIPTION") == "Doesn't fit this game: too many features" &&
             picture != nullptr && picture->active == 0,
         "a refused map shows its name, why it does not fit, and no picture"
@@ -2268,7 +2275,8 @@ void check_pack_maps(Driver& d) {
     );
     d.frame();
     expect(
-        mp::panel_text(mp::multiplayer_panel(), "MAPNAME") == PackProbe::kName &&
+        mp::panel_text(mp::multiplayer_panel(), "MAPNAME") ==
+                mp::multiplayer_shown_map_name(PackProbe::kName) &&
             chat_lines(lobby, line) == said + 1,
         "the line a 3.1c joiner sees names isle_of_ashes@archipelago, since it receives the same "
         "name"

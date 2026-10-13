@@ -24,6 +24,7 @@ inline constexpr std::string_view interface_words[] = {
     "A drag draws a selection box; two fingers scroll the map.",
     "A drag scrolls the map; hold, then drag, for a selection box.",
     "A failed graphics driver is skipped.",
+    "A middle click pans the view towards the pointer until you click or press a key.",
     "A number key selects its group on its own.",
     "A quick slide moves the pointer further.",
     "A random number that lets {name} stop automated downloads. Turned off, you can browse the "
@@ -271,6 +272,7 @@ inline constexpr std::string_view interface_words[] = {
     "Megamap",
     "Menu scaling",
     "Mex snap radius",
+    "Middle-click pans",
     "Mirror of {name}",
     "Mirrors the roles: the left pad points, the right pad moves the map, triggers and grips swap.",
     "Mobile Unit Yard Maps",

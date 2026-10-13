@@ -752,6 +752,25 @@ void Runtime::pan_match_camera() {
     const auto speed =
         match_ != nullptr ? match_->state().game.scroll_speed : preferences_.scroll_speed;
     const double step = frame_pacing::scroll_distance(speed, elapsed_ns);
+    // A middle-click pan scrolls on its own curve, and neither the screen's
+    // edges nor a held arrow key add to it. The pan ends when the match does.
+    if (middle_pan_.phase != middle_pan::Phase::idle) {
+        const bool live =
+            screen_ == Screen::match && match_ != nullptr && !match_paused_ && !match_finished_;
+        if (!live) {
+            middle_pan_ = {};
+            middle_pan_swallow_button_ = 0;
+        } else {
+            const auto share = middle_pan::scroll_share(
+                middle_pan_.anchor_x, middle_pan_.anchor_y, match_pointer_x_, match_pointer_y_
+            );
+            if (share.x != 0.0F || share.y != 0.0F)
+                scroll_match_view_by(
+                    static_cast<double>(share.x) * step, static_cast<double>(share.y) * step
+                );
+            return;
+        }
+    }
     int dx = 0, dz = 0;
     // A --frame-rate run's held scroll is an arrow key.
     if (frame_run_clock_ns_)
@@ -798,6 +817,37 @@ void Runtime::pan_match_camera() {
     if (dx == 0 && dz == 0)
         return;
     scroll_match_view(dx, dz, step);
+}
+
+void Runtime::scroll_match_view_by(double screen_dx, double screen_dy) {
+    if (!selected_tnt_ || (screen_dx == 0.0 && screen_dy == 0.0))
+        return;
+    const auto zoom = static_cast<double>(match_zoom() <= 0.0F ? 1.0F : match_zoom());
+    const auto place = match_view_place();
+    const auto [map_width, map_height] = shown_map_size();
+    const auto along =
+        [&](double at, double delta, int32_t battlefield, int32_t map, double centre) {
+            if (delta == 0.0)
+                return at;
+            return held_view(
+                at + delta / zoom,
+                static_cast<double>(battlefield) / zoom,
+                static_cast<double>(map),
+                past_map_edge_share(),
+                view_hold_.held ? std::optional<double>(centre) : std::nullopt
+            );
+        };
+    const double x = along(
+        place[0], screen_dx, match_layout_.battlefield_width(), map_width, view_hold_.centre_x
+    );
+    const double z = along(
+        place[1], screen_dy, match_layout_.battlefield_height(), map_height, view_hold_.centre_z
+    );
+    // A scroll ends a follow even when the view is already at its limit.
+    stop_match_tracking();
+    if (x == place[0] && z == place[1])
+        return;
+    place_match_view(x, z);
 }
 
 void Runtime::scroll_match_view(int32_t way_x, int32_t way_z, double step) {
