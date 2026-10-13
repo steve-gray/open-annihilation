@@ -105,46 +105,69 @@ void Runtime::check_navigation_without_maps(const fs::path& report_directory) {
     snapshot("native-single.ppm");
     expect(grayed("LoadGame") == !offers_saved_games(), "Load Game does not follow LOADGAME.GUI");
     expect(!shown("AnyMsn") || offers_any_mission(), "Any Mission shows without its screen");
+    expect(!grayed("NewCamp") && shown("NewCamp"), "New Campaign is not offered");
+    expect(!grayed("Options") && shown("Options"), "Options is not offered");
+    expect(!grayed("PrevMenu") && shown("PrevMenu"), "Previous Menu is not offered");
     if (!offers_saved_games()) {
         press("LoadGame");
         expect(screen_ == Screen::single_player, "a grayed-out Load Game took a press");
     }
 
-    // Skirmish tells the player there are no skirmish maps; the website
-    // button asks the seam for the project's site and closes the notice.
-    exercise_click(entry::resource_name(entry::Button::skirmish));
-    expect(notice_open(), "Skirmish did not tell the player skirmish is not available");
-    snapshot("native-skirmish-notice.ppm");
-    if (notice_drawn) {
-        // The website button names the address it opens.
-        const oa::ui::gui_layout::ButtonFields* caption = nullptr;
-        if (const auto* notice = dialogs::dialog_resources())
-            for (const auto& gadget : notice->layout.gadgets)
-                if (gadget.common.name == "GotoWebsite")
-                    caption = std::get_if<oa::ui::gui_layout::ButtonFields>(&gadget.fields);
+    // The demo, as the base game, greys Skirmish. A press and its key stay on
+    // this menu. Any other game with no skirmish map says so in a notice.
+    if (!offers_skirmish()) {
+        expect(grayed("Skirmish") && shown("Skirmish"), "Skirmish is not greyed on the demo");
+        press("Skirmish");
         expect(
-            caption != nullptr && caption->text == web_link_caption(project_website_address),
-            "the website button does not name " + std::string(project_website_address)
+            screen_ == Screen::single_player && dialogs::dialog_count() == 0,
+            "a grayed-out Skirmish took a press"
         );
-        const auto& requests = web_links_->requests;
-        const auto asked = requests.size();
-        close_with("GotoWebsite");
+        bool running = true;
+        SDL_Event key{};
+        key.type = SDL_EVENT_KEY_DOWN;
+        key.key.key = SDLK_S;
+        handle_sdl_event(key, running);
         expect(
-            requests.size() == asked + 1 && requests.back() == project_website_address,
-            "the website button did not ask for " + std::string(project_website_address)
+            screen_ == Screen::single_player && dialogs::dialog_count() == 0,
+            "Skirmish's key did something while it was greyed"
         );
-        expect(dialogs::dialog_count() == 0, "the website button left the notice open");
-        expect(screen_ == Screen::single_player, "the website button left SINGLE.GUI");
+    } else {
+        // Skirmish tells the player there are no skirmish maps; the website
+        // button asks the seam for the project's site and closes the notice.
         exercise_click(entry::resource_name(entry::Button::skirmish));
+        expect(notice_open(), "Skirmish did not tell the player skirmish is not available");
+        snapshot("native-skirmish-notice.ppm");
+        if (notice_drawn) {
+            // The website button names the address it opens.
+            const oa::ui::gui_layout::ButtonFields* caption = nullptr;
+            if (const auto* notice = dialogs::dialog_resources())
+                for (const auto& gadget : notice->layout.gadgets)
+                    if (gadget.common.name == "GotoWebsite")
+                        caption = std::get_if<oa::ui::gui_layout::ButtonFields>(&gadget.fields);
+            expect(
+                caption != nullptr && caption->text == web_link_caption(project_website_address),
+                "the website button does not name " + std::string(project_website_address)
+            );
+            const auto& requests = web_links_->requests;
+            const auto asked = requests.size();
+            close_with("GotoWebsite");
+            expect(
+                requests.size() == asked + 1 && requests.back() == project_website_address,
+                "the website button did not ask for " + std::string(project_website_address)
+            );
+            expect(dialogs::dialog_count() == 0, "the website button left the notice open");
+            expect(screen_ == Screen::single_player, "the website button left SINGLE.GUI");
+            exercise_click(entry::resource_name(entry::Button::skirmish));
+        }
+        close_with("OK");
+        expect(
+            dialogs::dialog_count() == 0 &&
+                screen_ == (notice_drawn ? Screen::main_menu : Screen::single_player),
+            "OK did not close the notice as it should"
+        );
+        if (screen_ == Screen::main_menu)
+            exercise_click(menu::resource_name(menu::Button::single_player));
     }
-    close_with("OK");
-    expect(
-        dialogs::dialog_count() == 0 &&
-            screen_ == (notice_drawn ? Screen::main_menu : Screen::single_player),
-        "OK did not close the notice as it should"
-    );
-    if (screen_ == Screen::main_menu)
-        exercise_click(menu::resource_name(menu::Button::single_player));
 
     // New Campaign opens on a side with a campaign; a side without one is grayed out.
     exercise_click(entry::resource_name(entry::Button::new_campaign));

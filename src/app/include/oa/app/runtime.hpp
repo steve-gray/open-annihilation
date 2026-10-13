@@ -14024,6 +14024,11 @@ class Runtime final : public menu::Host,
     void record_typed_key(uint8_t key);
 
     /// Runs the SINGLE.GUI setup and installs its DRDEATH key hook.
+    ///
+    /// Load Game is greyed when the data has no save dialog, Any Mission stays
+    /// hidden when the data has no any-mission screen, and Skirmish is greyed
+    /// when the base game is the Total Annihilation demo (1997). A greyed
+    /// button takes no press and its key does nothing.
     void enter_single_player_panel();
 
     /// Tells whether the game data holds the any-mission screen: NEWGAME.GUI over playanygame4.
@@ -14041,6 +14046,14 @@ class Runtime final : public menu::Host,
     ///
     /// @return true when the layout is present
     [[nodiscard]] bool offers_saved_games() const;
+
+    /// Tells whether Single Player offers Skirmish.
+    ///
+    /// The Total Annihilation demo (1997), when it is the base game, does not.
+    /// A game folder that is not a managed base game does.
+    ///
+    /// @return false only when the mounted base game is the demo
+    [[nodiscard]] bool offers_skirmish() const;
 
     /// Tells whether the game data holds a campaign for a side.
     ///
