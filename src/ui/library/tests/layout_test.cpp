@@ -1747,6 +1747,29 @@ void active_base_game_is_a_tile() {
 
 std::string hover_card_words(const kit::DisplayList& list);
 
+/// CHANGE… opens the base game chooser over the Library.
+void the_base_chooser_names_its_rows() {
+    const kit::Frame regular = fixture::frames()[1].frame;
+    lib::Library library = fixture::fixture_library();
+    lib::set_tab(library, lib::Tab::active);
+    OA_CHECK(lib::open_base_chooser(library).opened);
+    lib::ScreenState state;
+    const kit::DisplayList list = laid_out(library, state, regular);
+    const kit::Control* demo = fixture::named(list, "library.base.totala-demo");
+    const kit::Control* cancel = fixture::named(list, "library.base.cancel");
+    const kit::Control* use = fixture::named(list, "library.base.use");
+    OA_CHECK(demo != nullptr && demo->enabled);
+    OA_CHECK(cancel != nullptr && cancel->text == "CANCEL");
+    OA_CHECK(use != nullptr && use->text == "USE THIS GAME");
+    OA_CHECK(text_item(list, "Base game") != nullptr);
+    OA_CHECK(text_item(list, "Not added") != nullptr || shows_pill(list, "Not added"));
+    lib::mark_base_game(library, "totala-demo");
+    const kit::DisplayList marked = laid_out(library, state, regular);
+    OA_CHECK(text_starts(marked, "Choosing another base game"));
+    static_cast<void>(lib::library_key(library, state, marked, kit::Key::escape));
+    OA_CHECK(!library.chooser.open);
+}
+
 /// UNLOAD MOD asks for SWITCH OFF of the mod being played, which is the
 /// question the host asks before it plays no mod, and it is off during a game.
 void unload_mod_asks_switch_off() {
@@ -3643,6 +3666,7 @@ int main() {
     compact_expansions_hint_wraps();
     active_maps_fill_scroll_and_filter();
     active_base_game_is_a_tile();
+    the_base_chooser_names_its_rows();
     base_badge_is_nearest_and_tabs_are_bracketed();
     unload_mod_asks_switch_off();
     registries_tab_lists_every_registry();

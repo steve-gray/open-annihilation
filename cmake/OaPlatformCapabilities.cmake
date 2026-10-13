@@ -45,7 +45,8 @@ set_property(SOURCE "${oa_capability_app_dir}/video_capture.cpp"
   "${oa_capability_app_dir}/director_output.cpp" "${oa_capability_app_dir}/startup.cpp"
   "${oa_capability_app_dir}/user_folder_open.cpp" APPEND
   PROPERTY COMPILE_DEFINITIONS "OA_PROCESS_SPAWNING=${oa_OA_PROCESS_SPAWNING_value}")
-set_property(SOURCE "${oa_capability_app_dir}/game_directory_dialog.cpp" APPEND
+set_property(SOURCE "${oa_capability_app_dir}/game_directory_dialog.cpp"
+  "${oa_capability_app_dir}/runtime_library.cpp" APPEND
   PROPERTY COMPILE_DEFINITIONS "OA_NATIVE_FOLDER_DIALOG=${oa_OA_NATIVE_FOLDER_DIALOG_value}")
 set_property(SOURCE "${oa_capability_app_dir}/main.cpp" APPEND
   PROPERTY COMPILE_DEFINITIONS "OA_NATIVE_DENSITY_WINDOWS=${oa_OA_NATIVE_DENSITY_WINDOWS_value}"

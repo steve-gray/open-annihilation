@@ -952,12 +952,16 @@ ActiveSetup active_setup(const Library& library) {
     const Inputs& inputs = library.inputs;
     ActiveSetup setup;
 
+    const bool unloaded = library.content.unload_mod;
     const Entry* playing = nullptr;
-    for (const Entry& entry : library.entries)
-        if (entry.id.kind == Kind::mod && entry.installed != nullptr && entry.installed->playing) {
-            playing = &entry;
-            break;
-        }
+    if (!unloaded) {
+        for (const Entry& entry : library.entries)
+            if (entry.id.kind == Kind::mod && entry.installed != nullptr &&
+                entry.installed->playing) {
+                playing = &entry;
+                break;
+            }
+    }
     if (playing != nullptr) {
         setup.mod_name = entry_name(*playing);
         setup.mod_version = version_text(*playing->installed, text);
@@ -968,7 +972,7 @@ ActiveSetup active_setup(const Library& library) {
         if (!author.empty())
             setup.mod_author = filled(text, words::byline, {{"author", author}});
         setup.mod_state = std::string(shown(text, words::status_playing));
-    } else if (inputs.playing_mod) {
+    } else if (!unloaded && inputs.playing_mod) {
         setup.mod_name = inputs.playing_mod->name;
         setup.mod_version = inputs.playing_mod->version;
         setup.mod_release = inputs.playing_mod->version;
@@ -976,7 +980,7 @@ ActiveSetup active_setup(const Library& library) {
             setup.mod_badge = &*inputs.playing_mod->badge;
         setup.mod_state = std::string(shown(text, words::status_playing));
     }
-    if (playing == nullptr && !inputs.playing_mod) {
+    if (unloaded || (playing == nullptr && !inputs.playing_mod)) {
         const ActiveContent face = active_content(library);
         setup.base_title = std::string(shown(text, words::no_mod));
         setup.base_look = filled(text, words::active_as_made, {{"game", face.name}});

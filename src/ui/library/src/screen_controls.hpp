@@ -75,6 +75,26 @@ inline constexpr kit::ControlId registries_note = 72;
 inline constexpr kit::ControlId active_search = 73;
 /// CHANGE… on the base game tile. The host opens the chooser.
 inline constexpr kit::ControlId active_change = 74;
+/// The chooser's first base game row. The next rows follow, one per base game.
+inline constexpr kit::ControlId first_base_row = 13000000;
+/// The most base game rows the chooser names.
+inline constexpr std::size_t most_base_rows = 8;
+/// CANCEL on the chooser.
+inline constexpr kit::ControlId base_cancel = 13000010;
+/// USE THIS GAME on the chooser.
+inline constexpr kit::ControlId base_use = 13000011;
+/// The shade behind the chooser. It takes a press so the Library under it does not.
+inline constexpr kit::ControlId base_blocker = 13000012;
+
+/// Tells whether a control is one of the chooser's base game rows.
+///
+/// @param id the control
+/// @return true when it is a row
+[[nodiscard]] inline bool base_row_control(kit::ControlId id) noexcept {
+    return id >= first_base_row &&
+           id < first_base_row + static_cast<kit::ControlId>(most_base_rows);
+}
+
 /// The base game tile's label. It takes no press.
 inline constexpr kit::ControlId active_base = 75;
 /// The expansions heading's label. It takes no press.

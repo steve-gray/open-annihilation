@@ -410,6 +410,8 @@ std::string_view action_text(Action action, const TextHooks& text) {
         return shown(text, words::action_use_now);
     case Action::change_base_game:
         return shown(text, words::active_change);
+    case Action::copy_base_game:
+        return shown(text, words::base_use);
     case Action::add_expansion:
         return shown(text, words::active_add_from);
     case Action::ask_expansion_off:

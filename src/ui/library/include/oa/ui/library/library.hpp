@@ -543,15 +543,23 @@ struct TextHooks {
     std::string_view (*shown)(void* context, std::string_view english){};
 };
 
+/// Why the pending choice unloads the mod when the Library closes.
+enum class PendingClear : uint8_t {
+    none,                   ///< the mod stays
+    base_game_chosen,       ///< another base game was chosen
+    required_expansion_off, ///< an expansion the mod needs went off
+};
+
 /// The choice the Active tab is holding until the Library closes.
 ///
-/// `edited` is set when the pills have changed the stored expansions.
-/// `asking` is set while the player is being asked before a mod is unloaded.
-/// The host applies nothing here: G10 reads this when the Library closes.
+/// `edited` is set when the pills or the base game chooser have changed the
+/// stored choice. `asking` is set while the player is being asked before a
+/// mod is unloaded. Nothing here writes a preference or remounts the files:
+/// the host reads this when the Library closes, and only then.
 struct ContentDraft {
     bool edited{};
-    /// The base game the pending choice names. Empty until a pill edits it,
-    /// and then the stored base game.
+    /// The base game the pending choice names. Empty until a pill or the
+    /// chooser edits it, and then the stored base game.
     std::string base_game{};
     /// Expansion ids that are on in the pending choice.
     std::vector<std::string> expansions{};
@@ -570,6 +578,74 @@ struct ContentDraft {
     std::string last_id{};
     /// That expansion is on in the pending choice.
     bool last_on{};
+    /// Another base game was chosen. The Active tab says it is used when the
+    /// Library closes, and the mod tile says No Mod when `unload_mod` is set.
+    bool pending_base{};
+    /// The mod tile shows No Mod. The mod stays mounted until the Library closes.
+    bool unload_mod{};
+    /// Why `unload_mod` is set. The host clears the remembered mod for this reason.
+    PendingClear clear_reason{PendingClear::none};
+    /// The host has already applied this draft. A second close does nothing.
+    bool applied{};
+};
+
+/// How one base game is shown in the chooser.
+enum class BaseGameState : uint8_t {
+    in_use,    ///< the pending choice names it
+    copied,    ///< copied, and not the pending choice
+    not_added, ///< not copied: choosing it asks for a source
+};
+
+/// One base game in the chooser.
+struct BaseGameRow {
+    std::string id{};
+    /// The letters on the badge ("TA", "DEMO").
+    std::string letters{};
+    std::string name{};
+    std::string version{};
+    BaseGameState state{BaseGameState::not_added};
+    /// The state pill's words.
+    std::string state_text{};
+    /// The line under the name: where it was copied from, or what choosing it asks.
+    std::string detail{};
+    /// Expansion names, drawn as pills. They take no press.
+    std::vector<std::string> expansions{};
+    /// The radio marks this row.
+    bool marked{};
+};
+
+/// The base game chooser over the Library.
+struct BaseChooser {
+    bool open{};
+    /// The base game the radio marks.
+    std::string marked{};
+    /// Shown when the marked game is not the one in use. Empty otherwise.
+    std::string note{};
+    /// A copy that failed, under the note. Empty when the last copy worked.
+    std::string problem{};
+    std::vector<BaseGameRow> rows{};
+};
+
+/// What Use this game did.
+enum class BaseUseKind : uint8_t {
+    none,         ///< the chooser was closed, or the press did nothing
+    applied,      ///< the pending choice now names the marked game
+    needs_source, ///< the marked game is not copied; the host asks for it
+    refused,      ///< a match is running, or the command line named the choice
+};
+
+/// The result of Use this game.
+struct BaseUse {
+    BaseUseKind kind{BaseUseKind::none};
+    /// The marked base game, when `kind` is `needs_source`.
+    std::string id{};
+};
+
+/// What opening the chooser did, and which control takes the focus.
+struct BaseOpen {
+    bool opened{};
+    /// The in-use row's control. no_control when the chooser did not open.
+    int32_t focus{-1};
 };
 
 /// The Library's whole state.
@@ -589,10 +665,14 @@ struct Library {
     std::optional<EntryId> selected{};  ///< one of the visible entries; none when none shows
     bool details_open{};                ///< the selected entry's details page is open
     TextHooks text{};                   ///< how texts are looked up; empty for English
-    /// The Active tab's pending choice. A pill writes it here. It is not the
-    /// stored choice, and it is kept across refresh while that choice is the
-    /// same. Empty `edited` shows `inputs.content` as it was read.
+    /// The Active tab's pending choice. A pill or the base game chooser writes
+    /// it here. It is not the stored choice, and it is kept across refresh
+    /// while that choice is the same. Empty `edited` shows `inputs.content`
+    /// as it was read.
     ContentDraft content{};
+    /// The base game chooser, over the Library. Empty `open` draws nothing.
+    /// Choosing a game writes the pending choice; it does not remount.
+    BaseChooser chooser{};
     /// The base game's badge, scaled for the squares of the last layout.
     /// Those pictures point here until the next layout, which clears this.
     mutable std::deque<std::vector<uint8_t>> scaled_badge_pixels{};
@@ -895,6 +975,9 @@ struct ActiveContent {
     std::vector<ExpansionPill> pills{};
     /// What an expansion needs, or that a pending change applies when the Library closes.
     std::string hint{};
+    /// CHANGE… takes a press. Off during a match, while `--content` locked the
+    /// run, and while the command line chose the mod.
+    bool change_enabled{true};
 };
 
 /// Describes the base game tile and the expansion pills.
@@ -943,6 +1026,49 @@ void accept_expansion_off(Library& library);
 ///
 /// @param[in,out] library the Library
 void cancel_expansion_off(Library& library);
+
+/// Opens the base game chooser on the pending choice's game.
+///
+/// Nothing opens during a match, while `--content` locked the run, or while
+/// the command line chose the mod. The files are not remounted.
+///
+/// @param[in,out] library the Library
+/// @return whether it opened, and the control that takes the focus
+[[nodiscard]] BaseOpen open_base_chooser(Library& library);
+
+/// Closes the chooser. The pending choice stays.
+///
+/// @param[in,out] library the Library
+void close_base_chooser(Library& library);
+
+/// Marks one base game in the open chooser. A closed chooser is left as it is.
+///
+/// @param[in,out] library the Library
+/// @param id the base game
+void mark_base_game(Library& library, std::string_view id);
+
+/// Rebuilds the open chooser's rows from the inputs, keeping the marked game.
+///
+/// @param[in,out] library the Library
+void refresh_base_chooser(Library& library);
+
+/// Keeps a failed copy's words on the open chooser.
+///
+/// @param[in,out] library the Library
+/// @param problem the words; empty clears them
+void note_base_copy_problem(Library& library, std::string_view problem);
+
+/// Uses the marked base game.
+///
+/// A game that is not copied is `needs_source` and the chooser stays open.
+/// A copied game is given to choose_content_base_game and kept on the pending
+/// draft: every copied expansion of it is on, and a mod being played is
+/// marked unloaded. The same game as the pending choice only closes the
+/// chooser. Nothing is written to the preferences, and nothing is remounted.
+///
+/// @param[in,out] library the Library
+/// @return what the press did
+[[nodiscard]] BaseUse use_marked_base_game(Library& library);
 
 /// How well one search word was found: the best field it is in.
 enum class MatchClass : uint8_t {
@@ -1011,6 +1137,10 @@ enum class Action : uint8_t {
     /// CHANGE… on the base game tile. The host opens the chooser. This press
     /// does not change the choice.
     change_base_game,
+    /// USE THIS GAME named a base game that is not copied. The host asks for
+    /// its source and copies it. `ScreenResult::base_game` names it. The
+    /// chooser stays open until the copy is in the pending choice.
+    copy_base_game,
     /// ADD FROM… on an expansion that is not copied. The host opens the
     /// locator. `ScreenResult::expansion` names it. This press does not turn it on.
     add_expansion,

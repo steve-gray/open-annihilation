@@ -1065,6 +1065,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_registries_check.cpp
   src/app/runtime_library_check.cpp src/app/runtime_library_actions_check.cpp
   src/app/runtime_library_map_preview_check.cpp
+  src/app/runtime_library_content_check.cpp
   src/app/runtime_team_panel_check.cpp src/app/runtime_scroll_bar_check.cpp
   src/app/runtime_interpolation_check.cpp src/app/runtime_unit_playout_check.cpp
   src/app/runtime_engine_settings_wiring_check.cpp src/app/runtime_engine_settings_check.cpp
@@ -1810,6 +1811,31 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_library_previews_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED library-map-previews-clean)
+      # Core Contingency is turned off and its maps leave the skirmish list
+      # when the Library closes. The demo is then chosen, when
+      # OA_DEMO_INSTALLER names its installer, and mounted on the next close.
+      # --game-dir is the source of the copy; the check plays the player's copy.
+      set(oa_library_content_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/library-content")
+      file(MAKE_DIRECTORY "${oa_library_content_dir}")
+      add_test(NAME library-content-clean COMMAND ${CMAKE_COMMAND} -E rm -rf
+        "${oa_library_content_dir}/Open Annihilation"
+        "${oa_library_content_dir}/library-content.conf")
+      set_tests_properties(library-content-clean PROPERTIES
+        FIXTURES_SETUP library-content-clean)
+      add_test(NAME native-library-content COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-library-content
+        --preferences-file "${oa_library_content_dir}/library-content.conf"
+        --user-folder "${oa_library_content_dir}/Open Annihilation")
+      set(oa_library_content_env
+        "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+      if(OA_DEMO_INSTALLER)
+        string(APPEND oa_library_content_env ";OA_DEMO_INSTALLER=${OA_DEMO_INSTALLER}")
+      endif()
+      set_tests_properties(native-library-content PROPERTIES
+        TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_library_content_dir}"
+        ENVIRONMENT "${oa_library_content_env}"
+        FIXTURES_REQUIRED library-content-clean)
       # Made-up mod packages posted as the download queue posts them, from a
       # built-in registry and two added ones, installed while the Library
       # shows: the built-in one's with no question, the added ones' asking
