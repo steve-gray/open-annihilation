@@ -428,8 +428,17 @@ ActiveContent active_content(const Library& library) {
             pill.face = ExpansionFace::add;
         else
             pill.face = ExpansionFace::off;
+        const bool music_short = bundle->id == "music" && stored.music_tracks &&
+                                 *stored.music_tracks < stored.music_track_count;
         if (pill.face == ExpansionFace::add)
             pill.text = filled(text, words::active_add_from, {{"name", bundle->english_name}});
+        else if (music_short)
+            pill.text = filled(
+                text,
+                words::music_tracks,
+                {{"held", std::to_string(*stored.music_tracks)},
+                 {"total", std::to_string(stored.music_track_count)}}
+            );
         else
             pill.text = std::string(bundle->english_name);
         pill.enabled = pills_on;

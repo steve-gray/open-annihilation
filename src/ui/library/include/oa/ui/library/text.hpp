@@ -355,6 +355,8 @@ inline constexpr std::string_view active_add_from = "{name} · ADD FROM…";
 inline constexpr std::string_view active_files_match = "All files match";
 inline constexpr std::string_view active_file_differs = "{count} file differs";
 inline constexpr std::string_view active_files_differ = "{count} files differ";
+/// Music the source did not finish. `{held}` and `{total}` are counts.
+inline constexpr std::string_view music_tracks = "{held} of {total} tracks";
 inline constexpr std::string_view active_version_source = "{version} · {source}";
 inline constexpr std::string_view active_turns_off = "{name} turns off when the Library closes.";
 inline constexpr std::string_view active_turns_on = "{name} turns on when the Library closes.";

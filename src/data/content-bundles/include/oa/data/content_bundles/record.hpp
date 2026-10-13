@@ -3,10 +3,13 @@
 
 // The .oa-content record of one copied bundle. The text is version 1:
 // "oa-content 1", then "bundle <id>", then "source <path>", then one group
-// per file of "file", "size", "modified" and "sha256". The source escapes
-// backslash, newline and carriage return. A line whose first word is not
-// one of those fields is kept for a later reader and ignored here. The
-// parser takes bytes and returns a record; it does not open a file.
+// per file of "file", "size", "modified" and "sha256". A file the source
+// did not hold follows that group with "not-in-source". A record written
+// before that line existed has no such line, and the file reads as held.
+// The source escapes backslash, newline and carriage return. A line whose
+// first word is not one of those fields is kept for a later reader and
+// ignored here. The parser takes bytes and returns a record; it does not
+// open a file.
 #pragma once
 
 #include "oa/base/sha256.hpp"
@@ -33,6 +36,9 @@ struct ContentRecordFile {
     int64_t modified{};
     /// SHA-256 of the bytes.
     base::sha256::Digest digest{};
+    /// The source did not hold this file. A record with no such line reads
+    /// this as false: the file was held.
+    bool not_in_source{};
 };
 
 /// A bundle folder's record, as text or as read from the folder.

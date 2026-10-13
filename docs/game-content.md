@@ -47,6 +47,13 @@ through `tactics8.hpi`.
 change units, maps or the rules, and a comparison of two games' rules
 leaves it out.
 
+`music/0.mp3` is the same recording as `music/9.mp3`. A source that has
+one and not the other is copied as both. A soundtrack file the source
+does not have at all, which the macOS installer does for `music/13.mp3`,
+is left out and is not reported as a damaged file. The Music pill then
+reads how many tracks that source held, such as "17 of 18 tracks". A
+track that is there and does not match is still reported.
+
 **Cavedog units** (`cavedog-units`) needs Core Contingency. It holds six
 unit files, copied as `afark.ufo`, `aflea.ufo`, `ascarab.ufo`,
 `cormabm.ufo`, `cornecro.ufo` and `corplas.ufo`: FARK, Flea, Scarab,

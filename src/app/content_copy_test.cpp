@@ -712,6 +712,108 @@ void test_content_difference(const fs::path& scratch) {
     OA_CHECK(oa::app::content_match_line(2) == "2 files differ");
 }
 
+// One soundtrack file is missing and matches another file's bytes. A second
+// is missing and matches nothing. The first is stored under its own name.
+// The second is recorded as not in the source and does not warn. A damaged
+// track still does.
+void test_sibling_and_absent(const fs::path& scratch) {
+    const std::string shared = "track-shared";
+    const std::string only = "track-only";
+    static oa::base::sha256::Digest stored_shared;
+    static oa::base::sha256::Digest stored_only;
+    stored_shared = digest_of(shared);
+    stored_only = digest_of(only);
+    static const std::string_view name0[]{"music/0.mp3"};
+    static const std::string_view name9[]{"music/9.mp3"};
+    static const std::string_view name13[]{"music/13.mp3"};
+    const uint64_t shared_size = static_cast<uint64_t>(shared.size());
+    const uint64_t only_size = static_cast<uint64_t>(only.size());
+    const oa::data::content_bundles::ContentFile files[] = {
+        {"music/0.mp3",
+         name0,
+         shared_size,
+         std::span<const oa::base::sha256::Digest>(&stored_shared, 1)},
+        {"music/9.mp3",
+         name9,
+         shared_size,
+         std::span<const oa::base::sha256::Digest>(&stored_shared, 1)},
+        {"music/13.mp3",
+         name13,
+         only_size,
+         std::span<const oa::base::sha256::Digest>(&stored_only, 1)},
+    };
+    const oa::data::content_bundles::Bundle table[] = {
+        {"music",
+         "Music",
+         oa::data::content_bundles::Kind::expansion,
+         {},
+         {},
+         std::span<const oa::data::content_bundles::ContentFile>(files)},
+    };
+    const fs::path install = scratch / "source";
+    const fs::path user = scratch / "user";
+    std::error_code failure;
+    fs::create_directories(install / "music", failure);
+    OA_CHECK(!failure);
+    fs::create_directories(user, failure);
+    place_file(install / "music" / "9.mp3", shared);
+    oa::app::FolderContentSource source(install, table);
+    oa::app::CopyRequest request;
+    request.user_folder = user;
+    request.bundles = table;
+    request.share_blocks = false;
+    const oa::app::CopyResult copied = oa::app::copy_content(source, request);
+    OA_CHECK(copied.status == oa::app::CopyStatus::finished);
+    const fs::path music_dir =
+        user / std::string(oa::app::managed_expansions_folder) / "music" / "music";
+    OA_CHECK(read_bytes(music_dir / "0.mp3") == shared);
+    OA_CHECK(read_bytes(music_dir / "9.mp3") == shared);
+    OA_CHECK(!fs::exists(music_dir / "13.mp3", failure));
+    std::string error;
+    const oa::app::ContentRecord record = oa::app::read_content_record(
+        user / std::string(oa::app::managed_expansions_folder) / "music" /
+            std::string(oa::app::content_record_name),
+        &error
+    );
+    OA_CHECK(record.valid);
+    bool saw_filled = false;
+    bool saw_absent = false;
+    for (const oa::app::ContentRecordFile& item : record.files) {
+        if (item.copy_name == "music/0.mp3") {
+            saw_filled = true;
+            OA_CHECK(!item.not_in_source);
+            OA_CHECK(item.digest == stored_shared);
+        }
+        if (item.copy_name == "music/13.mp3") {
+            saw_absent = true;
+            OA_CHECK(item.not_in_source);
+        }
+    }
+    OA_CHECK(saw_filled);
+    OA_CHECK(saw_absent);
+    const oa::app::ContentCheck check = oa::app::check_managed_content(user, table);
+    OA_CHECK(!oa::app::content_notice_due(check));
+    const oa::app::ContentBundleCheck* music = bundle_named(check, "music");
+    OA_CHECK(music != nullptr);
+    if (music != nullptr) {
+        OA_CHECK(music->files_differ == 0);
+        OA_CHECK(music->files_not_in_source == 1);
+        OA_CHECK(oa::app::content_bundle_line(*music) == "2 of 3 tracks");
+    }
+    OA_CHECK(oa::app::content_tracks_line(17, 18) == "17 of 18 tracks");
+
+    place_file(music_dir / "9.mp3", "TRACK-SHARED");
+    const oa::app::ContentCheck damaged = oa::app::check_managed_content(user, table);
+    OA_CHECK(oa::app::content_notice_due(damaged));
+    const oa::app::ContentBundleCheck* broken = bundle_named(damaged, "music");
+    OA_CHECK(broken != nullptr);
+    if (broken != nullptr) {
+        OA_CHECK(broken->files_differ == 1);
+        OA_CHECK(names_file(*broken, "music/9.mp3"));
+        OA_CHECK(!names_file(*broken, "music/13.mp3"));
+    }
+}
+
 } // namespace
 
 int main() {
@@ -727,6 +829,7 @@ int main() {
     test_clone(scratch / "clone");
     test_check(scratch / "check");
     test_content_difference(scratch / "G03-difference");
+    test_sibling_and_absent(scratch / "G26-music");
     each_regular_file(scratch, unlock_one);
     std::error_code ignored;
     fs::remove_all(scratch, ignored);
