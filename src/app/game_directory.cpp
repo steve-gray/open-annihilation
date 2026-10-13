@@ -373,11 +373,9 @@ void take_archive(const fs::path& root, const fs::path& archive, GameInstall& in
     }
 }
 
-// The managed copy's folder names. They match content_copy.hpp. That module
-// links this one, so this file keeps its own copies and does not call it.
-// The record itself is read through content_bundles.
-constexpr std::string_view kManagedGamesFolder = "games";
-constexpr std::string_view kManagedExpansionsFolder = "expansions";
+// The managed copy's folder names are content_bundles::managed_games_folder
+// and managed_expansions_folder. The copy module links this one, so this
+// file uses those names and does not call it.
 
 [[nodiscard]] bool directory_named(const fs::path& folder, std::string_view name) {
     return equal_ignoring_case(path_to_utf8(folder.filename()), name);
@@ -386,18 +384,24 @@ constexpr std::string_view kManagedExpansionsFolder = "expansions";
 [[nodiscard]] bool has_managed_layout(const fs::path& user) {
     std::error_code games_failure;
     std::error_code expansions_failure;
-    return fs::is_directory(user / std::string(kManagedGamesFolder), games_failure) ||
-           fs::is_directory(user / std::string(kManagedExpansionsFolder), expansions_failure);
+    return fs::is_directory(
+               user / std::string(oa::data::content_bundles::managed_games_folder), games_failure
+           ) ||
+           fs::is_directory(
+               user / std::string(oa::data::content_bundles::managed_expansions_folder),
+               expansions_failure
+           );
 }
 
 [[nodiscard]] fs::path
 bundle_directory(const fs::path& user, const oa::data::content_bundles::Bundle& bundle) {
     const fs::path id{std::string(bundle.id)};
     if (bundle.kind == oa::data::content_bundles::Kind::base_game)
-        return user / std::string(kManagedGamesFolder) / id;
+        return user / std::string(oa::data::content_bundles::managed_games_folder) / id;
     if (bundle.extends.empty())
-        return user / std::string(kManagedExpansionsFolder) / id;
-    return user / std::string(kManagedExpansionsFolder) / std::string(bundle.extends[0]) / id;
+        return user / std::string(oa::data::content_bundles::managed_expansions_folder) / id;
+    return user / std::string(oa::data::content_bundles::managed_expansions_folder) /
+           std::string(bundle.extends[0]) / id;
 }
 
 [[nodiscard]] bool record_covers(
@@ -440,14 +444,14 @@ bundle_directory(const fs::path& user, const oa::data::content_bundles::Bundle& 
 }
 
 // The player's folder behind `folder`: the folder itself when it holds
-// games/ or expansions/, or the folder above a managed bundle folder.
+// Games/ or Expansions/, or the folder above a managed bundle folder.
 [[nodiscard]] std::optional<fs::path> managed_user_of(const fs::path& folder) {
     if (folder.empty())
         return std::nullopt;
     if (has_managed_layout(folder))
         return folder;
     std::error_code failure;
-    if (directory_named(folder.parent_path(), kManagedGamesFolder)) {
+    if (directory_named(folder.parent_path(), oa::data::content_bundles::managed_games_folder)) {
         const fs::path user = folder.parent_path().parent_path();
         const bool known =
             oa::data::content_bundles::find_bundle(path_to_utf8(folder.filename())) != nullptr;
@@ -458,7 +462,7 @@ bundle_directory(const fs::path& user, const oa::data::content_bundles::Bundle& 
             return user;
     }
     const fs::path expansions = folder.parent_path().parent_path();
-    if (directory_named(expansions, kManagedExpansionsFolder)) {
+    if (directory_named(expansions, oa::data::content_bundles::managed_expansions_folder)) {
         const fs::path user = expansions.parent_path();
         if (has_managed_layout(user))
             return user;

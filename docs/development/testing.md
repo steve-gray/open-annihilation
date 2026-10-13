@@ -299,13 +299,13 @@ setting the demo's tests need: each unpacks the demo's data from the
 installer itself. These tests read it:
 
 - `demo-installer-data` unpacks the installer's archive into
-  `games/totala-demo` of a temporary player's folder, checks its size and
+  `Games/totala-demo` of a temporary player's folder, checks its size and
   SHA-256, and checks that a second start reuses it and that the unpacked
   folder is a usable installation;
 - `native-demo-installer` starts the game headless, with `--game-dir` on the
   installer's folder and `--data-dir` on a scratch folder, and checks that the
   archive is unpacked into that scratch folder's player folder at
-  `games/totala-demo` with its `.oa-content` record, checked and mounted, that
+  `Games/totala-demo` with its `.oa-content` record, checked and mounted, that
   every start opens the main menu with no dialog over it, that a second start
   mounts it without unpacking it again, that a damaged archive is unpacked
   again, that an earlier `demo-1997` archive in the data folder is copied
