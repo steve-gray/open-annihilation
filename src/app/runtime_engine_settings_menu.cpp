@@ -649,6 +649,77 @@ bool Runtime::EngineSettingsMenuHost::prepare_sharp_button(
     return true;
 }
 
+void Runtime::EngineSettingsMenuHost::copy_presented_menu_buttons(
+    Runtime& runtime,
+    const artless::Surface& presented,
+    artless::Surface& reference,
+    artless::SourceRect covered
+) {
+    if (runtime.sdl_.renderer == nullptr || !button_shown(runtime))
+        return;
+    if (presented.width == 0 || presented.height == 0 || presented.width != reference.width ||
+        presented.height != reference.height || presented.rgb.size() != reference.rgb.size())
+        return;
+    const std::size_t pixels =
+        static_cast<std::size_t>(presented.width) * static_cast<std::size_t>(presented.height);
+    if (presented.rgb.size() < pixels * 3U)
+        return;
+    int output_width = 0;
+    int output_height = 0;
+    if (!SDL_GetRenderOutputSize(runtime.sdl_.renderer, &output_width, &output_height) ||
+        output_width <= 0 || output_height <= 0)
+        return;
+    // A whole-window read is already in the window's pixels. A letterbox
+    // read starts at the picture's origin in that window.
+    int origin_x = 0;
+    int origin_y = 0;
+    if (presented.width != static_cast<uint32_t>(output_width) ||
+        presented.height != static_cast<uint32_t>(output_height)) {
+        SDL_FRect picture{};
+        if (!SDL_GetRenderLogicalPresentationRect(runtime.sdl_.renderer, &picture))
+            return;
+        const int picture_width = static_cast<int>(picture.w);
+        const int picture_height = static_cast<int>(picture.h);
+        if (picture_width <= 0 || picture_height <= 0 ||
+            presented.width != static_cast<uint32_t>(picture_width) ||
+            presented.height != static_cast<uint32_t>(picture_height))
+            return;
+        origin_x = static_cast<int>(picture.x);
+        origin_y = static_cast<int>(picture.y);
+    }
+    const auto copy_one = [&](const oa::ui::display_layout::Rect& window, int32_t source_side) {
+        if (window.width <= 0 || window.height <= 0)
+            return;
+        if (window.width == source_side && window.height == source_side)
+            return;
+        for (int button_row = window.y; button_row < window.y + window.height; ++button_row) {
+            for (int button_column = window.x; button_column < window.x + window.width;
+                 ++button_column) {
+                const int frame_column = button_column - origin_x;
+                const int frame_row = button_row - origin_y;
+                if (frame_column < 0 || frame_row < 0 ||
+                    static_cast<uint32_t>(frame_column) >= reference.width ||
+                    static_cast<uint32_t>(frame_row) >= reference.height)
+                    continue;
+                if (covered.width > 0 && covered.height > 0 && frame_column >= covered.x &&
+                    frame_row >= covered.y && frame_column < covered.x + covered.width &&
+                    frame_row < covered.y + covered.height)
+                    continue;
+                const std::size_t at_pixel =
+                    (static_cast<std::size_t>(frame_row) * reference.width +
+                     static_cast<std::size_t>(frame_column)) *
+                    3U;
+                reference.rgb[at_pixel] = presented.rgb[at_pixel];
+                reference.rgb[at_pixel + 1U] = presented.rgb[at_pixel + 1U];
+                reference.rgb[at_pixel + 2U] = presented.rgb[at_pixel + 2U];
+            }
+        }
+    };
+    const auto windows = runtime.oa_layer().menu_button_windows();
+    copy_one(windows.library, button_rect(runtime).width);
+    copy_one(windows.settings, settings_button_rect(runtime).width);
+}
+
 bool Runtime::EngineSettingsMenuHost::replace_scaled_buttons(
     Runtime& runtime, std::vector<uint8_t>& frame
 ) {
