@@ -16,6 +16,7 @@
 #include "oa/ui/kit/text.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -527,7 +528,36 @@ void add_chrome(
     order.push_back(next_id);
 }
 
+/// One channel of a rule blended over the window face at half.
+///
+/// The same mix the painter uses at 128 of 256: the face keeps half, the
+/// rule takes half, and a half is added before the divide.
+///
+/// @param under the window face's channel
+/// @param over the rule's channel
+/// @return the blended channel
+uint8_t floor_channel(uint8_t under, uint8_t over) noexcept {
+    constexpr uint32_t kOpaque = 256;
+    constexpr uint32_t kShare = kOpaque / 2;
+    const uint32_t painted = uint32_t{over} * kShare + kOpaque / 2;
+    return static_cast<uint8_t>((uint32_t{under} * (kOpaque - kShare) + painted) / kOpaque);
+}
+
+/// The floor's ink: half the strength of a rule, over the window face.
+///
+/// @return the colour
+kit::Colour floor_ink() noexcept {
+    return {
+        floor_channel(kit::colour::panel.r, kit::colour::rule.r),
+        floor_channel(kit::colour::panel.g, kit::colour::rule.g),
+        floor_channel(kit::colour::panel.b, kit::colour::rule.b),
+    };
+}
+
 /// Draws the floor the language cards stand on: a grid, denser toward its top.
+///
+/// The lines are half a rule over the window face, at every size, so they
+/// do not read as the edges of a table under the cards.
 ///
 /// @param[in,out] list the display list
 /// @param width the window's width
@@ -536,13 +566,14 @@ void add_chrome(
 void add_floor(kit::DisplayList& list, int32_t width, int32_t top, int32_t bottom) {
     if (width <= 0 || bottom - top < 8)
         return;
+    const kit::Colour ink = floor_ink();
     constexpr int32_t kRows = 5;
     for (int32_t row = 0; row <= kRows; ++row) {
         const int32_t y = top + (bottom - top) * row * row / (kRows * kRows);
         kit::Item rule;
         rule.role = kit::Role::rule;
         rule.rect = {0, y, width, 1};
-        rule.colour = kit::colour::edge_light;
+        rule.colour = ink;
         list.items.push_back(std::move(rule));
     }
     constexpr int32_t kColumns = 12;
@@ -551,7 +582,7 @@ void add_floor(kit::DisplayList& list, int32_t width, int32_t top, int32_t botto
         kit::Item rule;
         rule.role = kit::Role::rule;
         rule.rect = {x, top, 1, bottom - top};
-        rule.colour = kit::colour::edge_light;
+        rule.colour = ink;
         list.items.push_back(std::move(rule));
     }
 }
@@ -630,7 +661,7 @@ void lay_language(
     constexpr int32_t kArrow = 28;
     const std::string note = show(
         "Other languages download from Core Prime. The first download makes a random install ID, "
-        "which the next step explains.",
+        "which a later step explains.",
         preview
     );
     const int32_t note_width = std::max(band.width, int32_t{1});
@@ -918,7 +949,10 @@ void lay_online(
     int32_t text_left = band.left;
     int32_t text_top = band.top;
     int32_t text_width = band.width;
-    if (band.width >= kTextFloor + kGap + 200 && band.height >= 200) {
+    // At Compact the well is a strip of the sample's header. The text takes
+    // that room, from the top of the band. Regular and Large keep the well.
+    const bool show_well = frame.size_class != kit::SizeClass::compact;
+    if (show_well && band.width >= kTextFloor + kGap + 200 && band.height >= 200) {
         const int32_t well_room = band.width - kTextFloor - kGap;
         fitted = fit_sample(well_room, band.height);
         const kit::Metrics& fitted_metrics = kit::metrics_of(fitted.size_class);
@@ -935,7 +969,7 @@ void lay_online(
             text_width = std::max(band.left + band.width - text_left, int32_t{1});
         }
     }
-    if (!beside) {
+    if (show_well && !beside) {
         const int32_t words = column_height(std::max(band.width, int32_t{1}));
         int32_t room_h = std::max(band.height - words - 8, int32_t{72});
         const int32_t cap = std::max(band.height * 2 / 5, int32_t{72});

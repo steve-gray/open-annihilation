@@ -6186,12 +6186,12 @@
 	it=Ordini;
 	}
 
-[Other languages download from Core Prime. The first download makes a random install ID, which the next step explains.]
+[Other languages download from Core Prime. The first download makes a random install ID, which a later step explains.]
 	{
-	de=Andere Sprachen kommen von Core Prime. Der erste Download erzeugt eine zufällige Installationskennung, die der nächste Schritt erklärt.;
-	fr=Les autres langues se téléchargent depuis Core Prime. Le premier téléchargement crée un identifiant d'installation aléatoire, que l'étape suivante explique.;
-	es=Otros idiomas se descargan de Core Prime. La primera descarga crea un ID de instalación aleatorio, que explica el paso siguiente.;
-	it=Le altre lingue si scaricano da Core Prime. Il primo download crea un ID di installazione casuale, che il passo successivo spiega.;
+	de=Andere Sprachen kommen von Core Prime. Der erste Download erzeugt eine zufällige Installationskennung, die ein späterer Schritt erklärt.;
+	fr=Les autres langues se téléchargent depuis Core Prime. Le premier téléchargement crée un identifiant d'installation aléatoire, qu'une étape ultérieure explique.;
+	es=Otros idiomas se descargan de Core Prime. La primera descarga crea un ID de instalación aleatorio, que explica un paso posterior.;
+	it=Le altre lingue si scaricano da Core Prime. Il primo download crea un ID di installazione casuale, che un passo più avanti spiega.;
 	}
 
 [Out to 1/16 of normal size, or the whole map. Graphics' Zoomed out units says how units look.]
