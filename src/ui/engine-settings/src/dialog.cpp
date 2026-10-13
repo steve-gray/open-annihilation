@@ -384,8 +384,17 @@ void fit_measured(
         const int32_t button = shown.control_width > 0
                                    ? shown.control_width
                                    : oa::ui::kit::compact_metrics.button_row_width;
+        // What stands at the line's right end: the button, with the lock
+        // before it, or the lock alone in the button's place when the row's
+        // hint is its status.
+        int32_t beside = button;
+        if (!shown.lock.empty()) {
+            const int32_t lock = shown.lock_columns > 0 ? shown.lock_columns
+                                                        : oa::ui::kit::compact_metrics.lock_width;
+            beside = shown.hint_is_status ? lock : lock + label_gap + button;
+        }
         const int32_t side =
-            (label_w > 0 ? label_w + label_gap : 0) + value_width + label_gap + button;
+            (label_w > 0 ? label_w + label_gap : 0) + value_width + label_gap + beside;
         if (side > available_width)
             shown.control_below = true;
     }
