@@ -62,10 +62,12 @@ constexpr std::array<Setting, 7> kControlsRows{
     Setting::switch_alt,
     Setting::window_edge,
 };
-/// Engine Limits' rows: the unit limit, then pathfinding.
-constexpr std::array<Setting, 2> kEngineLimitsRows{
+/// Engine Limits' rows: the unit limit, pathfinding, then how many player
+/// rows the skirmish setup shows.
+constexpr std::array<Setting, 3> kEngineLimitsRows{
     Setting::unit_limit,
     Setting::path_search,
+    Setting::skirmish_players,
 };
 /// Graphics' rows: how units look zoomed out, and the zoom they look so
 /// from right under the way.
@@ -778,6 +780,19 @@ void set_unit_limit_stop(SettingsModel& model, int32_t stop) {
 /// Returns the unit limit, as "250 per player".
 std::string unit_limit_text(const SettingsModel& model) {
     return std::to_string(model.settings->unit_limit) + " " + std::string(shown_text("per player"));
+}
+
+/// Skirmish players: one stop for each count from the lowest to the highest.
+using SkirmishPlayers = Linear<
+    int32_t,
+    &EngineSettings::skirmish_players,
+    lowest_skirmish_players,
+    highest_skirmish_players,
+    1>;
+
+/// Returns the skirmish player count as the slider shows it.
+std::string skirmish_players_text(const SettingsModel& model) {
+    return std::to_string(model.settings->skirmish_players);
 }
 
 // Maximum frame rate, Text size, Hold delay, Pointer speed and Gyro speed.
@@ -2377,6 +2392,14 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = engine_switch<&E::file_type_oareg>("file-type-oareg", "Registry files (.oareg)", {})},
     {.setting = S::file_types_note,
      .spec = file_types_note_row()},
+    {.setting = S::skirmish_players,
+     .spec = linear<SkirmishPlayers, &skirmish_players_text>(
+         "skirmish-players",
+         "Skirmish players",
+         {"The skirmish setup shows that many player rows.", {}}
+     ),
+     .lock = &Locks::skirmish_players,
+     .copy = &copy_field<&E::skirmish_players>},
     {.setting = S::welcome_setup,
      .spec = welcome_setup_row(),
      .lock = &Locks::welcome_setup},
@@ -2463,6 +2486,7 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "file-type-oalang",
     "file-type-oareg",
     "file-types",
+    "skirmish-players",
     "first-run",
 };
 
