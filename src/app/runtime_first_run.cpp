@@ -748,6 +748,7 @@ class FirstRunScreen final : public LayerScreen {
     }
 
     /// Takes a turn of the wheel. On the language step it moves the carousel.
+    /// On the game and copying steps it scrolls a list that does not fit.
     ///
     /// @param at the pointer, in the setup's points
     /// @param notches how far the wheel turned; positive is away from the player

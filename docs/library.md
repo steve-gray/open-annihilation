@@ -379,9 +379,11 @@ back button follow whichever of those is showing.
 - **The map previews**, for a map pack: one large picture when the pack
   holds one map, and a grid of pictures when it holds several. Each
   picture is that map's minimap, fitted the same way as the row, and under
-  it the map's name, how many players it is for, its size and its
-  description. The picture is there before you download the pack and after.
-  ![Maps, one map: the row's minimap, and a larger one in the details with the map's name, players, size and description.](images/library/library-maps-one-large.png)
+  it how many players the map is for, its size and its description. In a
+  grid each map's name comes first; under a one-map pack's picture the name
+  is left out, as the pack's title heads the details. The picture is there
+  before you download the pack and after.
+  ![Maps, one map: the row's minimap, and a larger one in the details with the map's players, size and description.](images/library/library-maps-one-large.png)
   ![Maps, several maps and no pack badge: the first map's minimap on the row, and a grid of each map in the details.](images/library/library-maps-several-large.png)
 - **The facts**:
   - **Installed**, the version you have and its packaging revision, "4.8

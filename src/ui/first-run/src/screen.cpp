@@ -1156,6 +1156,83 @@ std::string_view source_badge(SourceMark mark) noexcept {
     return "FOLDER";
 }
 
+/// The points between a list and its scroll bar, and between the copying
+/// panel's edge and the bar inside it.
+constexpr int32_t kBarGap = 4;
+/// A scroll bar's well: the thumb and its border.
+constexpr int32_t kWellWidth = kit::compact_metrics.scroll_thumb_width + 2;
+/// How far a press beside the well still holds the scroll bar, either side.
+constexpr int32_t kBarReach = 3;
+/// The room kept above and below the row a list follows, so its edge and a
+/// focus ring around it stay in view.
+constexpr int32_t kFollowMargin = 4;
+
+/// Returns where a list that does not fit scrolls, and how far.
+///
+/// The list keeps the offset the player left it at. Until the player
+/// scrolls it, it moves the least from there that shows the row it follows
+/// whole.
+///
+/// @param view what the list is seen through, in points
+/// @param well the scroll bar's well, as high as the view or a little less
+/// @param content_height the whole list's height, in points
+/// @param scroll where the player left the list
+/// @param follow_top the top of the row it follows before scrolling, in points
+/// @param follow_height that row's height; 0 follows nothing
+/// @param follow_last true when that row is the last
+/// @return the scroll area
+kit::ScrollArea list_area(
+    const kit::Rect& view,
+    const kit::Rect& well,
+    int32_t content_height,
+    const ListScroll& scroll,
+    int32_t follow_top,
+    int32_t follow_height,
+    bool follow_last
+) noexcept {
+    kit::ScrollArea area;
+    area.view = view;
+    area.well = well;
+    area.hit = {well.x - kBarReach, well.y, well.width + 2 * kBarReach, well.height};
+    area.page_step = std::max(view.height - list_step, list_step);
+    area.content_height = content_height;
+    area.limit = kit::ScrollArea::limit_for(content_height, view.height);
+    area.offset = std::clamp(scroll.offset, int32_t{0}, area.limit);
+    if (!scroll.held && follow_height > 0)
+        area.offset = area.offset_showing(follow_top, follow_height, follow_last);
+    return area;
+}
+
+/// Adds a list's scroll bar.
+///
+/// @param[in,out] list the display list
+/// @param area where the list scrolls
+/// @param scroll the press on it, which lights it while it is held
+void add_list_bar(kit::DisplayList& list, const kit::ScrollArea& area, const ListScroll& scroll) {
+    kit::Item bar;
+    bar.role = kit::Role::scroll_bar;
+    bar.rect = area.well;
+    bar.look = kit::ScrollBarLook{
+        area.thumb(kit::compact_metrics.least_thumb_height), scroll.dragging && scroll.by_bar
+    };
+    list.items.push_back(std::move(bar));
+}
+
+/// Clips what was added to a display list since a point in it.
+///
+/// @param[in,out] list the display list
+/// @param items_from the first item to clip
+/// @param controls_from the first control to clip
+/// @param clip what drawing and a press may reach
+void clip_since(
+    kit::DisplayList& list, std::size_t items_from, std::size_t controls_from, const kit::Rect& clip
+) {
+    for (std::size_t at = items_from; at < list.items.size(); ++at)
+        list.items[at].clip = clip;
+    for (std::size_t at = controls_from; at < list.controls.size(); ++at)
+        list.controls[at].clip = clip;
+}
+
 /// Returns a footer button's width: button_width, or the caption with the
 /// same inset the footer's buttons keep either side of the word. Without
 /// the game's fonts, or with fonts that have no glyphs, the caption is
@@ -1193,7 +1270,9 @@ int32_t chip_width(const kit::Fonts* fonts, std::string_view text, int32_t room)
 /// Lays the game step out: the sources that were found, and Locate another.
 ///
 /// The column is as wide as Settings' panel. Each row holds its path and the bundles it has,
-/// and the rows are separated by the panel's padding.
+/// and the rows are separated by the panel's padding. Rows that do not fit
+/// above Locate another… and the line under it scroll between the title and
+/// Locate another…, with a scroll bar right of them.
 ///
 /// @param[in,out] scene the scene
 /// @param session the session
@@ -1208,12 +1287,11 @@ void lay_game(
     add_chrome(scene, order, session, width, height, true, true, nullptr);
     const Band band = content_band(width, height);
     const kit::Metrics& metrics = kit::metrics_of(frame.size_class);
-    const int32_t column = std::min(band.width, metrics.dialog_width);
+    int32_t column = std::min(band.width, metrics.dialog_width);
     const int32_t left = band.left + std::max((band.width - column) / 2, int32_t{0});
     // The choice card's text starts after the radio, and stops short of the card's right edge.
     constexpr int32_t kTextInset = 24;
     constexpr int32_t kTextEnd = 6;
-    const int32_t text_w = std::max(column - kTextInset - kTextEnd, int32_t{1});
     const int32_t text_left = left + kTextInset;
 
     int32_t row = add_title(
@@ -1224,80 +1302,172 @@ void lay_game(
         show("OA copies the game once. The installation is left as it is.")
     );
     row += metrics.padding;
+    const int32_t list_top = row;
 
     constexpr int32_t kCardPad = 6;
     constexpr int32_t kChipGap = 6;
     const int32_t chip_h = kit::pill_height();
     const auto count = static_cast<int32_t>(session.model.sources.size());
-    for (int32_t index = 0; index < count; ++index) {
-        const GameSource& source = session.model.sources[static_cast<std::size_t>(index)];
-        std::string hint = std::string(source_badge(source.mark));
-        if (!source.detail.empty()) {
-            hint += " · ";
-            hint += source.detail;
-        }
-        if (!source.status.empty()) {
-            hint += " · ";
-            hint += source.status;
-        }
 
-        struct ChipSpot {
-            std::string text{};
-            int32_t x{};
-            int32_t y{};
-            int32_t width{};
-        };
+    struct ChipSpot {
+        std::string text{};
+        int32_t x{};
+        int32_t y{};
+        int32_t width{};
+    };
 
-        std::vector<ChipSpot> spots;
-        int32_t cursor = 0;
-        int32_t chip_row = 0;
-        for (const SourceChip& chip : source.chips) {
-            if (!chip.held || chip.name.empty())
-                continue;
-            const int32_t pill_w = chip_width(fonts, chip.name, text_w);
-            if (cursor > 0 && cursor + pill_w > text_w) {
-                cursor = 0;
-                ++chip_row;
+    /// One row's words and its chips, laid out for the text's width.
+    struct CardPlan {
+        std::string hint{};
+        std::vector<ChipSpot> spots{};
+        int32_t chip_block{};
+        int32_t hint_h{};
+        int32_t height{};
+    };
+
+    const auto plan_cards = [&](int32_t words_width) {
+        std::vector<CardPlan> made;
+        for (const GameSource& source : session.model.sources) {
+            CardPlan plan;
+            plan.hint = std::string(source_badge(source.mark));
+            if (!source.detail.empty()) {
+                plan.hint += " · ";
+                plan.hint += source.detail;
             }
-            ChipSpot spot;
-            spot.text = chip.name;
-            spot.x = cursor;
-            spot.y = chip_row * (chip_h + kChipGap);
-            spot.width = pill_w;
-            cursor += pill_w + kChipGap;
-            spots.push_back(std::move(spot));
+            if (!source.status.empty()) {
+                plan.hint += " · ";
+                plan.hint += source.status;
+            }
+            int32_t cursor = 0;
+            int32_t chip_row = 0;
+            for (const SourceChip& chip : source.chips) {
+                if (!chip.held || chip.name.empty())
+                    continue;
+                const int32_t pill_w = chip_width(fonts, chip.name, words_width);
+                if (cursor > 0 && cursor + pill_w > words_width) {
+                    cursor = 0;
+                    ++chip_row;
+                }
+                ChipSpot spot;
+                spot.text = chip.name;
+                spot.x = cursor;
+                spot.y = chip_row * (chip_h + kChipGap);
+                spot.width = pill_w;
+                cursor += pill_w + kChipGap;
+                plan.spots.push_back(std::move(spot));
+            }
+            const int32_t chip_rows = plan.spots.empty() ? 0 : chip_row + 1;
+            plan.chip_block = chip_rows == 0 ? 0 : chip_rows * chip_h + (chip_rows - 1) * kChipGap;
+            plan.hint_h = std::max(
+                paragraph_height(fonts, words_width, plan.hint, kit::FontRole::small),
+                metrics.small_line
+            );
+            const int32_t note_h =
+                source.footnote.empty()
+                    ? 0
+                    : paragraph_height(fonts, words_width, source.footnote, kit::FontRole::small);
+            int32_t card_h = kCardPad + metrics.regular_line + metrics.hint_gap + plan.hint_h;
+            if (plan.chip_block > 0)
+                card_h += metrics.hint_gap + plan.chip_block;
+            if (note_h > 0)
+                card_h += metrics.hint_gap + note_h;
+            card_h += kCardPad;
+            plan.height = std::max(card_h, kit::choice_card_height());
+            made.push_back(std::move(plan));
         }
-        const int32_t chip_rows = spots.empty() ? 0 : chip_row + 1;
-        const int32_t chip_block =
-            chip_rows == 0 ? 0 : chip_rows * chip_h + (chip_rows - 1) * kChipGap;
-        const int32_t hint_h = std::max(
-            paragraph_height(fonts, text_w, hint, kit::FontRole::small), metrics.small_line
-        );
-        const int32_t note_h =
-            source.footnote.empty()
-                ? 0
-                : paragraph_height(fonts, text_w, source.footnote, kit::FontRole::small);
-        int32_t card_h = kCardPad + metrics.regular_line + metrics.hint_gap + hint_h;
-        if (chip_block > 0)
-            card_h += metrics.hint_gap + chip_block;
-        if (note_h > 0)
-            card_h += metrics.hint_gap + note_h;
-        card_h += kCardPad;
-        card_h = std::max(card_h, kit::choice_card_height());
+        return made;
+    };
+    const auto list_height = [&](const std::vector<CardPlan>& planned) {
+        int32_t total = 0;
+        for (const CardPlan& plan : planned)
+            total += plan.height + metrics.padding;
+        return std::max(total - metrics.padding, int32_t{0});
+    };
 
+    int32_t text_w = std::max(column - kTextInset - kTextEnd, int32_t{1});
+    std::vector<CardPlan> plans = plan_cards(text_w);
+    int32_t content_height = list_height(plans);
+
+    // Under the rows: Locate another…, the line under it, and with a
+    // controller the band's last line, which its hint takes.
+    const std::string locate = show("Locate another…");
+    const std::string copies = show("Copies go to Documents › Open Annihilation");
+    const int32_t button_height = kit::compact_metrics.button_height;
+    const int32_t under_rows =
+        metrics.padding + button_height + 8 +
+        paragraph_height(fonts, column, copies, kit::FontRole::small) +
+        (session.model.controller ? kit::compact_metrics.small_line : int32_t{0});
+    const int32_t room = std::max(band.top + band.height - under_rows - list_top, int32_t{0});
+    const bool scrolls = count > 0 && content_height > room;
+    if (scrolls && left + column + kBarGap + kWellWidth > band.left + band.width) {
+        // No room right of the rows for the scroll bar, so the rows give it theirs.
+        column = std::max(column - kBarGap - kWellWidth, int32_t{1});
+        text_w = std::max(column - kTextInset - kTextEnd, int32_t{1});
+        plans = plan_cards(text_w);
+        content_height = list_height(plans);
+    }
+
+    std::vector<int32_t> tops;
+    int32_t top = 0;
+    for (const CardPlan& plan : plans) {
+        tops.push_back(top);
+        top += plan.height + metrics.padding;
+    }
+    kit::ScrollArea area;
+    kit::Rect clip{};
+    if (scrolls) {
+        const kit::Rect view{left, list_top, column, room};
+        const kit::Rect well{left + column + kBarGap, list_top, kWellWidth, room};
+        // The list follows the place the focus is on, else the chosen one.
+        int32_t followed = -1;
+        const kit::ControlId focused = session.interaction.focused;
+        if (focused >= source_id && focused < source_id + count)
+            followed = focused - source_id;
+        else if (session.model.source >= 0 && session.model.source < count)
+            followed = session.model.source;
+        int32_t follow_top = 0;
+        int32_t follow_height = 0;
+        if (followed >= 0) {
+            const auto at = static_cast<std::size_t>(followed);
+            follow_top = list_top + tops[at] - kFollowMargin;
+            follow_height = plans[at].height + 2 * kFollowMargin;
+        }
+        area = list_area(
+            view,
+            well,
+            content_height,
+            session.source_list,
+            follow_top,
+            follow_height,
+            followed == count - 1
+        );
+        scene.list_scroll = area;
+        // The focus ring stands just outside a row, so the clip leaves it
+        // room at the sides.
+        clip = {
+            left - kFollowMargin, list_top, column + 2 * kFollowMargin, std::max(room, int32_t{1})
+        };
+    }
+
+    for (int32_t index = 0; index < count; ++index) {
+        const auto at = static_cast<std::size_t>(index);
+        const GameSource& source = session.model.sources[at];
+        const CardPlan& plan = plans[at];
+        const std::size_t items_from = scene.list.items.size();
+        const std::size_t controls_from = scene.list.controls.size();
         kit::ChoiceCardLook card;
         card.title = source.title;
-        card.hint = std::move(hint);
+        card.hint = plan.hint;
         card.chosen = session.model.source == index;
-        const kit::Rect rect{left, row, column, card_h};
+        const kit::Rect rect = area.placed({left, list_top + tops[at], column, plan.height});
         const kit::ControlId id = source_id + index;
         kit::add_choice_card(
             scene.list, rect, card, id, control_name(Step::game, "source." + std::to_string(index))
         );
         order.insert(order.begin(), id);
-        const int32_t chips_y =
-            rect.y + kCardPad + metrics.regular_line + metrics.hint_gap + hint_h + metrics.hint_gap;
-        for (const ChipSpot& spot : spots) {
+        const int32_t chips_y = rect.y + kCardPad + metrics.regular_line + metrics.hint_gap +
+                                plan.hint_h + metrics.hint_gap;
+        for (const ChipSpot& spot : plan.spots) {
             kit::PillLook pill;
             pill.text = spot.text;
             pill.state = card.chosen ? kit::PillState::active : kit::PillState::neutral;
@@ -1311,7 +1481,7 @@ void lay_game(
         }
         if (!source.footnote.empty()) {
             const int32_t note_y =
-                chip_block > 0 ? chips_y + chip_block + metrics.hint_gap : chips_y;
+                plan.chip_block > 0 ? chips_y + plan.chip_block + metrics.hint_gap : chips_y;
             add_paragraph(
                 scene.list,
                 fonts,
@@ -1323,11 +1493,16 @@ void lay_game(
                 kit::colour::quiet
             );
         }
-        row += card_h + metrics.padding;
+        if (scrolls)
+            clip_since(scene.list, items_from, controls_from, clip);
     }
+    if (scrolls)
+        add_list_bar(scene.list, area, session.source_list);
+    if (scrolls)
+        row = list_top + room + metrics.padding;
+    else if (count > 0)
+        row = list_top + content_height + metrics.padding;
 
-    const std::string locate = show("Locate another…");
-    const int32_t button_height = kit::compact_metrics.button_height;
     const int32_t locate_w =
         std::min(footer_button_width(fonts, locate), std::max(column, int32_t{1}));
     const kit::Rect locate_rect{
@@ -1350,7 +1525,7 @@ void lay_game(
         left,
         row,
         column,
-        show("Copies go to Documents › Open Annihilation"),
+        copies,
         kit::FontRole::small,
         kit::colour::quiet,
         kit::Align::centre
@@ -1371,7 +1546,43 @@ void lay_game(
     scene.list.tab_order = std::move(order);
 }
 
+/// The copy row the copying step's list follows: the bundle being copied;
+/// else the first that differs; else the first whose result is a note; else
+/// the last that is done.
+///
+/// @param copy the copy
+/// @return its index; -1 when no bundle has started
+int32_t followed_bundle(const CopyView& copy) noexcept {
+    const auto count = static_cast<int32_t>(copy.bundles.size());
+    const auto first_where = [&](auto test) {
+        for (int32_t index = 0; index < count; ++index) {
+            if (test(copy.bundles[static_cast<std::size_t>(index)]))
+                return index;
+        }
+        return int32_t{-1};
+    };
+    int32_t found =
+        first_where([](const CopyBundle& bundle) { return bundle.phase == CopyPhase::copying; });
+    if (found < 0)
+        found =
+            first_where([](const CopyBundle& bundle) { return bundle.phase == CopyPhase::differ; });
+    if (found < 0)
+        found = first_where([](const CopyBundle& bundle) {
+            return bundle.phase == CopyPhase::done && bundle.note;
+        });
+    for (int32_t index = count - 1; found < 0 && index >= 0; --index) {
+        if (copy.bundles[static_cast<std::size_t>(index)].phase == CopyPhase::done)
+            found = index;
+    }
+    return found;
+}
+
 /// Lays the copying step out: the overall bar, one row a bundle, and the check.
+///
+/// The two lines at the band's foot keep their places: the note that a copy
+/// carries on, then where the copies go, over the line the controller's hint
+/// takes. The bundles' panel ends above them, and rows that do not fit
+/// scroll inside it, with a scroll bar at its right.
 ///
 /// @param[in,out] scene the scene
 /// @param session the session
@@ -1440,24 +1651,74 @@ void lay_copying(
     }
     row += 8;
 
+    // The foot of the band, from the bottom up: the controller's hint, where
+    // the copies go, and the note.
+    const std::string note = show("If OA stops, the copy carries on from here next time.");
+    const std::string destination = show("To Documents › Open Annihilation › Games and Expansions");
+    const int32_t hint_top = band.top + band.height - kit::compact_metrics.small_line;
+    const int32_t destination_top =
+        hint_top - paragraph_height(fonts, column, destination, kit::FontRole::small);
+    const int32_t note_top =
+        destination_top - paragraph_height(fonts, column, note, kit::FontRole::small);
+
     if (!copy.bundles.empty()) {
         const int32_t pad = kit::compact_metrics.padding;
-        const int32_t inner_left = left + pad;
-        const int32_t inner_width = std::max(column - 2 * pad, int32_t{1});
-        const std::size_t panel_at = scene.list.items.size();
+        // A row: the name, the file or the result, the bar, and the amount.
+        constexpr int32_t kBarGapAbove = 4;
+        constexpr int32_t kBarStep = 10;
+        constexpr int32_t kRuleAbove = 8;
+        constexpr int32_t kRuleStep = 9;
+        const int32_t row_height = kit::compact_metrics.regular_line +
+                                   kit::compact_metrics.small_line + kBarGapAbove + kBarStep +
+                                   kit::compact_metrics.small_line;
+        const auto count = static_cast<int32_t>(copy.bundles.size());
+        const int32_t content_height =
+            pad + count * row_height + (count - 1) * (kRuleAbove + kRuleStep) + pad;
+        const int32_t room = std::max(note_top - 8 - row, int32_t{0});
+        const bool scrolls = content_height > room;
+        const int32_t panel_height = scrolls ? room : content_height;
+        const kit::Rect panel_rect{left, row, column, panel_height};
         kit::Item panel;
         panel.role = kit::Role::fill;
-        panel.rect = {left, row, column, 0};
+        panel.rect = panel_rect;
         panel.colour = kit::colour::list;
         scene.list.items.push_back(panel);
         kit::Item edge;
         edge.role = kit::Role::bevel;
-        edge.rect = panel.rect;
+        edge.rect = panel_rect;
         edge.colour = kit::colour::edge_light;
         scene.list.items.push_back(edge);
 
-        int32_t y = row + pad;
-        const auto count = static_cast<int32_t>(copy.bundles.size());
+        const int32_t inner_left = left + pad;
+        int32_t inner_width = std::max(column - 2 * pad, int32_t{1});
+        kit::ScrollArea area;
+        // Inside the panel's raised edge.
+        const kit::Rect clip{left + 1, row + 1, column - 2, std::max(panel_height - 2, int32_t{1})};
+        if (scrolls) {
+            const kit::Rect well{
+                left + column - 1 - kBarGap - kWellWidth,
+                row + 1 + kBarGap,
+                kWellWidth,
+                std::max(panel_height - 2 - 2 * kBarGap, int32_t{0})
+            };
+            inner_width = std::max(well.x - kBarGap - inner_left, int32_t{1});
+            const int32_t followed = followed_bundle(copy);
+            const int32_t follow_top =
+                row + pad + followed * (row_height + kRuleAbove + kRuleStep) - kRuleAbove;
+            area = list_area(
+                panel_rect,
+                well,
+                content_height,
+                session.copy_list,
+                follow_top,
+                followed < 0 ? 0 : row_height + 2 * kRuleAbove,
+                followed == count - 1
+            );
+            scene.list_scroll = area;
+        }
+        const std::size_t rows_from = scene.list.items.size();
+
+        int32_t y = row + pad - area.offset;
         for (int32_t index = 0; index < count; ++index) {
             const CopyBundle& bundle = copy.bundles[static_cast<std::size_t>(index)];
             add_text(
@@ -1488,11 +1749,11 @@ void lay_copying(
                 );
             }
             y += kit::compact_metrics.small_line;
-            y += 4;
+            y += kBarGapAbove;
             kit::add_progress(
                 scene.list, {inner_left, y, inner_width, 6}, bundle.done, bundle.whole
             );
-            y += 10;
+            y += kBarStep;
             // The amount under the bar is the live count while the file
             // copies. The same height stays once the result has moved up,
             // so the row does not change height.
@@ -1507,28 +1768,28 @@ void lay_copying(
             }
             y += kit::compact_metrics.small_line;
             if (index + 1 < count) {
-                y += 8;
+                y += kRuleAbove;
                 kit::Item rule;
                 rule.role = kit::Role::rule;
                 rule.rect = {inner_left, y, inner_width, 1};
                 rule.colour = kit::colour::rule;
                 scene.list.items.push_back(std::move(rule));
-                y += 9;
+                y += kRuleStep;
             }
         }
-        y += pad;
-        scene.list.items[panel_at].rect.height = y - row;
-        scene.list.items[panel_at + 1].rect.height = y - row;
-        row = y + 8;
+        if (scrolls) {
+            clip_since(scene.list, rows_from, scene.list.controls.size(), clip);
+            add_list_bar(scene.list, area, session.copy_list);
+        }
     }
 
     add_paragraph(
         scene.list,
         fonts,
         left,
-        std::max(row, band.top + band.height - kit::compact_metrics.small_line * 3),
+        note_top,
         column,
-        show("If OA stops, the copy carries on from here next time."),
+        note,
         kit::FontRole::small,
         kit::colour::quiet,
         kit::Align::centre
@@ -1538,7 +1799,7 @@ void lay_copying(
             scene.list,
             fonts,
             left,
-            band.top + band.height - kit::compact_metrics.small_line,
+            hint_top,
             column,
             show("A continues. B goes back."),
             kit::FontRole::small,
@@ -1546,13 +1807,13 @@ void lay_copying(
             kit::Align::centre
         );
     }
-    add_text(
+    add_paragraph(
         scene.list,
-        {left,
-         band.top + band.height - kit::compact_metrics.small_line * 2,
-         column,
-         kit::compact_metrics.small_line},
-        show("To Documents › Open Annihilation › Games and Expansions"),
+        fonts,
+        left,
+        destination_top,
+        column,
+        destination,
         kit::FontRole::small,
         kit::colour::quiet,
         kit::Align::centre
@@ -1746,6 +2007,142 @@ void lay_buttons(
     scene.list.tab_order = std::move(order);
 }
 
+/// The list of the step on screen.
+///
+/// @param session the session
+/// @return the game step's or the copying step's list; null on the other steps
+ListScroll* list_of(Session& session) noexcept {
+    if (session.model.step == Step::game)
+        return &session.source_list;
+    if (session.model.step == Step::copying)
+        return &session.copy_list;
+    return nullptr;
+}
+
+/// How far the step's list is moved up now. A list the player has scrolled
+/// is where they left it, even when several turns or keys arrive before
+/// the host lays the step out again.
+///
+/// @param session the session
+/// @param scene the layout, with the list's scroll area
+/// @return the offset, in points
+int32_t list_offset(const Session& session, const Scene& scene) noexcept {
+    const kit::ScrollArea& area = scene.list_scroll;
+    const ListScroll* scroll = session.model.step == Step::game      ? &session.source_list
+                               : session.model.step == Step::copying ? &session.copy_list
+                                                                     : nullptr;
+    if (scroll == nullptr || !scroll->held)
+        return area.offset;
+    return std::clamp(scroll->offset, int32_t{0}, std::max(area.limit, int32_t{0}));
+}
+
+/// Scrolls the step's list to an offset, and keeps it there.
+///
+/// @param[in,out] session the session
+/// @param scene the layout, with the list's scroll area
+/// @param offset how far the list is wanted moved up, in points
+/// @return true when the list moved
+bool scroll_list_to(Session& session, const Scene& scene, int32_t offset) noexcept {
+    ListScroll* scroll = list_of(session);
+    const kit::ScrollArea& area = scene.list_scroll;
+    if (scroll == nullptr || area.limit <= 0)
+        return false;
+    const int32_t was = list_offset(session, scene);
+    scroll->held = true;
+    scroll->offset = std::clamp(offset, int32_t{0}, area.limit);
+    return scroll->offset != was;
+}
+
+/// Takes a pointer on the step's list while the list scrolls.
+///
+/// A press on the scroll bar's thumb drags the thumb; a press on the bar
+/// beside the thumb moves a page toward the press, then drags. A press on
+/// the list where no control takes it drags the list. The press's moves and
+/// its release go to the list until it is let go.
+///
+/// @param[in,out] session the session
+/// @param scene the layout
+/// @param kind where the finger is
+/// @param at the finger, in the screen's points
+/// @param[out] redraw true when the list or its bar changed
+/// @return true when the list took the pointer
+bool list_pointer(
+    Session& session, const Scene& scene, PointerKind kind, kit::Point at, bool& redraw
+) {
+    redraw = false;
+    ListScroll* scroll = list_of(session);
+    if (scroll == nullptr)
+        return false;
+    const kit::ScrollArea& area = scene.list_scroll;
+    constexpr int32_t kLeastThumb = kit::compact_metrics.least_thumb_height;
+    if (scroll->dragging && kind == PointerKind::move) {
+        int32_t wanted = scroll->press_offset - (at.y - scroll->press_y);
+        if (scroll->by_bar) {
+            kit::ScrollArea pressed = area;
+            pressed.offset = std::clamp(scroll->press_offset, int32_t{0}, area.limit);
+            const int32_t thumb_top = pressed.thumb(kLeastThumb).y + (at.y - scroll->press_y);
+            wanted = area.offset_at(thumb_top, kLeastThumb);
+        }
+        redraw = scroll_list_to(session, scene, wanted);
+        return true;
+    }
+    if (scroll->dragging) {
+        redraw = scroll->by_bar;
+        scroll->dragging = false;
+        scroll->by_bar = false;
+        if (kind == PointerKind::up)
+            return true;
+    }
+    if (kind != PointerKind::down || area.limit <= 0)
+        return false;
+    kit::ScrollArea shown = area;
+    shown.offset = list_offset(session, scene);
+    if (kit::contains(area.hit, at)) {
+        const kit::Rect thumb = shown.thumb(kLeastThumb);
+        if (at.y < thumb.y)
+            std::ignore = scroll_list_to(session, scene, shown.offset - area.page_step);
+        else if (at.y >= thumb.y + thumb.height)
+            std::ignore = scroll_list_to(session, scene, shown.offset + area.page_step);
+        scroll->dragging = true;
+        scroll->by_bar = true;
+        scroll->press_y = at.y;
+        scroll->press_offset = list_offset(session, scene);
+        redraw = true;
+        return true;
+    }
+    if (kit::contains(area.view, at) && kit::hit(scene.list, at) == kit::no_control) {
+        scroll->dragging = true;
+        scroll->by_bar = false;
+        scroll->press_y = at.y;
+        scroll->press_offset = shown.offset;
+        return true;
+    }
+    return false;
+}
+
+/// Lets the game step's list follow a place again, from where it is now, so
+/// it moves no more than it must to show that place.
+///
+/// @param[in,out] session the session
+/// @param scene the layout the list is in now
+void follow_places(Session& session, const Scene& scene) noexcept {
+    session.source_list.offset = scene.list_scroll.offset;
+    session.source_list.held = false;
+}
+
+/// Lets the game step's list follow again once the focus moves onto a place.
+///
+/// @param[in,out] session the session
+/// @param scene the layout the list is in now
+/// @param was the control the focus was on before
+void follow_focused_place(Session& session, const Scene& scene, kit::ControlId was) noexcept {
+    const kit::ControlId now = session.interaction.focused;
+    const auto count = static_cast<kit::ControlId>(session.model.sources.size());
+    if (session.model.step == Step::game && now != was && now >= source_id &&
+        now < source_id + count)
+        follow_places(session, scene);
+}
+
 /// What a control asks for.
 ///
 /// @param[in,out] session the session
@@ -1813,6 +2210,10 @@ Outcome activate(Session& session, const Scene& scene, kit::ControlId id) {
         const int32_t index = id - source_id;
         if (index < 0 || index >= static_cast<int32_t>(session.model.sources.size()))
             return outcome;
+        // The list follows the place chosen, even after the player scrolled it.
+        if (session.source_list.held)
+            outcome.redraw = true;
+        follow_places(session, scene);
         if (session.model.source != index) {
             session.model.source = index;
             session.interaction.focused = id;
@@ -1996,6 +2397,7 @@ void reset_copy_continue(Session& session) noexcept {
     session.copy_continue_ms = -1;
     session.copy_continue_armed = false;
     session.copy_continue_stopped = false;
+    session.copy_list = {};
 }
 
 void ensure_focus(Session& session, const kit::DisplayList& list) {
@@ -2062,6 +2464,11 @@ Outcome pointer(
 ) {
     Outcome outcome;
     const bool stopped = kind != PointerKind::move && stop_copy_continue(session);
+    bool list_moved = false;
+    if (list_pointer(session, scene, kind, at, list_moved)) {
+        outcome.redraw = list_moved || stopped;
+        return outcome;
+    }
     if (session.model.step == Step::language && !scene.places.empty()) {
         const kit::PointerPhase phase = kind == PointerKind::move   ? kit::PointerPhase::move
                                         : kind == PointerKind::down ? kit::PointerPhase::down
@@ -2113,6 +2520,34 @@ Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
         outcome.ask = Ask::advance;
         return outcome;
     }
+    // A list that does not fit scrolls under the paging keys, and on the
+    // copying step, whose list holds no control, under Up and Down too.
+    if (list_of(session) != nullptr && scene.list_scroll.limit > 0) {
+        const kit::ScrollArea& area = scene.list_scroll;
+        const bool copying = session.model.step == Step::copying;
+        const int32_t now = list_offset(session, scene);
+        bool scrolls = true;
+        int32_t wanted = now;
+        if (pressed == kit::Key::page_up)
+            wanted = now - area.page_step;
+        else if (pressed == kit::Key::page_down)
+            wanted = now + area.page_step;
+        else if (pressed == kit::Key::home)
+            wanted = 0;
+        else if (pressed == kit::Key::end)
+            wanted = area.limit;
+        else if (copying && pressed == kit::Key::up)
+            wanted = now - list_step;
+        else if (copying && pressed == kit::Key::down)
+            wanted = now + list_step;
+        else
+            scrolls = false;
+        if (scrolls) {
+            if (scroll_list_to(session, scene, wanted))
+                outcome.redraw = true;
+            return outcome;
+        }
+    }
     if (pressed == kit::Key::escape) {
         if (session.model.step == Step::copying && !session.model.copy.checked)
             outcome.ask = Ask::cancel_copy;
@@ -2150,6 +2585,7 @@ Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
         return outcome;
     }
     if (taken.result == kit::KeyResult::redraw) {
+        follow_focused_place(session, scene, focused);
         outcome.redraw = true;
         return outcome;
     }
@@ -2169,10 +2605,21 @@ Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
     return outcome;
 }
 
-Outcome wheel(Session& session, const Scene& /*scene*/, float notches) {
+Outcome wheel(Session& session, const Scene& scene, float notches) {
     Outcome outcome;
     if (notches != 0.F && stop_copy_continue(session))
         outcome.redraw = true;
+    if (ListScroll* scroll = list_of(session); scroll != nullptr) {
+        const kit::ScrollArea& area = scene.list_scroll;
+        if (area.limit > 0 && notches != 0.F) {
+            const int32_t wanted = kit::wheel_offset(
+                scroll->wheel, notches, list_step, list_offset(session, scene), area.limit
+            );
+            if (scroll_list_to(session, scene, wanted))
+                outcome.redraw = true;
+        }
+        return outcome;
+    }
     if (session.model.step != Step::language || session.carousel.count <= 1 || notches == 0.F)
         return outcome;
     // A turn away from the player is the previous card. One card does not move.
@@ -2187,8 +2634,12 @@ void draw(const kit::Canvas& canvas, const Scene& scene, const Session& session)
     kit::DisplayList list = scene.list;
     kit::mark_states(list, session.interaction);
     if (session.interaction.focus_shown) {
-        if (const kit::Control* control = kit::control_of(list, session.interaction.focused))
+        if (const kit::Control* control = kit::control_of(list, session.interaction.focused)) {
+            // A row of a list that scrolls rings only the part in view.
+            const kit::Rect clip = control->clip;
             kit::add_focus_ring(list, control->rect, true);
+            list.items.back().clip = clip;
+        }
     }
     if (session.model.step == Step::buttons) {
         const kit::Rect library = kit::grown(session.model.library_button, 4);
