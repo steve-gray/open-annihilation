@@ -144,6 +144,10 @@ Steam, still in Desktop Mode:
    current layout, then **Templates**, and pick **Open Annihilation**.
 3. Choose **Play**.
 
+A later start opens as you left it. In Game Mode the first start is still
+the screen's size. A window you leave is kept only as far as it fits that
+screen.
+
 At its first start the game looks for Total Annihilation where Steam,
 Heroic, Lutris and Bottles put it: Steam's copy in any of your Steam
 libraries, SD cards included, a Heroic install, a Lutris or Wine prefix in
@@ -276,10 +280,11 @@ for any game.
 
 In Game Mode the window opens at the screen's size, 1280×800 on the Deck's
 own screen, unless `--resolution` or the **Screen size** setting names
-another. Steam shows a larger window shrunk to fit, but its pointer stops
-short of that window's lower and right edges, so leave Screen size at
-**Desktop**. The log says the size the window opened at (see
-[Logs](#logs-and-reporting-a-problem)).
+another. A later start opens as you left it, and a remembered window is
+kept only as far as it fits the screen. Steam shows a larger window shrunk
+to fit, but its pointer stops short of that window's lower and right
+edges, so leave Screen size at **Desktop**. The log says the size the
+window opened at (see [Logs](#logs-and-reporting-a-problem)).
 
 ## The touch screen
 

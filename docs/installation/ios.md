@@ -204,7 +204,8 @@ tap **Check again**.
 
 ## 8. Play
 
-Open **Open Annihilation**. The game is landscape only: turn the device on
+Open **Open Annihilation**. The game fills the screen; a phone or tablet
+has no desktop window to place. It is landscape only: turn the device on
 its side. [touch-controls.md](../touch-controls.md) describes the
 gestures and the layouts for phones and tablets. A keyboard, mouse or
 trackpad connected to the device works as on a computer.
