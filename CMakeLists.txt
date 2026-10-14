@@ -3480,7 +3480,7 @@ if(TARGET oa-app-game-options AND TARGET oa-app-netgame-options)
   target_link_libraries(oa-app-game-options PRIVATE oa-app-netgame-options)
 endif()
 if(TARGET oa-app-netgame)
-  oa_add_extension(oa-app-netgame INIT oa_extension_init_netgame SWITCHES cehnpt)
+  oa_add_extension(oa-app-netgame INIT oa_extension_init_netgame SWITCHES cehnpty)
 endif()
 # The automation endpoint: the automation protocol's codec, and the
 # endpoint a program on this machine drives the game through, oa-game's

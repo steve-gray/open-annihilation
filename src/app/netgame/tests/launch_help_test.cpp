@@ -75,7 +75,10 @@ std::string ini_table() {
     return table;
 }
 
-/// Reads a whole file.
+/// Reads a whole file, with its line endings as LF.
+///
+/// A Windows checkout may hold the page with CRLF endings; the tables and
+/// examples are compared line by line, so the endings must not count.
 ///
 /// @param path the file
 /// @return its text; empty when it cannot be read
@@ -84,6 +87,7 @@ std::string read_text(const char* path) {
     std::string text;
     if (input)
         text.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+    std::erase(text, '\r');
     return text;
 }
 
