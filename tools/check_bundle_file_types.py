@@ -2,14 +2,15 @@
 # SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Check that the macOS and iOS bundles declare .oamod, .oalang, .oamap and .oareg as the game's own types.
+"""Check that the macOS and iOS bundles declare .oamod, .oalang, .oamap, .oareg and .oalaunch as the game's own types.
 
 Reads the two Info.plist templates (src/app/Info.plist.in and platforms/ios/Info.plist.in, or
 the two named) as property lists and fails unless each, for every type in TYPES:
 
   exports    the type (UTExportedTypeDeclarations), named as the table says, conforming to
-             public.data alone, with the file name extension and the MIME type, as the
-             run-time registration (src/platform/file-types) names them;
+             public.data alone (public.plain-text alone for a launch file), with the file
+             name extension and the MIME type, as the run-time registration
+             (src/platform/file-types) names them;
   opens      that type as its owner (CFBundleDocumentTypes: LSHandlerRank Owner, the role
              Viewer, the type alone in LSItemContentTypes);
   icon       on macOS, gives the type the icon the system draws from the app's icon
@@ -18,7 +19,10 @@ the two named) as property lists and fails unless each, for every type in TYPES:
              cmake/OaGameBundle.cmake takes from branding/ and that is there; on iOS, names no
              icon file, since iOS draws document icons from the app's icon;
   in place   on iOS, still opens documents in place (LSSupportsOpeningDocumentsInPlace),
-             which the Files app needs, and still declares the game's archive type.
+             which the Files app needs, and still declares the game's archive type;
+  plain text on macOS, takes plain text it is handed without being its opener (one document
+             type of public.plain-text alone, LSHandlerRank None), so that `open -f -a`
+             hands the game a launch piped in.
 
 Exit status is 1 on any finding and 2 when a file cannot be read.
 """
@@ -29,19 +33,21 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-# type id, name, extension, MIME type, the header constants' prefix.
+# type id, name, extension, MIME type, the header constants' prefix, what it conforms to.
 TYPES = (
     ("net.coreprime.open-annihilation.oamod", "Open Annihilation mod", "oamod",
-     "application/x-oamod", "mod"),
+     "application/x-oamod", "mod", ["public.data"]),
     ("net.coreprime.open-annihilation.oalang", "Open Annihilation language pack", "oalang",
-     "application/x-oalang", "language"),
+     "application/x-oalang", "language", ["public.data"]),
     ("net.coreprime.open-annihilation.oamap", "Open Annihilation map pack", "oamap",
-     "application/x-oamap", "map"),
+     "application/x-oamap", "map", ["public.data"]),
     ("net.coreprime.open-annihilation.oareg", "Open Annihilation registry", "oareg",
-     "application/x-oareg", "registry"),
+     "application/x-oareg", "registry", ["public.data"]),
+    ("net.coreprime.open-annihilation.oalaunch", "Open Annihilation launch file", "oalaunch",
+     "application/x-oalaunch", "launch", ["public.plain-text"]),
 )
 BUNDLE_ID = "net.coreprime.open-annihilation"
-CONFORMS_TO = ["public.data"]
+PLAIN_TEXT = "public.plain-text"
 ARCHIVE_TYPE_ID = "net.coreprime.open-annihilation.game-archive"
 ICON_PLACEHOLDER = "${MACOSX_BUNDLE_ICON_FILE}"
 # The run-time registration's constants, which the bundles must agree with.
@@ -79,7 +85,8 @@ def read_plist(path):
     return value
 
 
-def check_exported_type(name, plist, findings, type_id, type_name, extension, mime_type):
+def check_exported_type(name, plist, findings, type_id, type_name, extension, mime_type,
+                        conforms_to):
     """Checks that a bundle exports one type as the registration names it."""
     exported = [entry for entry in plist.get("UTExportedTypeDeclarations", [])
                 if isinstance(entry, dict) and entry.get("UTTypeIdentifier") == type_id]
@@ -90,7 +97,7 @@ def check_exported_type(name, plist, findings, type_id, type_name, extension, mi
     tags = entry.get("UTTypeTagSpecification", {})
     expected = {
         "UTTypeDescription": (entry.get("UTTypeDescription"), type_name),
-        "UTTypeConformsTo": (entry.get("UTTypeConformsTo"), CONFORMS_TO),
+        "UTTypeConformsTo": (entry.get("UTTypeConformsTo"), conforms_to),
         "public.filename-extension": (tags.get("public.filename-extension"), [extension]),
         "public.mime-type": (tags.get("public.mime-type"), [mime_type]),
     }
@@ -131,6 +138,24 @@ def check_document_type(name, plist, findings, macos, type_id, type_name):
                 findings.append(f"{name}: icon: {key} is given; iOS draws the icon from the app's")
 
 
+def check_plain_text(name, plist, findings):
+    """Checks that the macOS bundle takes plain text it is handed, without opening it by default."""
+    documents = [entry for entry in plist.get("CFBundleDocumentTypes", [])
+                 if isinstance(entry, dict) and PLAIN_TEXT in entry.get("LSItemContentTypes", [])]
+    if len(documents) != 1:
+        findings.append(f"{name}: plain text: {len(documents)} document types name {PLAIN_TEXT}, not one")
+        return
+    entry = documents[0]
+    expected = {
+        "CFBundleTypeRole": "Viewer",
+        "LSHandlerRank": "None",
+        "LSItemContentTypes": [PLAIN_TEXT],
+    }
+    for key, wanted in expected.items():
+        if entry.get(key) != wanted:
+            findings.append(f"{name}: plain text: {key} is {entry.get(key)!r}, not {wanted!r}")
+
+
 def check_bundle_icon(root, findings):
     """Checks that the icon file the macOS bundle names is the one branding/ holds."""
     bundle = root / "cmake" / "OaGameBundle.cmake"
@@ -149,7 +174,7 @@ def check_constants(root, findings):
     constants = dict(CONSTANT_RE.findall(read_bytes(header).decode("utf-8")))
     if constants.get("desktop_id") != BUNDLE_ID:
         findings.append(f"{header}: exports: desktop_id is {constants.get('desktop_id')!r}, not {BUNDLE_ID!r}")
-    for _type_id, type_name, extension, mime_type, prefix in TYPES:
+    for _type_id, type_name, extension, mime_type, prefix, _conforms_to in TYPES:
         expected = {
             f"{prefix}_extension": extension,
             f"{prefix}_mime_type": mime_type,
@@ -165,11 +190,14 @@ def check(root, macos_path, ios_path):
     findings = []
     macos = read_plist(macos_path)
     ios = read_plist(ios_path)
-    for type_id, type_name, extension, mime_type, _prefix in TYPES:
-        check_exported_type(str(macos_path), macos, findings, type_id, type_name, extension, mime_type)
+    for type_id, type_name, extension, mime_type, _prefix, conforms_to in TYPES:
+        check_exported_type(str(macos_path), macos, findings, type_id, type_name, extension, mime_type,
+                            conforms_to)
         check_document_type(str(macos_path), macos, findings, True, type_id, type_name)
-        check_exported_type(str(ios_path), ios, findings, type_id, type_name, extension, mime_type)
+        check_exported_type(str(ios_path), ios, findings, type_id, type_name, extension, mime_type,
+                            conforms_to)
         check_document_type(str(ios_path), ios, findings, False, type_id, type_name)
+    check_plain_text(str(macos_path), macos, findings)
     if ios.get("LSSupportsOpeningDocumentsInPlace") is not True:
         findings.append(f"{ios_path}: in place: LSSupportsOpeningDocumentsInPlace is not true")
     archives = [entry for entry in ios.get("UTImportedTypeDeclarations", [])
@@ -201,7 +229,8 @@ def main(argv=None):
     if findings:
         print(f"check_bundle_file_types: {len(findings)} finding(s)", file=sys.stderr)
         return 1
-    print("check_bundle_file_types: both bundles declare and open .oamod, .oalang, .oamap and .oareg")
+    print("check_bundle_file_types: both bundles declare and open .oamod, .oalang, .oamap, .oareg "
+          "and .oalaunch, and macOS takes plain text it is handed")
     return 0
 
 

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The Windows registration: the four file types, each extension and its program identifier,
+// The Windows registration: the five file types, each extension and its program identifier,
 // the program's icon and its open command under HKEY_CURRENT_USER, through calls Windows XP has.
 
 #include "oa/platform/file_types.hpp"
@@ -340,7 +340,6 @@ Registration register_in(const fs::path& executable, const Places& places, TypeS
     }
     const std::wstring classes = wide_of(places.classes_key);
     const std::wstring icon = wide_of(default_icon(executable));
-    const std::wstring command = wide_of(open_command(executable));
     bool failed = false;
     for (const FileType& type : file_types) {
         if (!types.contains(type.extension))
@@ -356,7 +355,9 @@ Registration register_in(const fs::path& executable, const Places& places, TypeS
             {extension + L"\\OpenWithProgids", program_id, L""},
             {program_key, L"", wide_of(type.type_name)},
             {program_key + L"\\DefaultIcon", L"", icon},
-            {program_key + L"\\shell\\open\\command", L"", command},
+            {program_key + L"\\shell\\open\\command",
+             L"",
+             wide_of(open_command(executable, type.opening))},
         };
         for (const RegistryValue& value : values) {
             if (holds(value))

@@ -84,7 +84,18 @@ std::string desktop_exec_argument(std::string_view path_utf8) {
     return written;
 }
 
-std::string desktop_entry(const fs::path& executable, TypeSet types) {
+namespace {
+
+/// Returns a desktop entry that opens files of `opening` with `executable`: the file a bare
+/// argument, or after `-c` for a launch file.
+///
+/// @param executable the program, absolute
+/// @param types the file types the entry lists, of those `opening` covers
+/// @param opening the file types the entry opens
+/// @param comment what the entry says it does
+/// @return the entry's text, UTF-8; empty when the path cannot be written in an entry
+std::string
+entry_for(const fs::path& executable, TypeSet types, Opening opening, std::string_view comment) {
     const std::string path = detail::utf8_of(executable);
     const std::string argument = desktop_exec_argument(path);
     if (argument.empty())
@@ -93,10 +104,14 @@ std::string desktop_entry(const fs::path& executable, TypeSet types) {
     entry += "[Desktop Entry]\n";
     entry += "Type=Application\n";
     entry += "Name=Open Annihilation\n";
-    entry += "Comment=Plays Total Annihilation from your own game files\n";
+    entry += "Comment=" + std::string(comment) + "\n";
     // %f: the file opened. Started with no file, the entry drops it and the game starts as
-    // usual; a bare argument naming one of the file types opens that file.
-    entry += "Exec=" + argument + " %f\n";
+    // usual. A bare argument naming one of the files the game installs or adds opens that
+    // file; -c FILE starts the game with that launch.
+    if (opening == Opening::launch)
+        entry += "Exec=" + argument + " " + std::string(launch_option) + " %f\n";
+    else
+        entry += "Exec=" + argument + " %f\n";
     // The entry is passed over once the executable is gone.
     entry += "TryExec=" + desktop_string(path) + "\n";
     entry += "Icon=" + std::string(desktop_id) + "\n";
@@ -104,7 +119,7 @@ std::string desktop_entry(const fs::path& executable, TypeSet types) {
     entry += "Categories=Game;StrategyGame;\n";
     std::string mime_types;
     for (const FileType& type : file_types) {
-        if (!types.contains(type.extension))
+        if (type.opening != opening || !types.contains(type.extension))
             continue;
         mime_types += type.mime_type;
         mime_types += ';';
@@ -113,6 +128,23 @@ std::string desktop_entry(const fs::path& executable, TypeSet types) {
     // An opener of the file types that "Open With" lists, not an entry in the menus.
     entry += "NoDisplay=true\n";
     return entry;
+}
+
+} // namespace
+
+std::string desktop_entry(const fs::path& executable, TypeSet types) {
+    return entry_for(
+        executable, types, Opening::install, "Plays Total Annihilation from your own game files"
+    );
+}
+
+std::string launch_desktop_entry(const fs::path& executable) {
+    return entry_for(
+        executable,
+        TypeSet{},
+        Opening::launch,
+        "Opens a launch file's battle room in Open Annihilation"
+    );
 }
 
 std::string mime_package(TypeSet types) {
@@ -126,14 +158,23 @@ std::string mime_package(TypeSet types) {
         package += "    <comment>" + std::string(type.type_name) + "</comment>\n";
         package += "    <sub-class-of type=\"" + std::string(type.parent_mime_type) + "\"/>\n";
         package += "    <glob pattern=\"*." + std::string(type.extension) + "\"/>\n";
+        // A launch is known by its first bytes too, whatever its name, as `cat` and a
+        // download leave one.
+        if (type.opening == Opening::launch) {
+            package += "    <magic priority=\"50\">\n";
+            package += "      <match type=\"string\" value=\"" + std::string(launch_magic) +
+                       "\" offset=\"0\"/>\n";
+            package += "    </magic>\n";
+        }
         package += "  </mime-type>\n";
     }
     package += "</mime-info>\n";
     return package;
 }
 
-std::string open_command(const fs::path& executable) {
-    return "\"" + detail::utf8_of(executable) + "\" " + std::string(open_option) + " \"%1\"";
+std::string open_command(const fs::path& executable, const Opening opening) {
+    const std::string_view option = opening == Opening::launch ? launch_option : open_option;
+    return "\"" + detail::utf8_of(executable) + "\" " + std::string(option) + " \"%1\"";
 }
 
 std::string default_icon(const fs::path& executable) {
@@ -257,6 +298,8 @@ void set_open(TypeSet& open, std::string_view extension, bool on) noexcept {
         open.map = on;
     else if (extension == registry_extension)
         open.registry = on;
+    else if (extension == launch_extension)
+        open.launch = on;
 }
 
 /// Appends `more` to `failure`, after a semicolon when `failure` already holds one.
@@ -331,6 +374,7 @@ std::vector<std::string> extensions_still_opened(const TypeSet asked, const Type
     add(asked.map, open.map, map_extension);
     add(asked.language, open.language, language_extension);
     add(asked.registry, open.registry, registry_extension);
+    add(asked.launch, open.launch, launch_extension);
     return stayed;
 }
 
