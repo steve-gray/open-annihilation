@@ -184,9 +184,9 @@ inline constexpr int32_t explosion_flash_level_width = 50;
 /// columns each side.
 inline constexpr int32_t zoomed_out_units_level_width = 56;
 /// Window edge's level strip's segment width, inside the strip's 1-pixel
-/// border: room for Sticky, its widest caption, with three clear columns
+/// border: room for Capture, its widest caption, with three clear columns
 /// each side.
-inline constexpr int32_t window_edge_level_width = 48;
+inline constexpr int32_t window_edge_level_width = 50;
 /// Window frame's level strip's segment width, inside the strip's 1-pixel
 /// border: room for Hidden in play, its widest caption, with three clear
 /// columns each side.

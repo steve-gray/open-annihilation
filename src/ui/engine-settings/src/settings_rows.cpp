@@ -52,8 +52,9 @@ constexpr std::size_t kSettingCount = static_cast<std::size_t>(Setting::welcome_
 
 /// Controls' rows: the zoom's limits right under the switch for the wheel,
 /// how far past the map's edges the view goes under them, middle-click
-/// panning, and whether a window holds the pointer on its edges.
-constexpr std::array<Setting, 7> kControlsRows{
+/// panning, whether a window keeps the pointer, and how firmly a sticky
+/// edge holds right under that.
+constexpr std::array<Setting, 8> kControlsRows{
     Setting::wheel_zoom,
     Setting::max_zoom_out,
     Setting::max_zoom_in,
@@ -61,6 +62,7 @@ constexpr std::array<Setting, 7> kControlsRows{
     Setting::middle_click_pan,
     Setting::switch_alt,
     Setting::window_edge,
+    Setting::window_edge_stickiness,
 };
 /// Engine Limits' rows: the unit limit, pathfinding, then how many player
 /// rows the skirmish setup shows.
@@ -356,7 +358,7 @@ static_assert(
     "every way of Zoomed out units has its caption"
 );
 /// Window edge's captions, in window_edge_choices' order.
-constexpr std::array<std::string_view, 2> kWindowEdgeCaptions{"Sticky", "Free"};
+constexpr std::array<std::string_view, 3> kWindowEdgeCaptions{"Capture", "Sticky", "Free"};
 static_assert(
     kWindowEdgeCaptions.size() == window_edge_choices.size(),
     "every way of Window edge has its caption"
@@ -851,6 +853,19 @@ std::string pointer_speed_text(const SettingsModel& model) {
 /// Returns the gyro speed, as "100%".
 std::string gyro_speed_text(const SettingsModel& model) {
     return std::to_string(model.settings->pad_gyro_speed) + "%";
+}
+
+/// Edge stickiness: one stop for each tenth from 0.0 to 5.0.
+using EdgeStickiness = Linear<
+    uint32_t,
+    &EngineSettings::edge_stickiness,
+    lowest_edge_stickiness,
+    highest_edge_stickiness,
+    edge_stickiness_step>;
+
+/// Returns Edge stickiness as the slider shows it, as "1.0".
+std::string edge_stickiness_slider_text(const SettingsModel& model) {
+    return edge_stickiness_text(model.settings->edge_stickiness);
 }
 
 // Screen size: the dialog's offered sizes; in a window, the window's own
@@ -1608,14 +1623,23 @@ std::string zoomed_out_after_hint(const SettingsModel& model, std::size_t line) 
 
 /// Returns a line of Window edge's hint, by the way chosen.
 std::string window_edge_hint(const SettingsModel& model, std::size_t line) {
-    // Whether a window holds the pointer on its edges while a battlefield shows.
+    // Whether a window keeps the pointer while a battlefield shows.
     switch (model.settings->window_edge) {
+    case WindowEdge::capture:
+        return line_of({"The pointer stays in the window while you play.", {}}, line);
     case WindowEdge::sticky:
         return line_of({"The pointer rests on the edge so the view scrolls.", {}}, line);
     case WindowEdge::free:
         return line_of({"The pointer leaves a window's edge, as before.", {}}, line);
     }
     return {};
+}
+
+/// Returns a line of Edge stickiness's hint: what the level does.
+std::string edge_stickiness_hint(const SettingsModel& model, std::size_t line) {
+    if (model.settings->edge_stickiness == lowest_edge_stickiness)
+        return line_of({"At 0.0 the edge never holds.", {}}, line);
+    return line_of({"How firmly Sticky holds the pointer at the edge.", {}}, line);
 }
 
 /// Returns a line of Window frame's hint, by the way chosen.
@@ -2132,9 +2156,14 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
                                            {"A number key selects its group on its own.", {}})},
     {.setting = S::window_edge,
      .spec = changing(kit::levels("window-edge", "Window edge",
-                                  LevelStrip<WindowEdge, 2, window_edge_choices, &E::window_edge, kWindowEdgeCaptions, &table_word<window_edge_words, WindowEdge>>::stepper(),
+                                  LevelStrip<WindowEdge, 3, window_edge_choices, &E::window_edge, kWindowEdgeCaptions, &table_word<window_edge_words, WindowEdge>>::stepper(),
                                   window_edge_level_width),
                       &window_edge_hint, &lines<1>)},
+    {.setting = S::window_edge_stickiness,
+     .spec = changing(linear<EdgeStickiness, &edge_stickiness_slider_text>("window-edge-stickiness", "Edge stickiness", {}),
+                      &edge_stickiness_hint, &lines<1>),
+     .lock = &Locks::edge_stickiness,
+     .copy = &copy_field<&E::edge_stickiness>},
     {.setting = S::unit_limit,
      .spec = slider("unit-limit", "Unit limit",
                     {&unit_limit_stops, &unit_limit_stop, &set_unit_limit_stop,
@@ -2417,6 +2446,7 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "escape-opens-menu",
     "switch-alt",
     "window-edge",
+    "window-edge-stickiness",
     "unit-limit",
     "max-frame-rate",
     "anti-aliasing",

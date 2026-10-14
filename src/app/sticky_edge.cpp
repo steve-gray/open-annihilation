@@ -99,6 +99,14 @@ float push_past(float overshoot, float field) {
 
 } // namespace
 
+StickyLimits sticky_limits(float level) noexcept {
+    const float held = level > 0.0F ? level : 0.0F;
+    StickyLimits limits;
+    limits.push_points = sticky_push_points_per_level * held;
+    limits.flick_points_per_s = sticky_flick_points_per_s_per_level * held;
+    return limits;
+}
+
 void release_sticky_edge(StickyEdge& state) {
     disarm(state);
 }
@@ -106,7 +114,10 @@ void release_sticky_edge(StickyEdge& state) {
 StickyHold sticky_edge(
     StickyEdge& state, StickySample sample, float width, float height, StickyLimits limits
 ) {
-    if (!(width >= 2.0F) || !(height >= 2.0F)) {
+    // A window too small to have an inside, and an edge with no firmness,
+    // never hold.
+    if (!(width >= 2.0F) || !(height >= 2.0F) || !(limits.push_points > 0.0F) ||
+        !(limits.flick_points_per_s > 0.0F)) {
         disarm(state);
         return StickyHold::let_go;
     }

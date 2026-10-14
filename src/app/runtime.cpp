@@ -990,9 +990,9 @@ void Runtime::run_frame(bool& running) {
     // frame, for the screen the events left.
     apply_system_pointer(false);
     apply_window_frame();
-    // A pause, a menu or a resize since the last event settles the sticky
-    // edge before this frame is drawn.
-    apply_sticky_edge();
+    // A pause, a menu or a resize since the last event settles Window edge
+    // before this frame is drawn.
+    apply_window_edge();
     idle_tick();
     const auto now_ms = static_cast<uint32_t>(SDL_GetTicks());
     if (oa::platform::finished_stream_sweep_due(now_ms, last_stream_sweep_ms_)) {
@@ -1003,34 +1003,19 @@ void Runtime::run_frame(bool& running) {
 }
 
 void Runtime::dispatch_event(SDL_Event& event, bool& running) {
-    // Every return, the full-screen one included, settles the sticky edge
-    // after keep_pointer_on_screen has had its say.
-    struct StickyGuard {
+    // Every return, the full-screen one included, settles Window edge after
+    // keep_pointer_on_screen has had its say.
+    struct WindowEdgeGuard {
         Runtime& runtime;
         bool force_release = false;
 
-        ~StickyGuard() { runtime.apply_sticky_edge(force_release); }
-    } sticky{*this};
+        ~WindowEdgeGuard() { runtime.apply_window_edge(force_release); }
+    } window_edge{*this};
 
-    if (event.type == SDL_EVENT_MOUSE_MOTION && event.motion.which != SDL_TOUCH_MOUSEID &&
-        !sticky_ignores_motion(event) && sticky_edge_wanted()) {
-        const uint64_t time_ms = event.motion.timestamp != 0
-                                     ? event.motion.timestamp / 1'000'000ULL
-                                     : static_cast<uint64_t>(SDL_GetTicks());
-        note_sticky_motion(
-            event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel, time_ms
-        );
-        sticky_wanted_ = true;
-    }
-    // The focus always lets the pointer go. On a soft wall a leave is the
-    // pointer crossing the edge, and it is put back; Wayland's leave is the
-    // confinement giving way.
-    if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
-        sticky.force_release = true;
-    else if (
-        event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE && !(sticky_soft_wall() && sticky_edge_.holding)
-    )
-        sticky.force_release = true;
+    // The click that only gives a captured window the focus back, and its
+    // release, reach nothing.
+    if (take_window_edge_event(event, window_edge.force_release))
+        return;
     // The inactive-loop check's wake ends the run. It is not a focus change,
     // and it must not be read as one.
     if constexpr (self_checks_built)

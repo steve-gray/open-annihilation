@@ -6,13 +6,15 @@
 // presenter as a player does: each click changes its setting and what the
 // screen shows for it before Start, the help line follows the pointer, and the
 // chosen options tab shows pressed. Alt+Enter switches the window to full
-// screen and back on a menu and in a match. In a match's window the pointer
-// is put back on an edge until a push lets it go, and Window edge Free leaves
-// it free.
+// screen and back on a menu and in a match. In a match's window Window edge
+// Capture keeps the pointer in the window until a menu, Escape or a lost
+// focus, Sticky puts it back on an edge until a push as firm as Edge
+// stickiness lets it go, and Free leaves it free.
 #include "engine_settings_state.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/data/languages/translation.hpp"
 #include "oa/data/persist/save_sections.hpp"
+#include "oa/ui/console/game_fields.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
 
 #include <SDL3/SDL.h>
@@ -27,6 +29,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -1441,26 +1444,34 @@ void Runtime::check_frontend_controls() {
     key(SDL_EVENT_KEY_DOWN, SDLK_ESCAPE, SDL_KMOD_NONE, false);
     expect(!chat_composing_, "Escape did not close the chat line");
 
-    // A window puts the pointer back on its edges while the battlefield
-    // shows, so the view scrolls, and a push lets it go. Free leaves it free.
-    // This driver is not Wayland, so the pointer stays free of a grab.
+    // Window edge in a match's window. Capture, the default, keeps the
+    // pointer in the window through any push or flick, and lets it go in
+    // the game menu, on the pause screen, in Settings, after Escape and
+    // without the focus; a click on the battlefield captures it again, and
+    // the click that only brings the focus back reaches nothing. Sticky puts
+    // the pointer back on an edge until a push as firm as Edge stickiness
+    // lets it go, and 0.0 never holds. Free leaves it free. This driver is
+    // not Wayland, so Sticky stays free of a grab.
     {
+        namespace edge_settings = oa::ui::engine_settings;
         const bool sticky_started_full = full_screen();
         if (sticky_started_full)
             alt_enter(SDLK_RETURN, 0);
         expect(
             (SDL_GetWindowFlags(sdl_.window) & SDL_WINDOW_MOUSE_FOCUS) != 0,
-            "the window does not have the pointer for the sticky edge"
+            "the window does not have the pointer for Window edge"
         );
         int sticky_width = 0;
         int sticky_height = 0;
         require(
             SDL_GetWindowSize(sdl_.window, &sticky_width, &sticky_height) == true, SDL_GetError()
         );
-        require(
-            sticky_width > 80 && sticky_height > 80, "the window is too small for the sticky edge"
-        );
+        require(sticky_width > 80 && sticky_height > 80, "the window is too small for Window edge");
+        const auto saved_edge = engine_settings_state().current.window_edge;
+        const auto saved_level = engine_settings_state().current.edge_stickiness;
         const float sticky_right = static_cast<float>(sticky_width - 1);
+        const float sticky_bottom = static_cast<float>(sticky_height - 1);
+        const float sticky_mid_x = static_cast<float>(sticky_width / 2);
         const float sticky_mid_y = static_cast<float>(sticky_height / 2);
         uint64_t sticky_time_ms = SDL_GetTicks();
         const auto sticky_move =
@@ -1476,12 +1487,242 @@ void Runtime::check_frontend_controls() {
                 moved.motion.timestamp = sticky_time_ms * 1'000'000ULL;
                 dispatch_event(moved, running);
             };
+        const auto press = [&](SDL_EventType type, float x, float y) {
+            SDL_Event pressed{};
+            pressed.type = type;
+            pressed.button.windowID = SDL_GetWindowID(sdl_.window);
+            pressed.button.button = SDL_BUTTON_LEFT;
+            pressed.button.down = type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+            pressed.button.clicks = 1;
+            pressed.button.x = x;
+            pressed.button.y = y;
+            dispatch_event(pressed, running);
+        };
+        const auto window_event = [&](SDL_EventType type) {
+            SDL_Event changed{};
+            changed.type = type;
+            changed.window.windowID = SDL_GetWindowID(sdl_.window);
+            dispatch_event(changed, running);
+        };
+        const auto saved_camera_x = match_camera_x_;
+        const auto saved_camera_z = match_camera_z_;
+        const auto saved_clock = scroll_clock_;
+        const auto saved_frame = frame_time_ns_;
+        // One second of edge scrolling from where the pointer rests.
+        const auto pan_once = [&] {
+            scroll_clock_ = frame_pacing::kNanosecondsPerSecond;
+            frame_time_ns_ = frame_pacing::kNanosecondsPerSecond * 2;
+            pan_match_camera();
+        };
+
+        // Capture: the window's grab, whatever the pointer does.
+        engine_settings_state().current.window_edge = edge_settings::WindowEdge::capture;
+        const auto captured = [&] {
+            return capture_held_ && SDL_GetWindowMouseGrab(sdl_.window) && !sticky_edge_.holding;
+        };
+        // Escape closed the chat line above, so the pointer waits for a
+        // click on the battlefield.
+        sticky_move(sticky_mid_x, sticky_mid_y, 0.0F, 0.0F, 50);
+        expect(
+            !SDL_GetWindowMouseGrab(sdl_.window),
+            "Escape on the chat line left the pointer captured"
+        );
+        press(SDL_EVENT_MOUSE_BUTTON_DOWN, sticky_mid_x, sticky_mid_y);
+        press(SDL_EVENT_MOUSE_BUTTON_UP, sticky_mid_x, sticky_mid_y);
+        match_drag_.reset();
+        sticky_move(sticky_mid_x, sticky_mid_y, 0.0F, 0.0F, 50);
+        expect(captured(), "Capture did not keep the pointer in a match's window");
+        // Flicks and pushes far past each edge.
+        const std::array<std::array<float, 4>, 4> shoves{{
+            {sticky_right + 400.0F, sticky_mid_y, 9000.0F, 0.0F},
+            {-400.0F, sticky_mid_y, -9000.0F, 0.0F},
+            {sticky_mid_x, -400.0F, 0.0F, -9000.0F},
+            {sticky_mid_x, sticky_bottom + 400.0F, 0.0F, 9000.0F},
+        }};
+        for (const auto& shove : shoves)
+            for (int repeat = 0; repeat < 10; ++repeat) {
+                sticky_move(shove[0], shove[1], shove[2], shove[3], 5);
+                expect(captured(), "a push or a flick let a captured pointer leave the window");
+            }
+        // Each edge scrolls the view toward itself: there and back on
+        // each axis, so a view already at one limit still shows both ways.
+        sticky_move(sticky_right, sticky_mid_y, 0.0F, 0.0F, 50);
+        pan_once();
+        const auto east = match_camera_x_;
+        sticky_move(0.0F, sticky_mid_y, 0.0F, 0.0F, 50);
+        pan_once();
+        const auto west = match_camera_x_;
+        sticky_move(sticky_right, sticky_mid_y, 0.0F, 0.0F, 50);
+        pan_once();
+        expect(
+            west < east && match_camera_x_ > west,
+            "the left and right edges did not scroll a captured pointer's view"
+        );
+        sticky_move(sticky_mid_x, sticky_bottom, 0.0F, 0.0F, 50);
+        pan_once();
+        const auto south = match_camera_z_;
+        sticky_move(sticky_mid_x, 0.0F, 0.0F, 0.0F, 50);
+        pan_once();
+        const auto north = match_camera_z_;
+        sticky_move(sticky_mid_x, sticky_bottom, 0.0F, 0.0F, 50);
+        pan_once();
+        expect(
+            north < south && match_camera_z_ > north,
+            "the top and bottom edges did not scroll a captured pointer's view"
+        );
+        expect(captured(), "edge scrolling let a captured pointer go");
+        match_camera_x_ = saved_camera_x;
+        match_camera_z_ = saved_camera_z;
+        scroll_clock_ = saved_clock;
+        frame_time_ns_ = saved_frame;
+        sticky_move(sticky_mid_x, sticky_mid_y, 0.0F, 0.0F, 50);
+        // The game menu, and Settings beside it, let it go; Resume takes it
+        // back.
+        show_match_pause_menu();
+        apply_window_edge();
+        expect(!SDL_GetWindowMouseGrab(sdl_.window), "the game menu kept the pointer captured");
+        resume_match_pause();
+        apply_window_edge();
+        expect(captured(), "closing the game menu did not capture the pointer again");
+        open_engine_settings_in_match();
+        apply_window_edge();
+        expect(
+            engine_settings_dialog() != nullptr && !SDL_GetWindowMouseGrab(sdl_.window),
+            "Settings over the battlefield kept the pointer captured"
+        );
+        take_settings_screen_action(edge_settings::DialogAction::cancelled);
+        if (match_paused_)
+            resume_match_pause();
+        apply_window_edge();
+        expect(captured(), "closing Settings did not capture the pointer again");
+        // The pause screen lets it go.
+        {
+            auto& game = match_->state().game;
+            const uint16_t saved_run = game.sim_run_flags;
+            game.sim_run_flags =
+                static_cast<uint16_t>(game.sim_run_flags | oa::ui::console::kSimRunPaused);
+            apply_window_edge();
+            expect(!SDL_GetWindowMouseGrab(sdl_.window), "a paused game kept the pointer captured");
+            game.sim_run_flags = saved_run;
+            apply_window_edge();
+            expect(captured(), "the game going on did not capture the pointer again");
+        }
+        // Escape lets it go until a click on the battlefield, which acts as
+        // any click does.
+        key(SDL_EVENT_KEY_DOWN, SDLK_ESCAPE, SDL_KMOD_NONE, false);
+        key(SDL_EVENT_KEY_UP, SDLK_ESCAPE, SDL_KMOD_NONE, false);
+        expect(!SDL_GetWindowMouseGrab(sdl_.window), "Escape kept the pointer captured");
+        // With Escape opens the game menu on, the menu closes again; the
+        // pointer still waits for a click.
+        if (match_paused_)
+            resume_match_pause();
+        apply_window_edge();
+        expect(
+            !SDL_GetWindowMouseGrab(sdl_.window),
+            "closing the menu Escape opened captured the pointer without a click"
+        );
+        sticky_move(sticky_mid_x - 20.0F, sticky_mid_y, -20.0F, 0.0F, 50);
+        sticky_move(sticky_right, sticky_mid_y, 20.0F, 0.0F, 50);
+        expect(
+            !SDL_GetWindowMouseGrab(sdl_.window),
+            "moving after Escape captured the pointer without a click"
+        );
+        sticky_move(sticky_mid_x, sticky_mid_y, 0.0F, 0.0F, 50);
+        const float acted_x = pointer_x_;
+        match_drag_.reset();
+        press(SDL_EVENT_MOUSE_BUTTON_DOWN, sticky_mid_x + 17.0F, sticky_mid_y + 9.0F);
+        expect(captured(), "a click on the battlefield after Escape did not capture the pointer");
+        expect(
+            pointer_x_ != acted_x && match_drag_.has_value(),
+            "the click that captured the pointer after Escape did not reach the battlefield"
+        );
+        press(SDL_EVENT_MOUSE_BUTTON_UP, sticky_mid_x + 17.0F, sticky_mid_y + 9.0F);
+        match_drag_.reset();
+        // Losing the focus lets it go; coming back does not take it.
+        window_event(SDL_EVENT_WINDOW_FOCUS_LOST);
+        expect(!SDL_GetWindowMouseGrab(sdl_.window), "losing the focus kept the pointer captured");
+        sticky_move(sticky_mid_x, sticky_mid_y, 0.0F, 0.0F, 50);
+        window_event(SDL_EVENT_WINDOW_FOCUS_GAINED);
+        sticky_move(sticky_mid_x, sticky_mid_y, 0.0F, 0.0F, 50);
+        expect(
+            !SDL_GetWindowMouseGrab(sdl_.window),
+            "the focus coming back captured the pointer without a click"
+        );
+        // The click that brings the focus back captures it and is no order:
+        // neither it nor its release reaches the battlefield.
+        const float focused_x = pointer_x_;
+        const float focused_y = pointer_y_;
+        press(SDL_EVENT_MOUSE_BUTTON_DOWN, sticky_mid_x + 23.0F, sticky_mid_y + 11.0F);
+        expect(captured(), "the focusing click did not capture the pointer");
+        expect(
+            pointer_x_ == focused_x && pointer_y_ == focused_y && !match_drag_,
+            "the focusing click reached the battlefield"
+        );
+        press(SDL_EVENT_MOUSE_BUTTON_UP, sticky_mid_x + 23.0F, sticky_mid_y + 11.0F);
+        expect(
+            pointer_x_ == focused_x && pointer_y_ == focused_y && !match_drag_,
+            "the focusing click's release reached the battlefield"
+        );
+        // The next click is the battlefield's again.
+        press(SDL_EVENT_MOUSE_BUTTON_DOWN, sticky_mid_x + 23.0F, sticky_mid_y + 11.0F);
+        expect(
+            pointer_x_ != focused_x && match_drag_.has_value(),
+            "a click after the focusing click did not reach the battlefield"
+        );
+        press(SDL_EVENT_MOUSE_BUTTON_UP, sticky_mid_x + 23.0F, sticky_mid_y + 11.0F);
+        match_drag_.reset();
+        expect(captured(), "a click on the battlefield let the captured pointer go");
+        // A click well after the focus came back, or after a key, is the
+        // player's own: it captures the pointer and reaches the battlefield.
+        const auto later_click = [&](bool key_between, std::string_view what) {
+            window_event(SDL_EVENT_WINDOW_FOCUS_LOST);
+            const uint64_t back_ns = SDL_GetTicksNS();
+            SDL_Event gained{};
+            gained.type = SDL_EVENT_WINDOW_FOCUS_GAINED;
+            gained.window.windowID = SDL_GetWindowID(sdl_.window);
+            gained.window.timestamp = back_ns;
+            dispatch_event(gained, running);
+            if (key_between) {
+                key(SDL_EVENT_KEY_DOWN, SDLK_LSHIFT, SDL_KMOD_LSHIFT, false);
+                key(SDL_EVENT_KEY_UP, SDLK_LSHIFT, SDL_KMOD_NONE, false);
+            }
+            sticky_move(sticky_mid_x, sticky_mid_y, 0.0F, 0.0F, 50);
+            const float before_x = pointer_x_;
+            SDL_Event later{};
+            later.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+            later.button.windowID = SDL_GetWindowID(sdl_.window);
+            later.button.button = SDL_BUTTON_LEFT;
+            later.button.down = true;
+            later.button.clicks = 1;
+            later.button.x = sticky_mid_x + 29.0F;
+            later.button.y = sticky_mid_y + 13.0F;
+            later.button.timestamp =
+                back_ns +
+                (key_between ? 0ULL : 600ULL * frame_pacing::kNanosecondsPerSecond / 1000ULL);
+            dispatch_event(later, running);
+            expect(
+                captured() && pointer_x_ != before_x && match_drag_.has_value(),
+                std::string(what) + " did not capture the pointer and reach the battlefield"
+            );
+            press(SDL_EVENT_MOUSE_BUTTON_UP, sticky_mid_x + 29.0F, sticky_mid_y + 13.0F);
+            match_drag_.reset();
+        };
+        later_click(false, "a click 600 ms after the focus came back");
+        later_click(true, "a click after a key with the focus back");
+        std::cout << "frontend controls check: Capture keeps the pointer in a match's window "
+                     "through pushes and flicks, and lets it go in menus, after Escape and "
+                     "without the focus\n";
+
+        // Sticky, at Edge stickiness 1.0.
+        engine_settings_state().current.window_edge = edge_settings::WindowEdge::sticky;
+        engine_settings_state().current.edge_stickiness = edge_settings::default_edge_stickiness;
         const auto held = [&] {
             return sticky_edge_.holding && !SDL_GetWindowMouseGrab(sdl_.window);
         };
-        float sticky_x = static_cast<float>(sticky_width / 2);
+        float sticky_x = sticky_mid_x;
         sticky_move(sticky_x, sticky_mid_y, 0.0F, 0.0F, 50);
         expect(held(), "the pointer at the middle of a match window was not held");
+        expect(!capture_held_, "Sticky kept the pointer captured");
         while (sticky_x + 10.0F < sticky_right) {
             sticky_move(sticky_x + 10.0F, sticky_mid_y, 10.0F, 0.0F, 50);
             sticky_x += 10.0F;
@@ -1493,32 +1734,25 @@ void Runtime::check_frontend_controls() {
         expect(held(), "resting on the edge let the pointer go");
         // A leave forgets the place. While the pointer rests on the edge the
         // view still scrolls from that last pixel.
-        SDL_Event sticky_leave{};
-        sticky_leave.type = SDL_EVENT_WINDOW_MOUSE_LEAVE;
-        sticky_leave.window.windowID = SDL_GetWindowID(sdl_.window);
-        dispatch_event(sticky_leave, running);
+        window_event(SDL_EVENT_WINDOW_MOUSE_LEAVE);
         expect(
             match_pointer_known_ && match_pointer_x_ > sticky_right - 1.0F &&
                 match_pointer_x_ < sticky_right + 1.0F,
             "a leave while the pointer rests on the edge hid it from edge scrolling"
         );
-        const auto saved_camera_x = match_camera_x_;
-        const auto saved_camera_z = match_camera_z_;
-        const auto saved_clock = scroll_clock_;
-        const auto saved_frame = frame_time_ns_;
-        scroll_clock_ = frame_pacing::kNanosecondsPerSecond;
-        frame_time_ns_ = frame_pacing::kNanosecondsPerSecond * 2;
-        pan_match_camera();
+        const auto sticky_camera_x = match_camera_x_;
+        pan_once();
         expect(
-            match_camera_x_ > saved_camera_x,
+            match_camera_x_ > sticky_camera_x,
             "the view did not scroll while the pointer rested on the edge"
         );
         match_camera_x_ = saved_camera_x;
         match_camera_z_ = saved_camera_z;
         scroll_clock_ = saved_clock;
         frame_time_ns_ = saved_frame;
-        // Past the last pixel, and put back on it. Three such steps are the push.
-        sticky_move(sticky_right + 40.0F, sticky_mid_y, 0.0F, 0.0F, 50);
+        // Past the last pixel, and put back on it. Three such steps of 100
+        // are 1.0's push of 300.
+        sticky_move(sticky_right + 100.0F, sticky_mid_y, 0.0F, 0.0F, 50);
         float placed_x = 0.0F;
         float placed_y = 0.0F;
         std::ignore = SDL_GetMouseState(&placed_x, &placed_y);
@@ -1531,9 +1765,9 @@ void Runtime::check_frontend_controls() {
                 match_pointer_x_ < sticky_right + 1.0F,
             "edge scrolling does not see the pointer on the edge"
         );
-        sticky_move(sticky_right + 40.0F, sticky_mid_y, 0.0F, 0.0F, 50);
+        sticky_move(sticky_right + 100.0F, sticky_mid_y, 0.0F, 0.0F, 50);
         expect(held(), "a push under the threshold let the pointer go");
-        sticky_move(sticky_right + 40.0F, sticky_mid_y, 0.0F, 0.0F, 50);
+        sticky_move(sticky_right + 100.0F, sticky_mid_y, 0.0F, 0.0F, 50);
         expect(!sticky_edge_.holding, "a push past the threshold did not let the pointer go");
         expect(!SDL_GetWindowMouseGrab(sdl_.window), "letting the pointer go grabbed the window");
         const float sticky_near = sticky_right - 23.0F;
@@ -1542,9 +1776,25 @@ void Runtime::check_frontend_controls() {
         const float sticky_rearm = sticky_right - 24.0F;
         sticky_move(sticky_rearm, sticky_mid_y, sticky_rearm - sticky_near, 0.0F, 50);
         expect(held(), "moving 24 points in from the edge did not hold the pointer");
-        const auto saved_edge = engine_settings_state().current.window_edge;
-        engine_settings_state().current.window_edge = oa::ui::engine_settings::WindowEdge::free;
-        sticky_x = static_cast<float>(sticky_width / 2);
+        // Twice as firm, the same three steps hold; three more let go.
+        engine_settings_state().current.edge_stickiness =
+            2 * edge_settings::default_edge_stickiness;
+        for (int step = 0; step < 3; ++step)
+            sticky_move(sticky_right + 100.0F, sticky_mid_y, 0.0F, 0.0F, 50);
+        expect(held(), "Edge stickiness 2.0 let go of 1.0's push");
+        for (int step = 0; step < 3; ++step)
+            sticky_move(sticky_right + 100.0F, sticky_mid_y, 0.0F, 0.0F, 50);
+        expect(!sticky_edge_.holding, "Edge stickiness 2.0 held twice 1.0's push");
+        // 0.0 never holds.
+        engine_settings_state().current.edge_stickiness = edge_settings::lowest_edge_stickiness;
+        sticky_move(sticky_mid_x, sticky_mid_y, 0.0F, 0.0F, 50);
+        sticky_move(sticky_right, sticky_mid_y, sticky_right - sticky_mid_x, 0.0F, 50);
+        expect(!sticky_edge_.holding, "Edge stickiness 0.0 held the pointer");
+        engine_settings_state().current.edge_stickiness = saved_level;
+
+        // Free never holds and never grabs.
+        engine_settings_state().current.window_edge = edge_settings::WindowEdge::free;
+        sticky_x = sticky_mid_x;
         sticky_move(sticky_x, sticky_mid_y, 0.0F, 0.0F, 50);
         while (sticky_x + 10.0F < sticky_right) {
             sticky_move(sticky_x + 10.0F, sticky_mid_y, 10.0F, 0.0F, 50);
@@ -1554,10 +1804,11 @@ void Runtime::check_frontend_controls() {
         expect(!sticky_edge_.holding, "Window edge Free held the pointer");
         expect(!SDL_GetWindowMouseGrab(sdl_.window), "Window edge Free grabbed the pointer");
         engine_settings_state().current.window_edge = saved_edge;
+        sticky_move(sticky_mid_x, sticky_mid_y, 0.0F, 0.0F, 50);
         if (sticky_started_full)
             alt_enter(SDLK_RETURN, 0);
-        std::cout << "frontend controls check: a window puts the pointer back on its edge until "
-                     "a push\n";
+        std::cout << "frontend controls check: Sticky puts the pointer back on the window's edge "
+                     "until a push as firm as Edge stickiness, and Free leaves it free\n";
     }
 
     // The in-match Options' Visuals draws the same Screen Size. Choosing one

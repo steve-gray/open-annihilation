@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Writes the manual's pictures of the settings dialog: each section alone,
-// unlocked, at Compact and 2x (960 by 648), in the installed game's fonts.
+// unlocked, at Compact and 2x (960 by 648), in the installed game's fonts,
+// and Controls and Downloads scrolled to their ends.
 //
 // Usage: oa-ui-engine-settings-pictures DIRECTORY
 //
@@ -275,10 +276,12 @@ int main(int argc, char** argv) {
         Dialog dialog = section_dialog(page);
         if (!draw_section(dialog, fonts, icon.picture, directory / picture_name(page)))
             ok = false;
-        if (page == Page::downloads) {
-            dialog.scroll[static_cast<std::size_t>(Page::downloads)] =
-                settings::scroll_limit(dialog);
-            if (!draw_section(dialog, fonts, icon.picture, directory / "downloads-2.png"))
+        // Controls and Downloads scrolled to their ends: Window edge and Edge
+        // stickiness, and the downloads' last rows.
+        if (page == Page::controls || page == Page::downloads) {
+            dialog.scroll[static_cast<std::size_t>(page)] = settings::scroll_limit(dialog);
+            const std::string end = std::string(settings::page_word(page)) + "-2.png";
+            if (!draw_section(dialog, fonts, icon.picture, directory / end))
                 ok = false;
         }
     }

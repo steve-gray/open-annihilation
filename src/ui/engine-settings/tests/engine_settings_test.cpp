@@ -2148,43 +2148,111 @@ void the_zoomed_out_units_default_read_and_round_trip() {
     CHECK(pair.empty());
 }
 
-/// Window frame: Hidden in play everywhere by default; a file written
-/// before it reads the default; each word reads its way and any other text
-/// the default; Always shown written alone and read back, and Restore
-/// defaults then OK erases the key.
-/// Window edge: Sticky everywhere by default; "sticky" and "free" read
-/// their choices and round-trip alone; any other text reads Sticky; writing
-/// Free leaves every other key as it is, and Restore defaults then OK
-/// erases the key.
+/// Window edge: Capture everywhere by default, also for a file an earlier
+/// build wrote without the key; "capture", "sticky" and "free" read their
+/// choices, so an earlier build's Sticky or Free is kept, and round-trip
+/// alone; any other text reads Capture; writing Sticky leaves every other
+/// key as it is, and Restore defaults then OK erases the key.
 void the_window_edge_default_read_and_round_trip() {
     CHECK(settings::key::window_edge == "open-annihilation.window-edge");
     settings::Inputs own_mac = players_own_on_linux;
     own_mac.macos = true;
     for (const auto& inputs : {settings::Inputs{}, players_own_on_linux, own_mac}) {
         const auto defaults = settings::default_settings(inputs);
-        CHECK(defaults.window_edge == settings::WindowEdge::sticky);
+        CHECK(defaults.window_edge == settings::WindowEdge::capture);
         CHECK(settings::read_settings({}, inputs, false) == defaults);
     }
     const auto edge = [](const char* text) {
         return read_one(settings::key::window_edge, text).window_edge;
     };
+    CHECK(edge("capture") == settings::WindowEdge::capture);
     CHECK(edge("sticky") == settings::WindowEdge::sticky);
     CHECK(edge("free") == settings::WindowEdge::free);
-    for (const char* text : {"", "Free", "sticky ", "1", "always"})
-        CHECK(edge(text) == settings::WindowEdge::sticky);
+    for (const char* text : {"", "Free", "Capture", "sticky ", "1", "always"})
+        CHECK(edge(text) == settings::WindowEdge::capture);
 
     const auto defaults = settings::default_settings(players_own_on_linux);
-    auto loose = defaults;
-    loose.window_edge = settings::WindowEdge::free;
+    for (const auto way : {settings::WindowEdge::sticky, settings::WindowEdge::free}) {
+        auto chosen = defaults;
+        chosen.window_edge = way;
+        Values values;
+        settings::write_settings(values, defaults, chosen, defaults, false);
+        CHECK(values.size() == 1);
+        CHECK(
+            values.at(std::string{settings::key::window_edge}) ==
+            (way == settings::WindowEdge::sticky ? "sticky" : "free")
+        );
+        CHECK(settings::read_settings(values, players_own_on_linux, false) == chosen);
+        settings::write_settings(values, chosen, defaults, defaults, true);
+        CHECK(values.empty());
+    }
+    // Capture chosen again after Sticky is written as such.
+    auto sticky = defaults;
+    sticky.window_edge = settings::WindowEdge::sticky;
     Values values;
-    settings::write_settings(values, defaults, loose, defaults, false);
-    CHECK(values.size() == 1);
-    CHECK(values.at(std::string{settings::key::window_edge}) == "free");
-    CHECK(settings::read_settings(values, players_own_on_linux, false) == loose);
-    settings::write_settings(values, loose, defaults, defaults, true);
-    CHECK(values.empty());
+    values[std::string{settings::key::window_edge}] = "sticky";
+    settings::write_settings(values, sticky, defaults, defaults, false);
+    CHECK(values.at(std::string{settings::key::window_edge}) == "capture");
+    CHECK(settings::read_settings(values, players_own_on_linux, false) == defaults);
 }
 
+/// Edge stickiness: 1.0 everywhere by default and for a file without the
+/// key; a decimal reads to the nearest tenth, a half rounding up, held to
+/// 0.0 to 5.0; any other text reads 1.0; it is written with one decimal,
+/// alone, whatever Window edge is, and Restore defaults then OK erases it.
+void the_edge_stickiness_default_read_and_round_trip() {
+    CHECK(settings::key::edge_stickiness == "open-annihilation.window-edge-stickiness");
+    CHECK(settings::default_edge_stickiness == 10);
+    for (const auto& inputs : {settings::Inputs{}, players_own_on_linux})
+        CHECK(settings::default_settings(inputs).edge_stickiness == 10);
+    const auto level = [](const char* text) {
+        return read_one(settings::key::edge_stickiness, text).edge_stickiness;
+    };
+    CHECK(level("1.0") == 10);
+    CHECK(level("0.0") == 0);
+    CHECK(level("0") == 0);
+    CHECK(level("2.5") == 25);
+    CHECK(level("5.0") == 50);
+    CHECK(level("3") == 30);
+    CHECK(level(".5") == 5);
+    CHECK(level("4.") == 40);
+    CHECK(level("1.25") == 13);
+    CHECK(level("1.249") == 12);
+    CHECK(level("+0.3") == 3);
+    CHECK(level("7.5") == 50);
+    CHECK(level("-1.0") == 0);
+    CHECK(level("99999999999999") == 50);
+    for (const char* text : {"", ".", "1,5", "1.0 ", " 1.0", "1.2.3", "high", "1e1", "-", "0x1"})
+        CHECK(level(text) == 10);
+    CHECK(settings::edge_stickiness_text(0) == "0.0");
+    CHECK(settings::edge_stickiness_text(10) == "1.0");
+    CHECK(settings::edge_stickiness_text(25) == "2.5");
+    CHECK(settings::edge_stickiness_text(50) == "5.0");
+    CHECK(settings::edge_stickiness_from_text("2.5") == std::optional<uint32_t>{25});
+    CHECK(!settings::edge_stickiness_from_text("x"));
+
+    const auto defaults = settings::default_settings(players_own_on_linux);
+    for (const auto way : settings::window_edge_choices) {
+        auto chosen = defaults;
+        chosen.window_edge = way;
+        chosen.edge_stickiness = 25;
+        auto opened = defaults;
+        opened.window_edge = way;
+        Values values;
+        settings::write_settings(values, opened, chosen, defaults, false);
+        CHECK(values.size() == 1);
+        CHECK(values.at(std::string{settings::key::edge_stickiness}) == "2.5");
+        auto read = settings::read_settings(values, players_own_on_linux, false);
+        CHECK(read.edge_stickiness == 25 && read.window_edge == settings::WindowEdge::capture);
+        settings::write_settings(values, chosen, defaults, defaults, true);
+        CHECK(values.empty());
+    }
+}
+
+/// Window frame: Hidden in play everywhere by default; a file written
+/// before it reads the default; each word reads its way and any other text
+/// the default; Always shown written alone and read back, and Restore
+/// defaults then OK erases the key.
 void the_window_frame_default_read_and_round_trip() {
     CHECK(settings::key::window_frame == "open-annihilation.window-frame");
     settings::Inputs own_mac = players_own_on_linux;
@@ -2557,6 +2625,7 @@ int main() {
     explosion_flash_default_read_and_round_trip();
     the_zoomed_out_units_default_read_and_round_trip();
     the_window_edge_default_read_and_round_trip();
+    the_edge_stickiness_default_read_and_round_trip();
     the_window_frame_default_read_and_round_trip();
     the_hud_scaling_default_read_and_round_trip();
     the_interface_size_default_read_and_round_trip();

@@ -172,7 +172,8 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | `open-annihilation.max-zoom-out` | `automatic`, `whole-map`, `1/32`, `1/16`, `1/8`, `1/4` or `1/2`; any other text reads as `automatic` | `automatic` |
 | `open-annihilation.max-zoom-in` | `1`, `2`, `3` or `4` times the game's scale; any other text reads as `4` | `4` |
 | `open-annihilation.view-past-map-edge` | `off`, or `25` or `50` percent of the battlefield past the map's edges; any other text reads as `50` | `50` |
-| `open-annihilation.window-edge` | `sticky` or `free`; any other text reads as `sticky`. While a match's battlefield shows in a window, Sticky holds the pointer on the window's edges so the view edge-scrolls, and a firm push or a flick lets it leave | `sticky` |
+| `open-annihilation.window-edge` | `capture`, `sticky` or `free`; any other text reads as `capture`, and an earlier 0.8 build's `sticky` and `free` keep their meaning. While a match's battlefield shows in a focused window, Capture keeps the pointer in the window until a menu, Escape or a lost focus, Sticky holds it on the window's edges until a push or a flick as firm as `window-edge-stickiness` lets it leave, and Free leaves it free | `capture` |
+| `open-annihilation.window-edge-stickiness` | a decimal from `0.0` to `5.0`, written with one decimal; another number is rounded to the nearest tenth and held to that range, and any other text reads as `1.0`. How firmly Sticky holds: the push and the flick that let the pointer go grow with it, and `0.0` never holds | `1.0` |
 | `open-annihilation.escape-opens-menu` | 0 or 1 | 1 on macOS with the player's own file, else 0 |
 | `open-annihilation.unit-limit` | units per player, 20 to 1500, or to a mod's higher maximum (`oa::data::limits::UnitsPerPlayer`) | the game folder's `totala.ini` `[Preferences] UnitLimit`, clamped to 20 to 500, with the player's own file; else 250 |
 | `open-annihilation.max-fps` | frames a second, 30 to 120 | 120 |

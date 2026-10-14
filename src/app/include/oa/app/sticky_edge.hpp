@@ -35,16 +35,31 @@ struct StickySample {
     float past_y{};
 };
 
+/// The push that lets the pointer go at Edge stickiness 1.0, in desktop
+/// points past one edge within StickyLimits::push_window_ms. An ordinary
+/// fast move that runs on past the edge stops short of it; a deliberate
+/// shove carries on past it.
+inline constexpr float sticky_push_points_per_level = 300.0F;
+
+/// The arrival speed that lets the pointer go at Edge stickiness 1.0, in
+/// points per second over StickyLimits::flick_window_ms: 625 points in the
+/// last tenth of a second. An ordinary fast move toward the edge arrives
+/// slower; a deliberate fling arrives faster.
+inline constexpr float sticky_flick_points_per_s_per_level = 6250.0F;
+
 /// How hard a push or a flick has to be before the pointer is let go, and
-/// how far back in it must come before it is held again.
+/// how far back in it must come before it is held again. The defaults are
+/// Edge stickiness 1.0's.
 struct StickyLimits {
     /// Desktop distance past one edge, added while the push continues, that
-    /// lets the pointer go when it arrives within push_window_ms.
-    float push_points = 120.0F;
+    /// lets the pointer go when it arrives within push_window_ms. Zero
+    /// never holds.
+    float push_points = sticky_push_points_per_level;
     /// How long a push is remembered. A later push starts again.
     uint64_t push_window_ms = 500;
-    /// Arrival speed, in points per second, that lets the pointer go.
-    float flick_points_per_s = 2500.0F;
+    /// Arrival speed, in points per second, that lets the pointer go. Zero
+    /// never holds.
+    float flick_points_per_s = sticky_flick_points_per_s_per_level;
     /// How far back the approach toward an edge counts toward a flick.
     uint64_t flick_window_ms = 100;
     /// How far from every edge the pointer must be, after it was let go,
@@ -82,6 +97,17 @@ struct StickyEdge {
     int flick_next = 0;  ///< where the next flick sample is written
 };
 
+/// Returns the limits of a sticky edge as firm as an Edge stickiness level.
+///
+/// The push and the flick scale with the level, so 5.0 needs five times
+/// the push and the flick of 1.0, and 0.0 never holds. How long a push and
+/// a flick are remembered, and how far back in the pointer must come, stay
+/// as they are.
+///
+/// @param level the Edge stickiness, 0.0 to 5.0; below 0.0 counts as 0.0
+/// @return the limits
+[[nodiscard]] StickyLimits sticky_limits(float level) noexcept;
+
 /// Decides whether the pointer stays held at the window's edges.
 ///
 /// Resting on an edge, with no movement and no distance past it, stays held
@@ -96,7 +122,8 @@ struct StickyEdge {
 /// A distance of zero never grows a push and never starts its time again.
 /// After it lets go, it holds again only once the pointer is inside the
 /// window and at least the rearm distance from every edge. A window too
-/// small for that distance re-arms at its middle.
+/// small for that distance re-arms at its middle. Limits whose push or
+/// flick is zero never hold.
 ///
 /// @param state what earlier samples decided; updated
 /// @param sample where the pointer is, how it moved, how far past the edge
@@ -113,8 +140,9 @@ struct StickyEdge {
 
 /// Forgets a hold, so the pointer is free until it has moved back in.
 ///
-/// A menu, the pause screen, a window without the focus and the Free
-/// setting all call this. The next samples hold again only from inside.
+/// A menu, the pause screen, a window without the focus and Window edge
+/// Capture or Free all call this. The next samples hold again only from
+/// inside.
 ///
 /// @param state what earlier samples decided; left let go
 void release_sticky_edge(StickyEdge& state);
