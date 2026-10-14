@@ -42,6 +42,9 @@ struct HeaderLook {
     /// Columns kept clear at the right, inside the padding, for a control
     /// the header does not draw. 0 puts the version against the padding.
     int32_t right_inset{};
+    /// The mark at the left. Off, the title, or the second word when there
+    /// is no title, starts at the padding.
+    bool mark{true};
 };
 
 /// One entry of a nav list.

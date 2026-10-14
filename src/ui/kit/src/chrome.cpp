@@ -133,7 +133,8 @@ void draw_header(const Canvas& canvas, const HeaderLook& look) {
         compact_metrics.mark_side,
         compact_metrics.mark_side,
     };
-    draw_header_mark(canvas, mark);
+    if (look.mark)
+        draw_header_mark(canvas, mark);
     // On the smooth form the modern face is wider than the game font the
     // columns were kept for. Measure that face, or the second word starts
     // inside the title ("Open AnnihilationLibrary"). A crisp canvas keeps
@@ -146,8 +147,10 @@ void draw_header(const Canvas& canvas, const HeaderLook& look) {
         smooth
             ? std::max(look.second_width, smooth_header_width(canvas, look.second, look.tracking))
             : look.second_width;
+    const int32_t title_left =
+        look.mark ? mark.x + mark.width + compact_metrics.header_gap : compact_metrics.padding;
     const Rect title{
-        mark.x + mark.width + compact_metrics.header_gap,
+        title_left,
         header_top,
         title_span,
         header_height,
@@ -156,8 +159,10 @@ void draw_header(const Canvas& canvas, const HeaderLook& look) {
         canvas, FontRole::regular, look.title, title, Align::left, colour::text, look.tracking
     );
     const int32_t drawn_right = smooth ? title.x + title.width : title_right(canvas, title, look);
+    // With no mark and no title the second word takes the title's place.
+    const bool second_first = !look.mark && look.title.empty();
     const Rect second{
-        drawn_right + compact_metrics.header_gap,
+        second_first ? title_left : drawn_right + compact_metrics.header_gap,
         header_top,
         second_span,
         header_height,

@@ -54,6 +54,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -64,6 +65,7 @@
 #include <thread>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace oa::app {
@@ -1715,16 +1717,18 @@ void absorb_render_safe(SDL_Renderer* renderer, oa::ui::game_files::Viewport& vi
     viewport.safe.bottom = std::max(viewport.safe.bottom, bottom);
 }
 
-/// The frame the window is laid out in: the safe pixels, at the window's
-/// density, shrunk so the drawing cannot pass the canvas.
+/// The frame the window is laid out in: the safe pixels, at the setup's
+/// scale for them (first_run::setup_scale_percent, never below the window's
+/// density), shrunk so the drawing cannot pass the canvas. The window is
+/// drawn on the smooth form, so the scale may be a fraction.
 ///
 /// @param viewport the window's pixels, density and safe area
 /// @return the frame
 kit::Frame frame_of_window(const oa::ui::game_files::Viewport& viewport) {
     const float density = viewport.px_per_point > 0.F ? viewport.px_per_point : 1.F;
-    int32_t scale = static_cast<int32_t>(std::lround(static_cast<double>(density) * 100.0));
-    if (scale < 100)
-        scale = 100;
+    int32_t least = static_cast<int32_t>(std::lround(static_cast<double>(density) * 100.0));
+    if (least < 100)
+        least = 100;
     int32_t safe_left = std::max(viewport.safe.left, 0);
     int32_t safe_top = std::max(viewport.safe.top, 0);
     int32_t safe_right = std::max(viewport.safe.right, 0);
@@ -1739,6 +1743,7 @@ kit::Frame frame_of_window(const oa::ui::game_files::Viewport& viewport) {
         inner_width = std::max(viewport.width, 0);
         inner_height = std::max(viewport.height, 0);
     }
+    const int32_t scale = first_run::setup_scale_percent(inner_width, inner_height, least, true);
     kit::Frame frame;
     frame.scale_percent = scale;
     frame.area.x = origin_at_most(safe_left, scale);
@@ -1901,6 +1906,11 @@ constexpr std::string_view kDeutschCard = "first-run.language.card.de";
 /// Where the pre-game window check is in its walk. One call takes one action.
 struct SetupWindowDrive {
     enum class Phase : uint8_t {
+        mode,     ///< the header follows the window; switch to full screen
+        full,     ///< the header shows the mark and the name; back to the window
+        window,   ///< the header leaves them out again
+        turn,     ///< Left, Left and Right on the carousel
+        turned,   ///< the focus is on the card in the middle
         seek,     ///< bring Deutsch onto the carousel
         pick,     ///< choose Deutsch
         language, ///< the German lines, then Next
@@ -1910,8 +1920,9 @@ struct SetupWindowDrive {
         records,  ///< the managed copy and its records, then Next
         done,     ///< the walk has left the window
     };
-    Phase phase{Phase::seek};
+    Phase phase{Phase::mode};
     int frames{0};  ///< frames this walk has taken
+    int keys{0};    ///< carousel keys pressed
     int back{0};    ///< previous-card presses
     int forward{0}; ///< next-card presses
     int pause{0};   ///< frames to wait before the next card press
@@ -1931,6 +1942,7 @@ void setup_check_expect(bool ok, std::string_view what) {
 template <typename Handle>
 void drive_setup_window_check(
     SetupWindowDrive& drive,
+    SDL_Window* window,
     const fs::path& user,
     first_run::Session& session,
     const first_run::Scene& scene,
@@ -1991,7 +2003,75 @@ void drive_setup_window_check(
         return;
     }
 
+    // Whether the header shows the mark and the name.
+    const auto branded = [&] {
+        for (const kit::Item& item : scene.list.items)
+            if (const auto* look = std::get_if<kit::SetupChromeLook>(&item.look))
+                return look->brand;
+        return false;
+    };
+    const auto full_screen = [&] {
+        return (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
+    };
+    const auto switch_mode = [&](bool full, std::string_view what) {
+        setup_check_expect(
+            SDL_SetWindowFullscreen(window, full) && SDL_SyncWindow(window),
+            std::string(what) + " did not take"
+        );
+        drive.pause = 10;
+    };
+
     switch (drive.phase) {
+    case SetupWindowDrive::Phase::mode:
+        setup_check_expect(!full_screen(), "the setup did not open in a window");
+        setup_check_expect(!branded(), "the header names the game in a window");
+        switch_mode(true, "full screen");
+        drive.phase = SetupWindowDrive::Phase::full;
+        return;
+    case SetupWindowDrive::Phase::full:
+        setup_check_expect(full_screen(), "the window is not full screen");
+        setup_check_expect(branded(), "the header does not name the game full screen");
+        switch_mode(false, "the window");
+        drive.phase = SetupWindowDrive::Phase::window;
+        return;
+    case SetupWindowDrive::Phase::window:
+        setup_check_expect(!full_screen(), "the window did not come back");
+        setup_check_expect(!branded(), "the header still names the game in the window");
+        setup_check_expect(
+            SDL_SetWindowSize(window, 1280, 720) && SDL_SyncWindow(window),
+            "the window did not take 1280x720 again"
+        );
+        std::cout << "setup window check: the header follows the window\n" << std::flush;
+        drive.pause = 10;
+        drive.phase = SetupWindowDrive::Phase::turn;
+        return;
+    case SetupWindowDrive::Phase::turn: {
+        constexpr kit::Key kTurns[] = {kit::Key::left, kit::Key::left, kit::Key::right};
+        handle(first_run::key(session, scene, kTurns[drive.keys]));
+        ++drive.keys;
+        drive.pause = 4;
+        if (drive.keys >= static_cast<int>(std::size(kTurns))) {
+            drive.pause = 60;
+            drive.phase = SetupWindowDrive::Phase::turned;
+        }
+        return;
+    }
+    case SetupWindowDrive::Phase::turned: {
+        const kit::Control* focused = kit::control_of(scene.list, session.interaction.focused);
+        setup_check_expect(
+            focused != nullptr &&
+                session.interaction.focused == first_run::card_id + session.carousel.selected,
+            "the focus is not on the chosen card"
+        );
+        const int32_t middle = focused->rect.x + focused->rect.width / 2;
+        setup_check_expect(
+            middle >= scene.width / 2 - 2 && middle <= scene.width / 2 + 2,
+            "the focus is not on the card in the middle"
+        );
+        std::cout << "setup window check: the box is on " << focused->name << "\n" << std::flush;
+        drive.phase = SetupWindowDrive::Phase::seek;
+        return;
+    }
     case SetupWindowDrive::Phase::seek:
         setup_check_expect(
             session.model.step == first_run::Step::language, "the language step did not show"
@@ -2021,7 +2101,9 @@ void drive_setup_window_check(
             drive.phase = SetupWindowDrive::Phase::language;
         return;
     case SetupWindowDrive::Phase::language:
-        german("Where is Total Annihilation?", "Wo ist Total Annihilation?");
+        german(
+            "Locate Total Annihilation Game Files", "Spieldateien von Total Annihilation suchen"
+        );
         german(
             "OA copies the game once. The installation is left as it is.",
             "OA kopiert das Spiel einmal. Die Installation bleibt, wie sie ist."
@@ -2044,7 +2126,8 @@ void drive_setup_window_check(
         );
         setup_check_expect(session.model.source == 0, "the check's install was not chosen");
         setup_check_expect(
-            scene.title_text == "Wo ist Total Annihilation?", "the game step's title is not German"
+            scene.title_text == "Spieldateien von Total Annihilation suchen",
+            "the game step's title is not German"
         );
         setup_check_expect(shows("OA kopiert das Spiel einmal"), "the game step is not in German");
         setup_check_expect(shows("Beenden"), "the game step's left button is not Quit");
@@ -2254,6 +2337,15 @@ SetupBefore run_setup_before_game(
     if (read_window_viewport(display.window, display.renderer, viewport))
         absorb_render_safe(display.renderer, viewport);
     kit::Frame room = frame_of_window(viewport);
+    // The window's own title bar names the game; full screen has none.
+    const auto follow_window_mode = [&] {
+        const bool windowed = (SDL_GetWindowFlags(display.window) & SDL_WINDOW_FULLSCREEN) == 0;
+        if (windowed == session.model.windowed)
+            return false;
+        session.model.windowed = windowed;
+        return true;
+    };
+    std::ignore = follow_window_mode();
     first_run::Scene scene = relayout(room);
     SetupWindowDrive window_check;
 
@@ -2459,6 +2551,8 @@ SetupBefore run_setup_before_game(
             room = fitted;
             dirty = true;
         }
+        if (follow_window_mode())
+            dirty = true;
         const int32_t continue_before = session.copy_continue_ms;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -2588,7 +2682,9 @@ SetupBefore run_setup_before_game(
         }
         if (options.check_setup_window) {
             try {
-                drive_setup_window_check(window_check, user, session, scene, handle);
+                drive_setup_window_check(
+                    window_check, display.window, user, session, scene, handle
+                );
             } catch (...) {
                 setup_request_cancel();
                 setup_stop_join();

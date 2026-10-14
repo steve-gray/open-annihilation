@@ -271,8 +271,9 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
     own name, large and shrunk until it fits, its English name, a facts
     line and a pill centred at the bottom. A facts line wider than the
     card wraps onto the next small line, above the pill, so the whole
-    line is shown. An active card, and the carousel's centre card, have
-    an accent border and a one-point accent ring outside it. The
+    line is shown. An active card, and the carousel's chosen card once it
+    faces the player (`CarouselLook::chosen`; with none, the centre card),
+    have an accent border and a one-point accent ring outside it. The
     pill follows `LanguageAvailability`. Built in, get, downloading and
     checking are neutral; active uses the accent pill and an accent badge;
     a failed fetch uses the problem pill; offline is neutral and the card
@@ -301,9 +302,10 @@ contract from version 15 (`src/app/include/oa/app/extension.hpp`).
     segment a step, lit from the first up to the current one.
   - The setup window (`draw_setup_chrome`, `setup_buttons`): the kit
     window's header (the mark, "Open Annihilation", a muted page word and
-    the step indicator at the right) and its footer (Skip setup, a quiet
-    button on the left, then Back and an accent Next). It spans the window
-    and is drawn from the canvas's origin.
+    the step indicator at the right; without `SetupChromeLook::brand`, the
+    page word at the left and the step indicator) and its footer (Skip
+    setup, a quiet button on the left, then Back and an accent Next). It
+    spans the window and is drawn from the canvas's origin.
   - A choice card (`draw_choice_card`, `choice_step`): a radio row with a
     title and a hint, idle, hovered, held, chosen and disabled. Up and Left
     move to the previous row of a group and Down and Right to the next,

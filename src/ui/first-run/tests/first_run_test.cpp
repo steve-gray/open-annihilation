@@ -1,7 +1,10 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The first-run gate, and the coach marks at Compact, Regular and Large.
+// The first-run gate, and the coach marks at Compact, Regular and Large; the
+// chosen language card alone marked as the carousel turns; the header's
+// mark and name left out in a window; the Locate step's title and button;
+// and the setup's scale on a window.
 
 #include "oa/ui/first_run/first_run.hpp"
 
@@ -10,10 +13,12 @@
 #include "oa/test/check.hpp"
 #include "oa/ui/kit/looks.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <variant>
 
@@ -762,8 +767,21 @@ void check_game_column() {
             continue;
         OA_CHECK(locate->rect.height == oa::ui::kit::compact_metrics.button_height);
         OA_CHECK(locate->rect.y == second->rect.y + second->rect.height + metrics.padding);
-        OA_CHECK(locate->rect.width == oa::ui::kit::compact_metrics.button_width);
+        // As wide as the footer makes a button of the same words: Quit's and
+        // Back's insets either side of the estimated caption.
+        oa::ui::kit::SetupChromeLook same;
+        same.width = size[0];
+        same.height = size[1];
+        same.skip = locate->text;
+        const oa::ui::kit::SetupButtons footer = oa::ui::kit::setup_buttons(nullptr, same);
+        OA_CHECK(locate->rect.width == footer.skip.width);
+        OA_CHECK(locate->rect.height == footer.skip.height);
+        OA_CHECK(
+            locate->rect.width >= oa::ui::kit::estimated_width(locate->text) +
+                                      2 * oa::ui::kit::compact_metrics.choice_text_inset
+        );
         OA_CHECK(locate->rect.x == first->rect.x + (column - locate->rect.width) / 2);
+        OA_CHECK(scene.title_text == "Locate Total Annihilation Game Files");
     }
 }
 
@@ -1108,6 +1126,253 @@ void check_online_well() {
     }
 }
 
+/// The look of the carousel a scene draws.
+///
+/// @param scene the layout
+/// @return the look; null when the scene has no carousel
+const oa::ui::kit::CarouselLook* carousel_look(const oa::ui::first_run::Scene& scene) {
+    for (const oa::ui::kit::Item& item : scene.list.items)
+        if (const auto* look = std::get_if<oa::ui::kit::CarouselLook>(&item.look))
+            return look;
+    return nullptr;
+}
+
+/// Checks that the chosen card, and only it, is marked: the focus is on it,
+/// the carousel rings it, and no other card is drawn Active.
+///
+/// @param session the session after ensure_focus
+/// @param scene its layout
+/// @param speaks true when the step speaks the chosen card's language
+/// @param when what the player has just done, for the log
+void expect_marked(
+    const Session& session, const oa::ui::first_run::Scene& scene, bool speaks, const char* when
+) {
+    const int32_t chosen = session.carousel.selected;
+    const oa::ui::kit::ControlId focused = session.interaction.focused;
+    const bool on_chosen = focused == oa::ui::first_run::card_id + chosen;
+    const oa::ui::kit::CarouselLook* look = carousel_look(scene);
+    bool ringed = look != nullptr && look->chosen == chosen;
+    int32_t active = 0;
+    bool active_chosen = false;
+    if (look != nullptr) {
+        for (std::size_t at = 0; at < look->cards.size(); ++at) {
+            if (look->cards[at].availability != oa::ui::kit::LanguageAvailability::active)
+                continue;
+            ++active;
+            active_chosen = static_cast<int32_t>(at) == chosen;
+        }
+    }
+    const bool active_right = speaks ? active == 1 && active_chosen : active == 0;
+    // The focus ring is drawn around the focused control: the chosen card's face.
+    const oa::ui::kit::Control* control = oa::ui::kit::control_of(scene.list, focused);
+    const oa::ui::kit::CarouselSlot* slot = slot_of(scene, chosen);
+    const bool ring_on_face = control != nullptr && slot != nullptr &&
+                              control->rect.x == slot->face.x && control->rect.y == slot->face.y &&
+                              control->rect.width == slot->face.width;
+    if (!on_chosen || !ringed || !active_right || !ring_on_face) {
+        std::fprintf(
+            stderr,
+            "%s: chosen %d, focus %d, ring %d, %d active\n",
+            when,
+            chosen,
+            static_cast<int>(focused) - static_cast<int>(oa::ui::first_run::card_id),
+            look != nullptr ? look->chosen : -2,
+            active
+        );
+    }
+    OA_CHECK(on_chosen);
+    OA_CHECK(ringed);
+    OA_CHECK(active_right);
+    OA_CHECK(ring_on_face);
+}
+
+/// Left, left, right on the language carousel: after every key, part way
+/// through the move and once it has settled, the box is on the chosen card
+/// and no longer around English. The wheel, a press on a side card and a
+/// carousel that slides flat do the same.
+void check_box_follows_choice() {
+    for (const bool flat : {false, true}) {
+        Session session;
+        session.model.walk = Walk::setup;
+        session.model.cards = {
+            named_card("en", "English"),
+            named_card("de", "Deutsch"),
+            named_card("es", "Espanol"),
+            named_card("fr", "Francais"),
+            named_card("it", "Italiano"),
+        };
+        session.model.cards[0].current = true;
+        session.carousel.selected = 0;
+        oa::ui::first_run::bind(session);
+        oa::ui::kit::carousel_settle(session.carousel);
+        oa::ui::kit::Frame frame;
+        frame.area = {0, 0, 1280, 720};
+        frame.size_class = oa::ui::kit::SizeClass::large;
+        frame.scale_percent = 100;
+        frame.reduced_motion = flat;
+        auto scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+        oa::ui::first_run::ensure_focus(session, scene.list);
+        expect_marked(session, scene, true, "start");
+        const oa::ui::kit::Key keys[] = {
+            oa::ui::kit::Key::left, oa::ui::kit::Key::left, oa::ui::kit::Key::right
+        };
+        for (const oa::ui::kit::Key pressed : keys) {
+            const auto moved = oa::ui::first_run::key(session, scene, pressed);
+            OA_CHECK(moved.redraw);
+            // The focus follows at once, before the screen is laid out again.
+            OA_CHECK(
+                session.interaction.focused ==
+                oa::ui::first_run::card_id + session.carousel.selected
+            );
+            oa::ui::first_run::tick(session, oa::ui::kit::carousel_move_ms / 4);
+            scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+            oa::ui::first_run::ensure_focus(session, scene.list);
+            expect_marked(session, scene, true, "moving");
+            oa::ui::first_run::tick(session, oa::ui::kit::carousel_move_ms);
+            scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+            oa::ui::first_run::ensure_focus(session, scene.list);
+            expect_marked(session, scene, true, "settled");
+        }
+        OA_CHECK(session.carousel.selected == 4);
+        // English is still the language in use, but is not marked.
+        const oa::ui::kit::CarouselLook* look = carousel_look(scene);
+        OA_CHECK(look != nullptr);
+        if (look != nullptr && !look->cards.empty()) {
+            OA_CHECK(look->cards[0].availability == oa::ui::kit::LanguageAvailability::built_in);
+            OA_CHECK(look->cards[0].pill == "Built in");
+            OA_CHECK(look->cards[4].pill == "Active");
+        }
+
+        const auto turned = oa::ui::first_run::wheel(session, scene, -1.F);
+        OA_CHECK(turned.redraw);
+        oa::ui::first_run::tick(session, oa::ui::kit::carousel_move_ms);
+        scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+        oa::ui::first_run::ensure_focus(session, scene.list);
+        expect_marked(session, scene, true, "wheel");
+
+        const oa::ui::kit::CarouselSlot* side = slot_of(scene, 1);
+        OA_CHECK(side != nullptr);
+        if (side != nullptr) {
+            const oa::ui::kit::Point at{
+                side->face.x + side->face.width / 2, side->face.y + side->face.height / 2
+            };
+            std::ignore = oa::ui::first_run::pointer(
+                session, scene, oa::ui::first_run::PointerKind::down, at, 0, 1
+            );
+            std::ignore = oa::ui::first_run::pointer(
+                session, scene, oa::ui::first_run::PointerKind::up, at, 0, 1
+            );
+            OA_CHECK(session.carousel.selected == 1);
+            oa::ui::first_run::tick(session, oa::ui::kit::carousel_move_ms / 2);
+            scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+            oa::ui::first_run::ensure_focus(session, scene.list);
+            expect_marked(session, scene, true, "press");
+        }
+    }
+
+    // A pack that is not installed is ringed and focused when chosen, and
+    // no card is drawn Active: the step still speaks the language in use.
+    Session packed;
+    packed.model.cards = {named_card("en", "English"), named_card("de", "Deutsch")};
+    packed.model.cards[0].current = true;
+    Card pack;
+    pack.tag = "eo";
+    pack.own_name = "Esperanto";
+    pack.kind = CardKind::pack;
+    pack.size_text = "1.2 MB";
+    packed.model.cards.push_back(pack);
+    packed.carousel.selected = 0;
+    oa::ui::first_run::bind(packed);
+    oa::ui::kit::Frame frame;
+    frame.area = {0, 0, 1280, 720};
+    frame.size_class = oa::ui::kit::SizeClass::large;
+    frame.scale_percent = 100;
+    auto scene = oa::ui::first_run::lay_out(packed, frame, nullptr);
+    oa::ui::first_run::ensure_focus(packed, scene.list);
+    std::ignore = oa::ui::first_run::key(packed, scene, oa::ui::kit::Key::left);
+    oa::ui::first_run::tick(packed, oa::ui::kit::carousel_move_ms);
+    scene = oa::ui::first_run::lay_out(packed, frame, nullptr);
+    oa::ui::first_run::ensure_focus(packed, scene.list);
+    OA_CHECK(packed.carousel.selected == 2);
+    expect_marked(packed, scene, false, "pack");
+
+    // A focus on an arrow stays on it while the carousel turns.
+    packed.interaction.focused = oa::ui::first_run::previous_id;
+    std::ignore = oa::ui::first_run::key(packed, scene, oa::ui::kit::Key::left);
+    OA_CHECK(packed.interaction.focused == oa::ui::first_run::previous_id);
+}
+
+/// In a window the header leaves out the mark and the name, on every step
+/// with the setup's header; full screen keeps them.
+void check_brand() {
+    oa::ui::kit::Frame frame;
+    frame.area = {0, 0, 1280, 720};
+    frame.size_class = oa::ui::kit::SizeClass::large;
+    frame.scale_percent = 100;
+    for (const Step step : {Step::language, Step::game, Step::copying, Step::online}) {
+        for (const bool windowed : {false, true}) {
+            Session session;
+            session.model.walk = Walk::setup;
+            session.model.step = step;
+            session.model.windowed = windowed;
+            const auto scene = oa::ui::first_run::lay_out(session, frame, nullptr);
+            bool saw = false;
+            for (const oa::ui::kit::Item& item : scene.list.items) {
+                const auto* look = std::get_if<oa::ui::kit::SetupChromeLook>(&item.look);
+                if (look == nullptr)
+                    continue;
+                saw = true;
+                OA_CHECK(look->brand == !windowed);
+                OA_CHECK(!look->page.empty());
+                OA_CHECK(look->step_count == 5);
+            }
+            OA_CHECK(saw);
+        }
+    }
+}
+
+/// The setup's scale on the windows its sizes are stated for, and the
+/// least it keeps.
+void check_setup_scale() {
+    using oa::ui::first_run::setup_scale_percent;
+    // 640 by 480 and 960 by 540 lay out in their own points.
+    OA_CHECK(setup_scale_percent(640, 480, 100, true) == 100);
+    OA_CHECK(setup_scale_percent(960, 540, 100, true) == 100);
+    // 1280 by 720 holds 960 by 540 at four thirds.
+    OA_CHECK(setup_scale_percent(1280, 720, 100, true) == 133);
+    OA_CHECK(setup_scale_percent(1920, 1080, 100, true) == 200);
+    // A 2x window of 1920 by 1117 points: 3840 by 2234 pixels.
+    OA_CHECK(setup_scale_percent(3840, 2234, 200, true) == 400);
+    // Whole steps without fractions; the least is kept.
+    OA_CHECK(setup_scale_percent(1280, 720, 100, false) == 100);
+    OA_CHECK(setup_scale_percent(2560, 1440, 100, false) == 200);
+    OA_CHECK(setup_scale_percent(640, 480, 200, true) == 200);
+    OA_CHECK(setup_scale_percent(0, 0, 0, true) == 100);
+
+    const struct Window {
+        int32_t width;
+        int32_t height;
+        int32_t density;
+    } windows[] = {{640, 480, 1}, {1280, 720, 1}, {1920, 1080, 1}, {1920, 1117, 2}};
+
+    for (const Window& window : windows) {
+        const oa::ui::kit::Frame frame = oa::ui::first_run::setup_frame(
+            window.width * window.density,
+            window.height * window.density,
+            window.density * 100,
+            true
+        );
+        // The room never shrinks below 640 by 480, and a larger window keeps
+        // Regular's room.
+        OA_CHECK(frame.area.width >= 640 && frame.area.height >= 480);
+        if (window.width >= 960)
+            OA_CHECK(frame.size_class == oa::ui::kit::SizeClass::regular);
+        const oa::ui::kit::Rect drawn = oa::ui::kit::to_canvas(frame.area, frame.scale_percent);
+        OA_CHECK(drawn.width <= window.width * window.density);
+        OA_CHECK(drawn.height <= window.height * window.density);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -1126,5 +1391,8 @@ int main() {
     check_game_column();
     check_language_floor_and_note();
     check_online_well();
+    check_box_follows_choice();
+    check_brand();
+    check_setup_scale();
     return oa::test::check_exit_status();
 }

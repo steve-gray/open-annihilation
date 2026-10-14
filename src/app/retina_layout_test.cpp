@@ -532,7 +532,14 @@ void test_setup(text_font::FontStack* fonts, const kit::Frame& once, const kit::
     if (next == nullptr || locate == nullptr)
         return;
     CHECK(next->rect.width > kit::compact_metrics.button_width);
-    CHECK(locate->rect.width == kit::compact_metrics.button_width);
+    // Locate another… holds its estimated words with the footer's insets.
+    CHECK(
+        locate->rect.width ==
+        std::max(
+            kit::compact_metrics.button_width,
+            kit::estimated_width(locate->text) + 2 * kit::compact_metrics.choice_text_inset
+        )
+    );
     CHECK(next->rect.height == kit::compact_metrics.button_height);
     const int32_t next_right = next->rect.x + next->rect.width;
     CHECK(next_right <= once.area.width - kit::compact_metrics.edge);
