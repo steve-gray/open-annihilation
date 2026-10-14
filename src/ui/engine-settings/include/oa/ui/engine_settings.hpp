@@ -41,8 +41,11 @@ inline constexpr std::string_view max_zoom_in = "open-annihilation.max-zoom-in";
 /// "off", or the share of the battlefield in percent: "25" or "50"
 /// (EngineSettings::view_past_map_edge).
 inline constexpr std::string_view view_past_map_edge = "open-annihilation.view-past-map-edge";
-/// "sticky" or "free" (EngineSettings::window_edge).
+/// "capture", "sticky" or "free" (EngineSettings::window_edge).
 inline constexpr std::string_view window_edge = "open-annihilation.window-edge";
+/// How firmly Sticky holds, a decimal from "0.0" to "5.0" in tenths
+/// (EngineSettings::edge_stickiness).
+inline constexpr std::string_view edge_stickiness = "open-annihilation.window-edge-stickiness";
 /// 1 or 0 (EngineSettings::middle_click_pan).
 inline constexpr std::string_view middle_click_pan = "open-annihilation.middle-click-pan";
 /// 1 or 0 (EngineSettings::escape_opens_menu).
@@ -591,19 +594,57 @@ inline constexpr std::array<ZoomedOutUnits, 3> zoomed_out_units_choices{
 /// Icons is shown, but cannot be chosen yet.
 inline constexpr std::size_t offered_zoomed_out_units = 2;
 
-/// Window edge: whether a window holds the pointer on its edges while a
-/// match's battlefield shows, so the view edge-scrolls. Full screen holds
-/// the pointer either way.
+/// Window edge: whether a window keeps the pointer while a match's
+/// battlefield shows, so the view edge-scrolls. Full screen holds the
+/// pointer either way.
 enum class WindowEdge : uint8_t {
-    sticky, ///< the pointer rests on the edge so the view scrolls
+    /// the pointer cannot leave the window while the battlefield shows and
+    /// the window has the focus
+    capture,
+    sticky, ///< the pointer rests on the edge until a firm push lets it go
     free,   ///< the pointer leaves a window's edge, as before
 };
 
 /// The ways of Window edge, in the order the dialog offers them.
-inline constexpr std::array<WindowEdge, 2> window_edge_choices{
+inline constexpr std::array<WindowEdge, 3> window_edge_choices{
+    WindowEdge::capture,
     WindowEdge::sticky,
     WindowEdge::free,
 };
+
+/// Edge stickiness's lowest value, in tenths: 0.0, a sticky edge that never
+/// holds.
+inline constexpr uint32_t lowest_edge_stickiness = 0;
+/// Edge stickiness's highest value, in tenths: 5.0, five times as firm as
+/// 1.0.
+inline constexpr uint32_t highest_edge_stickiness = 50;
+/// Edge stickiness's slider steps, in tenths: 0.1.
+inline constexpr uint32_t edge_stickiness_step = 1;
+/// Edge stickiness's default, in tenths: 1.0.
+inline constexpr uint32_t default_edge_stickiness = 10;
+/// Tenths in one whole level of Edge stickiness.
+inline constexpr uint32_t edge_stickiness_per_level = 10;
+static_assert(
+    default_edge_stickiness >= lowest_edge_stickiness &&
+        default_edge_stickiness <= highest_edge_stickiness,
+    "Edge stickiness's default lies on its slider"
+);
+
+/// Returns Edge stickiness as the slider and the preferences show it: one
+/// decimal, as "1.0" or "2.5".
+///
+/// @param tenths the level in tenths
+/// @return the text
+[[nodiscard]] std::string edge_stickiness_text(uint32_t tenths);
+
+/// Reads Edge stickiness from its stored text: a decimal number with at
+/// most one sign, digits and a point, as "1.0", "2.5", "3" or "0.25".
+///
+/// @param text the stored text
+/// @return the level in tenths, rounded to the nearest tenth (a half rounds
+///     up) and held to lowest_edge_stickiness to highest_edge_stickiness;
+///     nothing for any other text
+[[nodiscard]] std::optional<uint32_t> edge_stickiness_from_text(std::string_view text) noexcept;
 
 /// Window frame: when the game's window shows its title bar and borders.
 /// Full screen has none either way.
@@ -880,9 +921,12 @@ struct EngineSettings {
     bool middle_click_pan{true};
     bool escape_opens_menu{}; ///< Escape with nothing to cancel opens the game menu
     bool switch_alt{};        ///< 3.1c's SwitchAlt: a number key alone selects its group
-    /// Whether a window holds the pointer on its edges while a match's
-    /// battlefield shows. Full screen holds the pointer either way.
-    WindowEdge window_edge{WindowEdge::sticky};
+    /// Whether a window keeps the pointer while a match's battlefield
+    /// shows. Full screen holds the pointer either way.
+    WindowEdge window_edge{WindowEdge::capture};
+    /// How firmly Sticky holds the pointer at a window's edges, in tenths:
+    /// 10 is 1.0. Kept whatever Window edge is.
+    uint32_t edge_stickiness{default_edge_stickiness};
     uint16_t unit_limit{default_unit_limit};       ///< units per player, from the next game
     uint32_t max_frame_rate{highest_frame_rate};   ///< frames a second
     AntiAliasing anti_aliasing{AntiAliasing::off}; ///< enhanced anti-aliasing of units
@@ -1406,6 +1450,8 @@ enum class Lock : uint8_t {
     /// Zoomed out units is Rendered: units are drawn the same at every
     /// zoom, so After zoom changes nothing.
     needs_dots,
+    /// Window edge is Capture or Free: only a sticky edge has a firmness.
+    needs_sticky,
     /// The welcome setup is walked through again only from the main menu.
     main_menu,
 };
@@ -1464,6 +1510,9 @@ struct Locks {
     /// After zoom: the dialog itself locks it needs_dots while it shows
     /// Zoomed out units Rendered.
     Lock zoomed_out_after{};
+    /// Edge stickiness: the dialog itself locks it needs_sticky while it
+    /// shows Window edge Capture or Free.
+    Lock edge_stickiness{};
     /// Welcome setup: locked while a game is running. SHOW AGAIN is chosen
     /// from the main menu.
     Lock welcome_setup{};

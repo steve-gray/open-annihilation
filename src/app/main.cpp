@@ -1643,8 +1643,10 @@ int run_once(
         if (options.check_game_files && options.game_files_route == GameFilesRoute::manage &&
             !run_game_files_manage_check(options, display.window, display.renderer_host.renderer()))
             return finish_game_files_check(options, 1);
-    // While the setup will still show, the movies wait until its last step.
-    // A start that does not show it plays them here, before the menu.
+    // While the setup will still show, the movies wait until its last step,
+    // and the main menu's hum waits for them (Runtime::play_menu_voice). A
+    // start that does not show it plays them here, before the archives are
+    // mounted and the runtime opens the main menu, which starts the hum.
     if (options.restarts == 0 && setup_shows_over_menu(options))
         options.intro_after_setup = true;
     else if (options.restarts == 0)

@@ -4031,7 +4031,8 @@ class Runtime final : public menu::Host,
 
     /// Plays the intro that waited for the setup, once the setup will not
     /// show again, and writes "first-run: done" before it. A start that did
-    /// not wait returns without playing.
+    /// not wait returns without playing. The main menu's hum waited with the
+    /// intro, and starts after it (start_waiting_menu_hum).
     void play_intro_after_setup();
 
     /// Writes "first-run: not showing" once when the setup stays hidden, and
@@ -5139,6 +5140,12 @@ class Runtime final : public menu::Host,
     /// every section, each setting in effect at once, OK, Cancel and Restore
     /// defaults and the preferences they save (part of --check-engine-settings).
     void check_engine_settings_dialog();
+
+    /// Checks that Window edge's strip and Edge stickiness's slider fit the
+    /// settings dialog on a 640x480 window in English and German, with each
+    /// way of the strip, as part of --check-engine-settings. Leaves the
+    /// window at 640x480 and the language as it found it.
+    void check_window_edge_rows_fit();
 
     /// Checks the main menu with its OA button, and the dialog on each of its
     /// sections, as windows of several sizes show them (part of
@@ -9017,19 +9024,100 @@ class Runtime final : public menu::Host,
     /// @param time_ms the sample's time, in milliseconds
     void note_sticky_motion(float x, float y, float motion_x, float motion_y, uint64_t time_ms);
 
+    /// Returns the Window edge setting in effect: Capture when there are
+    /// no settings, as on a new install.
+    ///
+    /// @return the way chosen
+    [[nodiscard]] oa::ui::engine_settings::WindowEdge window_edge_mode() const;
+
+    /// Tells whether a match's battlefield shows, in play: the match runs,
+    /// and no game menu, pause screen, settings dialog or message box is
+    /// over it. Says nothing of the window.
+    ///
+    /// @return true while the battlefield is played
+    [[nodiscard]] bool battlefield_in_play();
+
+    /// Tells whether the game's window, not full screen, has the input
+    /// focus over a battlefield in play: when Window edge acts.
+    ///
+    /// Full screen keeps its own rule.
+    ///
+    /// @param require_mouse the pointer has to be inside the window too
+    /// @return true while Window edge may keep the pointer
+    [[nodiscard]] bool window_edge_battlefield(bool require_mouse = true);
+
     /// Tells whether a match's battlefield in a focused window wants the
     /// pointer held at the window's edges.
     ///
     /// Menus, the pause screen, a settings dialog, a message box, a window
-    /// without the focus, full screen and Window edge Free do not. Full
-    /// screen keeps its own rule. While a soft wall is holding, the pointer
-    /// may be past the edge for the moment it is put back, so the mouse
-    /// focus is not required then.
+    /// without the focus, full screen, Window edge Capture and Free, and
+    /// Edge stickiness 0.0 do not. Full screen keeps its own rule. While a
+    /// soft wall is holding, the pointer may be past the edge for the moment
+    /// it is put back, so the mouse focus is not required then.
     ///
     /// @param require_mouse the pointer has to be inside the window; false
     ///        while a soft wall is putting it back
     /// @return true while the sticky edge should keep the pointer at the edges
     [[nodiscard]] bool sticky_edge_wanted(bool require_mouse = true);
+
+    /// Returns how firm a sticky edge is, from Edge stickiness.
+    ///
+    /// @return the push and the flick that let the pointer go
+    [[nodiscard]] StickyLimits sticky_edge_limits() const;
+
+    /// Tells whether Window edge Capture wants the pointer kept in the
+    /// window.
+    ///
+    /// Only while a match's battlefield in play shows in a focused window
+    /// and Window edge is Capture, and not after Escape or a lost focus
+    /// until the battlefield is clicked again.
+    ///
+    /// @param require_mouse the pointer has to be inside the window, as it
+    ///        must before a capture starts
+    /// @return true while the pointer should not leave the window
+    [[nodiscard]] bool capture_wanted(bool require_mouse = true);
+
+    /// Notes what an event means to Window edge, before any screen sees it.
+    ///
+    /// A motion feeds the sticky edge. Losing the focus lets the pointer go,
+    /// and with Capture the pointer then waits for a click on the battlefield.
+    /// The click that gives the window the focus back, before the focus or
+    /// within focus_click_ms of it with no key pressed between, is only that:
+    /// the press and its release reach nothing. Escape in a match lets a
+    /// captured pointer go until the battlefield is clicked again; that
+    /// click, like a later one after a lost focus, acts as any click does.
+    ///
+    /// @param event the event about to be dispatched
+    /// @param[out] force_release set when this event lets the pointer go
+    ///        whatever the window's flags say
+    /// @return true when the event is the focusing click or its release, and
+    ///         nothing else should see it
+    bool take_window_edge_event(const SDL_Event& event, bool& force_release);
+
+    /// Keeps the pointer in the window, at its edges or free, as Window edge
+    /// says, after an event or before a frame.
+    ///
+    /// Full screen is left to keeps_pointer_on_screen. Capture holds SDL's
+    /// window grab, which confines the pointer to the window on every
+    /// system, and Sticky follows apply_sticky_edge.
+    ///
+    /// @param force_release let go for this call even when the battlefield
+    ///        still looks wanted, as when the focus is lost and the window's
+    ///        flags have not caught up
+    void apply_window_edge(bool force_release = false);
+
+    /// Takes or gives up the window's grab for Window edge Capture.
+    ///
+    /// The grab is asked for again on every call while it is wanted, since
+    /// a change of the window's state may have cleared it. Letting go leaves
+    /// a Wayland sticky edge's confinement alone.
+    ///
+    /// @param force_release let go for this call
+    void apply_capture(bool force_release);
+
+    /// Ends the window's grab and mouse rect unless the other way of Window
+    /// edge still holds them.
+    void release_window_edge_grab();
 
     /// Tells whether this window system leaves the pointer free, so the
     /// game puts it back on an edge itself.
@@ -9051,7 +9139,7 @@ class Runtime final : public menu::Host,
 
     /// Keeps the pointer at the window's edges, or lets it go, as the rule says.
     ///
-    /// Full screen is left to keeps_pointer_on_screen. A window that does
+    /// Called by apply_window_edge for a window. A window that does
     /// not want the rule, or force_release, lets the pointer go until it
     /// has moved back in. Becoming wanted samples the pointer once with no
     /// movement, so a pointer already on an edge is not trapped. A soft
@@ -9063,7 +9151,9 @@ class Runtime final : public menu::Host,
     ///        flags have not caught up
     void apply_sticky_edge(bool force_release = false);
 
-    /// Forgets a hold, so the next apply holds again only from inside.
+    /// Forgets a hold, so the next apply holds again only from inside, and
+    /// forgets that Capture held the grab, which a dialog of the system's
+    /// clears.
     void forget_sticky_edge();
 
     /// Tells whether the desktop pointer's place is a real distance past the
@@ -13614,16 +13704,37 @@ class Runtime final : public menu::Host,
             report_unplayed_sound(selection.sound->resource, error);
     }
 
-    /// Starts the main menu's music: the CD music's menu mode and the menu voice loop.
+    /// Starts the main menu's music: the CD music's menu mode and the menu
+    /// voice loop, the hum (runtime_menu_audio.cpp).
     void start_menu_music();
 
-    /// Loops an ALLSOUND alternate voice as the menu music (the menu's BGM entry is drone2).
+    /// Loops an ALLSOUND alternate voice as the menu music (the menu's BGM entry
+    /// is drone2), the main menu's hum.
     ///
-    /// Nothing plays when muted, headless or already playing; a failure is
-    /// reported on stderr.
+    /// While the setup is still to finish and the movies to play after it
+    /// (menu_hum_waits), the hum waits: nothing plays, and
+    /// start_waiting_menu_hum starts it once they are over. Otherwise
+    /// "menu hum: starts" is written as the hum starts, muted and headless
+    /// runs included. Nothing plays when muted, headless or already playing;
+    /// a failure is reported on stderr.
     ///
     /// @param sound ALLSOUND name
     void play_menu_voice(std::string_view sound);
+
+    /// Tells whether the main menu's hum waits: while the setup is still to
+    /// finish and the movies to play after it (Options::intro_after_setup).
+    /// A --first-run start, whose setup shows again and whose movies wait
+    /// for a walk that will not, waits only until the walk is first finished.
+    ///
+    /// @return true while the hum waits
+    [[nodiscard]] bool menu_hum_waits() const;
+
+    /// Starts the main menu's hum that waited for the setup and the movies
+    /// after it, once they are over: the frame after the movies played, or
+    /// after the setup ended where a switch skips them. Called every frame;
+    /// does nothing while they are still to come or when no menu asked for
+    /// the hum.
+    void start_waiting_menu_hum();
 
     /// Plays an ALLSOUND sound on the alternate route, looping it as the menu
     /// music plays, in place of whatever that route plays.
@@ -13636,7 +13747,8 @@ class Runtime final : public menu::Host,
     /// @return true when the sound started
     bool play_alternate_sound(std::string_view sound);
 
-    /// Stops the menu music loop and puts the CD music into its match mode.
+    /// Stops the menu music loop and puts the CD music into its match mode. A
+    /// hum that waited is forgotten: the menu asks for it again.
     void stop_menu_music();
 
     // CD music (runtime_music.cpp): music files play as the disc.
@@ -16114,6 +16226,26 @@ class Runtime final : public menu::Host,
     float sticky_warp_x_ = 0;
     /// Where the pointer was last put back, down the window.
     float sticky_warp_y_ = 0;
+    /// Window edge Capture holds the window's grab, so letting go clears it.
+    bool capture_held_ = false;
+    /// Capture waits for a click on the battlefield before it keeps the
+    /// pointer again: after Escape in a match, and after the window lost
+    /// the focus.
+    bool capture_waits_for_click_ = false;
+    /// The window lost the focus while Capture applied, and no press, and
+    /// no key since the focus came back, has come since: a click on the
+    /// battlefield before the focus, or within focus_click_ms after it, only
+    /// gives the window the focus back.
+    bool capture_focus_click_ = false;
+    /// When the focus came back while capture_focus_click_ waits, in
+    /// milliseconds; 0 while it has not.
+    uint64_t capture_focus_gained_ms_ = 0;
+    /// How long after the focus comes back a click is still the one that
+    /// brought it, in milliseconds. A window system sends the two together.
+    static constexpr uint64_t focus_click_ms = 500;
+    /// The button of the focusing click Capture took, whose release it takes
+    /// too; 0 for none.
+    uint8_t capture_swallowed_button_ = 0;
     /// A middle-click pan: idle, a click still deciding, or a drag. The
     /// anchor is a screen point.
     middle_pan::State middle_pan_{};
@@ -16140,6 +16272,15 @@ class Runtime final : public menu::Host,
     uint8_t cursor_index_ = 0xff;
     bool cursors_loaded_ = false;
     bool menu_music_playing_ = false;
+    /// The main menu asked for its hum while it waited for the setup and the
+    /// movies after it (play_menu_voice, start_waiting_menu_hum).
+    bool menu_hum_waiting_ = false;
+    /// The hum has started and no match has stopped it, muted and headless
+    /// runs included; "menu hum: starts" is written as this turns true.
+    bool menu_hum_on_ = false;
+    /// The setup's walk was finished in this run, by Start playing or Skip
+    /// setup (menu_hum_waits).
+    bool setup_finished_ = false;
     // The settings the profile's display rules let the player change.
     view_rules::ViewSettings view_settings_{};
 

@@ -193,15 +193,28 @@ Each of these takes effect at once.
   way. Turn it on if you are used to selecting groups with the number keys
   alone, as most strategy games do. It is 3.1c's own SwitchAlt option, so
   the console's `+switchalt` changes it too.
-- **Window edge**, Sticky or Free, Sticky by default. In a window, while a
-  match's battlefield shows and the window has the focus, Sticky holds the
-  pointer on the window's edges so it rests on the last pixel and the view
-  edge-scrolls, as it does in full screen. A firm push past the edge, or
-  arriving there fast, lets the pointer leave. It is held again once it has
-  come back into the window and moved in from the edges. Menus, the pause
-  screen and a window without the focus leave it free. Free leaves a
-  window's edge as the game did before. Full screen holds the pointer
-  either way.
+- **Window edge**, Capture, Sticky or Free, Capture by default. What a
+  window does with the pointer while a match's battlefield shows and the
+  window has the focus. Capture keeps the pointer in the window: no push or
+  flick takes it out, it rests on the last pixel of each edge and the view
+  edge-scrolls, as it does in full screen. The game menu, the pause screen,
+  Settings, Escape and a window without the focus let it go, and a click on
+  the battlefield captures it again; the click that only brings the window
+  back gives no order. Sticky holds the pointer on the window's edges until
+  a firm push past the edge, or arriving there fast, lets it leave, as
+  firmly as Edge stickiness says. It is held again once it has come back
+  into the window and moved in from the edges. Free leaves a window's edge
+  as the game did before. Full screen holds the pointer whichever is
+  chosen. See [the window's edge](controls.md#the-windows-edge).
+- **Edge stickiness**, 0.0 to 5.0 in steps of 0.1, 1.0 by default, under
+  Window edge. How firmly Sticky holds: at 1.0 a push of about 300 points
+  past the edge within half a second, or arriving at about 6250 points a
+  second, lets the pointer go, and the push and the flick grow with the
+  level, so 5.0 holds five times as firmly. At 0.0 the edge never holds.
+  Only Sticky uses it: with Capture or Free it is greyed, says Needs
+  Sticky, and keeps its value.
+
+![The end of the Controls section: Middle-click pans On, Select groups without Alt Off, Window edge at Capture, and Edge stickiness greyed at 1.0, Needs Sticky.](images/settings/controls-2.png)
 
 ## Engine Limits
 

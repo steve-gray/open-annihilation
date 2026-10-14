@@ -35,9 +35,11 @@
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/first_run/first_run.hpp"
 #include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/looks.hpp"
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -51,6 +53,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace oa::app {
@@ -306,12 +309,11 @@ void Runtime::check_first_run() {
         LayerScreen* screen = setup();
         require(screen != nullptr, "the setup is not showing");
         const LayerPlacement placed = screen->placement(oa_layer().view());
-        const int32_t scale = placed.points_width > 0 && placed.shown.width > 0
-                                  ? placed.shown.width / placed.points_width
-                                  : 1;
+        // At the setup's own scale, which may be a fraction.
+        const int32_t percent = std::max(placed.scale_percent, int32_t{100});
         const oa::ui::display_layout::Point at{
-            placed.shown.x + (control->rect.x + control->rect.width / 2) * scale,
-            placed.shown.y + (control->rect.y + control->rect.height / 2) * scale
+            placed.shown.x + (control->rect.x + control->rect.width / 2) * percent / 100,
+            placed.shown.y + (control->rect.y + control->rect.height / 2) * percent / 100
         };
         send_check_pointer(SDL_EVENT_MOUSE_MOTION, at, 0);
         send_check_pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, at, SDL_BUTTON_LEFT);
@@ -463,6 +465,157 @@ void Runtime::check_first_run() {
         pump();
     }
 
+    // The header leaves out the mark and the name in a window, shows them
+    // full screen, and follows a switch while the setup is up.
+    {
+        const auto branded = [&]() -> std::optional<bool> {
+            LayerScreen* screen = setup();
+            if (screen == nullptr)
+                return std::nullopt;
+            const kit::DisplayList display = screen->display_list();
+            for (const kit::Item& item : display.items)
+                if (const auto* look = std::get_if<kit::SetupChromeLook>(&item.look))
+                    return look->brand;
+            return std::nullopt;
+        };
+        const auto wait_for = [&](bool brand, std::string_view what) {
+            const auto deadline = std::chrono::steady_clock::now() + kWait;
+            while (branded() != brand) {
+                require(!deadline_passed(deadline), what);
+                pump();
+            }
+        };
+        const auto switch_to = [&](bool full) {
+            require(
+                SDL_SetWindowFullscreen(sdl_.window, full) && SDL_SyncWindow(sdl_.window),
+                full ? "full screen did not take" : "the window did not come back"
+            );
+            pump();
+        };
+        require(
+            (SDL_GetWindowFlags(sdl_.window) & SDL_WINDOW_FULLSCREEN) == 0,
+            "the check did not start in a window"
+        );
+        wait_for(false, "the header names the game in a window");
+        switch_to(true);
+        wait_for(true, "the header does not name the game full screen");
+        switch_to(false);
+        wait_for(false, "the header still names the game in the window");
+        require(
+            SDL_SetWindowSize(sdl_.window, kCanvasWidth, kCanvasHeight) &&
+                SDL_SyncWindow(sdl_.window),
+            "the window did not return to 640x480"
+        );
+        apply_output_mode();
+        pump();
+        std::cout << "first-run check: the header follows the window" << std::endl;
+    }
+
+    // Left, Left and Right leave the box on the card in the middle, not on
+    // the language in use.
+    {
+        const auto press = [&](SDL_Keycode key) {
+            SDL_Event event{};
+            event.type = SDL_EVENT_KEY_DOWN;
+            event.key.key = key;
+            event.key.down = true;
+            bool going = true;
+            dispatch_event(event, going);
+            event.type = SDL_EVENT_KEY_UP;
+            event.key.down = false;
+            dispatch_event(event, going);
+            require(going, "a key ended the run");
+            pump();
+        };
+        press(SDLK_LEFT);
+        press(SDLK_LEFT);
+        press(SDLK_RIGHT);
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(800);
+        while (std::chrono::steady_clock::now() < until)
+            pump();
+        LayerScreen* screen = setup();
+        require(screen != nullptr, "the setup is not showing");
+        const kit::DisplayList display = screen->display_list();
+        const kit::Control* focused = kit::control_of(display, screen->interaction().focused);
+        require(
+            focused != nullptr && focused->name.starts_with("first-run.language.card."),
+            "the focus left the language cards"
+        );
+        require(focused->name != "first-run.language.card.en", "the box stayed on English");
+        const LayerPlacement placed = screen->placement(oa_layer().view());
+        const int32_t middle = focused->rect.x + focused->rect.width / 2;
+        require(
+            middle >= placed.points_width / 2 - 2 && middle <= placed.points_width / 2 + 2,
+            "the box is not on the card in the middle"
+        );
+        std::cout << "first-run check: the box is on " << focused->name << std::endl;
+    }
+
+    // A window of 2880 by 1620 draws the setup larger than the layer's own
+    // scale while the Interface size is Auto, even on whole steps, and a
+    // press lands where the larger setup draws its control.
+    {
+        require(
+            SDL_SetWindowSize(sdl_.window, 2880, 1620) && SDL_SyncWindow(sdl_.window),
+            "the window did not take 2880x1620"
+        );
+        apply_output_mode();
+        pump();
+        pump();
+        LayerScreen* screen = setup();
+        require(screen != nullptr, "the setup is not showing at 2880x1620");
+        const LayerView seen = oa_layer().view();
+        const LayerPlacement placed = screen->placement(seen);
+        require(seen.interface_percent <= 0, "the check's Interface size is not Auto");
+        require(placed.scale_percent > seen.scale_percent, "the setup is not drawn larger");
+        const std::optional<kit::Control> next = control_named("first-run.language.next");
+        const std::optional<kit::Control> arrow = control_named("first-run.language.next-card");
+        require(next.has_value() && arrow.has_value(), "the setup's controls are missing");
+        const int32_t tall = next->rect.height * placed.scale_percent / 100;
+        require(tall >= 3 * kit::compact_metrics.button_height, "Next is not three times as tall");
+        const kit::ControlId before = screen->interaction().focused;
+        const oa::ui::display_layout::Point pixel = layer_window_pixel(
+            placed, {arrow->rect.x + arrow->rect.width / 2, arrow->rect.y + arrow->rect.height / 2}
+        );
+        for (const SDL_EventType type :
+             {SDL_EVENT_MOUSE_MOTION, SDL_EVENT_MOUSE_BUTTON_DOWN, SDL_EVENT_MOUSE_BUTTON_UP}) {
+            SDL_Event event = window_pointer_event(
+                sdl_.window,
+                sdl_.renderer,
+                type,
+                pixel,
+                type == SDL_EVENT_MOUSE_MOTION ? uint8_t{0} : uint8_t{SDL_BUTTON_LEFT}
+            );
+            bool going = true;
+            dispatch_event(event, going);
+            require(going, "a press ended the run");
+            pump();
+        }
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(800);
+        while (std::chrono::steady_clock::now() < until)
+            pump();
+        LayerScreen* after = setup();
+        require(after != nullptr, "the setup closed at 2880x1620");
+        const kit::DisplayList display = after->display_list();
+        bool moved = false;
+        for (const kit::Control& control : display.controls) {
+            const int32_t middle = control.rect.x + control.rect.width / 2;
+            if (control.name.starts_with("first-run.language.card.") &&
+                middle >= placed.points_width / 2 - 2 && middle <= placed.points_width / 2 + 2)
+                moved = control.id != before;
+        }
+        require(moved, "a press on the next arrow at 2880x1620 did not turn the carousel");
+        std::cout << "first-run check: at 2880x1620 the setup is drawn at " << placed.scale_percent
+                  << "%, the layer at " << seen.scale_percent << "%" << std::endl;
+        require(
+            SDL_SetWindowSize(sdl_.window, kCanvasWidth, kCanvasHeight) &&
+                SDL_SyncWindow(sdl_.window),
+            "the window did not return to 640x480"
+        );
+        apply_output_mode();
+        pump();
+    }
+
     pick_card("first-run.language.card.de");
     require(
         settings::language_notice_same_tag(shown_language().tag, "de"), "Deutsch was not chosen"
@@ -551,8 +704,8 @@ void Runtime::check_first_run() {
         "Deutsch was not chosen for the game steps"
     );
     require(
-        std::string(oa::data::languages::interface_text("Where is Total Annihilation?")) ==
-            "Wo ist Total Annihilation?",
+        std::string(oa::data::languages::interface_text("Locate Total Annihilation Game Files")) ==
+            "Spieldateien von Total Annihilation suchen",
         "the game step's title is not German"
     );
     click("first-run.language.next");

@@ -653,6 +653,10 @@ Locks shown_locks(const Dialog& dialog) noexcept {
     if (locks.zoomed_out_after == Lock::none &&
         dialog.chosen.zoomed_out_units != ZoomedOutUnits::dots)
         locks.zoomed_out_after = Lock::needs_dots;
+    // Only a sticky edge has a firmness: Capture never lets the pointer go,
+    // and Free never holds it.
+    if (locks.edge_stickiness == Lock::none && dialog.chosen.window_edge != WindowEdge::sticky)
+        locks.edge_stickiness = Lock::needs_sticky;
     return locks;
 }
 
@@ -1068,6 +1072,8 @@ std::string_view lock_text(Lock lock) noexcept {
         return "Set by the language";
     case Lock::needs_dots:
         return "Needs Dots";
+    case Lock::needs_sticky:
+        return "Needs Sticky";
     case Lock::main_menu:
         return "Choose from the main menu.";
     }

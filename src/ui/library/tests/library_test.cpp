@@ -2975,6 +2975,81 @@ void test_base_chooser() {
     OA_CHECK(music_pill);
 }
 
+/// A catalogue, a picture or a copy that arrives while the chooser is open
+/// keeps it open on the game the player marked. A different stored base game
+/// closes it.
+void test_base_chooser_through_refresh() {
+    lib::Inputs inputs;
+    inputs.registries = fixture_registries();
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"totala", "campaign"};
+    inputs.content.enabled = {"campaign"};
+    lib::Library library;
+    lib::refresh(library, inputs);
+    OA_CHECK(lib::open_base_chooser(library).opened);
+    lib::mark_base_game(library, "totala-demo");
+    OA_CHECK(library.chooser.marked == "totala-demo");
+    OA_CHECK(!library.chooser.note.empty());
+
+    // The catalogue the Library asked for as it opened, and the base game's
+    // picture, arrive. The stored choice is the same.
+    lib::Inputs arrived = inputs;
+    arrived.listings.push_back(listing(core, Kind::mod, "ridge", "Ridge"));
+    arrived.base_game_badge = lib::Badge{std::vector<uint8_t>(1 * 1 * 4, 9), 1, 1};
+    lib::refresh(library, arrived);
+    OA_CHECK(library.chooser.open);
+    OA_CHECK(library.chooser.marked == "totala-demo");
+    OA_CHECK(!library.chooser.note.empty());
+    OA_CHECK(!library.chooser.rows.empty());
+    for (const lib::BaseGameRow& row : library.chooser.rows) {
+        OA_CHECK(row.marked == (row.id == "totala-demo"));
+        OA_CHECK(row.badge == &*library.inputs.base_game_badge);
+    }
+
+    // USE THIS GAME still asks for the demo's installer.
+    const lib::BaseUse needs = lib::use_marked_base_game(library);
+    OA_CHECK(needs.kind == lib::BaseUseKind::needs_source);
+    OA_CHECK(needs.id == "totala-demo");
+    OA_CHECK(library.chooser.open);
+
+    // A failed copy's words stay through a refresh too.
+    lib::note_base_copy_problem(library, "The installer could not be read.");
+    lib::refresh(library, arrived);
+    OA_CHECK(library.chooser.open);
+    OA_CHECK_TEXT(library.chooser.problem, "The installer could not be read.");
+    lib::note_base_copy_problem(library, {});
+
+    // The copy arrives. The chooser shows the demo as copied, and USE THIS
+    // GAME keeps it on the pending choice.
+    arrived.content.copied.push_back("totala-demo");
+    lib::refresh(library, arrived);
+    OA_CHECK(library.chooser.open);
+    OA_CHECK(library.chooser.marked == "totala-demo");
+    bool demo_copied = false;
+    for (const lib::BaseGameRow& row : library.chooser.rows) {
+        if (row.id == "totala-demo")
+            demo_copied = row.state == lib::BaseGameState::copied;
+    }
+    OA_CHECK(demo_copied);
+    const lib::BaseUse applied = lib::use_marked_base_game(library);
+    OA_CHECK(applied.kind == lib::BaseUseKind::applied);
+    OA_CHECK(!library.chooser.open);
+    OA_CHECK(library.content.base_game == "totala-demo");
+    OA_CHECK(library.content.pending_base);
+
+    // A different stored base game closes the chooser and drops the draft.
+    lib::Library stored;
+    lib::refresh(stored, arrived);
+    OA_CHECK(lib::open_base_chooser(stored).opened);
+    lib::mark_base_game(stored, "totala-demo");
+    lib::Inputs switched = arrived;
+    switched.content.base_id = "totala-demo";
+    switched.content.enabled.clear();
+    lib::refresh(stored, std::move(switched));
+    OA_CHECK(!stored.chooser.open);
+    OA_CHECK(stored.chooser.rows.empty());
+}
+
 /// Returns a button of an action, or null.
 ///
 /// @param buttons the buttons
@@ -3439,6 +3514,7 @@ int main() {
     test_expansion_pills();
     test_expansion_download();
     test_base_chooser();
+    test_base_chooser_through_refresh();
     test_base_game_after_required_off();
     test_check_now();
     test_built_in_languages();

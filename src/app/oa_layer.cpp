@@ -2371,6 +2371,16 @@ class RegisteredKitScreen final : public LayerScreen {
     bool closed_{};                  ///< closed has been called
 };
 
+/// The scale a front-end screen is drawn at: its placement's, which is the
+/// view's for every screen but the setup, or the view's when it has none.
+///
+/// @param placed where the screen shows
+/// @param seen the view
+/// @return the scale, in percent
+int32_t front_scale_of(const LayerPlacement& placed, const LayerView& seen) noexcept {
+    return placed.scale_percent > 0 ? placed.scale_percent : seen.scale_percent;
+}
+
 } // namespace
 
 uint32_t OaLayer::take_request_id() noexcept {
@@ -2750,7 +2760,9 @@ void OaLayer::compose_front_end(renderer::Surface& frame) const {
             continue;
         // A screen under a modal screen with a backdrop darkens with what
         // lies under it.
-        LayerDrawing drawn = draw_screen(screen, placed, seen.scale_percent);
+        // At the screen's own scale, which every screen but the setup takes
+        // from the view.
+        LayerDrawing drawn = draw_screen(screen, placed, front_scale_of(placed, seen));
         darken(drawn.picture, above[index], kit::menu_backdrop_opacity);
         stamp_onto_picture(frame, drawn, placed.shown, seen);
     }
@@ -3018,8 +3030,9 @@ void OaLayer::present_front_end(const SDL_FRect& area) {
             continue;
         FrontPiece piece{};
         piece.shown = placed.shown;
-        // Drawn at the view's scale, as large as its place.
-        piece.drawn = draw_screen(screen, placed, seen.scale_percent);
+        // Drawn at its own scale, as large as its place: the view's, or the
+        // setup's.
+        piece.drawn = draw_screen(screen, placed, front_scale_of(placed, seen));
         // Of a screen that is not opaque, only the part that holds what it
         // drew: the rest is clear.
         const layout::Rect drawn_part = drawn_bounds(piece.drawn);

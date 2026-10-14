@@ -693,7 +693,8 @@ slides flat and the call to action holds a steady ring.
   pill centred at the bottom. A facts line wider than the card wraps onto
   the next small line, above the pill, so every word is shown. An active
   card has an accent border and a one-point accent ring outside it. The
-  carousel's centre card draws that ring too; a side card's turn and
+  carousel's chosen card (`CarouselLook::chosen`, or with none the centre
+  card) draws that ring once it faces the player; a side card's turn and
   opacity come from the carousel.
   `LanguageAvailability` chooses the pill: built in,
   get, downloading and checking are neutral, active uses the accent pill,
@@ -718,7 +719,9 @@ slides flat and the call to action holds a steady ring.
   "Open Annihilation", a muted page word and the step indicator at the
   right, and its footer: Skip setup, a quiet button on the left, then Back
   and an accent Next. It spans the window and is drawn from the canvas's
-  origin.
+  origin. With `SetupChromeLook::brand` off, as in a window whose title
+  bar names the game, the header leaves out the mark and the name, and the
+  page word stands at its left.
 - **Choice card** (`draw_choice_card`, `choice_step`). A radio row with a
   title and a hint: idle, hovered, held, chosen and disabled. Up and Left
   move to the previous row of a group, and Down and Right to the next.

@@ -33,19 +33,32 @@ folder is removed once the copy finishes, so the game is not kept twice.
 
 ## Welcome
 
-![Welcome: the title Welcome to Open Annihilation, Choose your language, and a carousel of languages with English in front, Next at the bottom and Skip above.](images/first-run/welcome.png)
+![Welcome in a 1280 by 720 window: Welcome at the top left, the title Welcome to Open Annihilation, Choose your language, and a carousel of languages with English in front, Skip, Back and Next at the bottom.](images/first-run/welcome.png)
 
 On the welcome walk the page word is Welcome, the step is WELCOME, and the
 count is 1 of 3. The footer is **Skip**, **Back** and **Next**. On the
 five-step walk the page word is Setup, the step is LANGUAGE, and the count
 is 1 of 5. That footer's left button is **Quit** on a first start and
 **Skip** on a re-run, and the same word stays through the game, the copy
-and online features. The header shows Open Annihilation's app icon. The
+and online features. Full screen, the header shows Open Annihilation's
+app icon and its name before the page word. In a window, whose title bar
+already names the game, the header leaves both out: the page word stands
+at its left and the step at its right. Switching between a window and
+full screen while the setup is up redraws the header the other way. The
 footer buttons are the dialog buttons Settings uses, with the primary
-button on the right, and the header and footer sit inside the window.
-The setup window is the window's size in points, drawn at the display's
-pixel density. A footer button is at least as wide as its caption, so
-**Copy the game** stays inside the window.
+button on the right, and the header and footer sit inside the window. A
+footer button is at least as wide as its caption, so **Copy the game**
+stays inside the window.
+
+The setup grows with the window. Up to 960 by 540 points it is laid out
+in the window's own points, Compact below that. A larger window draws
+that same 960 by 540 room larger, so the words, the footer's buttons and
+the cards grow together: by four thirds in a 1280 by 720 window, and
+twice in a 1920 by 1080 one, whatever the display's pixel density. The
+footer's buttons are then at least 69 by 22 and 104 by 34 points, and the
+small text 13 and 20 points. Over the main menu the setup grows the same
+way while the Interface size is Auto, on whole steps when the modern
+fonts are off. An Interface size chosen in Settings is kept as it is.
 
 The title is "Welcome to Open Annihilation" and the line under it is
 "Choose your language."
@@ -60,11 +73,20 @@ read. The centre card and the card one step to either side keep theirs.
 The floor's grid is drawn behind the cards, at half the strength of a
 rule, so the lines do not meet the cards as a table.
 
-![The language step of a first start, at 1280 by 720: English centred and ringed, Active and Built in whole, and a fixture pack offering Get.](images/first-run/language-large.png)
+![The language step of a first start, full screen at 1920 by 1080: the app icon, Open Annihilation and Setup at the top left, English centred and ringed, Active and Built in whole, and a fixture pack offering Get.](images/first-run/language-1920x1080.png)
 
-![The same step at 960 by 540.](images/first-run/language-regular.png)
+![The same step in a 1280 by 720 window, with Setup alone at the top left.](images/first-run/language-1280x720.png)
 
-![The same step at 640 by 480.](images/first-run/language-compact.png)
+![The same step in a 640 by 480 window.](images/first-run/language-640x480.png)
+
+The card in the middle is the one the step marks: the accent ring once
+it faces the player, the keyboard focus, and, while the step speaks its
+language, the accent badge and the **Active** pill. Left and Right, a
+controller, the wheel, the arrows and a press on a side card all move
+that mark with the carousel, at every moment of the move. The language
+in use loses it while another card is chosen, and its pill then says
+**Built in** or **Installed**. While a pack that is not installed is in
+the middle, no card says **Active**.
 
 The carousel lists the built-in languages in the order the game keeps them
 (English, Deutsch, Español, Français, Italiano), then language packs that
@@ -108,7 +130,7 @@ so language packs stay offline." The built-in languages still switch.
 
 ## The game
 
-![The game: Where is Total Annihilation?, two installer rows with the fuller one selected, Locate another, and Copy the game.](images/first-run/game.png)
+![The game: Locate Total Annihilation Game Files, two installer rows with the fuller one selected, Locate another, and Copy the game.](images/first-run/game.png)
 
 This step is only on the five-step walk, and it is the second step.
 Language comes first. A start that will show these steps does not ask for
@@ -116,7 +138,7 @@ a folder before them: no system folder dialog, no folder locator, and no
 Game files screen.
 
 The page word is Setup, the step is THE GAME, and the count is 2 of 5.
-The title is "Where is Total Annihilation?". The column is as wide as
+The title is "Locate Total Annihilation Game Files". The column is as wide as
 Settings. Each row is a place that was found: an installer or an
 installation, never a folder of loose files such as Downloads. When a
 folder was only searched for installers, those installers are the rows.
@@ -126,7 +148,9 @@ It does not name a bundle the place lacks. The selected row's bundles
 are accent pills, and every other row's are quiet pills. The list is
 ready when the step opens. Copying still checks each file as it reads
 it. **Locate another…** is centred under the rows, at the footer
-buttons' height, and asks for a folder. **Copy the game** is available
+buttons' height, as wide as the footer makes a button of the same words,
+with the same room either side of them, in every language. It asks for a
+folder. **Copy the game** is available
 once a row is chosen. **Back** returns to the language. The left button
 is the walk's **Quit** or **Skip**.
 

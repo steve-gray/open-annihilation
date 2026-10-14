@@ -7,7 +7,9 @@
 // renderer, Menu scaling's whole steps in the window's presentation at once,
 // Native pixel density kept for the next start, Explosion flash's Reduced in
 // effect for the next frame drawn, the zoom's limits stepped by the keys on
-// their drop-downs, View past the map's edge's 25% in effect at once, OK,
+// their drop-downs, View past the map's edge's 25% in effect at once,
+// Window edge's strip and Edge stickiness's slider, locked but for Sticky,
+// in effect at once and fitting the 640x480 dialog in English and German, OK,
 // Cancel and Restore defaults and the preferences they leave, Developer
 // Mode's overrides in effect and kept), and the main menu
 // with its OA button and Settings button and the dialog as the window shows
@@ -19,6 +21,7 @@
 #include "engine_settings_menu_host.hpp"
 #include "engine_settings_state.hpp"
 #include "engine_settings_tall_section.hpp"
+#include "language_state.hpp"
 #include "library_host.hpp"
 #include "oa_layer.hpp"
 #include "oa_layer_check.hpp"
@@ -28,6 +31,7 @@
 #include "oa/app/game_files_hooks.hpp"
 #include "oa/app/mod_profile_loader.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/data/mod_profile/overrides.hpp"
 #include "oa/platform/preferences.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
@@ -35,6 +39,7 @@
 #include "oa/ui/kit/canvas.hpp"
 #include "oa/ui/kit/input.hpp"
 #include "oa/ui/kit/layout.hpp"
+#include "oa/ui/kit/text.hpp"
 #include "oa/ui/kit/theme.hpp"
 #include "oa/ui/library/library.hpp"
 
@@ -51,6 +56,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <map>
 #include <span>
@@ -338,6 +344,8 @@ std::string_view label_of(settings::Setting setting) {
         return "Select groups without Alt";
     case settings::Setting::window_edge:
         return "Window edge";
+    case settings::Setting::window_edge_stickiness:
+        return "Edge stickiness";
     case settings::Setting::unit_limit:
         return "Unit limit";
     case settings::Setting::max_frame_rate:
@@ -935,6 +943,70 @@ void Runtime::check_engine_settings_dialog() {
     // A click on the side a switch already shows changes nothing.
     click(groups, "ON", "Select groups without Alt's On");
     expect("a second click on On");
+    // Window edge opens on Capture, with Edge stickiness under it locked at
+    // 1.0: Tab passes it by and its keys change nothing. Sticky frees it,
+    // and a step of it is the sticky edge's firmness at once. Free locks it
+    // again and keeps its value.
+    {
+        const int32_t window_edge = control_named("settings.window-edge");
+        // The slider is the row under the strip. Locked, it names no control.
+        const int32_t stickiness = window_edge + 1;
+        require(
+            engine_settings_dialog()->chosen.window_edge == settings::WindowEdge::capture,
+            "Window edge did not open on Capture"
+        );
+        // Both rows at the section's end, scrolled into view.
+        const auto shows = [&](std::string_view text) {
+            auto* shown = engine_settings_dialog();
+            shown->scroll[static_cast<std::size_t>(settings::Page::controls)] =
+                std::numeric_limits<int32_t>::max();
+            return shows_text(settings::dialog_layout(*shown), text);
+        };
+        focus(window_edge, "Window edge");
+        require(
+            shows("Capture") && shows("Sticky") && shows("Free") && shows("Needs Sticky") &&
+                shows("1.0"),
+            "Window edge's strip or Edge stickiness's locked slider does not show"
+        );
+        tap(SDLK_TAB);
+        require(
+            engine_settings_dialog()->focused != stickiness,
+            "Tab reached Edge stickiness while Window edge is Capture"
+        );
+        engine_settings_dialog()->focused = stickiness;
+        tap(SDLK_RIGHT);
+        expect("a key on the locked Edge stickiness");
+        focus(window_edge, "Window edge");
+        click(window_edge, "Sticky", "Window edge's Sticky");
+        chosen.window_edge = settings::WindowEdge::sticky;
+        expect("Window edge Sticky");
+        require(!shows("Needs Sticky"), "Sticky did not free Edge stickiness");
+        require(
+            control_named("settings.window-edge-stickiness") == stickiness,
+            "Edge stickiness is not the row under Window edge"
+        );
+        focus(stickiness, "Edge stickiness");
+        tap(SDLK_RIGHT);
+        tap(SDLK_RIGHT);
+        chosen.edge_stickiness = settings::default_edge_stickiness + 2;
+        expect("Edge stickiness 1.2");
+        require(shows("1.2"), "Edge stickiness does not show 1.2");
+        require(
+            sticky_edge_limits().push_points == sticky_limits(1.2F).push_points &&
+                sticky_edge_limits().flick_points_per_s == sticky_limits(1.2F).flick_points_per_s,
+            "Edge stickiness 1.2 is not the sticky edge's firmness"
+        );
+        focus(window_edge, "Window edge");
+        click(window_edge, "Free", "Window edge's Free");
+        chosen.window_edge = settings::WindowEdge::free;
+        expect("Window edge Free");
+        require(shows("Needs Sticky") && shows("1.2"), "Free did not lock Edge stickiness at 1.2");
+        focus(window_edge, "Window edge");
+        click(window_edge, "Sticky", "Window edge's Sticky");
+        chosen.window_edge = settings::WindowEdge::sticky;
+        expect("Window edge Sticky again");
+        require(!shows("Needs Sticky") && shows("1.2"), "Edge stickiness lost 1.2");
+    }
 
     // Escape opens the game menu, the last row of User Interface.
     click(settings::page_control(settings::Page::user_interface), {}, "User Interface's entry");
@@ -1233,6 +1305,8 @@ void Runtime::check_engine_settings_dialog() {
         {std::string(settings::key::max_zoom_out), "whole-map"},
         {std::string(settings::key::max_zoom_in), "3"},
         {std::string(settings::key::view_past_map_edge), "25"},
+        {std::string(settings::key::window_edge), "sticky"},
+        {std::string(settings::key::edge_stickiness), "1.2"},
         {std::string(settings::key::escape_opens_menu), "1"},
         {std::string(settings::key::unit_limit), std::to_string(kChosenUnitLimit)},
         {std::string(settings::key::max_frame_rate), std::to_string(kChosenFrameRate)},
@@ -2666,12 +2740,84 @@ void Runtime::check_engine_settings_window_sizes() {
             );
         }
     }
+    check_window_edge_rows_fit();
     if (!SDL_SetWindowSize(sdl_.window, kDefaultWindowWidth, kDefaultWindowHeight) ||
         !SDL_SyncWindow(sdl_.window))
         throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError());
     load(Screen::main_menu);
     oa_layer().forget_latched_key();
     fake_frontend_tick_ = previous_tick;
+}
+
+void Runtime::check_window_edge_rows_fit() {
+    // Window edge's strip and Edge stickiness's slider on the 640x480
+    // window, Compact, in English and German, with each way of the strip:
+    // no text of theirs is wider than its box or drawn across another.
+    // Simplified Chinese draws from its pack, and --check-text-fit shows
+    // every section in it.
+    if (!SDL_SetWindowSize(sdl_.window, 640, 480) || !SDL_SyncWindow(sdl_.window))
+        throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError());
+    load(Screen::main_menu);
+    require(screen_ == Screen::main_menu, "the main menu did not open on the 640x480 window");
+    const std::string kept_language = language_state().choice;
+    constexpr std::array<std::string_view, 10> words{
+        "Window edge",
+        "Capture",
+        "Sticky",
+        "Free",
+        "The pointer stays in the window while you play.",
+        "The pointer rests on the edge so the view scrolls.",
+        "The pointer leaves a window's edge, as before.",
+        "Edge stickiness",
+        "How firmly Sticky holds the pointer at the edge.",
+        "Needs Sticky",
+    };
+    for (const std::string_view tag : {std::string_view{"en"}, std::string_view{"de"}}) {
+        set_language_choice(tag);
+        require(
+            shown_language().tag == tag,
+            "the check could not show the settings in " + std::string(tag)
+        );
+        for (const auto way : settings::window_edge_choices) {
+            open_engine_settings_from_menu();
+            settings::Dialog* dialog = engine_settings_dialog();
+            require(dialog != nullptr, "Settings did not open on the 640x480 window");
+            dialog->page = settings::Page::controls;
+            dialog->chosen.window_edge = way;
+            dialog->scroll[static_cast<std::size_t>(settings::Page::controls)] =
+                std::numeric_limits<int32_t>::max();
+            const std::string screen = std::string("settings/controls/") +
+                                       (way == settings::WindowEdge::capture  ? "capture"
+                                        : way == settings::WindowEdge::sticky ? "sticky"
+                                                                              : "free");
+            oa::ui::kit::set_text_fit_screen(screen);
+            bool running = true;
+            // The first frame settles the size class; the second is read.
+            for (int frame = 0; frame < 2; ++frame) {
+                oa::ui::kit::begin_text_fit_frame();
+                run_frame(running);
+                require(running, "a frame ended the run");
+            }
+            for (const oa::ui::kit::TextFitRecord& noted : oa::ui::kit::text_fit_records()) {
+                if ((!noted.wider && !noted.across) || noted.text.empty())
+                    continue;
+                for (const std::string_view word : words) {
+                    const std::string shown{oa::data::languages::interface_text(word)};
+                    require(
+                        shown.find(noted.text) == std::string::npos,
+                        screen + " in " + std::string(tag) + ": '" + noted.text + "' is " +
+                            (noted.wider ? "wider than its box" : "drawn across other text")
+                    );
+                }
+            }
+            take_settings_screen_action(settings::DialogAction::cancelled);
+            require(engine_settings_dialog() == nullptr, "Cancel did not close Settings");
+        }
+        std::cout << "engine settings check: Window edge and Edge stickiness fit the 640x480 "
+                     "dialog in "
+                  << tag << '\n';
+    }
+    set_language_choice(kept_language);
 }
 
 } // namespace oa::app

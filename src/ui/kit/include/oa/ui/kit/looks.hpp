@@ -464,6 +464,9 @@ struct CarouselLook {
     /// The ring joins. The card before the first is the last, so two cards
     /// stand on each side of a selection at either end. Off, the row is a line.
     bool wrap{false};
+    /// The chosen card, from 0: the one the ring marks once it faces the
+    /// player. -1 marks the card nearest the centre.
+    int32_t chosen{-1};
 };
 
 /// A step indicator: a letter-spaced line, and one segment a step.
@@ -504,6 +507,10 @@ struct SetupChromeLook {
     bool next_hovered{};
     bool next_held{};
     bool next_enabled{true};
+    /// The header shows the mark and "Open Annihilation" before the page
+    /// word. Off, as in a window whose own title bar names the game, the
+    /// page word stands at the header's left.
+    bool brand{true};
 };
 
 /// A choice card: a radio row with a title and a hint.

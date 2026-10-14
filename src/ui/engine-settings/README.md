@@ -24,7 +24,8 @@ the locks a running game puts on them (`settings_locks`).
 | | View past the map's edge, a strip: how much of the battlefield the view may show past the map's edges; at 25% and Off a zoom keeps to it too | Off (the view stays on the map, as 3.1c's does), 25%, 50% (the map's edge reaches the battlefield's middle) | 50% | `open-annihilation.view-past-map-edge` (`off`, `25` or `50`) |
 | | Middle-click pans: a middle click on the battlefield scrolls the view towards the pointer until another press or a key | Off, On | On | `open-annihilation.middle-click-pan` |
 | | Select groups without Alt | Off, On | Off | 3.1c's SwitchAlt |
-| | Window edge, a strip: whether a window holds the pointer on its edges while a match's battlefield shows, so the view edge-scrolls. A firm push or a flick lets it leave. Menus, the pause screen and a window without the focus leave it free. Full screen holds the pointer either way | Sticky, Free | Sticky | `open-annihilation.window-edge` (`sticky` or `free`) |
+| | Window edge, a strip: what a window does with the pointer while a match's battlefield shows. Capture keeps it in the window until the game menu, the pause screen, Settings, Escape or a lost focus, and a click on the battlefield captures it again. Sticky holds it on the edges so the view edge-scrolls, until a firm push or a flick lets it leave. Free leaves it free. Full screen holds the pointer either way | Capture, Sticky, Free | Capture | `open-annihilation.window-edge` (`capture`, `sticky` or `free`) |
+| | Edge stickiness, a slider: how firmly Sticky holds, the push and the flick growing with it; 0.0 never holds. Locked Needs Sticky (`Lock::needs_sticky`, which the dialog sets itself in `shown_locks`) while Window edge shows Capture or Free, when it keeps its value | 0.0 to 5.0 in steps of 0.1 | 1.0 | `open-annihilation.window-edge-stickiness` (a decimal, `1.0`) |
 | Engine Limits | Unit limit | 50 to 1500 per player, steps of 50, or on to a mod's higher maximum | the installation's `totala.ini` UnitLimit, else 250 or a mod's default | `open-annihilation.unit-limit` |
 | | Pathfinding cycles | 1× to 8× of 1333 path nodes a tick, or of a mod's budget | 1× | `open-annihilation.path-search-nodes` |
 | | Skirmish players: how many player rows the skirmish setup shows. The dialog's working copy of the setup's own count; OK stores it only when the slider moved, and the setup's key codes write the same count | 2 to 10; a stored count outside that shows as it is until the slider moves | 10 when none is stored | `NumSkirmishPlayers` |
@@ -450,7 +451,8 @@ the Text size slider, by 129, User Interface, with its three switches, Menu
 scaling's strip and Interface size's drop-down, by 88, Touch, with its
 three strips, the Hold delay slider and two switches, by 121, and Controls,
 with Mouse wheel zoom, the two zoom drop-downs, View past the map's edge,
-Select groups without Alt and Window edge, by 131; Engine Limits fits, its three sliders
+Middle-click pans, Select groups without Alt, Window edge and Edge
+stickiness, by 255; Engine Limits fits, its three sliders
 in 216 pixels, and draws as if there were no scrolling,
 with no bar. While the dialog's words are drawn in the modern fonts, as in
 Simplified Chinese, whose ideographs stand as tall as a hint line, the

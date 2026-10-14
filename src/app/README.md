@@ -136,6 +136,45 @@ names the same renderer. `app-graphics-report` checks the limit and the
 line, and `native-renderer-report` that a start on the dummy video driver
 logs it.
 
+## The start's movies and the menu hum
+
+The game starts with two movies, the logo movie and the intro (the mod
+profile's `media.movies`, `1.zrb` and `2.zrb` for 3.1c), unless
+`--skip-intro` or the game's `-c`, `-n` or `-y` skips them, or a key ends
+them. The main menu's hum, the BGM loop on the alternate route
+(`Runtime::play_menu_voice`, `runtime_menu_audio.cpp`), starts with the
+main menu once the movies are over, never while one plays:
+
+- A start that does not show the setup plays the movies in `run_once`
+  (`main.cpp`) before the archives are mounted. The runtime then opens the
+  main menu, which starts the hum.
+- A start that shows the setup, the first start and a `--first-run` start,
+  keeps the movies until the setup will not show again
+  (`Options::intro_after_setup`, `Runtime::play_intro_after_setup`), and
+  the hum waits with them (`Runtime::menu_hum_waits`): it does not play
+  through the setup window, the copy, the mounting of the archives or the
+  setup's steps over the main menu. When the walk ends, the movies play,
+  and the frame after them the hum starts
+  (`Runtime::start_waiting_menu_hum`); with the movies skipped it starts
+  as the walk ends. A `--first-run` start shows the setup again each time
+  the menu settles, so its movies never come: its hum starts once the walk
+  is first finished.
+
+The hum stops as a match starts (`Runtime::stop_menu_music`) and starts
+again as the game returns to the menus; a movie the menus play holds it
+while it plays (`Runtime::play_movie_resource`). `--mute` and headless runs
+play none of it, but the log says what it does in every run: `menu hum:
+waits for the setup and the movies after it` when it waits, and `menu hum:
+starts`, with `(muted)` or `(headless)`, each time it starts, after the
+movies' `intro 1.ZRB: decoded …` lines. `native-menu-hum-start` and
+`native-menu-hum-start-skip-intro` check that order on a start without the
+setup, with the movies and with `--skip-intro`; `native-menu-hum-setup`
+that the hum still waits once the setup window has copied the game and the
+archives are mounted; and `native-menu-hum-first-run` and
+`native-menu-hum-first-run-skip-intro` that, when the setup's walk over the
+menu ends, the movies play first and the hum starts after them, or at once
+when they are skipped.
+
 ## Adding a screen or overlay
 
 1. In your package, write `void oa::app::register_<pkg>_screens(ScreenRegistry*)`
@@ -825,6 +864,8 @@ hosts them on the OA layer.
   `runtime_builtin_screens.cpp`, `screen_registry.*`: the screen registry,
   screen loading and the host of the frontend dispatcher. Lines are only
   ever added to `screens.inc`.
+- `runtime_menu_audio.cpp`: the main menu's hum, and when it starts and
+  stops (The start's movies and the menu hum, above).
 - `runtime_world_draw.cpp`, `runtime_camera.cpp`: world rendering and the
   camera. The map the game shows (`shown_map_size`) is the tile mosaic less
   its last 32 columns and 128 rows of map pixels, the hidden edges the
@@ -1981,11 +2022,21 @@ hosts them on the OA layer.
   display. Switching to another program (Alt+Tab, Command+Tab), a dialog of
   the system's taking the focus, or Alt+Enter to a window lets the pointer
   go, and coming back to full screen with the focus holds it again. A window
-  holds the pointer at its edges only while a match's battlefield shows, the window has the focus and the
-  pointer, and Window edge is Sticky (`sticky_edge.hpp`): the pointer rests on the last pixel and the view
-  edge-scrolls. On macOS, Windows and X11 it stays free and is put back on that pixel until a firm push
-  lets it go; on Wayland it is confined, and a quick approach lets it go. Menus, the pause screen, a window without the focus
-  and Window edge Free leave it free. The window events that may change this
+  keeps the pointer only while a match's battlefield shows and the window
+  has the focus, as Window edge says (`apply_window_edge`). Capture, the
+  default, takes SDL's window grab, which confines the pointer to the window
+  on every system the way full screen's does, so no push or flick takes it
+  out and every edge scrolls (`apply_capture`). Escape and a lost focus let
+  it go until a press on the battlefield; after a lost focus that press and
+  its release reach nothing, so the click that brings the window back is no
+  order (`take_window_edge_event`). Sticky holds the pointer at the edges
+  while the pointer is in the window (`sticky_edge.hpp`), as firmly as Edge
+  stickiness says (`sticky_limits`): the pointer rests on the last pixel and
+  the view edge-scrolls. On macOS, Windows and X11 it stays free and is put
+  back on that pixel until a firm push lets it go; on Wayland it is
+  confined, and a quick approach lets it go. Menus, the pause screen,
+  Settings, a message box, a window without the focus and Window edge Free
+  leave it free. The window events that may change this
   (`changes_pointer_bounds`) settle it in every event loop that takes
   Alt+Enter (the movies, a match loading and the game), and the window's own
   state settles it after the game drops pending input. The game lets the
@@ -2031,8 +2082,12 @@ hosts them on the OA layer.
   come back onto the display from off it, also with a usable area smaller
   than the display, and `--check-frontend-controls` presses Alt+Enter on a
   menu, over a message box and in a match, and checks that full screen
-  holds the pointer, that a window holds it at an edge while a match's battlefield shows until a firm
-  push lets it go, and that Window edge Free leaves it free, and that the window comes back
+  holds the pointer, that Window edge Capture keeps it in a match's window
+  through pushes and flicks, lets it go in the game menu, Settings, on the
+  pause screen, after Escape and without the focus, and takes it back on a
+  click on the battlefield, the focusing click reaching nothing, that Sticky
+  holds it at an edge until a push as firm as Edge stickiness lets it go,
+  0.0 never holding, and that Free leaves it free, and that the window comes back
   at its own size, or onto its display when it started off it (the dummy
   driver's display is smaller than the game's first window).
   The Window frame setting hides a window's title bar and borders while a

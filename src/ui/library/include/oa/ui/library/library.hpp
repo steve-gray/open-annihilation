@@ -746,7 +746,8 @@ inline constexpr std::string_view supported_base = "ta-3.1c";
 /// Makes one entry per listing, joined with the package installed from the
 /// same registry, kind and key, and one per installed package no listing
 /// names, then the base game entry (base_game_id), which is not a package.
-/// Keeps the tab, each tab's filter, the tag, query and selection.
+/// Keeps the tab, each tab's filter, the tag, query and selection, and an
+/// open base game chooser while the stored choice is the same (note_content).
 /// When the selected entry no longer shows, the first visible entry is
 /// selected and the details close.
 /// An update note is not attached when the installed copy already names a
@@ -766,6 +767,9 @@ void refresh(Library& library, Inputs inputs);
 /// A draft that was edited from the stored base game and expansions now in
 /// the inputs is kept, including a question that is waiting. Any other
 /// refresh stores that choice as the new seed and clears the draft.
+/// An open base game chooser stays open on its marked game while the stored
+/// choice is the same, its rows read again from the inputs; a different
+/// stored choice closes it.
 ///
 /// @param[in,out] library the Library, its inputs already stored
 void note_content(Library& library);

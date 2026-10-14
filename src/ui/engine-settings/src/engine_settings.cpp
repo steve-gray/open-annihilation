@@ -438,6 +438,50 @@ std::optional<ScreenSize> screen_size_from_text(std::string_view text) {
     return ScreenSize{*width, *height};
 }
 
+std::string edge_stickiness_text(uint32_t tenths) {
+    return std::to_string(tenths / edge_stickiness_per_level) + "." +
+           std::to_string(tenths % edge_stickiness_per_level);
+}
+
+std::optional<uint32_t> edge_stickiness_from_text(std::string_view text) noexcept {
+    std::size_t at = 0;
+    const bool negative = !text.empty() && text.front() == '-';
+    if (!text.empty() && (text.front() == '-' || text.front() == '+'))
+        at = 1;
+    // The whole part, then at most one point and the fraction's digits.
+    // Hundredths and beyond only round the tenths.
+    int64_t whole = 0;
+    std::size_t digits = 0;
+    while (at < text.size() && text[at] >= '0' && text[at] <= '9') {
+        whole = std::min(whole * 10 + (text[at] - '0'), number_bound);
+        ++at;
+        ++digits;
+    }
+    int64_t tenths = 0;
+    int64_t hundredths = 0;
+    if (at < text.size() && text[at] == '.') {
+        ++at;
+        std::size_t place = 0;
+        while (at < text.size() && text[at] >= '0' && text[at] <= '9') {
+            if (place == 0)
+                tenths = text[at] - '0';
+            else if (place == 1)
+                hundredths = text[at] - '0';
+            ++place;
+            ++at;
+            ++digits;
+        }
+    }
+    if (digits == 0 || at != text.size())
+        return std::nullopt;
+    int64_t level = whole * edge_stickiness_per_level + tenths + (hundredths >= 5 ? 1 : 0);
+    if (negative)
+        level = -level;
+    return static_cast<uint32_t>(
+        std::clamp(level, int64_t{lowest_edge_stickiness}, int64_t{highest_edge_stickiness})
+    );
+}
+
 std::string_view hardware_acceleration_text(HardwareAcceleration level) noexcept {
     switch (level) {
     case HardwareAcceleration::off:
@@ -554,6 +598,9 @@ EngineSettings read_settings(
         values, key::view_past_map_edge, view_past_map_edge_words, settings.view_past_map_edge
     );
     read_word(values, key::window_edge, window_edge_words, settings.window_edge);
+    if (const auto found = values.find(std::string{key::edge_stickiness}); found != values.end())
+        settings.edge_stickiness =
+            edge_stickiness_from_text(found->second).value_or(settings.edge_stickiness);
     if (const auto number = stored_number(values, key::middle_click_pan))
         settings.middle_click_pan = *number > 0;
     if (const auto number = stored_number(values, key::escape_opens_menu))
@@ -849,6 +896,14 @@ void write_settings(
         opened.window_edge,
         chosen.window_edge,
         defaults.window_edge,
+        restored
+    );
+    store(
+        values,
+        key::edge_stickiness,
+        edge_stickiness_text(chosen.edge_stickiness),
+        chosen.edge_stickiness != opened.edge_stickiness,
+        chosen.edge_stickiness == defaults.edge_stickiness,
         restored
     );
     store_word(
