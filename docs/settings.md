@@ -617,9 +617,9 @@ them.
 
 ## Downloads
 
-![The top of the Downloads section: Check for content updates at Automatically, Install ID On with its hint, the ID's row reading "Made at your first download" with a RESET button, and Downloaded files.](images/settings/downloads-1.png)
+![The top of the Downloads section: Check for content updates at Automatically, Install ID On with its hint, and under that hint the line "Made at your first download".](images/settings/downloads-1.png)
 
-![The Downloads section: Check for content updates at Automatically, Install ID On, "Made at your first download" with RESET, Downloaded files reading "Nothing kept" with EMPTY, and REGISTRIES IN THE LIBRARY… with the line "Registries are in the Library."](images/settings/downloads-2.png)
+![The Downloads section: Check for content updates at Automatically, Install ID On, the line "Made at your first download" under its hint, Downloaded files reading "Nothing kept" with EMPTY greyed, and REGISTRIES IN THE LIBRARY… with the line "Registries are in the Library."](images/settings/downloads-2.png)
 
 Downloads says when Open Annihilation looks for new content, holds the
 install ID a registry asks for, and keeps the files downloads leave behind.
@@ -639,10 +639,12 @@ download sends and records.
 - **Install ID**, On by default: a random number that lets Core Prime stop
   automated downloads, made at your first download from its registry.
   Turned off, you can browse the Library, but downloads from that registry
-  are off; installed content keeps working. The row under it shows the ID
-  in part, as "7f3a90d2 · · · c91e", or "Made at your first download"
-  before one is made, or "Off"; **RESET** replaces the ID with a new random
-  one at once. Each registry that asks for an install ID has its own,
+  are off; installed content keeps working. Before an ID is made, the
+  line under the hint says "Made at your first download". Once one exists,
+  a row labelled **Your install ID** shows it in part, as
+  "7f3a90d2 · · · c91e", or "Off" while the switch is off, and **RESET**
+  replaces it with a new random one at once. Each registry that asks for
+  an install ID has its own,
   labelled "Install ID · *registry*" when there is more than one. The
   switch takes effect at OK; RESET acts at once, and Cancel does not undo
   it.
@@ -666,7 +668,7 @@ Game Content lists each base game and expansion, its size, and what the
 last check said. A bundle that is not in the copy says "not added". A
 bundle whose files differ is marked.
 
-OA plays from its own copy in Documents › Open Annihilation. The
+OA plays from its own copy in Documents › Open Annihilation. The
 installation is not used or changed.
 
 - **Check again** reads the copy on its own and the row shows "Checking…
@@ -679,7 +681,7 @@ installation is not used or changed.
 
 ## System
 
-![The top of the System section in a game: Your files with the folder path, Welcome setup locked ("Choose from the main menu."), and the top of File Type Registration.](images/settings/system.png)
+![The top of the System section in a game: Your files with the folder path, Welcome setup locked ("Choose from the main menu.") with SHOW AGAIN faded, and the top of File Type Registration.](images/settings/system.png)
 
 System is where the game sits on your computer: your own folder, and which
 of the game's file types this copy opens.

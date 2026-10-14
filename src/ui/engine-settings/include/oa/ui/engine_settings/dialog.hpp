@@ -591,10 +591,10 @@ struct SectionHooks {
     /// Returns a setting's lock, given the one Dialog::locks puts on it;
     /// null keeps that one.
     Lock (*lock)(void* context, Setting setting, Lock lock){};
-    /// Tells whether a setting's hint lines are its status: a locked switch
-    /// or strip whose hint lines are its status shows its lock where its
-    /// control was, and only its label line fades. Null leaves it as the
-    /// dialog has it.
+    /// Tells whether a setting's hint lines are its status: a locked row
+    /// whose hint lines are its status keeps its control, faded, and fades
+    /// only its label line and that control. Null leaves it as the dialog
+    /// has it.
     bool (*hint_is_status)(void* context, Setting setting){};
 };
 

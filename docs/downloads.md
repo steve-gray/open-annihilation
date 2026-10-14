@@ -241,7 +241,8 @@ install ID" never receives one.
   player.
 - **Made at your first download** from that registry, not when the game
   starts. Until then Settings › Downloads says "Made at your first
-  download"; afterwards it shows the ID in part, as "7f3a90d2 · · · c91e".
+  download" under the Install ID hint. Afterwards a row labelled "Your
+  install ID" shows the ID in part, as "7f3a90d2 · · · c91e".
 - **Sent only when asking that registry for a download**, never with
   anything else ([what a download sends](#what-a-download-sends)).
 - **RESET** replaces it at once with a new random ID. Cancel does not undo

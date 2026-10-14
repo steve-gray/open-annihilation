@@ -491,24 +491,27 @@ const std::vector<Expected> kControlsTall{
 };
 
 /// Controls, its first, second, fourth and fifth rows locked, the fifth's
-/// hint its status, with the game's fonts.
+/// hint its status, with the game's fonts. A switch or a strip whose label,
+/// lock and control do not fit keeps the control and puts the lock at the
+/// start of the line under the label. A drop-down's lock stays on the label
+/// line, at its right.
 const std::vector<Expected> kControlsLocked{
-    {54, 47, {158, 63, 93, 16}, {259, 63, 148, 16}, {81}, {415, 63, 52, 16}, {}},
-    {101, 79, {158, 110, 153, 16}, {319, 110, 148, 16}, {128, 140}, {158, 156, 200, 16}, {}},
-    {180, 79, {158, 189, 309, 16}, {}, {207, 219}, {158, 235, 200, 16}, {}},
-    {259, 59, {158, 268, 41, 16}, {207, 268, 148, 16}, {286, 298}, {363, 268, 104, 16}, {}},
-    {318, 59, {158, 327, 153, 16}, {319, 327, 148, 16}, {345, 357}, {}, {}},
-    {377, 47, {158, 386, 249, 16}, {}, {404}, {415, 386, 52, 16}, {}},
+    {54, 65, {158, 63, 249, 16}, {158, 81, 148, 16}, {99}, {415, 63, 52, 16}, {}},
+    {119, 79, {158, 128, 153, 16}, {319, 128, 148, 16}, {146, 158}, {158, 174, 200, 16}, {}},
+    {198, 79, {158, 207, 309, 16}, {}, {225, 237}, {158, 253, 200, 16}, {}},
+    {277, 77, {158, 286, 197, 16}, {158, 304, 148, 16}, {322, 334}, {363, 286, 104, 16}, {}},
+    {354, 77, {158, 363, 249, 16}, {158, 381, 148, 16}, {399, 411}, {415, 363, 52, 16}, {}},
+    {431, 47, {158, 440, 249, 16}, {}, {458}, {415, 440, 52, 16}, {}},
 };
 
 /// Controls, locked as above, with the modern fonts' taller hints.
 const std::vector<Expected> kControlsLockedTall{
-    {54, 47, {158, 63, 93, 16}, {259, 63, 148, 16}, {81}, {415, 63, 52, 16}, {}},
-    {101, 82, {158, 110, 153, 16}, {319, 110, 148, 16}, {128, 143}, {158, 159, 200, 16}, {}},
-    {183, 82, {158, 192, 309, 16}, {}, {210, 225}, {158, 241, 200, 16}, {}},
-    {265, 62, {158, 274, 41, 16}, {207, 274, 148, 16}, {292, 307}, {363, 274, 104, 16}, {}},
-    {327, 62, {158, 336, 153, 16}, {319, 336, 148, 16}, {354, 369}, {}, {}},
-    {389, 47, {158, 398, 249, 16}, {}, {416}, {415, 398, 52, 16}, {}},
+    {54, 65, {158, 63, 249, 16}, {158, 81, 148, 16}, {99}, {415, 63, 52, 16}, {}},
+    {119, 82, {158, 128, 153, 16}, {319, 128, 148, 16}, {146, 161}, {158, 177, 200, 16}, {}},
+    {201, 82, {158, 210, 309, 16}, {}, {228, 243}, {158, 259, 200, 16}, {}},
+    {283, 80, {158, 292, 197, 16}, {158, 310, 148, 16}, {328, 343}, {363, 292, 104, 16}, {}},
+    {363, 80, {158, 372, 249, 16}, {158, 390, 148, 16}, {408, 423}, {415, 372, 52, 16}, {}},
+    {443, 47, {158, 452, 249, 16}, {}, {470}, {415, 452, 52, 16}, {}},
 };
 
 /// Graphics' first three rows, unlocked, with the game's fonts. A status
@@ -527,31 +530,32 @@ const std::vector<Expected> kGraphicsTall{
 };
 
 /// Graphics' first three rows, locked, with the game's fonts: the strip,
-/// whose hint is its status, shows its lock in its place; the sliders keep
-/// their tracks.
+/// whose hint is its status, stays, faded, and its lock drops under the
+/// label because the three do not fit; the sliders keep their tracks and
+/// the lock at the label line's right.
 const std::vector<Expected> kGraphicsLocked{
     {54, 65, {158, 63, 153, 16}, {319, 63, 148, 16}, {81}, {158, 97, 189, 14}, {357, 97, 110, 14}},
-    {119, 59, {158, 128, 153, 16}, {319, 128, 148, 16}, {146, 158}, {}, {}},
-    {178,
+    {119, 77, {158, 128, 184, 16}, {158, 146, 148, 16}, {164, 176}, {350, 128, 117, 16}, {}},
+    {196,
      77,
-     {158, 187, 153, 16},
-     {319, 187, 148, 16},
-     {205, 217},
-     {158, 233, 189, 14},
-     {357, 233, 110, 14}},
+     {158, 205, 153, 16},
+     {319, 205, 148, 16},
+     {223, 235},
+     {158, 251, 189, 14},
+     {357, 251, 110, 14}},
 };
 
 /// Graphics' first three rows, locked, with the modern fonts' taller hints.
 const std::vector<Expected> kGraphicsLockedTall{
     {54, 65, {158, 63, 153, 16}, {319, 63, 148, 16}, {81}, {158, 97, 189, 14}, {357, 97, 110, 14}},
-    {119, 62, {158, 128, 153, 16}, {319, 128, 148, 16}, {146, 161}, {}, {}},
-    {181,
+    {119, 80, {158, 128, 184, 16}, {158, 146, 148, 16}, {164, 179}, {350, 128, 117, 16}, {}},
+    {199,
      80,
-     {158, 190, 153, 16},
-     {319, 190, 148, 16},
-     {208, 223},
-     {158, 239, 189, 14},
-     {357, 239, 110, 14}},
+     {158, 208, 153, 16},
+     {319, 208, 148, 16},
+     {226, 241},
+     {158, 257, 189, 14},
+     {357, 257, 110, 14}},
 };
 
 /// Developer's own two switches, half a row's padding apart.
@@ -581,13 +585,13 @@ void rows_shaped_as_controls_lie_where_the_dialog_places_them() {
         "Controls, locked",
         kit::place_rows(views_of(specs, sample), dialog_column(false)),
         kControlsLocked,
-        424
+        478
     );
     placed_as(
         "Controls, locked, tall",
         kit::place_rows(views_of(specs, sample), dialog_column(true)),
         kControlsLockedTall,
-        436
+        490
     );
 }
 
@@ -612,13 +616,13 @@ void rows_shaped_as_graphics_lie_where_the_dialog_places_them() {
         "Graphics, locked",
         kit::place_rows(views_of(specs, sample), dialog_column(false)),
         kGraphicsLocked,
-        255
+        273
     );
     placed_as(
         "Graphics, locked, tall",
         kit::place_rows(views_of(specs, sample), dialog_column(true)),
         kGraphicsLockedTall,
-        261
+        279
     );
 }
 
@@ -686,10 +690,9 @@ void every_kind_lies_by_the_rows_rules() {
     const kit::PlacedRows narrow = kit::place_rows(views_of(locked, sample), dialog_column(false));
     check_rect("Narrow link", 0, "control", narrow.rows[0].control_area, {158, 63, 60, 16});
 
-    // A locked value row whose label and value do not fit on one line with
-    // the lock: the label keeps its line and the value stands on the next,
-    // before the lock in the button's place when the hint is the row's
-    // status, else before the lock and the button.
+    // A locked value row whose control stands below the label: the lock
+    // stays at the right of the label line, and the value stands on the
+    // button's line, before the button. A status hint does not hide it.
     std::array<kit::RowSpec<Sample>, 2> values{
         locked_in_game(
             kit::value_and_button(
@@ -721,16 +724,34 @@ void every_kind_lies_by_the_rows_rules() {
     value_views[0].hint_is_status = true;
     value_views[1].control_below = true;
     const std::vector<Expected> value_rows{
-        {54, 65, {158, 63, 309, 16}, {319, 81, 148, 16}, {99}, {}, {158, 81, 153, 16}},
+        {54,
+         65,
+         {158, 63, 153, 16},
+         {319, 63, 148, 16},
+         {99},
+         {391, 81, 76, 16},
+         {158, 81, 225, 16}},
         {119,
          65,
-         {158, 128, 309, 16},
-         {235, 146, 148, 16},
+         {158, 128, 153, 16},
+         {319, 128, 148, 16},
          {164},
          {391, 146, 76, 16},
-         {158, 146, 69, 16}},
+         {158, 146, 225, 16}},
     };
-    placed_as("Locked values", kit::place_rows(value_views, dialog_column(false)), value_rows, 184);
+    const kit::PlacedRows locked_values = kit::place_rows(value_views, dialog_column(false));
+    placed_as("Locked values", locked_values, value_rows, 184);
+    kit::DisplayList locked_list;
+    kit::add_rows(locked_list, locked_values, {});
+    bool saw_button = false;
+    for (const kit::Item& item : locked_list.items) {
+        const auto* look = std::get_if<kit::ButtonLook>(&item.look);
+        if (look == nullptr)
+            continue;
+        saw_button = true;
+        OA_CHECK(look->style == kit::ButtonStyle::plain);
+    }
+    OA_CHECK(saw_button);
 }
 
 // ---- Scroll ----
@@ -1186,7 +1207,8 @@ void locked_rows_and_disabled_buttons_take_no_focus() {
         disabled != list.items.end() ? std::get_if<kit::ButtonLook>(&disabled->look) : nullptr;
     OA_CHECK(look != nullptr && !look->enabled && look->style == kit::ButtonStyle::plain);
 
-    // A locked row whose hint is its status fades only its label line.
+    // A locked row whose hint is its status fades its label line and a lock
+    // that dropped under it, and stops at the status.
     const auto specs = controls_rows();
     const kit::PlacedRows controls = kit::place_rows(views_of(specs, sample), dialog_column(false));
     kit::DisplayList faded;
@@ -1197,8 +1219,8 @@ void locked_rows_and_disabled_buttons_take_no_focus() {
             fades.push_back(item.rect);
     OA_CHECK(fades.size() == 4);
     if (fades.size() == 4) {
-        OA_CHECK(same(fades[2], {158, 260, 309, 58}));
-        OA_CHECK(same(fades[3], {158, 319, 309, 26}));
+        OA_CHECK(same(fades[2], {158, 278, 309, 76}));
+        OA_CHECK(same(fades[3], {158, 355, 309, 44}));
     }
     // With no prefix, a control is named by its row's id alone.
     OA_CHECK(kit::control_named(faded, "max-zoom-in") == 15);
