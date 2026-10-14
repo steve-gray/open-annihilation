@@ -20,6 +20,7 @@ inline constexpr std::string_view interface_words[] = {
     "1 of {total} files differs",
     "2",
     "3",
+    "A launch is already open. Quit Open Annihilation, then open the file again.",
     "A graphics driver failed, so the game now uses another one. You can try it again under "
     "Graphics in the OA settings.",
     "ADD",
@@ -117,8 +118,10 @@ inline constexpr std::string_view interface_words[] = {
     "Its oamod.yaml has errors:",
     "KEEP WHAT WAS COPIED",
     "LANGUAGE INSTALLED",
+    "LAUNCH FILE NOT OPENED",
     "LATCHED",
     "LOAD",
+    "Launch file not opened: finish or leave this game first.",
     "Language",
     "Language packs (.oalang)",
     "Languages",
@@ -174,6 +177,8 @@ inline constexpr std::string_view interface_words[] = {
     "Off: the processor draws and scales the view.",
     "One-finger drag",
     "Open Annihilation",
+    "Open Annihilation opens a launch file's battle room from the main menu. Go back to the main "
+    "menu, then open the file again.",
     "Open Annihilation remembers it for later starts; start it with --choose-game-dir to choose "
     "another folder.",
     "Orders",
@@ -244,6 +249,8 @@ inline constexpr std::string_view interface_words[] = {
     "The pack was not installed: {reason}",
     "This game includes no multiplayer maps, so multiplayer is not available.",
     "This game includes no skirmish maps, so skirmish is not available.",
+    "This launch plays other content than the game plays now. Quit Open Annihilation, then open "
+    "the file again.",
     "This map is for the TA demo.",
     "This map is for {name}.",
     "Total Annihilation",

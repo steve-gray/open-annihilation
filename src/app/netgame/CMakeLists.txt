@@ -18,14 +18,15 @@ target_link_libraries(oa-app-netgame-launch PUBLIC oa-app-command-line oa-ui-fro
   PRIVATE oa-base-text oa-options)
 
 # The long options and 3.1c network switches, which the option test parses
-# without a running app.
-add_library(oa-app-netgame-options STATIC net_options.cpp launch_file.cpp)
+# without a running app, and the launch files the system opens in the game.
+add_library(oa-app-netgame-options STATIC net_options.cpp launch_file.cpp opened_launch.cpp)
 add_library(oa::app::netgame_options ALIAS oa-app-netgame-options)
 target_include_directories(oa-app-netgame-options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(oa-app-netgame-options PUBLIC oa::app::headers oa-app-netgame-launch oa-netgame-frontend
   oa-app-command-line oa-ui-frontend-renderer oa-ui-frontend-state oa-sim-scenario oa-ui-screen-registry
   oa-core-types
-  PRIVATE oa-netgame oa-options oa-formats-oamod oa-base-text)
+  PRIVATE oa-netgame oa-options oa-formats-oamod oa-base-text oa-base-threads oa-platform-file-types
+  oa-data-content-bundles)
 
 # The network rules a mod profile gives network play, which their test
 # reads without a running app.
@@ -69,6 +70,7 @@ set(oa_app_netgame_sources
   runtime_demo.cpp
   extension.cpp
   runtime_netgame.cpp
+  runtime_opened_launch.cpp
   runtime_report.cpp
   runtime_session_cheats.cpp)
 
@@ -124,6 +126,14 @@ if(BUILD_TESTING)
     oa-app-automation-options oa-netgame oa-options)
   add_test(NAME netgame-launch-help COMMAND oa-netgame-launch-help-test
     "${PROJECT_SOURCE_DIR}/docs/command-line.md" "${PROJECT_SOURCE_DIR}/docs/multiplayer/launch-file.md")
+  # A launch file the system opens: told by its name or its first bytes, read as it
+  # arrives, the start's own launch as -c makes it, its content compared with what
+  # runs, and where the running game takes one, refuses one or keeps it waiting.
+  add_executable(oa-netgame-opened-launch-test tests/opened_launch_test.cpp)
+  target_link_libraries(oa-netgame-opened-launch-test PRIVATE oa-app-netgame-options
+    oa-app-game-options oa-netgame oa-test-support oa-options)
+  add_test(NAME netgame-opened-launch COMMAND oa-netgame-opened-launch-test)
+  set_tests_properties(netgame-opened-launch PROPERTIES TIMEOUT 60)
   add_executable(oa-netgame-close-handlers-test tests/close_handlers_test.cpp)
   target_link_libraries(oa-netgame-close-handlers-test PRIVATE oa-app-netgame-launch-binding oa-ui-frontend-state)
   add_test(NAME netgame-close-handlers COMMAND oa-netgame-close-handlers-test)
@@ -268,5 +278,14 @@ if(BUILD_TESTING AND TARGET oa-game AND IS_DIRECTORY "${OA_GAME_DIR}")
       --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
       --scratch-root "${oa_netgame_checks}")
     set_tests_properties(native-launch-file PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
+    # A launch file the system opens in the game, as a drop of the file: as the
+    # window first shows it is the start's launch, as -c makes it; at the main
+    # menu, from a temporary .txt file as `open -f` writes one, it goes to the
+    # same battle room; a file the battle room cannot use opens nothing.
+    add_test(NAME native-opened-launch COMMAND ${Python3_EXECUTABLE}
+      "${PROJECT_SOURCE_DIR}/tools/check_native_opened_launch.py"
+      --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
+      --scratch-root "${oa_netgame_checks}")
+    set_tests_properties(native-opened-launch PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
   endif()
 endif()

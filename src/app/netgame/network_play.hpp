@@ -11,6 +11,7 @@
 // (netgame-runtime-surface, tools/runtime-surface-baseline.json).
 #pragma once
 
+#include "oa/app/netgame/opened_launch.hpp"
 #include "oa/app/presence_facts.hpp"
 #include "oa/app/runtime.hpp"
 
@@ -462,6 +463,22 @@ class NetworkPlay {
     /// @param[in,out] world Match world the departure is posted to.
     /// @param player_id Session id of the player who left.
     void post_departure(oa::World& world, uint32_t player_id);
+
+    // Launch files the system opens while the game runs (runtime_opened_launch.cpp).
+
+    /// Returns what the game plays, for comparing an opened launch's content: the mounted
+    /// base game and expansions where it plays the player's copy, and the mod in play, read
+    /// through Runtime's public methods.
+    ///
+    /// @return the content
+    [[nodiscard]] netgame::RunningContent running_content() const;
+
+    /// Posts a line to the running match's message log, as a notice from no player, through
+    /// the console host the engine hands network play as each match starts.
+    ///
+    /// @param line the line, already in the language shown
+    /// @return false when no match's console host is kept, and nothing was posted
+    bool post_match_line(std::string_view line);
 
   private:
 
