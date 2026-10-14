@@ -10,8 +10,8 @@ machine is used or changed. Each game runs as a program of its own on the
 dummy SDL drivers, over 127.0.0.1, at a DirectPlay port of the check's own
 (--dplay-port), so the check runs beside anything else on this machine:
 
-- an .oalaunch host file opened as the window first shows is the start's
-  launch, as -c makes it: the battle room opens on the file's map and rules
+- an .oalaunch host file, in a folder whose name has a space, opened as the
+  window first shows is the start's launch, as -c makes it: the battle room opens on the file's map and rules
   and seats the player and two computer players as the file says, and the main
   menu is never left for it;
 - the same launch in a temporary .txt file, as macOS's `open -f` hands one
@@ -192,7 +192,10 @@ def refused(native, game_dir, workdir, path):
 
 def check(native, game_dir, workdir):
     """Runs each case; raises OpenedLaunchFailure when one differs."""
-    host = workdir / "host-now.oalaunch"
+    # A file the system opens is handed over whole, a space in its path included.
+    downloads = workdir / "Downloads folder"
+    downloads.mkdir()
+    host = downloads / "host now.oalaunch"
     host.write_text(YAML, encoding="utf-8")
     # `open -f` writes what it is piped into a temporary file with a .txt name.
     piped = workdir / "5E1F0A2C.txt"

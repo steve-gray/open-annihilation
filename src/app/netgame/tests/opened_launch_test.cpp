@@ -221,6 +221,12 @@ void test_start_is_minus_c(const Scratch& scratch) {
     OA_CHECK(with_c.options.launch_planned);
     OA_CHECK(with_c.options.launch_source == oa::app::path_to_utf8(file));
     OA_CHECK(with_c.launch.block.computer_count == 2);
+    // So is one after 3.1c's /C, in either case.
+    oa::app::NetgameContext with_slash{};
+    const oa::app::Options slash_run = parse(with_slash, {"/C", oa::app::path_to_utf8(file)});
+    OA_CHECK(slash_run.open_files.empty());
+    OA_CHECK(with_slash.options.launch_planned);
+    OA_CHECK(with_slash.options.launch_source == oa::app::path_to_utf8(file));
     oa::app::NetgameContext opened{};
     static_cast<void>(parse(opened, {}));
     OA_CHECK(!opened.options.launch_planned);
@@ -246,6 +252,19 @@ void test_start_is_minus_c(const Scratch& scratch) {
         oa::app::put_launch_in_place(from_text, net::read_opened_launch_plan(*text));
         OA_CHECK(from_text.launch.block.computer_count == 2);
         OA_CHECK(from_text.options.launch_source == oa::app::path_to_utf8(piped));
+    }
+
+    // A file the system opens is handed over whole, so a space in its path is part of it.
+    fs::create_directories(scratch.dir / "Downloads folder");
+    const fs::path spaced = scratch.write("Downloads folder/host now.oalaunch", kLaunch);
+    oa::app::NetgameContext from_spaced{};
+    static_cast<void>(parse(from_spaced, {}));
+    const std::optional<net::OpenedLaunch> spaced_launch = net::read_opened_launch(spaced);
+    OA_CHECK(spaced_launch && spaced_launch->problem.empty());
+    if (spaced_launch) {
+        oa::app::put_launch_in_place(from_spaced, net::read_opened_launch_plan(*spaced_launch));
+        OA_CHECK(from_spaced.options.launch_planned);
+        OA_CHECK(from_spaced.options.launch_source == oa::app::path_to_utf8(spaced));
     }
 
     // A join keeps its address.
