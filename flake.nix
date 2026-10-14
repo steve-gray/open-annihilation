@@ -128,9 +128,11 @@
 
           # `nix build .#win95` builds the Windows 95 package, from the one set
           # whose toolchain tools/nix/win95-toolchain.nix rebuilt. fullPackage
-          # installs the notices, the interface catalogue and oa-intro.exe
-          # beside the executables, in the same shape as the other Windows
-          # packages.
+          # installs a Release build with the self-checks left out, the
+          # programs stripped under $out/bin and the unstripped copies in
+          # $out/symbols, and the notices, the interface catalogue and
+          # oa-intro.exe beside the executables, in the same shape as the
+          # other Windows packages. The Linux-only SDL notice is not installed.
           win95 =
             let
               win95Pkgs = mkWin95Pkgs system;
