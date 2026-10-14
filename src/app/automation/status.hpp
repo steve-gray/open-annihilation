@@ -67,6 +67,11 @@ class StatusStream {
     /// @return true when a writer, a file or a descriptor is set
     [[nodiscard]] bool has_destination() const noexcept;
 
+    /// The output handle use_inherited_output gave the stream.
+    ///
+    /// @return the handle, or -1 when none was given
+    [[nodiscard]] intptr_t inherited_output() const noexcept;
+
     /// Writes the hello line once.
     ///
     /// @param version the line --version prints, with no newline
@@ -86,6 +91,10 @@ class StatusStream {
     /// waits for that.
     void note_score_left();
 
+    /// Remembers that the game refused its launch: the exit line's reason is
+    /// refused, whatever came before.
+    void note_refused();
+
     /// Sets when the run leaves.
     ///
     /// @param quit the option
@@ -99,7 +108,8 @@ class StatusStream {
     /// The code the process uses for this stream.
     ///
     /// With --quit-after-game a game that ended is 0 and a player who left
-    /// or lost the connection is 3. Otherwise `played` is kept.
+    /// or lost the connection is 3. Otherwise, and for a refused launch,
+    /// `played` is kept.
     ///
     /// @param played the code the run would return
     /// @return the code
@@ -207,6 +217,24 @@ void begin_status_lines(std::string_view version);
 ///
 /// @param played the code the run would return
 void finish_status_lines(int played);
+
+/// Writes the exit line of a launch the game refused, when hello was written.
+///
+/// The line's reason is refused and its code is `code`, with or without
+/// --quit-after-game.
+///
+/// @param code the code the process returns for the refusal
+void finish_refused_status_lines(int code);
+
+/// Writes one line to the standard output the process was started with.
+///
+/// That is the output capture_status_stdout kept, or the status stream's
+/// once the stream took it, so a log that took the streams does not take
+/// the line. Without either, the line goes to std::cout. The line is
+/// flushed.
+///
+/// @param line the line, without a newline
+void write_started_output(std::string_view line);
 
 /// The code main returns when --quit-after-game is on.
 ///

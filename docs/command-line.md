@@ -398,7 +398,7 @@ Network play's own checks, the last rows, are in every build.
 | `--net-loopback-computer` | The loopback check's host seats a computer player. |
 | `--net-loopback-each-ai` | The loopback check's host and joiner each seat a computer player. |
 | `--check-host-not-found` | Checks a joiner whose host is never found. |
-| `--check-opened-launch start\|menu FILE` | Opens `FILE` as the system opens a launch file: as the window first shows, or once the main menu has settled. |
+| `--check-opened-launch start\|menu FILE` | Opens `FILE` as the system opens a launch file: as the game starts, before its window opens, or once the main menu has settled. |
 | `--check-recording-hook` | Checks the game declines bytes that are no recording and refuses a cut one. |
 
 ### Tools
@@ -472,10 +472,10 @@ them starts a launch of its own. Without a launch file, `--host` or
 `--join`, a launch option is refused: `--metal needs --host or --join`.
 
 A value is checked as the file's value is. A launch the game cannot use
-ends the game as it starts, with status 2 and one line that names the file
-and the field (`host.oalaunch: rules.metal: 250000 is above 10000`), or the
-option (`--metal: 250000 is above 10000`). The password is never part of
-that line and is never written to the log.
+ends the game before a window opens, with status 2 and one line that names
+the file and the field (`host.oalaunch: rules.metal: 250000 is above
+10000`), or the option (`--metal: 250000 is above 10000`). The password is
+never part of that line and is never written to the log.
 
 The launch stays active for the whole run, and every battle room applies it
 as it opens. A player who joins takes the launch's player settings and
@@ -699,14 +699,15 @@ Restrictions does. A unit the game's content does not have is left out.
 only for this run. `base-game` is the base game's id, `expansions` a list of
 expansion ids, which needs a base game, and `mod` a mod's id, or the path of
 a mod folder or a mod profile. If this player does not have the base game,
-an expansion or the mod, the game ends as it starts, with status 2, and the
-line says which (`host.oalaunch: content.mod: "ridge" is not an installed
-mod`). A file that leaves `content` out plays what the Library has chosen.
+an expansion or the mod, the game ends before a window opens, with status
+2, and the line says which (`host.oalaunch: content.mod: "ridge" is not an
+installed mod`). A file that leaves `content` out plays what the Library
+has chosen.
 `--content`, `--base-game`, `--mod` and `--mod-dir` beside the file replace
 that choice.
 
 `map` is the map's shown name, or its key (`name@package` for a pack map). A
-map that is not installed is refused as the game starts
+map that is not installed is refused before a window opens
 (`host.oalaunch: map: "Acid Foursum" is not an installed map`). The game
 does not open on a different map.
 
@@ -944,8 +945,8 @@ What an opened launch file does depends on when it arrives:
 - **When it starts the game,** it is the start's launch, exactly as
   `-c FILE`: the intro is skipped, the launch's content chooses what the
   game plays, and the battle room opens on the file's map, rules and
-  players. A file the game cannot use ends the game with status 2 and a
-  message that names the file and the field.
+  players. A file the game cannot use ends the game before a window opens,
+  with status 2 and a message that names the file and the field.
 - **While the game shows the main menu,** the game goes to that launch's
   battle room. From the single-player menu it goes back to the main menu
   first.
@@ -969,11 +970,14 @@ does. On macOS the system hands the file to the copy that runs.
 ## Listing what is installed
 
 `--list-content --json` prints the installed maps, mods and expansions as
-one JSON object and exits with status 0, before the game's first screen.
-The maps are sorted by key, and the mods and expansions by id. The object
-is one line of standard output, the line that begins `{`; lines of the
-game's log may come before it. Leave `--log-dir` out: with it, the log
-takes standard output, and the object goes into the log.
+one JSON object and exits with status 0, without opening a window. The maps
+are sorted by key, and the mods and expansions by id. The object is one line
+of the standard output the game was started with, whatever the log
+settings. With `--log-dir`, or when the game keeps its log in its logs
+folder, it is the only line there; otherwise lines of the game's log may
+come before it, and the object is the line that begins `{`. A listing asks
+nothing: when no game folder is known it ends with status 1 and says to
+name one with `--game-dir`.
 
 ```json
 {"maps":[{"shown-name":"Acid Foursome","key":"Acid Foursome","players":4,"size":"13 x 13"}],"mods":[{"id":"ridge","name":"Ridge"}],"expansions":[{"id":"core-contingency","name":"Core Contingency"}]}
@@ -1187,11 +1191,15 @@ open-annihilation: taforever.ini: mission: "Acid Foursum" is not an installed ma
 open-annihilation: nothere.oalaunch: the file: cannot be read from the current folder or the game folder
 ```
 
-A value refused on the command line, or in the launch file it names, ends
-the game before a window opens. A map or content that is not installed is
-found as the game starts, and ends it before its first screen. The password
-is never part of a refusal, and never written to the log.
+A launch the game cannot use ends it before a window opens: a value
+refused on the command line or in the launch file, and a map, base game,
+expansion or mod that is not installed. A launch file opened with the game
+is checked the same way. Only where the game must first ask where Total
+Annihilation is, or show its first setup, does that window come before
+the check. The password is never part of a refusal, and never written to
+the log.
 
 With `--status-stdout` the status lines own standard output; the refusal
-goes to the log, and `--log-dir` names where that is
-([what a game reports](multiplayer/status.md)).
+goes to the log, and `--log-dir` names where that is. A launch refused
+once the status lines have begun ends them with `exit`, its reason
+`refused` and its code 2 ([what a game reports](multiplayer/status.md)).

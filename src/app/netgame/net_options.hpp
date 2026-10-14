@@ -35,7 +35,7 @@ constexpr std::size_t kDefaultDemoTicks = 600; // headless --play-demo without -
 // When --check-opened-launch opens its file in the game, as the system opens one.
 enum class OpenedLaunchCheck : uint8_t {
     none,  // no check
-    start, // as the window first shows, before the game's first screen
+    start, // as the game starts, before its window opens
     menu,  // once the main menu has settled
 };
 

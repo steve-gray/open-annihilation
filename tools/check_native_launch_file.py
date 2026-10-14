@@ -24,11 +24,18 @@ check runs beside anything else on this machine:
 - a file whose metal is above the slider ends with status 2 and names the
   field, and an option above it names the option;
 - -r ends with status 0 and says why, without opening a window;
-- --list-content --json prints one JSON object and ends with status 0, and
-  does so at once with an idle pipe as its standard input.
+- --list-content --json prints one JSON object and ends with status 0,
+  without opening a window, and does so at once with an idle pipe as its
+  standard input; with --log-dir the object is still printed on standard
+  output, as its only line, and the log does not hold it;
+- a launch whose map or mod is not installed, with the status lines on
+  standard output, ends with status 2 before a window opens, and its status
+  lines are hello and an exit line with reason refused and code 2.
 
 The battle room's lines are read from the game's log (--log-dir), which is
 where those lines are kept. The password in the file is never printed.
+Every game keeps its preferences, its data and its log in the check's
+scratch folder, and fetches no catalogue.
 """
 import argparse
 import json
@@ -157,6 +164,34 @@ KEYS_NOTE = "open-annihilation: keys.ini: tournament: not read, as 3.1c does not
 INI_NOTE = "totala.ini: tournment, tournament: not read, as 3.1c does not read them"
 SPACED_INI_NOTE = "TA Forever.ini: tournment, tournament: not read, as 3.1c does not read them"
 
+# The preferences every game of the check starts with: no catalogue is
+# fetched, so nothing leaves 127.0.0.1.
+PREFERENCES = 'open-annihilation-preferences 1\n"open-annihilation.content-updates" "never"\n'
+# The line the game logs as its window opens.
+WINDOW_LINE = "open-annihilation: window: "
+
+# A host whose map is not installed, and one whose mod is not, each with the
+# status lines on standard output.
+MISSING_MAP_YAML = """oalaunch: 1
+game:
+  role: host
+  name: Example game
+  password: secret
+map: "Acid Foursum"
+status:
+  standard-output: on
+"""
+MISSING_MOD_YAML = """oalaunch: 1
+game:
+  role: host
+  name: Example game
+map: "Acid Foursome"
+content:
+  mod: ridge
+status:
+  standard-output: on
+"""
+
 BAD_YAML = """oalaunch: 1
 game:
   role: host
@@ -194,9 +229,12 @@ class Game:
         environment = dict(os.environ, SDL_VIDEO_DRIVER="dummy", SDL_AUDIO_DRIVER="dummy",
                            SDL_RENDER_DRIVER="software")
         self.preferences = workdir / f"{name}.conf"
+        self.preferences.write_text(PREFERENCES, encoding="utf-8")
+        data = workdir / f"{name}-data"
+        data.mkdir()
         self.process = subprocess.Popen(
             [*RUNNER, str(native), "--game-dir", str(game_dir), "--mute",
-             "--preferences-file", str(self.preferences), *arguments],
+             "--preferences-file", str(self.preferences), "--data-dir", str(data), *arguments],
             cwd=workdir, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL if piped is None else subprocess.PIPE,
             text=True, errors="replace")
@@ -388,6 +426,8 @@ def check_list(native, game_dir, workdir):
     took = time.monotonic() - started
     if took > IDLE_PIPE_LIMIT:
         raise LaunchFileFailure(f"an idle pipe held the start up for {took:.1f} s")
+    if any(line.startswith(WINDOW_LINE) for line in game.lines):
+        raise LaunchFileFailure(f"list-content opened a window:\n{game.output()}")
     listed = None
     for line in game.lines:
         if line.startswith("{") and '"maps"' in line:
@@ -415,6 +455,93 @@ def check_list(native, game_dir, workdir):
         f"{len(listed['expansions'])} expansions; "
         f"Acid Foursome players {shown.get('players')} size {shown.get('size')!r}"
     )
+
+
+def run_apart(native, game_dir, workdir, name, arguments):
+    """Runs a game to its end, its standard output and standard error read apart.
+
+    The game logs to a folder of its own (--log-dir). Returns the exit
+    status, the lines of standard output and the text of the log.
+    """
+    user = workdir / f"{name}-user"
+    user.mkdir()
+    data = workdir / f"{name}-data"
+    data.mkdir()
+    logs = workdir / f"{name}-log"
+    logs.mkdir()
+    preferences = workdir / f"{name}.conf"
+    preferences.write_text(PREFERENCES, encoding="utf-8")
+    environment = dict(os.environ, SDL_VIDEO_DRIVER="dummy", SDL_AUDIO_DRIVER="dummy",
+                       SDL_RENDER_DRIVER="software")
+    try:
+        result = subprocess.run(
+            [*RUNNER, str(native), "--game-dir", str(game_dir), "--mute", "--skip-intro",
+             "--preferences-file", str(preferences), "--user-folder", str(user),
+             "--data-dir", str(data), "--log-dir", str(logs), *arguments],
+            cwd=workdir, env=environment, stdin=subprocess.DEVNULL, capture_output=True,
+            text=True, errors="replace", timeout=LINE_TIMEOUT, check=False)
+    except subprocess.TimeoutExpired:
+        raise LaunchFileFailure(f"{name} did not end within {LINE_TIMEOUT} s") from None
+    log = "\n".join(path.read_text(encoding="utf-8", errors="replace")
+                    for path in sorted(logs.glob("*.log")))
+    return result.returncode, result.stdout.splitlines(), log
+
+
+def status_objects(name, lines):
+    """Reads each line of standard output as one JSON object; raises LaunchFileFailure otherwise."""
+    objects = []
+    for line in lines:
+        try:
+            objects.append(json.loads(line))
+        except ValueError:
+            raise LaunchFileFailure(f"{name} printed a line that is no JSON object: {line}") \
+                from None
+    return objects
+
+
+def check_list_with_log(native, game_dir, workdir):
+    """--list-content --json with --log-dir prints its object on standard output, its only line."""
+    status, lines, log = run_apart(native, game_dir, workdir, "list-content-log",
+                                   ["--list-content", "--json"])
+    if status != 0:
+        raise LaunchFileFailure(f"list-content-log exited with {status}, expected 0")
+    if len(lines) != 1 or not lines[0].startswith("{"):
+        raise LaunchFileFailure(f"list-content-log printed {len(lines)} lines, not its object alone")
+    listed = json.loads(lines[0])
+    if not isinstance(listed.get("maps"), list) or not listed["maps"]:
+        raise LaunchFileFailure("list-content-log listed no maps")
+    if '"maps"' in log:
+        raise LaunchFileFailure("list-content-log wrote its object into the log")
+    if WINDOW_LINE in log:
+        raise LaunchFileFailure(f"list-content-log opened a window:\n{log}")
+    print(f"list-content-log: one line of standard output, {len(listed['maps'])} maps; "
+          "the log holds no listing and no window")
+
+
+def check_refused_launch(native, game_dir, workdir, name, text, field):
+    """A launch whose map or mod is not installed ends with status 2 before a window opens,
+    and its status lines end with exit, reason refused."""
+    path = workdir / f"{name}.oalaunch"
+    path.write_text(text, encoding="utf-8")
+    status, lines, log = run_apart(native, game_dir, workdir, name,
+                                   ["--dplay-port", str(free_port()), "-c", str(path)])
+    if status != 2:
+        raise LaunchFileFailure(f"{name} exited with {status}, expected 2")
+    objects = status_objects(name, lines)
+    events = [item.get("event") for item in objects]
+    if events != ["hello", "exit"]:
+        raise LaunchFileFailure(f"{name} wrote the status lines {events}, not hello and exit")
+    if objects[1].get("reason") != "refused" or objects[1].get("code") != 2:
+        raise LaunchFileFailure(f"{name} ended its status lines with {objects[1]}")
+    refusal = next((line for line in log.splitlines() if f": {field}: " in line), None)
+    if refusal is None:
+        raise LaunchFileFailure(f"{name} did not log the refusal of {field}:\n{log}")
+    if WINDOW_LINE in log:
+        raise LaunchFileFailure(f"{name} opened a window before its refusal:\n{log}")
+    if "secret" in log or "secret" in "\n".join(lines):
+        raise LaunchFileFailure(f"{name} printed the password")
+    print(f"{name}: exit 2, no window, {lines[-1]}")
+    print(f"{name}: {refusal[refusal.rfind('/') + 1:]}")
 
 
 def check(native, game_dir, workdir):
@@ -452,6 +579,9 @@ def check(native, game_dir, workdir):
     check_bad_file(native, game_dir, workdir)
     check_register(native, game_dir, workdir)
     check_list(native, game_dir, workdir)
+    check_list_with_log(native, game_dir, workdir)
+    check_refused_launch(native, game_dir, workdir, "missing-map", MISSING_MAP_YAML, "map")
+    check_refused_launch(native, game_dir, workdir, "missing-mod", MISSING_MOD_YAML, "content.mod")
 
 
 def main():
@@ -472,7 +602,9 @@ def main():
           "Acid Foursome with the launch's rules and seats, -c read TA Forever's file and a "
           "file of 3.1c's keys as 3.1c reads them, -c and -C read both from a folder whose "
           "name has a space, a bad file and a bad option exited 2, -r "
-          "exited 0, and --list-content --json parsed beside an idle pipe")
+          "exited 0, --list-content --json parsed beside an idle pipe and alone on standard "
+          "output beside --log-dir with no window, and a missing map and a missing mod exited 2 "
+          "with no window and an exit line")
     return 0
 
 

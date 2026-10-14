@@ -11,7 +11,7 @@ dummy SDL drivers, over 127.0.0.1, at a DirectPlay port of the check's own
 (--dplay-port), so the check runs beside anything else on this machine:
 
 - an .oalaunch host file, in a folder whose name has a space, opened as the
-  window first shows is the start's launch, as -c makes it: the battle room opens on the file's map and rules
+  game starts, before its window opens, is the start's launch, as -c makes it: the battle room opens on the file's map and rules
   and seats the player and two computer players as the file says, and the main
   menu is never left for it;
 - the same launch in a temporary .txt file, as macOS's `open -f` hands one
@@ -52,6 +52,9 @@ AT_START_LINE = "a launch file opened with the game is this start's launch: "
 AT_MENU_LINE = "multiplayer: a launch file opened at the main menu goes to its battle room: "
 MENU_CHECK_LINE = "opened-launch check: the main menu shows; the file is opened in the game"
 NOT_OPENED_LINE = "multiplayer: launch file not opened: "
+# The preferences every game of the check starts with: no catalogue is
+# fetched, so nothing leaves 127.0.0.1.
+PREFERENCES = 'open-annihilation-preferences 1\n"open-annihilation.content-updates" "never"\n'
 
 YAML = """oalaunch: 1
 game:
@@ -118,13 +121,17 @@ class Game:
         self.log_dir.mkdir()
         user = workdir / f"{name}-user"
         user.mkdir()
+        data = workdir / f"{name}-data"
+        data.mkdir()
+        preferences = workdir / f"{name}.conf"
+        preferences.write_text(PREFERENCES, encoding="utf-8")
         environment = dict(os.environ, SDL_VIDEO_DRIVER="dummy", SDL_AUDIO_DRIVER="dummy",
                            SDL_RENDER_DRIVER="software")
         self.output = workdir / f"{name}-output.txt"
         with open(self.output, "w", encoding="utf-8") as output:
             self.process = subprocess.Popen(
                 [*RUNNER, str(native), "--game-dir", str(game_dir), "--mute", "--skip-intro",
-                 "--preferences-file", str(workdir / f"{name}.conf"),
+                 "--preferences-file", str(preferences), "--data-dir", str(data),
                  "--user-folder", str(user), "--log-dir", str(self.log_dir),
                  "--dplay-port", str(free_port()), *arguments],
                 cwd=workdir, env=environment, stdin=subprocess.DEVNULL, stdout=output,

@@ -13,6 +13,8 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <iostream>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -140,6 +142,10 @@ bool StatusStream::has_destination() const noexcept {
     return writer_ != nullptr || file_ != nullptr || inherited_ != -1;
 }
 
+intptr_t StatusStream::inherited_output() const noexcept {
+    return inherited_;
+}
+
 void StatusStream::write_line(std::string_view json) {
     if (!has_destination())
         return;
@@ -192,6 +198,10 @@ void StatusStream::note_departure(bool connection_lost) {
 void StatusStream::note_score_left() {
     if (quit_ == QuitAfter::score && saw_game_over_)
         quit_pending_ = true;
+}
+
+void StatusStream::note_refused() {
+    reason_ = "refused";
 }
 
 void StatusStream::set_quit(QuitAfter quit) noexcept {
@@ -354,6 +364,28 @@ void begin_status_lines(std::string_view version) {
 
 void finish_status_lines(int played) {
     process_stream().finish(played);
+}
+
+void finish_refused_status_lines(int code) {
+    StatusStream& stream = process_stream();
+    stream.note_refused();
+    stream.finish(code);
+}
+
+void write_started_output(std::string_view line) {
+    std::string text(line);
+    text.push_back('\n');
+    intptr_t handle = captured_output();
+    if (handle == -1)
+        handle = process_stream().inherited_output();
+    if (handle == -1) {
+        std::cout << text << std::flush;
+        return;
+    }
+    // What the game printed before goes out first.
+    std::cout.flush();
+    std::fflush(stdout);
+    write_output(handle, text);
 }
 
 int status_exit_code(int played) noexcept {

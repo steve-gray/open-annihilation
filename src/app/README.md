@@ -4077,12 +4077,18 @@ TCP/IP game at once, each screen doing what a player would
 A launch file the system opens in the game (`opened_launch.hpp`) is read
 as it arrives and waits for the game to take it. One that arrives before
 the runtime starts is the start's launch, exactly as `-c FILE` makes it:
-`main.cpp` pumps SDL's events once the window is up, so that the file
-macOS hands a game it starts for arrives then, and before the game folder
-is resolved puts the launch in place (`put_launch_in_place`, the public
-entry point that puts a plan in place after the command line was checked),
-adopts its content and skips the intro; the map check then runs before the
-runtime as for `-c`, and a refusal ends the start with status 2. One that
+`main.cpp` starts SDL's video without the window and pumps its events, so
+that the file macOS hands a game it starts for arrives then, and before
+the game folder is resolved puts the launch in place
+(`put_launch_in_place`, the public entry point that puts a plan in place
+after the command line was checked), adopts its content and skips the
+intro; the map check then runs before the runtime as for `-c`, and a
+refusal ends the start with status 2. A launch, from the command line, a
+pipe or an opened file, keeps the window closed until its content and map
+are found installed, and `--list-content --json` opens none at all and
+writes its listing to the standard output the process was started with,
+whatever takes the log; a refusal after the status stream's hello writes
+its exit line, reason `refused`. One that
 arrives while the game runs is network play's frame's
 (`follow_opened_launches`): from the main menu, settled for two frames
 with no dialog and no multiplayer signal waiting, the launch is put in
@@ -4096,8 +4102,8 @@ content (mod, base game or expansions) differs from what the game plays,
 a notice says so, and nothing is put in place. In the intro, a loading
 screen or a change of screen the file waits. A late launch's status group
 has no effect. `--check-opened-launch start|menu FILE` opens FILE as the
-system would, a drop of the file, as the window first shows or once the
-main menu has settled (`native-opened-launch`).
+system would, a drop of the file, as the game starts, before its window
+opens, or once the main menu has settled (`native-opened-launch`).
 MULTI on the main menu asks the extensions (`select_multiplayer`), and
 network play answers by moving the frontend to its multiplayer states;
 when no extension answers, MULTI does nothing. Over game data with no
