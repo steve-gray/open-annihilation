@@ -147,7 +147,11 @@ path shortened under the home folder, and the bundles that place holds.
 It does not name a bundle the place lacks. The selected row's bundles
 are accent pills, and every other row's are quiet pills. The list is
 ready when the step opens. Copying still checks each file as it reads
-it. **Locate another…** is centred under the rows, at the footer
+it. When the rows do not fit above **Locate another…**, they scroll
+between the title and it, with a scroll bar at their right. The list
+keeps the focused or chosen row in view; the wheel, Page Up, Page Down,
+Home and End, or dragging the bar, scroll it, and choosing a row brings
+the list back to it. **Locate another…** is centred under the rows, at the footer
 buttons' height, as wide as the footer makes a button of the same words,
 with the same room either side of them, in every language. It asks for a
 folder. **Copy the game** is available
@@ -159,9 +163,9 @@ Annihilation, and that the installation is left as it is.
 
 ## Copying
 
-![Copying: the overall bar, the bundles this source holds, and Pause.](images/first-run/copying.png)
+![Copying: the overall bar, the five bundles this source holds in a panel that scrolls, two done and one copying, and Pause.](images/first-run/copying.png)
 
-![The same step after the check: 100 percent, All files match with the overall bar, a tracks note, and Continue counting down.](images/first-run/check.png)
+![The same step after the check: 100 percent, All files match with the overall bar, the panel scrolled to Music's tracks note, and Continue counting down.](images/first-run/check.png)
 
 The page word is Setup, the step is COPYING, and the count is 3 of 5. The
 title is "Copying Total Annihilation". Under it, a line says where the
@@ -178,8 +182,15 @@ bundle never held is a note, and is not a failure. While the copy runs
 the footer's right-hand button is **Pause**, drawn plain. Once the check
 is done it is **Continue**, in the accent, and counts down.
 
-Two centred lines say "If OA stops, the copy carries on from here next
-time." and "To Documents › Open Annihilation › Games and Expansions".
+The panel ends above two centred lines at the foot of the page, "If OA
+stops, the copy carries on from here next time." and "To Documents › Open
+Annihilation › Games and Expansions", which keep their places at every
+window size. When the bundles do not fit, they scroll inside the panel,
+with a scroll bar at its right. The panel follows the bundle being copied;
+after the check it shows the first bundle that differs, else the first
+with a note. The wheel, the Up and Down arrows, Page Up, Page Down, Home
+and End, or dragging the list or its bar, scroll it, and it stays where
+the player leaves it until the step opens again.
 **Pause** holds the copy, and **Continue** lets it go on. The left button
 is still the walk's **Quit** or **Skip**: it stops the copy and leaves.
 Escape returns to the game step.
