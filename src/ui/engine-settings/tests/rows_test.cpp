@@ -67,7 +67,7 @@ struct Expected {
 // choices are those of a dialog of the engine's settings opened over the
 // defaults: Language offers System default and the built-in languages.
 // clang-format off
-constexpr std::array<Expected, 79> kExpected{{
+constexpr std::array<Expected, 80> kExpected{{
     {Setting::path_search, RowKind::slider, "Pathfinding cycles", 1, 1, 8, 0, 0, false, Lock::in_game, &Locks::path_search},
     {Setting::wheel_zoom, RowKind::toggle, "Mouse wheel zoom", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::max_zoom_out, RowKind::choice, "Maximum zoom out", 1, 1, 7, 200, 0, false, Lock::none, nullptr},
@@ -150,6 +150,7 @@ constexpr std::array<Expected, 79> kExpected{{
 #else
     {Setting::file_types_note, RowKind::text, "File types", 2, 2, 0, 0, 0, false, Lock::none, nullptr},
 #endif
+    {Setting::skirmish_players, RowKind::slider, "Skirmish players", 1, 1, 9, 0, 0, false, Lock::in_game, &Locks::skirmish_players},
     {Setting::welcome_setup, RowKind::value_and_button, "Welcome setup", 2, 2, 0, 0, 0, false, Lock::main_menu, &Locks::welcome_setup},
 }};
 // clang-format on
@@ -160,9 +161,10 @@ static_assert(
 );
 
 /// Every field of the dialog's locks that locks a row.
-constexpr std::array<Lock Locks::*, 14> kLockFields{
+constexpr std::array<Lock Locks::*, 15> kLockFields{
     &Locks::path_search,
     &Locks::unit_limit,
+    &Locks::skirmish_players,
     &Locks::max_frame_rate,
     &Locks::hardware_acceleration,
     &Locks::vertical_sync,

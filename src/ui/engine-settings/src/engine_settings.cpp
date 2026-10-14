@@ -1155,6 +1155,7 @@ Locks settings_locks(const GameState& state) noexcept {
                                                                : Lock::in_game;
     locks.path_search = game_lock;
     locks.unit_limit = game_lock;
+    locks.skirmish_players = game_lock;
     locks.max_frame_rate = state.frame_rate_from_command_line ? Lock::command_line : Lock::none;
     locks.shared_game = state.in_game && state.shared_game;
     // A game never locks hardware acceleration: Off must stay possible in a

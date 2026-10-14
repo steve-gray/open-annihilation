@@ -40,6 +40,19 @@ struct MapListFact {
 /// @return one string per row
 [[nodiscard]] std::vector<std::string> map_list_texts(std::span<const MapListFact> rows);
 
+/// The order of the rows by the name the player reads.
+///
+/// That name is what `map_list_texts` shows, without a greyed row's reason,
+/// so a map that cannot be played keeps the place its name has. Letters fold
+/// as the game's own map list folds them, punctuation keeps its byte, and
+/// equal names stay in the order they were given. The rows are not moved.
+///
+/// @param rows the maps, in the order they were gathered
+/// @return the rows' places, the first shown first; one per row
+/// @throws std::invalid_argument when the list is past the game's sorting
+///         limits, or a shown name cannot fit the game's map field
+[[nodiscard]] std::vector<std::size_t> map_list_order(std::span<const MapListFact> rows);
+
 /// The row whose shown text or key is `query`, exactly.
 ///
 /// The shown text is tried first, then the key, so a pack map titled like a

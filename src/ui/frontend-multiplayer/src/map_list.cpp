@@ -4,9 +4,14 @@
 // Shown text for a map list. The name a row selects stays with the caller.
 #include "oa/ui/frontend_multiplayer/map_list.hpp"
 
+#include "oa/data/campaign/directory_list.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/data/map_pack/map_name.hpp"
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -74,21 +79,21 @@ std::string shown_reason(std::string_view english) {
     return std::string(english);
 }
 
-} // namespace
-
-std::vector<std::string> map_list_texts(std::span<const MapListFact> rows) {
+/// The name each row shows, before a greyed row's reason.
+///
+/// @param rows the maps, in list order
+/// @return one name per row
+std::vector<std::string> shown_names(std::span<const MapListFact> rows) {
     std::vector<std::string> plain;
     plain.reserve(rows.size());
     for (const MapListFact& row : rows)
         plain.push_back(plain_text(row));
 
-    std::vector<std::string> texts;
-    texts.reserve(rows.size());
+    std::vector<std::string> names;
+    names.reserve(rows.size());
     for (std::size_t index = 0; index < rows.size(); ++index) {
-        std::string text;
-        if (!rows[index].pack) {
-            text = plain[index];
-        } else {
+        std::string text = plain[index];
+        if (rows[index].pack) {
             bool shared = false;
             for (std::size_t other = 0; other < plain.size(); ++other) {
                 if (other != index && plain[other] == plain[index]) {
@@ -96,21 +101,91 @@ std::vector<std::string> map_list_texts(std::span<const MapListFact> rows) {
                     break;
                 }
             }
-            if (!shared) {
-                text = plain[index];
-            } else {
+            if (shared) {
                 const std::string mark = pack_mark(rows[index]);
-                text = mark.empty() ? plain[index] : plain[index] + " (" + mark + ")";
+                if (!mark.empty())
+                    text.append(" (").append(mark).append(")");
             }
         }
-        if (!rows[index].blocked_reason.empty()) {
-            const std::string reason = shown_reason(rows[index].blocked_reason);
-            if (!reason.empty())
-                text.append("  ").append(reason);
-        }
-        texts.push_back(std::move(text));
+        names.push_back(std::move(text));
+    }
+    return names;
+}
+
+} // namespace
+
+std::vector<std::string> map_list_texts(std::span<const MapListFact> rows) {
+    std::vector<std::string> texts = shown_names(rows);
+    for (std::size_t index = 0; index < rows.size() && index < texts.size(); ++index) {
+        if (rows[index].blocked_reason.empty())
+            continue;
+        const std::string reason = shown_reason(rows[index].blocked_reason);
+        if (!reason.empty())
+            texts[index].append("  ").append(reason);
     }
     return texts;
+}
+
+std::vector<std::size_t> map_list_order(std::span<const MapListFact> rows) {
+    const std::size_t count = rows.size();
+    if (count > static_cast<std::size_t>(oa::data::campaign::kSortEntryLimit))
+        throw std::invalid_argument("map list exceeds the game's sorting capacity");
+    const std::vector<std::string> shown = shown_names(rows);
+    if (shown.size() != count)
+        throw std::invalid_argument("map list exceeds the game's sorting capacity");
+
+    std::size_t shown_bytes = 0;
+    std::size_t index_bytes = 0;
+    std::vector<std::string> places;
+    places.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        const std::string& name = shown[index];
+        if (name.find('\0') != std::string::npos || name.size() >= 256)
+            throw std::invalid_argument("map name cannot fit the game's map field");
+        if (name.size() + 1 > oa::data::campaign::kSortListBytes - shown_bytes)
+            throw std::invalid_argument("map list exceeds the game's sorting byte capacity");
+        shown_bytes += name.size() + 1;
+        places.push_back(std::to_string(index));
+        if (places.back().size() + 1 > oa::data::campaign::kSortListBytes - index_bytes)
+            throw std::invalid_argument("map list exceeds the game's sorting byte capacity");
+        index_bytes += places.back().size() + 1;
+    }
+
+    std::string shown_list;
+    std::string index_list;
+    shown_list.reserve(shown_bytes);
+    index_list.reserve(index_bytes);
+    for (std::size_t index = 0; index < count; ++index) {
+        shown_list.append(shown[index]);
+        shown_list.push_back('\0');
+        index_list.append(places[index]);
+        index_list.push_back('\0');
+    }
+    oa::data::campaign::sort_paired_lists(
+        shown_list.data(), index_list.data(), nullptr, static_cast<int32_t>(count)
+    );
+
+    std::vector<std::size_t> order;
+    order.reserve(count);
+    std::size_t at = 0;
+    for (std::size_t step = 0; step < count; ++step) {
+        if (at >= index_list.size())
+            throw std::invalid_argument("map list exceeds the game's sorting capacity");
+        const char* text = index_list.c_str() + at;
+        const std::size_t length = std::strlen(text);
+        std::size_t place = 0;
+        for (std::size_t digit = 0; digit < length; ++digit) {
+            const char glyph = text[digit];
+            if (glyph < '0' || glyph > '9')
+                throw std::invalid_argument("map list exceeds the game's sorting capacity");
+            place = place * 10 + static_cast<std::size_t>(glyph - '0');
+        }
+        if (place >= count)
+            throw std::invalid_argument("map list exceeds the game's sorting capacity");
+        order.push_back(place);
+        at += length + 1;
+    }
+    return order;
 }
 
 int32_t map_list_row(

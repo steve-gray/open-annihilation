@@ -110,6 +110,15 @@ class Host {
     /// @param names Sorted map names.
     virtual void bind_map_names(std::span<const std::string> names) = 0;
 
+    /// Orders the names as the list shows them.
+    ///
+    /// The default orders by the name itself, as the game orders its own map
+    /// list. A host that shows a title orders by that title. A grey reason is
+    /// not part of the title, so a map that cannot be played keeps its place.
+    ///
+    /// @param[in,out] names the map names
+    virtual void order_map_names(std::vector<std::string>& names);
+
     /// Installs the MAPNAMES selection-change callback.
     virtual void install_map_selection_callback() = 0;
 
@@ -280,9 +289,10 @@ void sort_map_names(std::vector<std::string>& names);
 
 /// Opens the SELMAP.GUI map-selection modal.
 ///
-/// Loads the modal and background, binds the sorted map names, selects the
-/// saved map and previews it. The base maps come first, then the installed
-/// pack maps (`<stem>@<id>`), each part sorted by sort_map_names.
+/// Loads the modal and background, binds the map names in the order
+/// `Host::order_map_names` gives, selects the saved map and previews it.
+/// The game's own maps, installed pack maps and maps offered for download
+/// are one list. A map that cannot be played stays where its name sorts.
 ///
 /// @param[in,out] modal Modal state; becomes active.
 /// @param settings Skirmish settings supplying the saved map name.

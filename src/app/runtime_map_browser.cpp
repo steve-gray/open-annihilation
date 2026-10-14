@@ -115,8 +115,8 @@ constexpr std::size_t kept_previews = 256;
 constexpr int32_t decodes_a_frame = 4;
 /// The largest pack preview read, in bytes.
 constexpr uintmax_t most_preview_bytes = uintmax_t{4} << 20U;
-/// The gap between the map list and MORE MAPS…, in points.
-constexpr int32_t button_gap = kit::compact_metrics.hint_gap;
+/// The list's frame is drawn this many frame pixels outside the list gadget.
+constexpr int32_t list_frame_outset = 3;
 
 /// Returns one of the browser's words in the language shown.
 ///
@@ -183,6 +183,45 @@ kit::Rect frame_to_points(const LayerView& seen, const kit::Rect& frame_rect) {
     const int32_t right = ceil_points(across(frame_rect.x + frame_rect.width));
     const int32_t bottom = ceil_points(down(frame_rect.y + frame_rect.height));
     return {left, top, right - left, bottom - top};
+}
+
+/// The window row where a frame rectangle's bottom edge ends, rounded outward.
+///
+/// @param seen what the layer's screens are placed on
+/// @param frame_rect the rectangle, in the frame's pixels
+/// @return that row, in window pixels
+int32_t frame_window_bottom(const LayerView& seen, const kit::Rect& frame_rect) {
+    if (seen.picture_size.y <= 0)
+        return frame_rect.y + frame_rect.height;
+    const int64_t down = std::max(seen.picture_size.y, int32_t{1});
+    const int64_t row = static_cast<int64_t>(frame_rect.y) + frame_rect.height;
+    const int64_t mapped = (row * static_cast<int64_t>(seen.picture.height) + down - 1) / down;
+    return static_cast<int32_t>(static_cast<int64_t>(seen.picture.y) + mapped);
+}
+
+/// The first point that draws on or below a window row.
+///
+/// A point drawn with nearest rounding can land one window pixel above the
+/// row the frame's own scale rounds outward, which leaves the button on the
+/// frame when the picture is not a whole number of frame pixels.
+///
+/// @param window_row the row, in window pixels
+/// @param percent the layer's scale, in percent
+/// @return the point
+int32_t point_on_or_below(int32_t window_row, int32_t percent) {
+    const int64_t scale = std::max(percent, int32_t{1});
+    int32_t point = 0;
+    if (window_row > 0)
+        point = static_cast<int32_t>(static_cast<int64_t>(window_row) * 100 / scale);
+    else if (window_row < 0)
+        point =
+            static_cast<int32_t>(-((static_cast<int64_t>(-window_row) * 100 + scale - 1) / scale));
+    for (int32_t step = 0; step < 4; ++step) {
+        if (kit::to_canvas(kit::Rect{0, point, 1, 1}, percent).y >= window_row)
+            return point;
+        ++point;
+    }
+    return point;
 }
 
 /// Reads a whole file of at most a size.
@@ -1044,8 +1083,8 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
         Runtime& game = runtime_;
         if (std::find(game.bound_map_names_.begin(), game.bound_map_names_.end(), map_name) ==
             game.bound_map_names_.end()) {
-            // A pack installed since the list was made joins it when the map
-            // fits the mod being played, after the base maps.
+            // A pack installed since the list was made joins the list in the
+            // name order when the map fits the mod being played.
             game.refresh_listed_pack_maps();
         }
         const auto row =
@@ -1457,9 +1496,10 @@ struct Runtime::MoreMapsScreen final : LayerScreen {
         return found;
     }
 
-    /// Returns where the button lies, in the layer's points: directly under
-    /// the map list, its right edge on the list's, or above the list when
-    /// that place meets another gadget of the picker.
+    /// Returns where the button lies, in the layer's points: under the map
+    /// list's frame, its right edge on the list's, or above the frame when
+    /// the place under it meets another gadget of the picker. The button
+    /// keeps its size.
     ///
     /// @param placed_on what the screen is placed on
     /// @return the place; none while it does not show
@@ -1478,9 +1518,19 @@ struct Runtime::MoreMapsScreen final : LayerScreen {
                 metrics.prompt_button_padding
         );
         const kit::Rect list_points = frame_to_points(placed_on, list_rect);
+        kit::Rect framed = list_rect;
+        framed.x -= list_frame_outset;
+        framed.y -= list_frame_outset;
+        framed.width += list_frame_outset * 2;
+        framed.height += list_frame_outset * 2;
+        const kit::Rect frame_points = frame_to_points(placed_on, framed);
+        const int32_t percent = std::max(placed_on.scale_percent, int32_t{100});
+        // The top is the first point that draws on or below the frame's outer
+        // edge. The picture's scale rounds that edge outward, and a point
+        // just inside it draws on the frame.
         kit::Rect place{
             list_points.x + list_points.width - width,
-            list_points.y + list_points.height + button_gap,
+            point_on_or_below(frame_window_bottom(placed_on, framed), percent),
             width,
             metrics.button_height
         };
@@ -1488,7 +1538,7 @@ struct Runtime::MoreMapsScreen final : LayerScreen {
             return meet(place, frame_to_points(placed_on, other));
         });
         if (blocked)
-            place.y = list_points.y - button_gap - metrics.button_height;
+            place.y = frame_points.y - metrics.button_height;
         return place;
     }
 

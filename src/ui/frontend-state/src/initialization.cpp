@@ -384,7 +384,9 @@ void load_preferences(
     p.fx_volume = number("fxvol", 27);
     p.music_volume = number("musicvol", 32);
     bit(p.display_flags, preference_flags::clock, "clock", 0);
-    settings.slot_count = std::bit_cast<int32_t>(number("NumSkirmishPlayers", 4));
+    settings.slot_count = std::bit_cast<int32_t>(
+        number("NumSkirmishPlayers", static_cast<uint32_t>(default_skirmish_player_count))
+    );
     if (settings.slot_count < 0 ||
         static_cast<std::size_t>(settings.slot_count) > settings.slots.size())
         throw std::invalid_argument("NumSkirmishPlayers exceeds the slot storage");
@@ -461,6 +463,26 @@ void write_all_missions(const Preferences& p, PreferencesHost& h) {
 
 void write_skirmish_player_count(const game_entry::SkirmishSettings& s, PreferencesHost& h) {
     h.write_number(general_section, "NumSkirmishPlayers", std::bit_cast<uint32_t>(s.slot_count));
+}
+
+void set_skirmish_player_count(
+    game_entry::SkirmishSettings& settings, int32_t count, PreferencesHost& host
+) {
+    if (count < 0 || static_cast<std::size_t>(count) > settings.slots.size())
+        throw std::invalid_argument("skirmish slot count exceeds the slot storage");
+    settings.slot_count = count;
+    for (int32_t index = 0; index < count; ++index) {
+        auto& slot = settings.slots[static_cast<std::size_t>(index)];
+        if (slot.metal >= skirmish_ui::resource_minimum)
+            continue;
+        slot.side = index % 2;
+        slot.color = index;
+        slot.alliance = game_entry::unassigned_alliance;
+        slot.metal = 1000;
+        slot.energy = 1000;
+    }
+    if (count > 0)
+        write_skirmish_player_count(settings, host);
 }
 
 void remember_player_skirmish_settings(

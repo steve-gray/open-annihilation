@@ -387,14 +387,21 @@ package into `$out/bin`, which is the package root the suite copies:
 
 | File | What it is |
 |---|---|
-| `open-annihilation.exe`, `oa-tool.exe` | the game and the tool |
-| `oa-intro.exe` | the intro player the game already links, built with the same Windows 95 toolchain |
-| `LICENSE`, `ATTRIBUTIONS.md`, `licenses/` | the notices |
+| `open-annihilation.exe`, `oa-tool.exe` | the game and the tool, stripped, from a Release build with the self-checks left out |
+| `oa-intro.exe` | the intro player the game already links, built with the same Windows 95 toolchain and stripped the same way |
+| `LICENSE`, `ATTRIBUTIONS.md`, `licenses/` | the notices the other Windows packages carry; not the Linux-only SDL notice |
 | `fonts/` | the text fonts |
 | `languages/interface.tdf` | the interface catalogue |
 | `registries/` | the registries the game ships with |
 
+`$out/symbols` holds those three programs as the build linked them, symbol
+table included, and nothing else. The suite's symbols zip is made from that
+directory. What remains different from the 32-bit Windows package is the
+toolchain: no SSE, floats on the processor's floating-point unit, the C library Windows 95 ships,
+and executables stamped for Windows 95. The code generation is otherwise
+the release build's.
+
 The other Windows outputs of the flake (`windows`, `windows-i686`) still
-install only the executables, the fonts and the registries. The suite lays
-those packages out. A start of `oa-intro.exe` on a Windows 95 machine is
-not part of building the package.
+install only the executables, the fonts and the registries, unstripped. The
+suite lays those packages out and strips them. A start of `oa-intro.exe` on
+a Windows 95 machine is not part of building the package.

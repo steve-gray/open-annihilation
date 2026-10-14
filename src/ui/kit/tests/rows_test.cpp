@@ -531,8 +531,8 @@ const std::vector<Expected> kGraphicsTall{
 
 /// Graphics' first three rows, locked, with the game's fonts: the strip,
 /// whose hint is its status, stays, faded, and its lock drops under the
-/// label because the three do not fit; the sliders keep their tracks and
-/// the lock at the label line's right.
+/// label because the three do not fit; the sliders' labels fit beside the
+/// lock, so it stays at the label line's right.
 const std::vector<Expected> kGraphicsLocked{
     {54, 65, {158, 63, 153, 16}, {319, 63, 148, 16}, {81}, {158, 97, 189, 14}, {357, 97, 110, 14}},
     {119, 77, {158, 128, 184, 16}, {158, 146, 148, 16}, {164, 176}, {350, 128, 117, 16}, {}},
@@ -623,6 +623,93 @@ void rows_shaped_as_graphics_lie_where_the_dialog_places_them() {
         kit::place_rows(views_of(specs, sample), dialog_column(true)),
         kGraphicsLockedTall,
         279
+    );
+}
+
+/// A locked slider, drop-down or text row whose label does not fit beside
+/// the lock puts the lock at the start of the line under the label, before
+/// the hint, and keeps the label the whole line. A label that fits keeps
+/// the lock on the label line, at its right.
+void a_lock_drops_under_a_label_it_does_not_fit_beside() {
+    Sample sample;
+    sample.in_game = true;
+    const std::array<kit::RowSpec<Sample>, 2> sliders{
+        locked_in_game(
+            kit::slider(
+                "mex-snap",
+                "Metal extractor snap radius",
+                kVolume,
+                {"Cells a metal extractor snaps to."}
+            )
+        ),
+        locked_in_game(
+            kit::slider("screen-size", "Screen size", kVolume, {"The game's picture size."})
+        ),
+    };
+    // Twenty-seven characters at 7 columns do not fit beside a lock of 148.
+    // "Screen size" does, so its lock stays on the label line.
+    const std::vector<Expected> slider_rows{
+        {54,
+         83,
+         {158, 63, 309, 16},
+         {158, 81, 148, 16},
+         {99},
+         {158, 115, 189, 14},
+         {357, 115, 110, 14}},
+        {137,
+         65,
+         {158, 146, 153, 16},
+         {319, 146, 148, 16},
+         {164},
+         {158, 180, 189, 14},
+         {357, 180, 110, 14}},
+    };
+    const kit::PlacedRows placed = kit::place_rows(views_of(sliders, sample), dialog_column(false));
+    placed_as("Slider locks", placed, slider_rows, 202);
+    OA_CHECK(placed.rows[0].label.width > kit::estimated_width(placed.rows[0].view.label));
+    OA_CHECK(placed.rows[1].lock_area.y == placed.rows[1].label.y);
+    kit::DisplayList list;
+    kit::add_rows(list, placed, {});
+    bool saw_dropped = false;
+    for (const kit::Item& item : list.items) {
+        if (item.role != kit::Role::lock || !same(item.rect, placed.rows[0].lock_area))
+            continue;
+        saw_dropped = true;
+        OA_CHECK(item.text == "Not during a game");
+    }
+    OA_CHECK(saw_dropped);
+
+    const std::array<kit::RowSpec<Sample>, 1> choice{
+        locked_in_game(
+            kit::choice(
+                "gyro-pointer",
+                "Metal extractor snap radius",
+                &Sample::zoom,
+                kZoomCaptions,
+                {"One line."}
+            )
+        ),
+    };
+    const std::vector<Expected> choice_rows{
+        {54, 85, {158, 63, 309, 16}, {158, 81, 148, 16}, {99}, {158, 115, 200, 16}, {}},
+    };
+    placed_as(
+        "Drop-down lock",
+        kit::place_rows(views_of(choice, sample), dialog_column(false)),
+        choice_rows,
+        139
+    );
+
+    const std::array<kit::RowSpec<Sample>, 2> texts{
+        locked_in_game(kit::text("location", "Metal extractor snap radius", folder_text)),
+        locked_in_game(kit::text("where", "Where", folder_text)),
+    };
+    const std::vector<Expected> text_rows{
+        {54, 53, {158, 63, 309, 16}, {158, 81, 148, 16}, {}, {}, {158, 63, 309, 16}},
+        {107, 35, {158, 116, 153, 16}, {319, 116, 148, 16}, {}, {}, {158, 116, 153, 16}},
+    };
+    placed_as(
+        "Text locks", kit::place_rows(views_of(texts, sample), dialog_column(false)), text_rows, 142
     );
 }
 
@@ -1647,6 +1734,7 @@ int main() {
     every_kind_lies_by_the_rows_rules();
     rows_shaped_as_controls_lie_where_the_dialog_places_them();
     rows_shaped_as_graphics_lie_where_the_dialog_places_them();
+    a_lock_drops_under_a_label_it_does_not_fit_beside();
     developer_rows_lie_closer();
     the_rows_scroll_as_the_dialog_scrolls_them();
     a_view_shows_every_word_through_the_callers_function();

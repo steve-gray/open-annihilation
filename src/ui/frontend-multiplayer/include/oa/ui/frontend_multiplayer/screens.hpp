@@ -637,6 +637,14 @@ void multiplayer_reload_maps();
 /// @param names the maps' names, in list order
 void multiplayer_fill_map_names(Panel& panel, const std::vector<std::string>& names);
 
+/// Orders map names by the name each row shows.
+///
+/// The grey reason is not part of that name. Equal names stay as they were.
+/// A list past the game's sorting limits is left as it was given.
+///
+/// @param[in,out] names the maps' names
+void multiplayer_order_map_names(std::vector<std::string>& names);
+
 /// Returns the pack index's title for a pack map the battle room's source lists.
 ///
 /// The pointer stays valid until the next call of that source.

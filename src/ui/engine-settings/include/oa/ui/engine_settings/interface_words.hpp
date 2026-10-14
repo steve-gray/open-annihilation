@@ -411,6 +411,7 @@ inline constexpr std::string_view interface_words[] = {
     "Size",
     "Skip Empty Yard Maps",
     "Skip setup",
+    "Skirmish players",
     "Small ticks and bumps felt through the controller.",
     "Smoothed at every zoom.",
     "Smoothed at every zoom; 16x16 samples a pixel.",
@@ -474,6 +475,7 @@ inline constexpr std::string_view interface_words[] = {
     "The size of game text in the modern fonts. Larger sizes are easier to read.",
     "The size of game text in the modern fonts. The game's own fonts have fixed sizes.",
     "The size of the touch controls; the game's own screens keep theirs.",
+    "The skirmish setup shows that many player rows.",
     "The stick pointer settles on a lone unit near it.",
     "The system takes these file types from the app.",
     "The view stays on the map, as the game kept it. With more than the map in view, it is "
