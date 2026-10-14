@@ -409,8 +409,7 @@ void handle_player_count_code(
     if (clear_history)
         typed.fill(0);
     h.save_preferences();
-    s.slot_count = count;
-    initialization::write_skirmish_player_count(s, preferences);
+    initialization::set_skirmish_player_count(s, count, preferences);
     initialization::load_preferences(state, s, p, preferences);
     h.set_widget_count(static_cast<int16_t>(ui.base_widget_count));
     populate(s, p, ui, h);

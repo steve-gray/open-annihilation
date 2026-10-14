@@ -668,10 +668,11 @@ void each_section_shows_its_rows() {
     CHECK(settings::page_settings(Page::controls)[4] == Setting::middle_click_pan);
     CHECK(settings::page_settings(Page::controls)[5] == Setting::switch_alt);
     CHECK(settings::page_settings(Page::controls)[6] == Setting::window_edge);
-    // Engine Limits: the unit limit, then pathfinding.
-    CHECK(settings::page_settings(Page::common_tweaks).size() == 2);
+    // Engine Limits: the unit limit, pathfinding, then the skirmish player count.
+    CHECK(settings::page_settings(Page::common_tweaks).size() == 3);
     CHECK(settings::page_settings(Page::common_tweaks)[0] == Setting::unit_limit);
     CHECK(settings::page_settings(Page::common_tweaks)[1] == Setting::path_search);
+    CHECK(settings::page_settings(Page::common_tweaks)[2] == Setting::skirmish_players);
     // System: Your files, then Welcome setup, then the switches where the
     // game registers file types at run time, or the text row where the app
     // declares them.
@@ -799,8 +800,15 @@ void each_section_shows_its_rows() {
     parts = settings::dialog_layout(opened(Page::common_tweaks));
     CHECK(find_part(parts, "ENGINE LIMITS", settings::no_control) != nullptr);
     const auto tweaks = geometry::place_rows(Page::common_tweaks, {});
-    CHECK(tweaks.rows.size() == 2);
+    CHECK(tweaks.rows.size() == 3);
     CHECK(tweaks.rows[0].label.y < tweaks.rows[1].label.y);
+    CHECK(tweaks.rows[1].label.y < tweaks.rows[2].label.y);
+    CHECK(find_part(parts, "Skirmish players", settings::no_control) != nullptr);
+    CHECK(
+        find_part(parts, "The skirmish setup shows that many player rows.", settings::no_control) !=
+        nullptr
+    );
+    CHECK(find_part(parts, "10", settings::no_control) != nullptr);
 }
 
 void a_click_on_an_entry_shows_its_section() {
@@ -1770,6 +1778,60 @@ void text_size_waits_for_the_modern_fonts() {
     CHECK(dialog.chosen.text_size == 200);
 }
 
+void a_slider_lock_drops_when_its_label_does_not_fit() {
+    // Text size is locked while modern fonts are off. Measured in a wide
+    // regular face, the label does not fit beside the lock, so the lock
+    // moves under the label and the label keeps the line. A narrow face
+    // still fits, and the lock stays on the label line.
+    settings::Dialog dialog;
+    settings::open_dialog(dialog, {}, {}, {}, "v0.2.0", Page::language);
+    const geometry::TextWidth small = [](std::string_view words) {
+        return static_cast<int32_t>(words.size()) * 4;
+    };
+    const auto text_size_row = [](const geometry::Rows& rows) -> const geometry::Row* {
+        for (const geometry::Row& row : rows.rows)
+            if (row.setting == Setting::text_size)
+                return &row;
+        return nullptr;
+    };
+    const auto place = [&](int32_t columns) {
+        const geometry::TextWidth regular = [columns](std::string_view words) {
+            return static_cast<int32_t>(words.size()) * columns;
+        };
+        return geometry::open_rows(dialog, &small, nullptr, &regular);
+    };
+
+    const geometry::ScrolledRows fitted = place(4);
+    const geometry::Row* fits = text_size_row(fitted.rows);
+    CHECK(fits != nullptr && fits->lock == Lock::needs_modern_fonts);
+    if (fits != nullptr) {
+        CHECK(fits->lock_area.y == fits->label.y);
+        CHECK(fits->lock_area.x == fits->label.x + fits->label.width + geometry::label_gap);
+        CHECK(fits->label.width >= static_cast<int32_t>(std::string_view("Text size").size()) * 4);
+        CHECK(!overlap(fits->label, fits->lock_area));
+        CHECK(!overlap(fits->lock_area, fits->control_area));
+    }
+
+    const geometry::ScrolledRows dropped = place(30);
+    const geometry::Row* wide = text_size_row(dropped.rows);
+    CHECK(wide != nullptr && wide->lock == Lock::needs_modern_fonts);
+    if (wide != nullptr) {
+        CHECK(wide->label.x == geometry::content_left);
+        CHECK(wide->label.width == geometry::content_width);
+        CHECK(wide->label.width >= static_cast<int32_t>(std::string_view("Text size").size()) * 30);
+        CHECK(wide->lock_area.x == geometry::content_left);
+        CHECK(
+            wide->lock_area.y == wide->label.y + geometry::label_line_height + geometry::hint_gap
+        );
+        CHECK(!overlap(wide->label, wide->lock_area));
+        CHECK(wide->hint_lines >= 1);
+        CHECK(
+            wide->hints[0].y == wide->lock_area.y + geometry::label_line_height + geometry::hint_gap
+        );
+        CHECK(wide->control_area.y >= wide->hints[0].y + geometry::hint_line_height);
+    }
+}
+
 void a_language_locks_the_modern_fonts_and_unicode_chat() {
     [[maybe_unused]] const InstalledSimplifiedChinese installed;
     // Simplified Chinese draws in the modern fonts, and its pack asks for
@@ -1821,6 +1883,7 @@ void every_stop_maps_to_its_value_and_back() {
     for (const Expected expected :
          {Expected{settings::Setting::path_search, 8},
           Expected{settings::Setting::unit_limit, 30},
+          Expected{settings::Setting::skirmish_players, 9},
           Expected{settings::Setting::max_frame_rate, 19},
           Expected{settings::Setting::screen_size, 5}}) {
         CHECK(geometry::slider_of(expected.setting).stops == expected.stops);
@@ -1846,6 +1909,17 @@ void every_stop_maps_to_its_value_and_back() {
     CHECK(state.unit_limit == 250);
     geometry::set_stop(state, settings::Setting::unit_limit, 29);
     CHECK(state.unit_limit == 1500);
+    // Skirmish players: 2 to 10. Ten, the new-install count, is the last stop.
+    // A stored count off the stops, such as 1, shows as it is until moved.
+    geometry::set_stop(state, settings::Setting::skirmish_players, 0);
+    CHECK(state.skirmish_players == settings::lowest_skirmish_players);
+    geometry::set_stop(state, settings::Setting::skirmish_players, 8);
+    CHECK(state.skirmish_players == settings::highest_skirmish_players);
+    CHECK(geometry::value_text(settings::Setting::skirmish_players, state) == "10");
+    state.skirmish_players = 1;
+    CHECK(geometry::stop_of(state, settings::Setting::skirmish_players) == 0);
+    CHECK(geometry::value_text(settings::Setting::skirmish_players, state) == "1");
+    state.skirmish_players = settings::default_skirmish_players;
     // A mod's higher maximum adds stops past 1500, up to the largest a profile may name.
     const uint16_t highest = oa::data::limits::highest_units_per_player;
     CHECK(geometry::slider_of(settings::Setting::unit_limit, highest).stops == 131);
@@ -2208,7 +2282,7 @@ void the_footer_buttons_restore_cancel_and_keep() {
 
     // Left and Right move along the footer; Space presses.
     settings::open_dialog(dialog, current, defaults, {}, "v0.2.0", Page::common_tweaks);
-    for (int32_t step = 0; step < 3; ++step)
+    for (int32_t step = 0; step < 4; ++step)
         CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
     CHECK(dialog.focused == settings::restore_control);
     CHECK(settings::dialog_key(dialog, DialogKey::left) == DialogAction::none);
@@ -2287,14 +2361,15 @@ void locks_show_their_text_and_hold_their_settings() {
         DialogAction::none
     );
     CHECK(dialog.chosen.path_search_nodes == settings::base_path_search_nodes);
-    // Both sliders are locked, so the focus passes over them to the footer.
+    // The three sliders are locked, so the focus passes over them to the footer.
     CHECK(settings::dialog_key(dialog, DialogKey::tab) == DialogAction::redraw);
     CHECK(dialog.focused == settings::restore_control);
     // A locked slider takes no part a press can find.
     for (const auto& part : parts)
         CHECK(
             part.control != settings::first_row_control &&
-            part.control != settings::first_row_control + 1
+            part.control != settings::first_row_control + 1 &&
+            part.control != settings::first_row_control + 2
         );
 
     const auto shared = settings::settings_locks(settings::GameState{true, true, false, false});
@@ -2318,6 +2393,7 @@ void locks_show_their_text_and_hold_their_settings() {
     settings::EngineSettings current{};
     current.path_search_nodes = 4 * settings::base_path_search_nodes;
     current.unit_limit = 900;
+    current.skirmish_players = 6;
     current.max_frame_rate = 60;
     current.frame_stats = true;
     auto all_locked = in_game;
@@ -2326,6 +2402,7 @@ void locks_show_their_text_and_hold_their_settings() {
     CHECK(click(dialog, centre(geometry::restore_button)) == DialogAction::changed);
     CHECK(dialog.chosen.path_search_nodes == current.path_search_nodes);
     CHECK(dialog.chosen.unit_limit == current.unit_limit);
+    CHECK(dialog.chosen.skirmish_players == current.skirmish_players);
     CHECK(dialog.chosen.max_frame_rate == current.max_frame_rate);
     CHECK(!dialog.chosen.frame_stats);
 }
@@ -2462,8 +2539,8 @@ void the_view_and_the_scroll_bar_keep_their_places() {
 
 void sections_that_fit_do_not_scroll() {
     // Each section's content: its rows, and the end gap under the last.
-    // Engine Limits' unit limit and pathfinding sliders are 151,
-    // and fit; Controls' three switches, the zoom's two drop-downs, View
+    // Engine Limits' unit limit, pathfinding and skirmish-player sliders
+    // are 216, and fit; Controls' three switches, the zoom's two drop-downs, View
     // past the map's edge's strip and Window edge's strip are 426,
     // Graphics' nine rows are 572, Language's drop-down, five switches and
     // slider 424, and User Interface's four strips and switches with
@@ -2472,7 +2549,7 @@ void sections_that_fit_do_not_scroll() {
     const std::array<Page, 5> pages{
         Page::controls, Page::common_tweaks, Page::graphics, Page::language, Page::user_interface
     };
-    const std::array<int32_t, 5> content{426, 151, 572, 424, 324};
+    const std::array<int32_t, 5> content{426, 216, 572, 424, 324};
     const std::array<int32_t, 5> limits{190, 0, 336, 188, 88};
     for (std::size_t index = 0; index < content.size(); ++index) {
         const Page page = pages[index];
@@ -4994,7 +5071,7 @@ void the_kit_gallery_row_moves_only_developers_list() {
     // again.
     const std::array<std::pair<Page, uint64_t>, 10> kBefore{{
         {Page::controls, 0xc9b50dd61f00f98a},
-        {Page::common_tweaks, 0x834556760a9d2417},
+        {Page::common_tweaks, 0xa9d3644ec50d7ae1},
         {Page::language, 0xa7351a7ba3a3fcbe},
         {Page::graphics, 0xd03cbfe3c82dbe49},
         {Page::user_interface, 0x1bedfda1543e7ecf},
@@ -8847,7 +8924,7 @@ void the_arrows_move_by_geometry() {
         tab_round(opened(Page::controls)) ==
         then_rest({row, row + 1, row + 2, row + 3, row + 4, row + 5, row + 6})
     );
-    CHECK(tab_round(opened(Page::common_tweaks)) == then_rest({row, row + 1}));
+    CHECK(tab_round(opened(Page::common_tweaks)) == then_rest({row, row + 1, row + 2}));
     // Language: Text size waits for the modern fonts.
     CHECK(
         tab_round(opened(Page::language)) ==
@@ -9788,6 +9865,7 @@ int main(int argc, char** argv) {
         path_tails_keep_the_last_components_that_fit();
         text_size_runs_from_half_to_three_times_in_tenths();
         text_size_waits_for_the_modern_fonts();
+        a_slider_lock_drops_when_its_label_does_not_fit();
         a_language_locks_the_modern_fonts_and_unicode_chat();
         every_stop_maps_to_its_value_and_back();
         sliders_follow_the_pointer_and_the_arrows();

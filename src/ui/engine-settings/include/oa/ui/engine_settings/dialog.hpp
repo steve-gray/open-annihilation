@@ -64,7 +64,7 @@ inline constexpr uint32_t ingame_backdrop_opacity = oa::ui::kit::ingame_backdrop
 /// each kind lists alone.
 enum class Page : uint8_t {
     controls,      ///< Controls
-    common_tweaks, ///< Engine Limits: the unit limit and pathfinding
+    common_tweaks, ///< Engine Limits: the unit limit, pathfinding and skirmish players
     language,      ///< Language & Text: the language and how game text is drawn
     graphics,      ///< Graphics
     /// User Interface: menu scaling, the window's frame, HUD scaling,
@@ -293,6 +293,9 @@ enum class Setting : uint8_t {
     /// File types: the text row iOS shows in place of the switches.
     /// It changes no setting.
     file_types_note,
+    /// Skirmish players: a slider of how many player rows the skirmish setup
+    /// shows, the same count the setup's key codes store.
+    skirmish_players,
     /// Welcome setup: SHOW AGAIN walks through the language, online features
     /// and the OA buttons again. It changes no setting. During a game the
     /// button is locked, and the choice is made from the main menu.

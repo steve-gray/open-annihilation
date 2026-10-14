@@ -220,8 +220,13 @@ Each of these takes effect at once.
   It applies from the next game, and a multiplayer game or a replay always
   plays at 1x. Raise it on a fast computer if large groups hesitate before
   they move.
+- **Skirmish players**, 2 to 10, 10 when you have not chosen a count. The
+  skirmish setup shows that many player rows. It is the same count the
+  setup's key codes store, so a code changes the slider and the slider
+  changes what a code would set. A count you already stored stays, including
+  one outside 2 to 10, until you move the slider.
 
-Both sliders are locked during a game, and in a multiplayer game or a
+The three sliders are locked during a game, and in a multiplayer game or a
 replay they show "Set by the host".
 
 <a id="language"></a>
