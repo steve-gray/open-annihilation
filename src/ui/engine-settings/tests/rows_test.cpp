@@ -67,7 +67,7 @@ struct Expected {
 // choices are those of a dialog of the engine's settings opened over the
 // defaults: Language offers System default and the built-in languages.
 // clang-format off
-constexpr std::array<Expected, 80> kExpected{{
+constexpr std::array<Expected, 81> kExpected{{
     {Setting::path_search, RowKind::slider, "Pathfinding cycles", 1, 1, 8, 0, 0, false, Lock::in_game, &Locks::path_search},
     {Setting::wheel_zoom, RowKind::toggle, "Mouse wheel zoom", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::max_zoom_out, RowKind::choice, "Maximum zoom out", 1, 1, 7, 200, 0, false, Lock::none, nullptr},
@@ -76,7 +76,8 @@ constexpr std::array<Expected, 80> kExpected{{
     {Setting::middle_click_pan, RowKind::toggle, "Middle-click pans", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::escape_opens_menu, RowKind::toggle, "Escape opens the game menu", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
     {Setting::switch_alt, RowKind::toggle, "Select groups without Alt", 1, 1, 0, 0, 0, false, Lock::none, nullptr},
-    {Setting::window_edge, RowKind::levels, "Window edge", 1, 1, 2, 48, 2, false, Lock::none, nullptr},
+    {Setting::window_edge, RowKind::levels, "Window edge", 1, 1, 3, 50, 3, false, Lock::none, nullptr},
+    {Setting::window_edge_stickiness, RowKind::slider, "Edge stickiness", 1, 1, 51, 0, 0, false, Lock::none, &Locks::edge_stickiness},
     {Setting::unit_limit, RowKind::slider, "Unit limit", 1, 1, 30, 0, 0, false, Lock::in_game, &Locks::unit_limit},
     {Setting::max_frame_rate, RowKind::slider, "Maximum frame rate", 1, 2, 19, 0, 0, false, Lock::none, &Locks::max_frame_rate},
     {Setting::anti_aliasing, RowKind::levels, "Enhanced anti-aliasing", 1, 1, 5, 23, 5, false, Lock::none, nullptr},
@@ -161,7 +162,7 @@ static_assert(
 );
 
 /// Every field of the dialog's locks that locks a row.
-constexpr std::array<Lock Locks::*, 15> kLockFields{
+constexpr std::array<Lock Locks::*, 16> kLockFields{
     &Locks::path_search,
     &Locks::unit_limit,
     &Locks::skirmish_players,
@@ -176,6 +177,7 @@ constexpr std::array<Lock Locks::*, 15> kLockFields{
     &Locks::unicode_chat,
     &Locks::native_density,
     &Locks::zoomed_out_after,
+    &Locks::edge_stickiness,
     &Locks::welcome_setup,
 };
 

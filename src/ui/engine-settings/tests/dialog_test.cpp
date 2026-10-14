@@ -75,6 +75,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -658,9 +659,9 @@ void each_section_shows_its_rows() {
     CHECK(divider.y + divider.height <= geometry::list_item(Page::developer).y);
 
     // Controls: the wheel's switch with the zoom's two limits under it, how
-    // far past the map's edges the view goes, middle-click panning, and
-    // whether a window holds the pointer on its edges.
-    CHECK(settings::page_settings(Page::controls).size() == 7);
+    // far past the map's edges the view goes, middle-click panning, whether
+    // a window keeps the pointer, and how firmly a sticky edge holds.
+    CHECK(settings::page_settings(Page::controls).size() == 8);
     CHECK(settings::page_settings(Page::controls)[0] == Setting::wheel_zoom);
     CHECK(settings::page_settings(Page::controls)[1] == Setting::max_zoom_out);
     CHECK(settings::page_settings(Page::controls)[2] == Setting::max_zoom_in);
@@ -668,6 +669,7 @@ void each_section_shows_its_rows() {
     CHECK(settings::page_settings(Page::controls)[4] == Setting::middle_click_pan);
     CHECK(settings::page_settings(Page::controls)[5] == Setting::switch_alt);
     CHECK(settings::page_settings(Page::controls)[6] == Setting::window_edge);
+    CHECK(settings::page_settings(Page::controls)[7] == Setting::window_edge_stickiness);
     // Engine Limits: the unit limit, pathfinding, then the skirmish player count.
     CHECK(settings::page_settings(Page::common_tweaks).size() == 3);
     CHECK(settings::page_settings(Page::common_tweaks)[0] == Setting::unit_limit);
@@ -771,24 +773,35 @@ void each_section_shows_its_rows() {
             find_part(parts, choice, settings::first_row_control + static_cast<int32_t>(row)) !=
             nullptr
         );
-    CHECK(controls_rows.rows.size() == 7);
-    // The rows from View past the map's edge down, scrolled into view.
+    CHECK(controls_rows.rows.size() == 8);
+    // View past the map's edge, scrolled into view.
+    settings::Dialog middle = opened(Page::controls);
+    middle.scroll[static_cast<std::size_t>(Page::controls)] = 100;
+    parts = settings::dialog_layout(middle);
+    for (const std::string_view text :
+         {"View past the map's edge",
+          "Up to half the battlefield past the map's edges; a",
+          "zoom keeps the ground under the pointer."})
+        CHECK(find_part(parts, text, settings::no_control) != nullptr);
+    // The rows from Middle-click pans down, scrolled into view.
     settings::Dialog scrolled = opened(Page::controls);
     scrolled.scroll[static_cast<std::size_t>(Page::controls)] = std::numeric_limits<int32_t>::max();
     parts = settings::dialog_layout(scrolled);
     for (const std::string_view text :
-         {"View past the map's edge",
-          "Up to half the battlefield past the map's edges; a",
-          "zoom keeps the ground under the pointer.",
-          "Middle-click pans",
+         {"Middle-click pans",
           "A middle click pans the view towards the pointer",
           "until you click or press a key.",
           "Select groups without Alt",
           "A number key selects its group on its own.",
           "Window edge",
-          "The pointer rests on the edge so the view scrolls.",
+          "The pointer stays in the window while you play.",
+          "Capture",
           "Sticky",
-          "Free"})
+          "Free",
+          "Edge stickiness",
+          "Needs Sticky",
+          "1.0",
+          "How firmly Sticky holds the pointer at the edge."})
         CHECK(find_part(parts, text, settings::no_control) != nullptr);
     CHECK(find_part(parts, "Shared game - still running", settings::no_control) == nullptr);
     // Each entry is its section's control.
@@ -2541,7 +2554,8 @@ void sections_that_fit_do_not_scroll() {
     // Each section's content: its rows, and the end gap under the last.
     // Engine Limits' unit limit, pathfinding and skirmish-player sliders
     // are 216, and fit; Controls' three switches, the zoom's two drop-downs, View
-    // past the map's edge's strip and Window edge's strip are 426,
+    // past the map's edge's strip, Window edge's strip and Edge stickiness's
+    // slider are 491,
     // Graphics' nine rows are 572, Language's drop-down, five switches and
     // slider 424, and User Interface's four strips and switches with
     // Interface size's row are 324, and they scroll. Developer's list
@@ -2549,8 +2563,8 @@ void sections_that_fit_do_not_scroll() {
     const std::array<Page, 5> pages{
         Page::controls, Page::common_tweaks, Page::graphics, Page::language, Page::user_interface
     };
-    const std::array<int32_t, 5> content{426, 216, 572, 424, 324};
-    const std::array<int32_t, 5> limits{190, 0, 336, 188, 88};
+    const std::array<int32_t, 5> content{491, 216, 572, 424, 324};
+    const std::array<int32_t, 5> limits{255, 0, 336, 188, 88};
     for (std::size_t index = 0; index < content.size(); ++index) {
         const Page page = pages[index];
         if (limits[index] != 0) {
@@ -4366,7 +4380,8 @@ void the_dialog_draws_the_scroll_bar_and_clips_the_rows() {
             settings::Dialog dialog = opened(page);
             if (page == Page::system)
                 dialog.file_type_switches = layout == 0;
-            const auto placed = geometry::open_rows(dialog);
+            // The thumb follows the rows as the fonts lay them out.
+            const auto placed = rows_as_drawn(dialog, fonts);
             Canvas canvas = blank(settings::dialog_width, settings::dialog_height);
             settings::draw_dialog(canvas.surface, {0, 0, 1}, dialog, fonts, kNoIcon);
             CHECK(canvas.at(300, geometry::first_row_top) == kRule);
@@ -6032,8 +6047,8 @@ void hint_lines_part_while_the_modern_fonts_draw_the_words() {
     oa::data::languages::set_interface_language(nullptr, modern);
     const auto tall = geometry::place_rows(Page::controls, {});
     oa::data::languages::set_interface_language(nullptr, oa::data::languages::english());
-    CHECK(game_fonts.rows.size() == 7 && tall.rows.size() == 7);
-    if (game_fonts.rows.size() != 7 || tall.rows.size() != 7)
+    CHECK(game_fonts.rows.size() == 8 && tall.rows.size() == 8);
+    if (game_fonts.rows.size() != 8 || tall.rows.size() != 8)
         return;
     // Mouse wheel zoom: one line, in the same place.
     CHECK(tall.rows[0].hint_lines == 1 && tall.rows[0].height == game_fonts.rows[0].height);
@@ -7680,6 +7695,141 @@ void explosion_flash_shows_and_changes() {
     CHECK(dialog.chosen == dialog.opened);
 }
 
+/// Window edge's strip and Edge stickiness's slider: Capture by default,
+/// with the slider at 1.0 locked Needs Sticky, so neither a click, a key
+/// nor the focus reaches it; Sticky frees it, its keys step a tenth, and
+/// 0.0 says it never holds; Free and Capture lock it again and keep its
+/// value; Restore defaults gives Capture and 1.0.
+void window_edge_and_edge_stickiness_show_and_change() {
+    CHECK(geometry::kind_of(Setting::window_edge) == geometry::RowKind::levels);
+    CHECK(geometry::kind_of(Setting::window_edge_stickiness) == geometry::RowKind::slider);
+    CHECK(geometry::strip_caption(Setting::window_edge, 0) == "Capture");
+    CHECK(geometry::strip_caption(Setting::window_edge, 1) == "Sticky");
+    CHECK(geometry::strip_caption(Setting::window_edge, 2) == "Free");
+    CHECK(settings::EngineSettings{}.window_edge == settings::WindowEdge::capture);
+    CHECK(settings::EngineSettings{}.edge_stickiness == settings::default_edge_stickiness);
+    constexpr int32_t strip = settings::first_row_control + 6;
+    constexpr int32_t slider = settings::first_row_control + 7;
+
+    settings::Dialog dialog = opened(Page::controls);
+    dialog.scroll[static_cast<std::size_t>(Page::controls)] = std::numeric_limits<int32_t>::max();
+    auto parts = settings::dialog_layout(dialog);
+    for (const std::string_view text :
+         {"Window edge",
+          "Capture",
+          "Sticky",
+          "Free",
+          "The pointer stays in the window while you play.",
+          "Edge stickiness",
+          "Needs Sticky",
+          "1.0",
+          "How firmly Sticky holds the pointer at the edge."})
+        CHECK(find_part(parts, text, settings::no_control) != nullptr);
+    // The slider's row, copied out of the rows laid out for it.
+    const auto stickiness_row = [&]() -> std::optional<geometry::Row> {
+        const auto open = geometry::open_rows(dialog);
+        const geometry::Row* row = row_of(open, Setting::window_edge_stickiness);
+        if (row == nullptr)
+            return std::nullopt;
+        return *row;
+    };
+    const auto locked = stickiness_row();
+    CHECK(locked && locked->lock == Lock::needs_sticky);
+
+    // Locked: the keys change nothing, a click on the track changes
+    // nothing, and the focus passes it by.
+    CHECK(key_on(dialog, slider, DialogKey::right) != DialogAction::changed);
+    CHECK(key_on(dialog, slider, DialogKey::left) != DialogAction::changed);
+    CHECK(dialog.chosen.edge_stickiness == settings::default_edge_stickiness);
+    if (locked) {
+        const renderer::SourceRect track = locked->control_area;
+        CHECK(
+            click(dialog, {track.x + track.width - 2, track.y + track.height / 2}) !=
+            DialogAction::changed
+        );
+        CHECK(click(dialog, {track.x + 1, track.y + track.height / 2}) != DialogAction::changed);
+    }
+    CHECK(dialog.chosen.edge_stickiness == settings::default_edge_stickiness);
+    dialog.focused = strip;
+    std::ignore = settings::dialog_key(dialog, DialogKey::down);
+    CHECK(dialog.focused != slider);
+    dialog.focused = strip;
+    std::ignore = settings::dialog_key(dialog, DialogKey::tab);
+    CHECK(dialog.focused != slider);
+
+    // A click on a caption of the strip, scrolled into view.
+    const auto click_caption = [&](std::string_view caption) {
+        dialog.scroll[static_cast<std::size_t>(Page::controls)] =
+            std::numeric_limits<int32_t>::max();
+        const auto shown = settings::dialog_layout(dialog);
+        const settings::LayoutPart* found = nullptr;
+        for (const auto& part : shown)
+            if (part.text == caption && part.control == strip)
+                found = &part;
+        CHECK(found != nullptr);
+        return found != nullptr ? click(dialog, centre(found->rect)) : DialogAction::none;
+    };
+    // Sticky frees the slider; its keys step a tenth.
+    CHECK(click_caption("Sticky") == DialogAction::changed);
+    CHECK(dialog.chosen.window_edge == settings::WindowEdge::sticky);
+    const auto free_row = stickiness_row();
+    CHECK(free_row && free_row->lock == Lock::none);
+    parts = settings::dialog_layout(dialog);
+    CHECK(
+        find_part(
+            parts, "The pointer rests on the edge so the view scrolls.", settings::no_control
+        ) != nullptr
+    );
+    CHECK(find_part(parts, "Needs Sticky", settings::no_control) == nullptr);
+    dialog.focused = strip;
+    CHECK(settings::dialog_key(dialog, DialogKey::down) == DialogAction::redraw);
+    CHECK(dialog.focused == slider);
+    CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
+    CHECK(dialog.chosen.edge_stickiness == 11);
+    CHECK(find_part(settings::dialog_layout(dialog), "1.1", settings::no_control) != nullptr);
+    // Up to 5.0, where Right stops, and down to 0.0, where Left stops.
+    for (int32_t step = 0; step < 39; ++step)
+        CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
+    CHECK(dialog.chosen.edge_stickiness == settings::highest_edge_stickiness);
+    CHECK(settings::dialog_key(dialog, DialogKey::right) != DialogAction::changed);
+    CHECK(dialog.chosen.edge_stickiness == settings::highest_edge_stickiness);
+    CHECK(find_part(settings::dialog_layout(dialog), "5.0", settings::no_control) != nullptr);
+    for (int32_t step = 0; step < 50; ++step)
+        CHECK(settings::dialog_key(dialog, DialogKey::left) == DialogAction::changed);
+    CHECK(dialog.chosen.edge_stickiness == settings::lowest_edge_stickiness);
+    CHECK(settings::dialog_key(dialog, DialogKey::left) != DialogAction::changed);
+    parts = settings::dialog_layout(dialog);
+    CHECK(find_part(parts, "0.0", settings::no_control) != nullptr);
+    CHECK(find_part(parts, "At 0.0 the edge never holds.", settings::no_control) != nullptr);
+    for (int32_t step = 0; step < 25; ++step)
+        CHECK(settings::dialog_key(dialog, DialogKey::right) == DialogAction::changed);
+    CHECK(dialog.chosen.edge_stickiness == 25);
+    CHECK(find_part(settings::dialog_layout(dialog), "2.5", settings::no_control) != nullptr);
+
+    // Free and Capture lock it again, and it keeps 2.5 for Sticky.
+    CHECK(click_caption("Free") == DialogAction::changed);
+    CHECK(dialog.chosen.window_edge == settings::WindowEdge::free);
+    const auto relocked = stickiness_row();
+    CHECK(relocked && relocked->lock == Lock::needs_sticky);
+    CHECK(key_on(dialog, slider, DialogKey::left) != DialogAction::changed);
+    CHECK(dialog.chosen.edge_stickiness == 25);
+    CHECK(click_caption("Capture") == DialogAction::changed);
+    CHECK(dialog.chosen.window_edge == settings::WindowEdge::capture);
+    CHECK(dialog.chosen.edge_stickiness == 25);
+    CHECK(find_part(settings::dialog_layout(dialog), "2.5", settings::no_control) != nullptr);
+    CHECK(click_caption("Sticky") == DialogAction::changed);
+    CHECK(dialog.chosen.edge_stickiness == 25);
+    const auto again = stickiness_row();
+    CHECK(again && again->lock == Lock::none);
+
+    // Restore defaults gives Capture and 1.0; Cancel what it opened with.
+    CHECK(click(dialog, centre(geometry::restore_button)) == DialogAction::changed);
+    CHECK(dialog.chosen.window_edge == settings::WindowEdge::capture);
+    CHECK(dialog.chosen.edge_stickiness == settings::default_edge_stickiness);
+    CHECK(settings::dialog_key(dialog, DialogKey::escape) == DialogAction::cancelled);
+    CHECK(dialog.chosen == dialog.opened);
+}
+
 void zoomed_out_units_show_and_change() {
     CHECK(geometry::kind_of(Setting::zoomed_out_units) == geometry::RowKind::levels);
     const auto strip = geometry::strip_of(Setting::zoomed_out_units);
@@ -8820,8 +8970,10 @@ std::vector<int32_t> tab_round(settings::Dialog dialog) {
 }
 
 void the_arrows_move_by_geometry() {
-    // Controls: Down walks its seven rows, and from the last, which it brings
-    // into view, reaches the footer under it. A row lies across the
+    // Controls: Down walks the seven of its rows that take the focus (Edge
+    // stickiness, locked while Window edge shows Capture, takes none), and
+    // from the last, which it brings into view, reaches the footer under
+    // it. A row lies across the
     // section, so Cancel and OK both lie in line with it; Cancel's middle
     // is nearer the row's. Up comes back to the last row.
     settings::Dialog controls = opened(Page::controls);
@@ -9896,6 +10048,7 @@ int main(int argc, char** argv) {
         menu_scaling_and_native_density_show_and_change();
         explosion_flash_shows_and_changes();
         zoomed_out_units_show_and_change();
+        window_edge_and_edge_stickiness_show_and_change();
         window_frame_shows_and_changes();
         every_switch_reads_and_sets_through_one_table();
         the_new_rows_lock_in_their_own_forms();

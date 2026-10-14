@@ -2133,8 +2133,9 @@ void Runtime::check_edge_scroll() {
     probe_edges(full_screen() ? "in full screen" : "in a window");
 
     // With Window edge Free, the pointer that leaves the window scrolls
-    // nothing until it comes back. Sticky, the default, holds it on the edge
-    // and keeps scrolling; the frontend-controls check covers that.
+    // nothing until it comes back. Capture, the default, keeps it in the
+    // window, and Sticky holds it on the edge and keeps scrolling; the
+    // frontend-controls check covers both.
     const auto saved_edge = engine_settings_state().current.window_edge;
     engine_settings_state().current.window_edge = oa::ui::engine_settings::WindowEdge::free;
     move_to(0.0F, 0.0F);

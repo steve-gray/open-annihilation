@@ -2022,11 +2022,21 @@ hosts them on the OA layer.
   display. Switching to another program (Alt+Tab, Command+Tab), a dialog of
   the system's taking the focus, or Alt+Enter to a window lets the pointer
   go, and coming back to full screen with the focus holds it again. A window
-  holds the pointer at its edges only while a match's battlefield shows, the window has the focus and the
-  pointer, and Window edge is Sticky (`sticky_edge.hpp`): the pointer rests on the last pixel and the view
-  edge-scrolls. On macOS, Windows and X11 it stays free and is put back on that pixel until a firm push
-  lets it go; on Wayland it is confined, and a quick approach lets it go. Menus, the pause screen, a window without the focus
-  and Window edge Free leave it free. The window events that may change this
+  keeps the pointer only while a match's battlefield shows and the window
+  has the focus, as Window edge says (`apply_window_edge`). Capture, the
+  default, takes SDL's window grab, which confines the pointer to the window
+  on every system the way full screen's does, so no push or flick takes it
+  out and every edge scrolls (`apply_capture`). Escape and a lost focus let
+  it go until a press on the battlefield; after a lost focus that press and
+  its release reach nothing, so the click that brings the window back is no
+  order (`take_window_edge_event`). Sticky holds the pointer at the edges
+  while the pointer is in the window (`sticky_edge.hpp`), as firmly as Edge
+  stickiness says (`sticky_limits`): the pointer rests on the last pixel and
+  the view edge-scrolls. On macOS, Windows and X11 it stays free and is put
+  back on that pixel until a firm push lets it go; on Wayland it is
+  confined, and a quick approach lets it go. Menus, the pause screen,
+  Settings, a message box, a window without the focus and Window edge Free
+  leave it free. The window events that may change this
   (`changes_pointer_bounds`) settle it in every event loop that takes
   Alt+Enter (the movies, a match loading and the game), and the window's own
   state settles it after the game drops pending input. The game lets the
@@ -2072,8 +2082,12 @@ hosts them on the OA layer.
   come back onto the display from off it, also with a usable area smaller
   than the display, and `--check-frontend-controls` presses Alt+Enter on a
   menu, over a message box and in a match, and checks that full screen
-  holds the pointer, that a window holds it at an edge while a match's battlefield shows until a firm
-  push lets it go, and that Window edge Free leaves it free, and that the window comes back
+  holds the pointer, that Window edge Capture keeps it in a match's window
+  through pushes and flicks, lets it go in the game menu, Settings, on the
+  pause screen, after Escape and without the focus, and takes it back on a
+  click on the battlefield, the focusing click reaching nothing, that Sticky
+  holds it at an edge until a push as firm as Edge stickiness lets it go,
+  0.0 never holding, and that Free leaves it free, and that the window comes back
   at its own size, or onto its display when it started off it (the dummy
   driver's display is smaller than the game's first window).
   The Window frame setting hides a window's title bar and borders while a

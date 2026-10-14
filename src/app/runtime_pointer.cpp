@@ -26,6 +26,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace oa::app {
@@ -551,7 +552,8 @@ void Runtime::note_sticky_motion(
         sticky_edge_,
         StickySample{x, y, motion_x, motion_y, time_ms, past_x, past_y},
         static_cast<float>(width),
-        static_cast<float>(height)
+        static_cast<float>(height),
+        sticky_edge_limits()
     );
     restore_sticky_pointer(x, y, true);
 }
@@ -697,7 +699,8 @@ void Runtime::restore_sticky_pointer(float x, float y, bool fed) {
             sticky_edge_,
             StickySample{x, y, 0.0F, 0.0F, static_cast<uint64_t>(SDL_GetTicks()), past_x, past_y},
             width_f,
-            height_f
+            height_f,
+            sticky_edge_limits()
         );
     }
     if (!sticky_edge_.holding)
@@ -722,30 +725,148 @@ void Runtime::restore_sticky_pointer(float x, float y, bool fed) {
     remember_sticky_global();
 }
 
-bool Runtime::sticky_edge_wanted(bool require_mouse) {
-    if (sdl_.window == nullptr || screen_ != Screen::match || !match_ || match_finished_ ||
-        match_paused_)
+oa::ui::engine_settings::WindowEdge Runtime::window_edge_mode() const {
+    if (engine_settings_ == nullptr)
+        return oa::ui::engine_settings::WindowEdge::capture;
+    return engine_settings_->current.window_edge;
+}
+
+bool Runtime::battlefield_in_play() {
+    if (screen_ != Screen::match || !match_ || match_finished_ || match_paused_)
         return false;
     if (engine_settings_dialog() != nullptr || oa::ui::frontend_dialogs::dialog_count() != 0)
         return false;
+    return (match_->state().game.sim_run_flags & oa::ui::console::kSimRunPaused) == 0;
+}
+
+bool Runtime::window_edge_battlefield(bool require_mouse) {
+    if (sdl_.window == nullptr || !battlefield_in_play())
+        return false;
     const SDL_WindowFlags flags = SDL_GetWindowFlags(sdl_.window);
     // Full screen keeps its own grab. A window wants the rule with the
-    // input focus. The pointer may be past the edge while a soft wall puts
-    // it back, and then the mouse focus has already gone.
+    // input focus, and the pointer inside when asked.
     SDL_WindowFlags mask = SDL_WINDOW_FULLSCREEN | SDL_WINDOW_INPUT_FOCUS;
     SDL_WindowFlags need = SDL_WINDOW_INPUT_FOCUS;
     if (require_mouse) {
         mask |= SDL_WINDOW_MOUSE_FOCUS;
         need |= SDL_WINDOW_MOUSE_FOCUS;
     }
-    if ((flags & mask) != need)
+    return (flags & mask) == need;
+}
+
+bool Runtime::sticky_edge_wanted(bool require_mouse) {
+    // The pointer may be past the edge while a soft wall puts it back, and
+    // then the mouse focus has already gone.
+    if (window_edge_mode() != oa::ui::engine_settings::WindowEdge::sticky)
         return false;
-    if ((match_->state().game.sim_run_flags & oa::ui::console::kSimRunPaused) != 0)
+    if (engine_settings_ != nullptr && engine_settings_->current.edge_stickiness == 0)
         return false;
-    if (engine_settings_ != nullptr &&
-        engine_settings_->current.window_edge != oa::ui::engine_settings::WindowEdge::sticky)
+    return window_edge_battlefield(require_mouse);
+}
+
+StickyLimits Runtime::sticky_edge_limits() const {
+    const uint32_t tenths = engine_settings_ != nullptr
+                                ? engine_settings_->current.edge_stickiness
+                                : oa::ui::engine_settings::default_edge_stickiness;
+    return sticky_limits(
+        static_cast<float>(tenths) /
+        static_cast<float>(oa::ui::engine_settings::edge_stickiness_per_level)
+    );
+}
+
+bool Runtime::capture_wanted(bool require_mouse) {
+    return window_edge_mode() == oa::ui::engine_settings::WindowEdge::capture &&
+           !capture_waits_for_click_ && window_edge_battlefield(require_mouse);
+}
+
+bool Runtime::take_window_edge_event(const SDL_Event& event, bool& force_release) {
+    if (event.type == SDL_EVENT_MOUSE_MOTION && event.motion.which != SDL_TOUCH_MOUSEID &&
+        !sticky_ignores_motion(event) && sticky_edge_wanted()) {
+        const uint64_t time_ms = event.motion.timestamp != 0
+                                     ? event.motion.timestamp / 1'000'000ULL
+                                     : static_cast<uint64_t>(SDL_GetTicks());
+        note_sticky_motion(
+            event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel, time_ms
+        );
+        sticky_wanted_ = true;
+    }
+    const bool capture = window_edge_mode() == oa::ui::engine_settings::WindowEdge::capture;
+    const bool windowed =
+        sdl_.window != nullptr && (SDL_GetWindowFlags(sdl_.window) & SDL_WINDOW_FULLSCREEN) == 0;
+    // When the event came, in milliseconds. A posted event has no time.
+    const uint64_t event_ms = event.common.timestamp != 0 ? event.common.timestamp / 1'000'000ULL
+                                                          : static_cast<uint64_t>(SDL_GetTicks());
+    // The focus always lets the pointer go. On a soft wall a leave is the
+    // pointer crossing the edge, and it is put back; Wayland's leave is the
+    // confinement giving way, and a captured pointer's the grab giving way.
+    if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
+        force_release = true;
+        // A captured window waits for a click on the battlefield, and the
+        // click that brings the focus back is only that.
+        if (capture && windowed && match_) {
+            capture_waits_for_click_ = true;
+            capture_focus_click_ = true;
+            capture_focus_gained_ms_ = 0;
+        }
+    } else if (
+        event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE && !(sticky_soft_wall() && sticky_edge_.holding)
+    ) {
+        force_release = true;
+    }
+    if (event.type == SDL_EVENT_WINDOW_FOCUS_GAINED && capture_focus_click_)
+        capture_focus_gained_ms_ = std::max<uint64_t>(event_ms, 1);
+    if (event.type == SDL_EVENT_KEY_DOWN) {
+        // A key pressed with the focus back means the window is in use: the
+        // next click is the player's own.
+        if (capture_focus_gained_ms_ != 0)
+            capture_focus_click_ = false;
+        // Escape in a match lets a captured pointer go until the next click
+        // on the battlefield, whatever else the key does.
+        if (event.key.key == SDLK_ESCAPE && capture && screen_ == Screen::match && match_)
+            capture_waits_for_click_ = true;
+    }
+    const bool pointer_button =
+        (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
+        event.button.which != SDL_TOUCH_MOUSEID;
+    if (!pointer_button)
         return false;
-    return true;
+    // The focusing click's release reaches nothing either. A new press of
+    // that button means its release was lost.
+    if (capture_swallowed_button_ != 0 && event.button.button == capture_swallowed_button_) {
+        capture_swallowed_button_ = 0;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+            return true;
+    }
+    if (event.type != SDL_EVENT_MOUSE_BUTTON_DOWN)
+        return false;
+    // A press on a battlefield in play captures the pointer again. The input
+    // focus is not asked for: a window system may send the click that
+    // brings the focus back before the focus itself.
+    if (capture && windowed && capture_waits_for_click_ && battlefield_in_play()) {
+        capture_waits_for_click_ = false;
+        // The focusing click comes with the focus: before it, as some window
+        // systems send it, or within focus_click_ms after it.
+        const bool with_focus = capture_focus_gained_ms_ == 0 ||
+                                (event_ms >= capture_focus_gained_ms_ &&
+                                 event_ms - capture_focus_gained_ms_ <= focus_click_ms);
+        if (std::exchange(capture_focus_click_, false) && with_focus) {
+            capture_swallowed_button_ = event.button.button;
+            return true;
+        }
+        return false;
+    }
+    // Any other press, a menu's among them, was not the focusing click.
+    capture_focus_click_ = false;
+    return false;
+}
+
+void Runtime::release_window_edge_grab() {
+    if (sdl_.window == nullptr)
+        return;
+    if (!sticky_confined_)
+        std::ignore = SDL_SetWindowMouseRect(sdl_.window, nullptr);
+    if (!sticky_confined_ && !capture_held_)
+        std::ignore = SDL_SetWindowMouseGrab(sdl_.window, false);
 }
 
 void Runtime::forget_sticky_edge() {
@@ -753,12 +874,20 @@ void Runtime::forget_sticky_edge() {
     sticky_wanted_ = false;
     sticky_global_known_ = false;
     sticky_drop_warp_motion_ = false;
+    // A dialog of the system's clears the grab. The next apply asks again.
+    capture_held_ = false;
 }
 
-void Runtime::apply_sticky_edge(bool force_release) {
+void Runtime::apply_window_edge(bool force_release) {
     SDL_Window* window = sdl_.window;
     if (window == nullptr)
         return;
+    // Escape and a lost focus are forgotten with the match, and with another
+    // way of Window edge.
+    if (!match_ || window_edge_mode() != oa::ui::engine_settings::WindowEdge::capture) {
+        capture_waits_for_click_ = false;
+        capture_focus_click_ = false;
+    }
     const SDL_WindowFlags flags = SDL_GetWindowFlags(window);
     if ((flags & SDL_WINDOW_FULLSCREEN) != 0) {
         // The rect is the sticky edge's. The grab stays full screen's.
@@ -767,13 +896,58 @@ void Runtime::apply_sticky_edge(bool force_release) {
         sticky_confined_ = false;
         return;
     }
+    // The way that lets go comes first, so it never clears the grab the
+    // other has just taken.
+    if (window_edge_mode() == oa::ui::engine_settings::WindowEdge::capture) {
+        apply_sticky_edge(force_release);
+        apply_capture(force_release);
+    } else {
+        apply_capture(force_release);
+        apply_sticky_edge(force_release);
+    }
+}
+
+void Runtime::apply_capture(bool force_release) {
+    SDL_Window* window = sdl_.window;
+    // A capture starts only with the pointer inside. A captured pointer
+    // cannot leave, so the mouse focus is not asked for again.
+    if (force_release || !capture_wanted(!capture_held_)) {
+        if (capture_held_) {
+            // A focus lost while its event was dropped, as a loading screen
+            // drops input, still waits for the click that brings it back.
+            if ((SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) == 0) {
+                capture_waits_for_click_ = true;
+                capture_focus_click_ = true;
+                capture_focus_gained_ms_ = 0;
+            }
+            capture_held_ = false;
+            release_window_edge_grab();
+        }
+        return;
+    }
+    // A change of the window's state clears a window's grab
+    // (keep_pointer_on_screen), so it is asked for again each time. SDL
+    // confines the pointer to the window: the window server's confinement
+    // on macOS, the cursor clip on Windows, a pointer grab on X11 and the
+    // pointer constraint on Wayland.
+    capture_held_ = true;
+    std::ignore = SDL_SetWindowMouseRect(window, nullptr);
+    std::ignore = SDL_SetWindowMouseGrab(window, true);
+}
+
+void Runtime::apply_sticky_edge(bool force_release) {
+    SDL_Window* window = sdl_.window;
+    if (window == nullptr)
+        return;
     const bool putting_back = sticky_soft_wall() && sticky_edge_.holding && !force_release;
     if (force_release || !sticky_edge_wanted(!putting_back)) {
-        forget_sticky_edge();
+        release_sticky_edge(sticky_edge_);
+        sticky_wanted_ = false;
+        sticky_global_known_ = false;
+        sticky_drop_warp_motion_ = false;
         if (sticky_confined_) {
-            std::ignore = SDL_SetWindowMouseGrab(window, false);
-            std::ignore = SDL_SetWindowMouseRect(window, nullptr);
             sticky_confined_ = false;
+            release_window_edge_grab();
         }
         return;
     }
@@ -788,9 +962,8 @@ void Runtime::apply_sticky_edge(bool force_release) {
     int height = 0;
     if (!SDL_GetWindowSize(window, &width, &height) || width < 2 || height < 2) {
         if (sticky_confined_) {
-            std::ignore = SDL_SetWindowMouseGrab(window, false);
-            std::ignore = SDL_SetWindowMouseRect(window, nullptr);
             sticky_confined_ = false;
+            release_window_edge_grab();
         }
         return;
     }
@@ -803,18 +976,16 @@ void Runtime::apply_sticky_edge(bool force_release) {
             return;
         }
         if (sticky_confined_) {
-            std::ignore = SDL_SetWindowMouseGrab(window, false);
-            std::ignore = SDL_SetWindowMouseRect(window, nullptr);
             sticky_confined_ = false;
+            release_window_edge_grab();
         }
         return;
     }
     // The pointer stays free. What a Wayland hold confined is cleared, and
     // the pointer is put back only while the rule still holds.
     if (sticky_confined_) {
-        std::ignore = SDL_SetWindowMouseGrab(window, false);
-        std::ignore = SDL_SetWindowMouseRect(window, nullptr);
         sticky_confined_ = false;
+        release_window_edge_grab();
     }
     if (!sticky_edge_.holding)
         return;

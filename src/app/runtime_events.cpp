@@ -632,8 +632,9 @@ void Runtime::show_unsupported(std::string_view message) {
     std::cerr << "unsupported operation: " << message << '\n';
     if (sdl_.window != nullptr) {
         // The box needs the pointer; full screen holds it again once the
-        // box has closed and the window has the focus back. The sticky
-        // edge is forgotten so the pointer is held again only from inside.
+        // box has closed and the window has the focus back. Window edge
+        // forgets its hold, so a sticky edge holds again only from inside
+        // and Capture asks for the grab again.
         forget_sticky_edge();
         release_pointer(sdl_.window);
         SDL_ShowSimpleMessageBox(
