@@ -263,7 +263,8 @@ void adopt_launch_run(Options& options);
 ///
 /// The plan goes into the launch block and the game to host or join
 /// (apply_launch_plan, which keeps the fields the command line named), and
-/// the multiplayer screens take TCP/IP at once. A launch file the system
+/// a launch that hosts or joins has the multiplayer screens take TCP/IP at
+/// once, as check_options does. A launch file the system
 /// opened the game with is put in place this way before the runtime starts,
 /// and one opened while the game runs before the game goes to its battle
 /// room. A refusal puts nothing in place: the context is as it was.

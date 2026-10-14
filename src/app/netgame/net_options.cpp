@@ -798,10 +798,15 @@ void put_launch_in_place(NetgameContext& netgame, LaunchPlan plan) {
     const oa::app::netgame::launch::LaunchSwitches switches = netgame.launch;
     const netgame::LaunchStatusChoice status = netgame::kept_launch_status();
     try {
-        apply_launch_plan(netgame, std::move(plan));
-        oa::app::netgame::launch::set_connection_type(
-            netgame.launch, oa::app::netgame::launch::connection_type::tcpip
-        );
+        // As check_options does: a launch that hosts or joins plays over
+        // TCP/IP; one that leaves the choice to the multiplayer screens keeps
+        // the transport it names. A file never holds "-b" words alone.
+        if (apply_launch_plan(netgame, std::move(plan)) &&
+            netgame.options.direct_game.kind !=
+                oa::ui::frontend_multiplayer::DirectGame::Kind::none)
+            oa::app::netgame::launch::set_connection_type(
+                netgame.launch, oa::app::netgame::launch::connection_type::tcpip
+            );
     } catch (...) {
         netgame.options = options;
         netgame.launch = switches;
