@@ -22,6 +22,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <string>
@@ -494,36 +495,47 @@ oa::ui::first_run::Session game_session() {
     return session;
 }
 
+/// The copying step from the fuller installer the game step chose: its five
+/// bundles, more than the panel holds, so the panel scrolls. While it copies,
+/// two bundles are done beside the one copying, so the rows can be compared,
+/// and the list follows the one copying. Once the check is done every row
+/// shows a result, and the list shows Music's tracks note.
+///
+/// @param checked the copy has been checked
+/// @return the session
 oa::ui::first_run::Session copying_session(bool checked) {
     oa::ui::first_run::Session session = game_session();
     session.model.step = oa::ui::first_run::Step::copying;
-    session.model.copy.from = "Total Annihilation";
-    session.model.copy.done = checked ? 1000 : 300;
+    session.model.copy.from = "setup_total_annihilation.exe";
+    session.model.copy.done = checked ? 1000 : 310;
     session.model.copy.whole = 1000;
     session.model.copy.running = !checked;
     session.model.copy.checked = checked;
     session.model.copy.overall = checked ? "38 of 38 · 100%" : "12 of 38 · 31%";
     if (!checked)
         session.model.copy.remaining = "about 40 seconds left";
-    oa::ui::first_run::CopyBundle bundle;
-    bundle.name = "Total Annihilation";
-    bundle.file = checked ? std::string{} : std::string("totala1.hpi");
-    bundle.amount = checked ? "All files match" : "31%";
-    bundle.done = session.model.copy.done;
-    bundle.whole = 1000;
-    bundle.phase =
-        checked ? oa::ui::first_run::CopyPhase::done : oa::ui::first_run::CopyPhase::copying;
-    session.model.copy.bundles.push_back(std::move(bundle));
-    // Music is already done, beside the bundle that is still copying, so the
-    // two rows can be compared. Once the check is done both rows show a result.
-    oa::ui::first_run::CopyBundle music;
-    music.name = "Music";
-    music.amount = "17 of 18 tracks";
-    music.done = 1000;
-    music.whole = 1000;
-    music.phase = oa::ui::first_run::CopyPhase::done;
-    music.note = true;
-    session.model.copy.bundles.push_back(std::move(music));
+    const char* names[] = {
+        "Total Annihilation 3.1c", "Campaign", "Core Contingency", "Battle Tactics", "Music"
+    };
+    constexpr std::size_t kCopying = 2;
+    constexpr std::size_t kMusic = 4;
+    for (std::size_t at = 0; at < std::size(names); ++at) {
+        oa::ui::first_run::CopyBundle bundle;
+        bundle.name = names[at];
+        bundle.whole = 1000;
+        if (checked || at < kCopying) {
+            bundle.phase = oa::ui::first_run::CopyPhase::done;
+            bundle.done = 1000;
+            bundle.note = at == kMusic;
+            bundle.amount = bundle.note ? "17 of 18 tracks" : "All files match";
+        } else if (at == kCopying) {
+            bundle.phase = oa::ui::first_run::CopyPhase::copying;
+            bundle.file = "ccdata.ccx";
+            bundle.amount = "31%";
+            bundle.done = 310;
+        }
+        session.model.copy.bundles.push_back(std::move(bundle));
+    }
     if (checked) {
         session.model.copy.verdict = "All files match";
         session.copy_continue_ms = 3000;
