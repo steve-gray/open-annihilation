@@ -103,6 +103,9 @@ inline constexpr kit::ControlId base_blocker = 13000012;
 inline constexpr kit::ControlId active_base = 75;
 /// The expansions heading's label. It takes no press.
 inline constexpr kit::ControlId active_expansions = 76;
+/// The label of the lock under the expansion pills, while a pill is locked.
+/// It takes no press.
+inline constexpr kit::ControlId active_lock = 77;
 /// An entry's action button: this and the Action's value.
 inline constexpr kit::ControlId first_action = 100;
 /// A tag's chip or nav entry: this and the tag's place in tags_in_tab.

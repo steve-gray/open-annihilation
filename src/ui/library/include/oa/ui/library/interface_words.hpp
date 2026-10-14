@@ -330,6 +330,7 @@ inline constexpr std::string_view interface_words[] = {
     words::turn_on_several_applies,
     words::mod_unloaded_because,
     words::mod_unloaded_note,
+    words::active_command_line_needs,
 };
 
 } // namespace oa::ui::library

@@ -39,6 +39,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <deque>
+#include <initializer_list>
 #include <map>
 #include <optional>
 #include <regex>
@@ -297,7 +298,7 @@ bool designed_name(const std::string& name) {
         "action\\.(get|update|update-all|cancel|retry|roll-back|play-now|switch-off|uninstall|"
         "open-folder|homepage)|"
         "details|back|refresh|close-x|close|status|queue|note|from|rules|"
-        "active\\.(mod|language|base|expansions|unload|change|search|map\\.[1-9][0-9]*|"
+        "active\\.(mod|language|base|expansions|lock|unload|change|search|map\\.[1-9][0-9]*|"
         "from\\.[1-9][0-9]*|expansion\\.[a-z0-9-]+(\\.(get|cancel|retry))?)|"
         "add-registry|registries\\.(note|notice)|"
         "registry\\.[a-z0-9-]+(\\.(remove|add-mirror|key|refresh|address|refreshed))?)"
@@ -306,7 +307,7 @@ bool designed_name(const std::string& name) {
 }
 
 /// The labels: lines a journey reads, which take nothing.
-constexpr std::array<std::string_view, 11> label_names{
+constexpr std::array<std::string_view, 12> label_names{
     "library.status",
     "library.queue",
     "library.note",
@@ -316,6 +317,7 @@ constexpr std::array<std::string_view, 11> label_names{
     "library.active.language",
     "library.active.base",
     "library.active.expansions",
+    "library.active.lock",
     "library.registries.note",
     "library.registries.notice",
 };
@@ -3704,6 +3706,144 @@ void expansion_download_arrow_sits_inside_the_pill() {
     OA_CHECK(!library.content.edited);
 }
 
+/// Returns the item that draws a control as a pill.
+///
+/// @param list the display list
+/// @param control the control
+/// @return the item; null when none draws it
+const kit::Item* pill_item_of(const kit::DisplayList& list, const kit::Control& control) {
+    for (const kit::Item& item : list.items)
+        if (item.control == control.id && item.role == kit::Role::pill)
+            return &item;
+    return nullptr;
+}
+
+/// Tells whether the kit's locked fade covers a rectangle exactly.
+///
+/// @param list the display list
+/// @param rect the rectangle
+/// @return true when a fade covers it
+bool faded(const kit::DisplayList& list, const kit::Rect& rect) {
+    return std::any_of(list.items.begin(), list.items.end(), [&rect](const kit::Item& item) {
+        return item.role == kit::Role::locked_fade && item.rect.x == rect.x &&
+               item.rect.y == rect.y && item.rect.width == rect.width &&
+               item.rect.height == rect.height;
+    });
+}
+
+/// Counts the padlocks drawn.
+///
+/// @param list the display list
+/// @return how many
+std::size_t padlock_count(const kit::DisplayList& list) {
+    return static_cast<std::size_t>(
+        std::count_if(list.items.begin(), list.items.end(), [](const kit::Item& item) {
+            const auto* look = std::get_if<kit::MarkLook>(&item.look);
+            return item.role == kit::Role::mark && look != nullptr &&
+                   look->mark == kit::Mark::padlock && look->colour == kit::colour::lock;
+        })
+    );
+}
+
+/// A pill the command line's mod needs is drawn locked at every size: its
+/// face kept under the kit's locked fade, out of Tab's order and taking no
+/// press, with the padlock and the reason in the lock colour under the
+/// pills, which a label reads whole. Pills the player can turn keep their
+/// look, and without the command line nothing is locked.
+void locked_pill_shows_why() {
+    lib::Inputs inputs = fixture::fixture_inputs();
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"totala", "campaign", "core-contingency", "music"};
+    inputs.content.enabled = {"campaign", "core-contingency"};
+    inputs.content.mod_required = {"campaign"};
+    inputs.mod_from_command_line = true;
+    const std::string reason = "The command line chose this run's mod, which needs Campaign.";
+
+    for (const fixture::NamedFrame& named : fixture::frames()) {
+        lib::Library library;
+        lib::refresh(library, inputs);
+        lib::set_tab(library, lib::Tab::active);
+        lib::ScreenState state;
+        const kit::DisplayList list = laid_out(library, state, named.frame);
+        const std::string where = named.name + " locked pill";
+        const kit::Point window = lib::window_size(named.frame);
+        OA_EXPECT_NONE(fixture::outside_window(list, window), where);
+        OA_EXPECT_NONE(meeting_controls(list), where);
+        OA_EXPECT_NONE(order_problems(list), where);
+        OA_EXPECT_NONE(name_problems(list), where);
+        OA_EXPECT_NONE(fixture::texts_not_fitting(list, fonts()), where);
+
+        const kit::Control* campaign = fixture::named(list, "library.active.expansion.campaign");
+        const kit::Control* contingency =
+            fixture::named(list, "library.active.expansion.core-contingency");
+        const kit::Control* music = fixture::named(list, "library.active.expansion.music");
+        OA_CHECK(campaign != nullptr && contingency != nullptr && music != nullptr);
+        if (campaign == nullptr || contingency == nullptr || music == nullptr)
+            continue;
+        OA_CHECK(!campaign->enabled && !campaign->focusable);
+        OA_CHECK(
+            std::find(list.tab_order.begin(), list.tab_order.end(), campaign->id) ==
+            list.tab_order.end()
+        );
+        const kit::Item* locked = pill_item_of(list, *campaign);
+        OA_CHECK(locked != nullptr);
+        if (locked != nullptr) {
+            const auto* look = std::get_if<kit::PillLook>(&locked->look);
+            OA_CHECK(look != nullptr && look->state == kit::PillState::active && !look->disabled);
+            OA_CHECK(locked->state.locked);
+            OA_CHECK(faded(list, locked->rect));
+        }
+        for (const kit::Control* turns : {contingency, music}) {
+            OA_CHECK(turns->enabled && turns->focusable);
+            const kit::Item* turning = pill_item_of(list, *turns);
+            OA_CHECK(turning != nullptr && !turning->state.locked && !faded(list, turning->rect));
+            if (turning != nullptr) {
+                const auto* look = std::get_if<kit::PillLook>(&turning->look);
+                OA_CHECK(look != nullptr && !look->disabled);
+            }
+        }
+
+        const kit::Control* lock = fixture::named(list, "library.active.lock");
+        OA_CHECK(lock != nullptr);
+        if (lock == nullptr)
+            continue;
+        OA_CHECK(lock->text == reason);
+        OA_CHECK(lock->rect.y >= campaign->rect.y + campaign->rect.height);
+        OA_CHECK(padlock_count(list) == 1);
+        std::string shown;
+        for (const kit::Item& item : list.items) {
+            if (item.role != kit::Role::text || item.colour != kit::colour::lock ||
+                !kit::wholly_in(item.rect, lock->rect))
+                continue;
+            if (!shown.empty())
+                shown.push_back(' ');
+            shown += item.text;
+        }
+        OA_CHECK(shown == reason);
+
+        const lib::ScreenResult pressed =
+            click(library, state, list, "library.active.expansion.campaign");
+        OA_CHECK(!pressed.action.has_value() && pressed.expansion.empty());
+        OA_CHECK(!library.content.edited && !library.content.asking);
+    }
+
+    // Chosen in the game, the same choice asks before Campaign goes off, so
+    // no pill is locked and nothing is faded.
+    lib::Inputs in_game = inputs;
+    in_game.mod_from_command_line = false;
+    lib::Library library;
+    lib::refresh(library, std::move(in_game));
+    lib::set_tab(library, lib::Tab::active);
+    const kit::DisplayList list = laid_out(library, {}, fixture::frames()[0].frame);
+    OA_CHECK(fixture::named(list, "library.active.lock") == nullptr);
+    OA_CHECK(padlock_count(list) == 0);
+    OA_CHECK(std::none_of(list.items.begin(), list.items.end(), [](const kit::Item& item) {
+        return item.role == kit::Role::locked_fade || item.state.locked;
+    }));
+    const kit::Control* campaign = fixture::named(list, "library.active.expansion.campaign");
+    OA_CHECK(campaign != nullptr && campaign->enabled && campaign->focusable);
+}
+
 /// Returns the strip of tabs, or null when the layout has none.
 ///
 /// @param list the display list
@@ -3871,6 +4011,7 @@ int main() {
     active_maps_fill_scroll_and_filter();
     active_base_game_is_a_tile();
     expansion_download_arrow_sits_inside_the_pill();
+    locked_pill_shows_why();
     tabs_scroll_and_the_queue_shows_its_bar();
     the_base_chooser_names_its_rows();
     base_badge_is_nearest_and_tabs_are_bracketed();

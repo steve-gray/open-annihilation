@@ -3983,12 +3983,36 @@ expansion_hint_lines(const Building& building, std::string_view hint, int32_t in
     return wrapped(building, kit::FontRole::small, hint, inner, 0);
 }
 
-/// Returns the expansions tile's height, including a button's room when the
-/// mod tile has UNLOAD MOD, so the pills stay above that button. The hint
-/// takes one line for each line it wraps to.
+/// Returns the room the padlock takes before the lock's words: the padlock
+/// and the gap after it.
+///
+/// @param metrics the class's metrics
+/// @return the room, in points
+int32_t padlock_room(const kit::Metrics& metrics) {
+    return metrics.padlock_width + metrics.padlock_gap;
+}
+
+/// Returns the lock under the expansion pills wrapped beside its padlock.
+/// Every line is kept, as the hint's are.
 ///
 /// @param building the layout
-/// @param content the pills and the hint
+/// @param lock why the locked pills stay on; empty returns nothing
+/// @param inner the width inside the card
+/// @return the lines
+std::vector<std::string>
+expansion_lock_lines(const Building& building, std::string_view lock, int32_t inner) {
+    const int32_t room = inner - padlock_room(*building.metrics);
+    if (lock.empty() || room <= 0)
+        return {};
+    return wrapped(building, kit::FontRole::small, lock, room, 0);
+}
+
+/// Returns the expansions tile's height, including a button's room when the
+/// mod tile has UNLOAD MOD, so the pills stay above that button. The lock
+/// and the hint take one line for each line they wrap to.
+///
+/// @param building the layout
+/// @param content the pills, the lock and the hint
 /// @param width the tile's width
 /// @param reserve_button leave room for a button at the bottom
 /// @return the height, in points
@@ -4000,20 +4024,29 @@ int32_t expansions_height(
     const int32_t inner = std::max(width - 2 * inset, int32_t{0});
     const ExpansionWrap wrap = wrap_expansions(building, content, inner);
     int32_t stack = wrap.rows_height;
+    bool placed = !wrap.rows.empty();
+    const std::vector<std::string> lock_lines = expansion_lock_lines(building, content.lock, inner);
+    if (!lock_lines.empty()) {
+        stack += (placed ? metrics.hint_gap : 0) +
+                 static_cast<int32_t>(lock_lines.size()) * metrics.small_line;
+        placed = true;
+    }
     const std::vector<std::string> hint_lines = expansion_hint_lines(building, content.hint, inner);
     if (!hint_lines.empty())
-        stack += (wrap.rows.empty() ? 0 : metrics.hint_gap) +
+        stack += (placed ? metrics.hint_gap : 0) +
                  static_cast<int32_t>(hint_lines.size()) * metrics.small_line;
     if (reserve_button)
         stack += metrics.button_gap + metrics.button_height;
     return stack + 2 * inset;
 }
 
-/// Appends the expansions tile: wrapped pills and the hint. The heading's
-/// label is the caller's.
+/// Appends the expansions tile: wrapped pills, the lock and the hint. A
+/// locked pill keeps its face under the kit's locked fade and takes no
+/// press, and the lock under the pills is the padlock and why, in the lock
+/// colour. The heading's label is the caller's.
 ///
 /// @param[in,out] building the layout
-/// @param content the pills and the hint
+/// @param content the pills, the lock and the hint
 /// @param tile the tile
 /// @param clip what drawing may touch
 void place_expansions(
@@ -4052,7 +4085,8 @@ void place_expansions(
                 pill.face == ExpansionFace::on ? kit::PillState::active : kit::PillState::inactive;
             look.hovered = pressable && hovered(building, id);
             look.focused = pressable && focused(building, id);
-            look.disabled = !pressable;
+            // A locked pill keeps its face, faded below, so it still reads as on.
+            look.disabled = !pressable && !pill.locked;
             const kit::Rect rect{column, row_y, width, pill_height};
             const std::size_t before = building.list.controls.size();
             kit::add_pill(
@@ -4063,6 +4097,9 @@ void place_expansions(
                 unique_name(building, named("active.expansion." + pill.id))
             );
             building.list.items.back().clip = clip;
+            building.list.items.back().state.locked = pill.locked;
+            if (pill.locked)
+                add_item(building.list, kit::Role::locked_fade, rect, clip);
             move_controls(building.list, before, building.detail);
             kit::Control& control = building.detail.back();
             control.clip = clip;
@@ -4074,11 +4111,53 @@ void place_expansions(
         }
         row_y += band + metrics.button_gap;
     }
+    // After the last row of pills, row_y is a button gap below it. The lock
+    // and the hint each stand a hint gap below what is above them.
+    bool placed = !wrap.rows.empty();
+    if (placed)
+        row_y -= metrics.button_gap;
+    const std::vector<std::string> lock_lines =
+        expansion_lock_lines(building, content.lock, inner_width);
+    if (!lock_lines.empty()) {
+        if (placed)
+            row_y += metrics.hint_gap;
+        const int32_t lock_top = row_y;
+        const int32_t indent = padlock_room(metrics);
+        kit::add_mark(
+            building.list,
+            {inner_left, row_y + (metrics.small_line - metrics.padlock_height) / 2},
+            kit::Mark::padlock,
+            kit::colour::lock
+        );
+        building.list.items.back().clip = clip;
+        for (const std::string& lock_line : lock_lines) {
+            add_text(
+                building,
+                kit::FontRole::small,
+                lock_line,
+                {inner_left + indent, row_y, inner_width - indent, metrics.small_line},
+                kit::Align::left,
+                kit::colour::lock,
+                clip
+            );
+            row_y += metrics.small_line;
+        }
+        add_label(
+            building.detail,
+            controls::active_lock,
+            kit::intersect({inner_left, lock_top, inner_width, row_y - lock_top}, clip),
+            unique_name(building, named("active.lock")),
+            content.lock,
+            clip,
+            -1
+        );
+        placed = true;
+    }
     const std::vector<std::string> hint_lines =
         expansion_hint_lines(building, content.hint, inner_width);
     if (!hint_lines.empty()) {
-        if (!wrap.rows.empty())
-            row_y += metrics.hint_gap - metrics.button_gap;
+        if (placed)
+            row_y += metrics.hint_gap;
         for (const std::string& hint_line : hint_lines) {
             add_text(
                 building,

@@ -8322,6 +8322,14 @@
 	it=Le modifiche si usano dal prossimo avvio di Open Annihilation.;
 	}
 
+[The command line chose this run's mod, which needs {names}.]
+	{
+	de=Die Befehlszeile hat den Mod dieses Laufs gewählt, der {names} braucht.;
+	fr=La ligne de commande a choisi le mod de cette exécution, qui a besoin de {names}.;
+	es=La línea de órdenes eligió el mod de esta ejecución, que necesita {names}.;
+	it=La riga di comando ha scelto il mod di questa esecuzione, che ha bisogno di {names}.;
+	}
+
 [The command line chose this run's mod.]
 	{
 	de=Die Befehlszeile hat den Mod dieses Laufs gewählt.;
