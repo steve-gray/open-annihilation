@@ -1654,6 +1654,15 @@ std::optional<kit::Key> setup_key(const SDL_Event& event) {
         return kit::Key::space;
     case SDLK_TAB:
         return (event.key.mod & SDL_KMOD_SHIFT) != 0 ? kit::Key::back_tab : kit::Key::tab;
+    // A list that does not fit scrolls under these.
+    case SDLK_PAGEUP:
+        return kit::Key::page_up;
+    case SDLK_PAGEDOWN:
+        return kit::Key::page_down;
+    case SDLK_HOME:
+        return kit::Key::home;
+    case SDLK_END:
+        return kit::Key::end;
     default:
         return std::nullopt;
     }

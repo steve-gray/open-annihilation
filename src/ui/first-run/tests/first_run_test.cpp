@@ -4,7 +4,8 @@
 // The first-run gate, and the coach marks at Compact, Regular and Large; the
 // chosen language card alone marked as the carousel turns; the header's
 // mark and name left out in a window; the Locate step's title and button;
-// and the setup's scale on a window.
+// the setup's scale on a window; and the game and copying steps' lists,
+// which scroll when they do not fit and follow the row they show.
 
 #include "oa/ui/first_run/first_run.hpp"
 
@@ -1373,6 +1374,282 @@ void check_setup_scale() {
     }
 }
 
+/// The text item of some words.
+///
+/// @param scene the scene
+/// @param words the words
+/// @return the item; null when none shows them
+const oa::ui::kit::Item* text_item(const oa::ui::first_run::Scene& scene, std::string_view words) {
+    for (const oa::ui::kit::Item& item : scene.list.items) {
+        if (item.role == oa::ui::kit::Role::text && item.text == words)
+            return &item;
+    }
+    return nullptr;
+}
+
+/// Tells whether an item shows whole: it has no clip, or lies inside it.
+///
+/// @param item the item
+/// @return true when none of it is clipped away
+bool shows_whole(const oa::ui::kit::Item& item) {
+    if (item.clip.width <= 0 || item.clip.height <= 0)
+        return true;
+    return oa::ui::kit::wholly_in(item.rect, item.clip);
+}
+
+/// The copying step of seven bundles, one of them copying.
+///
+/// @param copying the bundle being copied
+/// @return the session
+Session seven_bundle_copy(int32_t copying) {
+    Session session;
+    session.model.walk = Walk::setup;
+    session.model.leave = Leave::quit;
+    session.model.step = Step::copying;
+    session.model.copy.from = "setup_total_annihilation.exe";
+    session.model.copy.overall = "12 of 47 · 25%";
+    session.model.copy.done = 250;
+    session.model.copy.whole = 1000;
+    session.model.copy.running = true;
+    const char* names[] = {
+        "Total Annihilation 3.1c",
+        "Campaign",
+        "Core Contingency",
+        "Battle Tactics",
+        "Music",
+        "Cavedog units",
+        "Cavedog tilesets",
+    };
+    for (int32_t index = 0; index < 7; ++index) {
+        oa::ui::first_run::CopyBundle row;
+        row.name = names[index];
+        row.whole = 1000;
+        if (index < copying) {
+            row.phase = oa::ui::first_run::CopyPhase::done;
+            row.done = 1000;
+            row.amount = "All files match";
+        } else if (index == copying) {
+            row.phase = oa::ui::first_run::CopyPhase::copying;
+            row.file = "totala2.hpi";
+            row.amount = "31%";
+            row.done = 310;
+        }
+        session.model.copy.bundles.push_back(std::move(row));
+    }
+    return session;
+}
+
+/// The copying step's list scrolls inside its panel, above the two lines
+/// under it, follows the bundle being copied, and stays where the player
+/// scrolls it until the step opens again.
+void check_copy_list_scrolls() {
+    namespace kit = oa::ui::kit;
+    namespace first_run = oa::ui::first_run;
+    const kit::Frame frame = first_run::setup_frame(640, 480, 100, true);
+    Session session = seven_bundle_copy(0);
+    first_run::Scene scene = first_run::lay_out(session, frame, nullptr);
+    const kit::ScrollArea first = scene.list_scroll;
+    OA_CHECK(first.limit > 0);
+    OA_CHECK(first.offset == 0);
+    const kit::Item* note =
+        text_item(scene, "If OA stops, the copy carries on from here next time.");
+    const kit::Item* destination =
+        text_item(scene, "To Documents › Open Annihilation › Games and Expansions");
+    OA_CHECK(note != nullptr && destination != nullptr);
+    if (note == nullptr || destination == nullptr)
+        return;
+    // The panel ends above the note, and where the copies go is under it.
+    OA_CHECK(first.view.y + first.view.height <= note->rect.y);
+    OA_CHECK(destination->rect.y >= note->rect.y + note->rect.height);
+    OA_CHECK(
+        destination->rect.y + destination->rect.height <=
+        frame.area.height - kit::compact_metrics.edge - kit::compact_metrics.footer_height
+    );
+    for (const kit::Item& item : scene.list.items) {
+        if (item.role == kit::Role::text && item.text == "Cavedog tilesets")
+            OA_CHECK(oa::ui::kit::wholly_in(item.clip, first.view));
+    }
+    const kit::Item* started = text_item(scene, "Total Annihilation 3.1c");
+    OA_CHECK(started != nullptr && shows_whole(*started));
+    const kit::Item* last = text_item(scene, "Cavedog tilesets");
+    OA_CHECK(last != nullptr && !shows_whole(*last));
+
+    // It follows the bundle being copied.
+    session = seven_bundle_copy(5);
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(scene.list_scroll.offset > 0);
+    const kit::Item* units = text_item(scene, "Cavedog units");
+    OA_CHECK(units != nullptr && shows_whole(*units));
+    const kit::Item* file = text_item(scene, "totala2.hpi");
+    OA_CHECK(file != nullptr && shows_whole(*file));
+
+    // The wheel scrolls it, and it stays there as the copy moves on.
+    const int32_t followed = scene.list_scroll.offset;
+    std::ignore = first_run::wheel(session, scene, 1.F);
+    OA_CHECK(session.copy_list.held);
+    OA_CHECK(session.copy_list.offset == followed - first_run::list_step);
+    session.model.copy.bundles[5].phase = oa::ui::first_run::CopyPhase::done;
+    session.model.copy.bundles[6].phase = oa::ui::first_run::CopyPhase::copying;
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(scene.list_scroll.offset == followed - first_run::list_step);
+
+    // Home, End, Page Down, Up and Down.
+    std::ignore = first_run::key(session, scene, kit::Key::end);
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(scene.list_scroll.offset == scene.list_scroll.limit);
+    std::ignore = first_run::key(session, scene, kit::Key::home);
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(scene.list_scroll.offset == 0);
+    std::ignore = first_run::key(session, scene, kit::Key::page_down);
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(scene.list_scroll.offset == scene.list_scroll.page_step);
+    std::ignore = first_run::key(session, scene, kit::Key::up);
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(scene.list_scroll.offset == scene.list_scroll.page_step - first_run::list_step);
+    std::ignore = first_run::key(session, scene, kit::Key::down);
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(scene.list_scroll.offset == scene.list_scroll.page_step);
+
+    // Dragging the list moves it with the pointer.
+    const kit::Point inside{
+        scene.list_scroll.view.x + 40, scene.list_scroll.view.y + scene.list_scroll.view.height / 2
+    };
+    const int32_t before_drag = scene.list_scroll.offset;
+    std::ignore = first_run::pointer(session, scene, first_run::PointerKind::down, inside, 0, 1);
+    OA_CHECK(session.copy_list.dragging && !session.copy_list.by_bar);
+    std::ignore = first_run::pointer(
+        session, scene, first_run::PointerKind::move, {inside.x, inside.y - 20}, 0, 1
+    );
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(scene.list_scroll.offset == before_drag + 20);
+    std::ignore = first_run::pointer(
+        session, scene, first_run::PointerKind::up, {inside.x, inside.y - 20}, 0, 1
+    );
+    OA_CHECK(!session.copy_list.dragging);
+
+    // Dragging the thumb moves the list the other way, further.
+    const kit::Rect thumb = scene.list_scroll.thumb(kit::compact_metrics.least_thumb_height);
+    const kit::Point grip{thumb.x + thumb.width / 2, thumb.y + thumb.height / 2};
+    const int32_t before_thumb = scene.list_scroll.offset;
+    std::ignore = first_run::pointer(session, scene, first_run::PointerKind::down, grip, 0, 1);
+    OA_CHECK(session.copy_list.dragging && session.copy_list.by_bar);
+    std::ignore = first_run::pointer(
+        session, scene, first_run::PointerKind::move, {grip.x, grip.y + 10}, 0, 1
+    );
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(scene.list_scroll.offset > before_thumb + 10);
+    std::ignore =
+        first_run::pointer(session, scene, first_run::PointerKind::up, {grip.x, grip.y + 10}, 0, 1);
+    OA_CHECK(!session.copy_list.dragging);
+
+    // The step opening again follows the copy again.
+    first_run::reset_copy_continue(session);
+    OA_CHECK(!session.copy_list.held && session.copy_list.offset == 0);
+    scene = first_run::lay_out(session, frame, nullptr);
+    const kit::Item* tilesets = text_item(scene, "Cavedog tilesets");
+    OA_CHECK(tilesets != nullptr && shows_whole(*tilesets));
+
+    // After the check the list shows the first bundle that differs.
+    session.model.copy.running = false;
+    session.model.copy.checked = true;
+    session.model.copy.verdict = "1 file differs";
+    for (oa::ui::first_run::CopyBundle& row : session.model.copy.bundles) {
+        row.phase = oa::ui::first_run::CopyPhase::done;
+        row.amount = "All files match";
+    }
+    session.model.copy.bundles[2].phase = oa::ui::first_run::CopyPhase::differ;
+    session.model.copy.bundles[2].amount = "1 file differs";
+    scene = first_run::lay_out(session, frame, nullptr);
+    const kit::Item* differs = text_item(scene, "Core Contingency");
+    OA_CHECK(differs != nullptr && shows_whole(*differs));
+
+    // A list that fits does not scroll, and the wheel leaves it.
+    Session two = seven_bundle_copy(0);
+    two.model.copy.bundles.resize(2);
+    const first_run::Scene fits = first_run::lay_out(two, frame, nullptr);
+    OA_CHECK(fits.list_scroll.limit == 0);
+    OA_CHECK(fits.list_scroll.view.width == 0);
+    std::ignore = first_run::wheel(two, fits, 1.F);
+    OA_CHECK(!two.copy_list.held);
+    for (const kit::Item& item : fits.list.items)
+        OA_CHECK(item.clip.width == 0);
+}
+
+/// The game step's places scroll between the title and Locate another…, and
+/// follow the place chosen or focused.
+void check_source_list_scrolls() {
+    namespace kit = oa::ui::kit;
+    namespace first_run = oa::ui::first_run;
+    const kit::Frame frame = first_run::setup_frame(640, 480, 100, true);
+    Session session;
+    session.model.walk = Walk::setup;
+    session.model.leave = Leave::quit;
+    session.model.step = Step::game;
+    for (int32_t index = 0; index < 5; ++index) {
+        oa::ui::first_run::GameSource source;
+        source.title = "setup_total_annihilation_" + std::to_string(index) + ".exe";
+        source.detail = "~/Downloads";
+        source.mark = oa::ui::first_run::SourceMark::gog;
+        source.footnote = "1.0 GB";
+        source.chips = {{"Total Annihilation 3.1c", true}, {"Campaign", true}, {"Music", true}};
+        session.model.sources.push_back(std::move(source));
+    }
+    session.model.source = 4;
+    first_run::Scene scene = first_run::lay_out(session, frame, nullptr);
+    first_run::ensure_focus(session, scene.list);
+    scene = first_run::lay_out(session, frame, nullptr);
+    const kit::ScrollArea& area = scene.list_scroll;
+    OA_CHECK(area.limit > 0);
+    OA_CHECK(area.offset == area.limit);
+    const kit::Control* chosen = kit::control_of(scene.list, first_run::source_id + 4);
+    const kit::Control* top = kit::control_of(scene.list, first_run::source_id);
+    const kit::Control* locate = kit::control_of(scene.list, first_run::locate_id);
+    OA_CHECK(chosen != nullptr && top != nullptr && locate != nullptr);
+    if (chosen == nullptr || top == nullptr || locate == nullptr)
+        return;
+    OA_CHECK(kit::wholly_in(chosen->rect, chosen->clip));
+    OA_CHECK(!kit::wholly_in(top->rect, top->clip));
+    OA_CHECK(locate->rect.y >= area.view.y + area.view.height);
+    // A press where the first place lies out of view does not reach it.
+    const kit::Point hidden{top->rect.x + 40, top->rect.y + 2};
+    OA_CHECK(!kit::contains(top->clip, hidden));
+    OA_CHECK(kit::hit(scene.list, hidden) != first_run::source_id);
+
+    // Up four times chooses the first place, and the list follows it.
+    for (int32_t step = 0; step < 4; ++step) {
+        std::ignore = first_run::key(session, scene, kit::Key::up);
+        scene = first_run::lay_out(session, frame, nullptr);
+    }
+    OA_CHECK(session.model.source == 0);
+    OA_CHECK(scene.list_scroll.offset == 0);
+    const kit::Control* first_place = kit::control_of(scene.list, first_run::source_id);
+    OA_CHECK(first_place != nullptr && kit::wholly_in(first_place->rect, first_place->clip));
+
+    // End scrolls to the last place and holds; choosing a place follows again.
+    std::ignore = first_run::key(session, scene, kit::Key::end);
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(session.source_list.held);
+    OA_CHECK(scene.list_scroll.offset == scene.list_scroll.limit);
+    std::ignore = first_run::key(session, scene, kit::Key::down);
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(session.model.source == 1);
+    OA_CHECK(!session.source_list.held);
+    const kit::Control* second = kit::control_of(scene.list, first_run::source_id + 1);
+    OA_CHECK(second != nullptr && kit::wholly_in(second->rect, second->clip));
+    OA_CHECK(session.interaction.focused == first_run::source_id + 1);
+
+    // Following moves the list no more than it must: a place already in
+    // view leaves it where it is.
+    session.model.source = 4;
+    std::ignore = first_run::key(session, scene, kit::Key::end);
+    scene = first_run::lay_out(session, frame, nullptr);
+    const int32_t at_end = scene.list_scroll.offset;
+    OA_CHECK(at_end == scene.list_scroll.limit);
+    std::ignore = first_run::key(session, scene, kit::Key::up);
+    scene = first_run::lay_out(session, frame, nullptr);
+    OA_CHECK(session.model.source == 3);
+    OA_CHECK(scene.list_scroll.offset == at_end);
+}
 } // namespace
 
 int main() {
@@ -1394,5 +1671,7 @@ int main() {
     check_box_follows_choice();
     check_brand();
     check_setup_scale();
+    check_copy_list_scrolls();
+    check_source_list_scrolls();
     return oa::test::check_exit_status();
 }

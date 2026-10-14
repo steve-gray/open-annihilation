@@ -290,6 +290,29 @@ inline constexpr kit::Point setup_room = kit::regular_from;
 /// How long a finished, matching copy shows the countdown on Continue.
 inline constexpr int32_t copy_continue_wait_ms = 3000;
 
+/// How far a list of a step scrolls for a notch of the wheel and for Up or
+/// Down, in points.
+inline constexpr int32_t list_step = 2 * kit::compact_metrics.small_line;
+
+/// Where a step's list is scrolled, and the press that drags it.
+///
+/// A list that does not fit between what is above it and the lines under
+/// it scrolls in the room left. Until the player scrolls it, it shows the
+/// row it follows: the chosen place on the game step, the bundle being
+/// copied on the copying step.
+struct ListScroll {
+    /// How far the list is moved up, in points: where the player left it,
+    /// and where following starts from.
+    int32_t offset{};
+    /// The player scrolled the list, so it stays where they left it.
+    bool held{};
+    kit::WheelCarry wheel{}; ///< the part of a turn of the wheel not yet scrolled
+    bool dragging{};         ///< a press on the list or its scroll bar is held
+    bool by_bar{};           ///< the press is on the scroll bar, so the thumb follows it
+    int32_t press_y{};       ///< where the press went down, in points
+    int32_t press_offset{};  ///< how far the list was moved up then, in points
+};
+
 /// The setup's controls and motion between layouts.
 struct Session {
     Model model{};                  ///< what the steps show
@@ -306,6 +329,8 @@ struct Session {
     bool copy_continue_armed{false};
     /// The player did something, so the countdown stays off.
     bool copy_continue_stopped{false};
+    ListScroll source_list{}; ///< the game step's places
+    ListScroll copy_list{};   ///< the copying step's bundles
 };
 
 /// What the player asked the host to do.
@@ -350,6 +375,9 @@ struct Scene {
     std::string title_text{}; ///< the title's words
     /// the class the sample Library is laid out at
     kit::SizeClass sample_class{kit::SizeClass::compact};
+    /// The step's list while it scrolls: its view, its scroll bar, and how
+    /// far it is moved up. The view is empty when the whole list fits.
+    kit::ScrollArea list_scroll{};
 };
 
 /// The left footer button: Skip, or Quit when the host set Leave::quit.
@@ -417,7 +445,9 @@ void tick(Session& session, uint32_t dt_ms) noexcept;
 /// @return true when a countdown was running and is now stopped
 bool stop_copy_continue(Session& session) noexcept;
 
-/// Forgets the copying step's countdown, including one the player stopped.
+/// Forgets the copying step's countdown, including one the player stopped,
+/// and where the player scrolled its list, so the list follows the copy
+/// again. A host calls it each time the copying step opens.
 ///
 /// @param[in,out] session the session
 void reset_copy_continue(Session& session) noexcept;
@@ -437,7 +467,9 @@ enum class PointerKind : uint8_t {
     up,   ///< a press came up
 };
 
-/// Takes a pointer.
+/// Takes a pointer. On the game and copying steps a press on a list's scroll
+/// bar, or on the list where no control takes it, drags the list while it
+/// does not fit.
 ///
 /// @param[in,out] session the session
 /// @param scene the layout the press lands on
@@ -457,7 +489,9 @@ enum class PointerKind : uint8_t {
 
 /// Takes a key. Escape does nothing on the language step, goes back on the
 /// game step and the online step, and cancels a copy that is still running.
-/// On the buttons step Escape and Enter finish the walk.
+/// On the buttons step Escape and Enter finish the walk. While a list of the
+/// game or copying step does not fit, Page Up, Page Down, Home and End
+/// scroll it, and on the copying step Up and Down do too.
 ///
 /// @param[in,out] session the session
 /// @param scene the layout
@@ -465,9 +499,11 @@ enum class PointerKind : uint8_t {
 /// @return what the setup did
 [[nodiscard]] Outcome key(Session& session, const Scene& scene, kit::Key pressed);
 
-/// Takes a turn of the wheel on the language step. A turn away from the player
-/// moves to the previous card, and toward the player to the next. One card
-/// does not move. Any other step swallows the turn.
+/// Takes a turn of the wheel. On the language step a turn away from the
+/// player moves to the previous card, and toward the player to the next.
+/// One card does not move. On the game and copying steps a turn scrolls a
+/// list that does not fit, list_step a notch. Any other step swallows the
+/// turn.
 ///
 /// @param[in,out] session the session
 /// @param scene the layout

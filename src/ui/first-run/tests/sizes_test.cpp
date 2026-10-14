@@ -5,10 +5,12 @@
 // 1920 by 1117 at twice the density, laid out as the pre-game window lays it
 // out and drawn in the bundled fonts: the footer's buttons and the body text
 // at least the sizes stated below, and nothing overlapping in English,
-// German and Chinese. The header leaves out the mark and the name in a
-// window and keeps them full screen. The game step's title reads the new
-// words, and Locate another… holds its words with room on every side in
-// every language.
+// German and Chinese. Nothing is drawn under the header or past the
+// footer's top: a list that does not fit scrolls, clipped above the lines
+// under it, and the line that says where the copies go meets nothing else.
+// The header leaves out the mark and the name in a window and keeps them
+// full screen. The game step's title reads the new words, and Locate
+// another… holds its words with room on every side in every language.
 //
 // Usage: oa-ui-first-run-sizes-test INTERFACE_TDF CHINESE_TDF, the engine's
 // languages/interface.tdf and this folder's zh-Hans-setup.tdf.
@@ -171,6 +173,25 @@ bool meets(const kit::Rect& left, const kit::Rect& right) {
     return shared.width > 0 && shared.height > 0;
 }
 
+/// The part of a rectangle a clip leaves in view.
+///
+/// @param rect the rectangle
+/// @param clip the clip; empty for none
+/// @return the part in view; empty when none is
+kit::Rect in_view(const kit::Rect& rect, const kit::Rect& clip) {
+    if (clip.width <= 0 || clip.height <= 0)
+        return rect;
+    return kit::intersect(rect, clip);
+}
+
+/// Tells whether a rectangle has area.
+///
+/// @param rect the rectangle
+/// @return true when it is wider and taller than nothing
+bool has_area(const kit::Rect& rect) {
+    return rect.width > 0 && rect.height > 0;
+}
+
 /// One thing on a step that must not run into another.
 struct Box {
     kit::Rect rect{};
@@ -250,6 +271,110 @@ first_run::Session game_session() {
     thinner.chips = {{"Total Annihilation 3.1c", true}, {"Music", true}};
     session.model.sources = {fuller, thinner};
     session.model.source = 0;
+    return session;
+}
+
+/// The game step with more places than a small window holds, the last chosen.
+///
+/// @return the session
+first_run::Session crowded_game_session() {
+    first_run::Session session = game_session();
+    const first_run::GameSource fuller = session.model.sources.front();
+    session.model.sources.clear();
+
+    const struct {
+        const char* title;
+        first_run::SourceMark mark;
+        std::size_t held;
+    } places[] = {
+        {"setup_total_annihilation_commander_pack_3.1_(22139).exe", first_run::SourceMark::gog, 7},
+        {"Total Annihilation", first_run::SourceMark::folder, 6},
+        {"TA_Demo.exe", first_run::SourceMark::demo, 1},
+        {"totala.iso", first_run::SourceMark::disc, 4},
+        {"setup_total_annihilation_2.exe", first_run::SourceMark::gog, 5},
+    };
+
+    const char* bundles[] = {
+        "Total Annihilation 3.1c",
+        "Campaign",
+        "Core Contingency",
+        "Battle Tactics",
+        "Music",
+        "Cavedog units",
+        "Cavedog tilesets",
+    };
+    for (const auto& place : places) {
+        first_run::GameSource source = fuller;
+        source.title = place.title;
+        source.mark = place.mark;
+        source.footnote = "1.0 GB · 40 GB free";
+        source.chips.clear();
+        for (std::size_t at = 0; at < place.held; ++at)
+            source.chips.push_back({bundles[at], true});
+        session.model.sources.push_back(std::move(source));
+    }
+    session.model.source = static_cast<int32_t>(session.model.sources.size()) - 1;
+    return session;
+}
+
+/// How far a full copy has got.
+enum class CopyStage : uint8_t {
+    started,  ///< the first bundle copies
+    underway, ///< the sixth of seven copies
+    checked,  ///< every bundle is done and checked
+};
+
+/// The copying step of the fullest installer: seven bundles, more than a
+/// window holds.
+///
+/// @param stage how far the copy has got
+/// @return the session
+first_run::Session full_copy_session(CopyStage stage) {
+    first_run::Session session = game_session();
+    session.model.step = first_run::Step::copying;
+    first_run::CopyView& copy = session.model.copy;
+    copy.from = "setup_total_annihilation_commander_pack_3.1_(22139).exe";
+    copy.whole = 1000;
+    const char* names[] = {
+        "Total Annihilation 3.1c",
+        "Campaign",
+        "Core Contingency",
+        "Battle Tactics",
+        "Music",
+        "Cavedog units",
+        "Cavedog tilesets",
+    };
+    const int32_t copying = stage == CopyStage::started ? 0 : 5;
+    for (int32_t index = 0; index < 7; ++index) {
+        first_run::CopyBundle row;
+        row.name = names[index];
+        row.whole = 1000;
+        const bool done = stage == CopyStage::checked || index < copying;
+        if (done) {
+            row.phase = first_run::CopyPhase::done;
+            row.done = 1000;
+            row.note = index == 4;
+            row.amount = row.note ? "17 of 18 tracks" : "All files match";
+        } else if (index == copying) {
+            row.phase = first_run::CopyPhase::copying;
+            row.file = "totala2.hpi";
+            row.amount = "94.9 MB";
+            row.done = 130;
+        }
+        copy.bundles.push_back(std::move(row));
+    }
+    if (stage == CopyStage::checked) {
+        copy.overall = "47 of 47 · 100%";
+        copy.done = 1000;
+        copy.checked = true;
+        copy.verdict = "All files match";
+        session.copy_continue_ms = 3000;
+    } else {
+        copy.overall = stage == CopyStage::started ? "2 of 47 · 4%" : "39 of 47 · 83%";
+        copy.remaining = "about 30 seconds left";
+        copy.done = stage == CopyStage::started ? 40 : 830;
+        copy.running = true;
+    }
     return session;
 }
 
@@ -459,11 +584,15 @@ void check_step(
                 left = item.rect.x + (item.rect.width - words) / 2;
             else if (item.align == kit::Align::right)
                 left = item.rect.x + item.rect.width - words;
-            boxes.push_back(
-                {{left, item.rect.y, words, item.rect.height}, item.text, Box::Kind::text}
-            );
+            // A line of a list that scrolls counts where it shows.
+            const kit::Rect shown =
+                in_view({left, item.rect.y, words, item.rect.height}, item.clip);
+            if (has_area(shown))
+                boxes.push_back({shown, item.text, Box::Kind::text});
         } else if (item.role == kit::Role::pill) {
-            boxes.push_back({item.rect, item.text, Box::Kind::pill});
+            const kit::Rect shown = in_view(item.rect, item.clip);
+            if (has_area(shown))
+                boxes.push_back({shown, item.text, Box::Kind::pill});
         }
     }
     if (!scene.title_text.empty())
@@ -477,7 +606,9 @@ void check_step(
             control.name.find(".next-card") != std::string::npos
         )
             kind = Box::Kind::arrow;
-        boxes.push_back({control.rect, control.name, kind});
+        const kit::Rect shown = in_view(control.rect, control.clip);
+        if (has_area(shown))
+            boxes.push_back({shown, control.name, kind});
     }
     for (const Box& box : boxes) {
         const bool inside = kit::wholly_in(box.rect, room);
@@ -521,6 +652,63 @@ void check_step(
                 where.c_str(),
                 a.what.c_str(),
                 b.what.c_str()
+            );
+            OA_CHECK(false);
+        }
+    }
+
+    // Nothing the step draws reaches under the header or past the footer's
+    // top: a list that does not fit is clipped above the lines under it.
+    const std::string destination = std::string(
+        languages::interface_text(
+            session.model.step == first_run::Step::copying
+                ? "To Documents › Open Annihilation › Games and Expansions"
+                : "Copies go to Documents › Open Annihilation"
+        )
+    );
+    std::vector<kit::Rect> lines;
+    for (const kit::Item& item : scene.list.items) {
+        if (item.role == kit::Role::setup_chrome)
+            continue;
+        const kit::Rect shown = in_view(item.rect, item.clip);
+        if (!has_area(shown))
+            continue;
+        const bool inside = shown.y >= body.y && shown.y + shown.height <= body.y + body.height;
+        if (!inside)
+            std::fprintf(
+                stderr,
+                "%s: a part (\"%s\") is drawn from %d to %d, outside %d to %d\n",
+                where.c_str(),
+                item.text.c_str(),
+                shown.y,
+                shown.y + shown.height,
+                body.y,
+                body.y + body.height
+            );
+        OA_CHECK(inside);
+        if (item.role == kit::Role::text && item.text == destination)
+            lines.push_back(shown);
+    }
+    // The line that says where the copies go meets nothing else it draws.
+    const bool says_where = session.model.step == first_run::Step::copying ||
+                            session.model.step == first_run::Step::game;
+    if (says_where) {
+        if (lines.empty())
+            std::fprintf(stderr, "%s: no line says where the copies go\n", where.c_str());
+        OA_CHECK(!lines.empty());
+    }
+    for (const kit::Rect& line : lines) {
+        for (const kit::Item& item : scene.list.items) {
+            if (item.role == kit::Role::setup_chrome || item.text == destination)
+                continue;
+            const kit::Rect shown = in_view(item.rect, item.clip);
+            if (!has_area(shown) || !meets(line, shown))
+                continue;
+            std::fprintf(
+                stderr,
+                "%s: where the copies go meets a part (\"%s\")\n",
+                where.c_str(),
+                item.text.c_str()
             );
             OA_CHECK(false);
         }
@@ -735,10 +923,14 @@ int main(int argc, char** argv) {
                 first_run::Session steps[] = {
                     language_session(language.tag),
                     game_session(),
+                    crowded_game_session(),
                     copying_session(),
+                    full_copy_session(CopyStage::started),
+                    full_copy_session(CopyStage::underway),
+                    full_copy_session(CopyStage::checked),
                     language_session(language.tag),
                 };
-                steps[3].model.step = first_run::Step::online;
+                steps[7].model.step = first_run::Step::online;
                 for (first_run::Session& session : steps) {
                     session.model.windowed = windowed;
                     check_step(fonts.get(), window, session, language.tag);
