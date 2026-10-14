@@ -179,6 +179,7 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | `open-annihilation.anti-aliasing` | 1 (off), 2, 3, 4, 8 or 16 | 1 |
 | `open-annihilation.frame-stats` | 0 or 1 | 0 |
 | `open-annihilation.screen-size` | `desktop`, or a size `WIDTHxHEIGHT` from `640x480`, each side at most 8192, such as `2560x1440` | `desktop`; with the player's own file on a light machine, `800x600`, or `640x480` on a smaller desktop |
+| `open-annihilation.window-place` | `window WIDTHxHEIGHT at X,Y on DX,DY,DW,DH` for a window, or `full-screen on DX,DY,DW,DH` for full screen, with ` window WIDTHxHEIGHT at X,Y` after the display when a window was left too. Sizes are 1 to 16384 and coordinates -100000 to 100000. Any other text is ignored | the platform's first start: full screen on Windows, a window elsewhere. Restore defaults does not erase it |
 | `open-annihilation.hardware-acceleration` | `off`, `basic` or `full`; a whole number from an earlier version reads as `off` at 0 or below, else `full` | `full` with the player's own file, else `off` |
 | `open-annihilation.vertical-sync` | 0 or 1 | 0 |
 | `open-annihilation.menu-scaling` | `sharp`, `whole-steps` or `unfiltered` | `sharp` |

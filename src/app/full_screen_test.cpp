@@ -20,7 +20,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <map>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -977,6 +980,142 @@ void test_window() {
     SDL_Quit();
 }
 
+oa::app::DisplayArea display_area(int32_t x, int32_t y, int32_t width, int32_t height, bool main) {
+    oa::app::DisplayArea area;
+    area.x = x;
+    area.y = y;
+    area.width = width;
+    area.height = height;
+    area.usable_x = x;
+    area.usable_y = y;
+    area.usable_width = width;
+    area.usable_height = height;
+    area.main = main;
+    return area;
+}
+
+bool wholly_inside(const oa::app::RestoredPlace& place, const oa::app::DisplayArea& area) {
+    const int64_t right = static_cast<int64_t>(place.x) + place.width;
+    const int64_t bottom = static_cast<int64_t>(place.y) + place.height;
+    const int64_t area_right = static_cast<int64_t>(area.usable_x) + area.usable_width;
+    const int64_t area_bottom = static_cast<int64_t>(area.usable_y) + area.usable_height;
+    return place.sized && place.positioned && place.x >= area.usable_x &&
+           place.y >= area.usable_y && right <= area_right && bottom <= area_bottom;
+}
+
+void test_saved_window_place() {
+    using oa::app::PlaceOverride;
+    using oa::app::SavedWindow;
+    oa::app::SavedWindow windowed;
+    windowed.full_screen = false;
+    windowed.has_window = true;
+    windowed.window = {10, 20, 1280, 720};
+    windowed.display_x = 0;
+    windowed.display_y = 0;
+    windowed.display_width = 1920;
+    windowed.display_height = 1080;
+    CHECK(oa::app::decode_window_place(oa::app::encode_window_place(windowed)) == windowed);
+
+    oa::app::SavedWindow full;
+    full.full_screen = true;
+    full.display_x = 1920;
+    full.display_y = 0;
+    full.display_width = 1920;
+    full.display_height = 1080;
+    CHECK(oa::app::decode_window_place(oa::app::encode_window_place(full)) == full);
+    full.has_window = true;
+    full.window = {-100, 40, 800, 600};
+    CHECK(oa::app::decode_window_place(oa::app::encode_window_place(full)) == full);
+
+    CHECK(!oa::app::decode_window_place(""));
+    CHECK(!oa::app::decode_window_place("window 0x720 at 0,0 on 0,0,1280,800"));
+    CHECK(!oa::app::decode_window_place("window 1280x720 at 0,0 on 0,0,1280,800 extra"));
+    CHECK(!oa::app::decode_window_place("full-screen on 0,0,0,800"));
+    CHECK(!oa::app::decode_window_place("window 20000x720 at 0,0 on 0,0,1920,1080"));
+
+    const oa::app::DisplayArea main = display_area(0, 0, 1280, 800, true);
+    const oa::app::DisplayArea gone = display_area(1920, 0, 1920, 1080, false);
+    const std::vector<oa::app::DisplayArea> now{main};
+    oa::app::SavedWindow off = windowed;
+    off.display_x = gone.x;
+    off.display_y = gone.y;
+    off.display_width = gone.width;
+    off.display_height = gone.height;
+    off.window = {2000, 100, 900, 700};
+    const oa::app::RestoredPlace fitted =
+        oa::app::restore_window_place(&off, PlaceOverride::none, true, now);
+    CHECK(!fitted.full_screen);
+    CHECK(fitted.width == 900 && fitted.height == 700);
+    CHECK(wholly_inside(fitted, main));
+    CHECK(fitted.x == 380 && fitted.y == 100);
+
+    off.window = {2000, 100, 2000, 1500};
+    const oa::app::RestoredPlace shrunk =
+        oa::app::restore_window_place(&off, PlaceOverride::none, false, now);
+    CHECK(shrunk.width == 1280 && shrunk.height == 800);
+    CHECK(shrunk.x == 0 && shrunk.y == 0);
+    CHECK(wholly_inside(shrunk, main));
+
+    const oa::app::DisplayArea left = display_area(-1920, 0, 1920, 1080, false);
+    const std::vector<oa::app::DisplayArea> two{main, left};
+    oa::app::SavedWindow negative = windowed;
+    negative.display_x = left.x;
+    negative.display_y = left.y;
+    negative.display_width = left.width;
+    negative.display_height = left.height;
+    negative.window = {-1500, 100, 800, 600};
+    const oa::app::RestoredPlace stayed =
+        oa::app::restore_window_place(&negative, PlaceOverride::none, false, two);
+    CHECK(stayed.x == -1500 && stayed.y == 100);
+    CHECK(stayed.width == 800 && stayed.height == 600);
+    negative.window.x = -3000;
+    const oa::app::RestoredPlace moved =
+        oa::app::restore_window_place(&negative, PlaceOverride::none, false, two);
+    // Entirely left of the display. The least move that lands it wholly on
+    // the display puts its left edge on the display's left edge. The right
+    // edge of that display would be -800, which moves the window further.
+    CHECK(moved.x == -1920 && moved.y == 100);
+    CHECK(wholly_inside(moved, left));
+
+    std::map<std::string, std::string> values;
+    oa::app::put_window_place(values, full);
+    const auto remembered = values;
+    oa::app::SavedWindow observed = windowed;
+    CHECK(!oa::app::store_window_place_unless(values, observed, false));
+    CHECK(values == remembered);
+    const oa::app::RestoredPlace commanded =
+        oa::app::restore_window_place(&full, PlaceOverride::window, true, two);
+    CHECK(!commanded.full_screen);
+    CHECK(commanded.sized);
+    CHECK(commanded.width == 800 && commanded.height == 600);
+    const oa::app::DisplayArea wide = display_area(0, 0, 1920, 1080, false);
+    const std::vector<oa::app::DisplayArea> wide_and_main{wide, main};
+    const oa::app::RestoredPlace forced_full =
+        oa::app::restore_window_place(&windowed, PlaceOverride::full_screen, false, wide_and_main);
+    CHECK(forced_full.full_screen);
+    CHECK(!forced_full.sized);
+    CHECK(forced_full.positioned);
+    CHECK(forced_full.x == windowed.display_x && forced_full.y == windowed.display_y);
+
+    const oa::app::RestoredPlace first_full =
+        oa::app::restore_window_place(nullptr, PlaceOverride::none, true, two);
+    CHECK(first_full.full_screen && !first_full.sized && !first_full.positioned);
+    const oa::app::RestoredPlace first_window =
+        oa::app::restore_window_place(nullptr, PlaceOverride::none, false, two);
+    CHECK(!first_window.full_screen && !first_window.sized && !first_window.positioned);
+
+    const oa::app::DisplayArea side = display_area(1920, 0, 1920, 1080, false);
+    const std::vector<oa::app::DisplayArea> with_side{main, side};
+    const oa::app::RestoredPlace full_again =
+        oa::app::restore_window_place(&full, PlaceOverride::none, false, with_side);
+    CHECK(full_again.full_screen && !full_again.sized && full_again.positioned);
+    CHECK(full_again.x == full.display_x && full_again.y == full.display_y);
+    const std::vector<oa::app::DisplayArea> main_only{main};
+    const oa::app::RestoredPlace full_moved =
+        oa::app::restore_window_place(&full, PlaceOverride::none, false, main_only);
+    CHECK(full_moved.full_screen && full_moved.x == main.x && full_moved.y == main.y);
+}
+
 } // namespace
 
 int main() {
@@ -1000,6 +1139,7 @@ int main() {
     test_window_frame_cases();
     test_window_frame_through_a_game();
     test_window_frame_kept_size();
+    test_saved_window_place();
     if (failures != 0) {
         std::fprintf(stderr, "%d check(s) failed\n", failures);
         return 1;
@@ -1008,7 +1148,7 @@ int main() {
         "full screen: the window opens at native density only when asked, Alt+Enter switches, "
         "the mode asked for is kept, the pointer stays on the screen while the window has the "
         "focus, a window leaving full screen comes back onto its display, at a size asked "
-        "for, and the window's frame follows the game"
+        "for, a saved place round-trips, and the window's frame follows the game"
     );
     return 0;
 }

@@ -2043,8 +2043,17 @@ hosts them on the OA layer.
   goes; macOS keeps the frame's, so the contents are put back at the size
   and place they had (`set_window_frame`), and the screen size the
   settings show never changes with the frame. A maximised window is left
-  at the size the window system gives it. `app-full-screen` asks for the
-  frame in each case and through a game, its game menu and full screen.
+  at the size the window system gives it. The full screen or window the
+  player left is remembered (`open-annihilation.window-place`,
+  `runtime_window.cpp`) when it changes and when the game closes, and the
+  next start opens that way directly: the same display when it is still
+  connected, otherwise the main one, a window kept wholly on the screen.
+  `-d` and `--resolution` win for that run and are not remembered. A first
+  start is unchanged, and a build whose touch controls are on from the
+  start does not keep a desktop place. `app-full-screen` asks for the
+  frame in each case and through a game, its game menu and full screen,
+  and checks that a saved place round-trips, including a window whose
+  display has gone.
 - `runtime_hud.cpp`, `runtime_match_hud.cpp`: the HUD.
 - `runtime_messages.cpp`: the in-game message log (`Game.chat_lines`) drawn
   over the battlefield, and the speed and message part of `--check-navigation`.
@@ -2341,6 +2350,8 @@ hosts them on the OA layer.
   (`FullScreenSwitch::window_width`); Desktop gives full screen the
   desktop's mode back and leaves a window as it is. The size applied
   (`FullScreenSwitch::screen_width`) lasts the run, soft restarts included.
+  The next start opens in the full screen or window the player left
+  (`open-annihilation.window-place`), and full screen uses this Screen size.
   In full screen on the desktop's mode at a size of its own
   (`scaled_frame`, `Runtime::scaled_frame_size`), a match is laid out and
   drawn at that size, as in a window of it, and presented letterboxed, or

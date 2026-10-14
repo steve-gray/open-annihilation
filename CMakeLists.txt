@@ -1028,7 +1028,8 @@ if(BUILD_TESTING)
     set_tests_properties(app-extension-text PROPERTIES TIMEOUT 120)
   endif()
 endif()
-set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size.cpp
+set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/runtime_window.cpp
+  src/app/screen_size.cpp
   src/app/screen_mode.cpp src/app/runtime_screen_size.cpp
   src/app/game_directory_dialog.cpp src/app/runtime.cpp
   src/app/runtime_builtin_screens.cpp
@@ -2987,6 +2988,14 @@ endforeach()
           --scratch-root "${CMAKE_CURRENT_BINARY_DIR}/native-checks")
         set_tests_properties(native-menu-without-movies PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
           SKIP_RETURN_CODE ${OA_GAME_DATA_SKIP_CODE})
+        # A window opened at a size, closed, and opened again at that size.
+        # -d and --resolution win for that run and leave the saved place.
+        add_test(NAME native-window-place COMMAND ${Python3_EXECUTABLE}
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_native_window_place.py"
+          --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
+          --scratch-root "${CMAKE_CURRENT_BINARY_DIR}/native-checks")
+        set_tests_properties(native-window-place PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+          ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy")
         # A mod folder whose Solar Collector script is not a COB the game
         # reads: the skirmish loads every unit type, says once that the unit
         # plays without a script, and plays on.

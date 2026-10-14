@@ -322,7 +322,11 @@ struct HostDisplay {
     /// one, and is otherwise drawn at the size and scaled to the screen
     /// there (take_screen_size, FullScreenSwitch::screen_width); a set size
     /// the display does not offer opens as Desktop for this run
-    /// (shown_screen_size). A build
+    /// (shown_screen_size). A place remembered from the last run
+    /// (open-annihilation.window-place) opens directly: full screen on that
+    /// display, or the window at its size and place, fitted onto the main
+    /// display when the old one is gone. A first start is unchanged. -d and
+    /// --resolution win for this run and are not remembered. A build
     /// whose touch controls are on from the start sets their input hints
     /// before SDL starts (set_input_hints), and the
     /// platform's window_ready hook, when there is one, is told once the
@@ -403,27 +407,85 @@ struct HostDisplay {
                 renderer_host.records().records(), OA_ENGINE_VERSION
             ))
             density.record_driver = std::string(*driver);
-        window = SDL_CreateWindow(
+        const bool native_density = decide_window_density(density).native;
+        bool create_full = options.start_full_screen && !sized;
+        int width = options.window_resolution ? options.match_width
+                    : sized                   ? static_cast<int>(screen.width)
+                                              : static_cast<int>(fallback.width);
+        int height = options.window_resolution ? options.match_height
+                     : sized                   ? static_cast<int>(screen.height)
+                                               : static_cast<int>(fallback.height);
+        std::optional<int> place_x;
+        std::optional<int> place_y;
+        bool keep_saved_window = false;
+        if constexpr (!kTouchFirst) {
+            std::optional<SavedWindow> saved_place;
+            try {
+                saved_place = read_window_place_file(preference_file(options.preferences_file));
+            } catch (const std::exception& error) {
+                std::cerr << "open-annihilation: the window's place was not read: " << error.what()
+                          << '\n';
+            }
+            const PlaceOverride override_mode =
+                options.launch.display_option != 0 ? PlaceOverride::window : PlaceOverride::none;
+            RestoredPlace restored = restore_window_place(
+                saved_place ? &*saved_place : nullptr,
+                override_mode,
+                options.start_full_screen,
+                connected_displays()
+            );
+            // --resolution names this run's size and leaves the placing to the window system.
+            if (options.window_resolution) {
+                restored.sized = false;
+                restored.positioned = false;
+            }
+            create_full = restored.full_screen;
+            // A set screen size with nothing remembered still opens as a window,
+            // then takes the size, as it always has.
+            if (!saved_place && sized)
+                create_full = false;
+            if (restored.sized) {
+                width = static_cast<int>(restored.width);
+                height = static_cast<int>(restored.height);
+                keep_saved_window = true;
+            }
+            if (restored.positioned) {
+                place_x = restored.x;
+                place_y = restored.y;
+            }
+        }
+        window = create_game_window(
             "Open Annihilation",
-            options.window_resolution ? options.match_width
-            : sized                   ? screen.width
-                                      : fallback.width,
-            options.window_resolution ? options.match_height
-            : sized                   ? screen.height
-                                      : fallback.height,
-            game_window_flags(
-                options.start_full_screen && !sized, decide_window_density(density).native
-            )
+            width,
+            height,
+            game_window_flags(create_full, native_density),
+            place_x,
+            place_y
         );
         if (window == nullptr)
             throw std::runtime_error(std::string("SDL_CreateWindow: ") + SDL_GetError());
         // Full screen shows the size through a display mode of it, or draws
         // the match at it and scales it to the screen (run_full_screen_method);
-        // the runtime follows the size applied.
+        // the runtime follows the size applied. A remembered window keeps its
+        // own size; the screen size is what full screen uses later.
         if (sized) {
-            take_screen_size(window, screen, options.start_full_screen, run_full_screen_method());
             full_screen.screen_width = screen.width;
             full_screen.screen_height = screen.height;
+        }
+        if (sized && !keep_saved_window)
+            take_screen_size(window, screen, options.start_full_screen, run_full_screen_method());
+        if constexpr (!kTouchFirst) {
+            const bool command_line =
+                options.launch.display_option != 0 || options.window_resolution;
+            try {
+                bind_window_place(
+                    preference_file(options.preferences_file), !options.unattended && !command_line
+                );
+            } catch (const std::exception& error) {
+                std::cerr << "open-annihilation: the window's place was not kept: " << error.what()
+                          << '\n';
+            }
+            set_window_place_watcher(&remember_open_window);
         }
         report_window_size(window, desktop, steam_game_mode);
         set_window_icon(window);
@@ -455,6 +517,9 @@ struct HostDisplay {
     /// closes the window and SDL. It runs at every exit through main, the
     /// fatal error's among them, as the error unwinds.
     ~HostDisplay() {
+        if constexpr (!kTouchFirst)
+            remember_open_window(window);
+        set_window_place_watcher(nullptr);
         release_pointer(window);
         renderer_host.finish_records();
         renderer_host.destroy();
@@ -1404,6 +1469,14 @@ int run_once(
     // dialog, so that look leaves this thread and the window keeps drawing.
     if (!options.headless_check && !display.initialized)
         display.initialize(options);
+    if (options.check_window_place) {
+        if (!display.initialized)
+            display.initialize(options);
+        const bool command_line = options.launch.display_option != 0 || options.window_resolution;
+        return check_saved_window_place(
+            display.window, preference_file(options.preferences_file), command_line
+        );
+    }
     std::optional<GameDirectory> game_directory;
     // Language, the game and the copy are the first thing a new player sees.
     // While they will, the system's folder dialog, the in-engine locator and
@@ -1646,6 +1719,14 @@ int run_once(
         display.renderer_host.renderer(),
         &display.renderer_host
     );
+    if constexpr (!kTouchFirst)
+        runtime->attach_window_place();
+
+    // Destroyed before the runtime, so a remember after it writes the file itself.
+    struct DetachWindowPlace {
+        ~DetachWindowPlace() { detach_window_place_values(); }
+    } detach_window_place;
+
     runtime->take_video_capture(std::move(capture));
     runtime->take_full_screen_switch(display.full_screen);
     if (check_mod_switch)

@@ -121,6 +121,12 @@ game says so if it cannot open the folder.
 3. The first time, it asks for your Total Annihilation folder. Choose the
    folder from step 4. It remembers your choice.
 
+A later start opens as you left it. The first start is full screen.
+After that, full screen stays full screen, and a window comes back at the
+same size and place on the same display when it is still connected.
+Starting once with `-d` or `--resolution` uses that choice for the one
+run only.
+
 To choose a different folder later, start it with `--choose-game-dir`:
 
 1. Right-click `open-annihilation.exe` and choose **Create shortcut**.

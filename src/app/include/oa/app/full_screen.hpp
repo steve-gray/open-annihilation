@@ -14,6 +14,13 @@
 
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
+#include <map>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace oa::app {
 
@@ -465,6 +472,237 @@ bool set_window_frame(SDL_Window* window, bool shown);
 ///         Enter key's release, which nothing else may see
 bool take_full_screen_event(
     SDL_Window* window, FullScreenSwitch& full_screen, const SDL_Event& event
+);
+
+/// The preferences key that remembers full screen or the window's place.
+///
+/// One value holds the whole place. It is not one of the Settings keys, so
+/// restoring defaults leaves it, and a run that never writes it keeps the
+/// first start's window.
+inline constexpr std::string_view window_place_key = "open-annihilation.window-place";
+
+/// A command line that chooses full screen or a window for one run.
+enum class PlaceOverride : uint8_t {
+    none,       ///< the remembered place, or the platform's first start
+    window,     ///< a window for this run, which is not remembered
+    full_screen ///< full screen for this run, which is not remembered
+};
+
+/// A window's contents, in the desktop's coordinates.
+struct WindowGeometry {
+    int32_t x{};      ///< the left of the contents
+    int32_t y{};      ///< the top of the contents
+    int32_t width{};  ///< the contents' width, at least 1
+    int32_t height{}; ///< the contents' height, at least 1
+
+    /// Tells whether two places name the same contents.
+    ///
+    /// @param other the place to compare
+    /// @return true when the origin and the size agree
+    [[nodiscard]] bool operator==(const WindowGeometry& other) const = default;
+};
+
+/// The full screen or window the player left, and the display it was on.
+struct SavedWindow {
+    bool full_screen{};       ///< true when the player left the game full screen
+    bool has_window{};        ///< a window's size and place are recorded too
+    WindowGeometry window{};  ///< that window; unused when has_window is false
+    int32_t display_x{};      ///< the display's left, in desktop coordinates
+    int32_t display_y{};      ///< the display's top
+    int32_t display_width{};  ///< the display's width
+    int32_t display_height{}; ///< the display's height
+
+    /// Tells whether two records name the same place.
+    ///
+    /// @param other the record to compare
+    /// @return true when the mode, the window and the display agree
+    [[nodiscard]] bool operator==(const SavedWindow& other) const = default;
+};
+
+/// One connected display, in desktop coordinates.
+struct DisplayArea {
+    int32_t x{};             ///< the display's left
+    int32_t y{};             ///< the display's top
+    int32_t width{};         ///< the display's width
+    int32_t height{};        ///< the display's height
+    int32_t usable_x{};      ///< the usable area's left, inside the menu bar and the dock
+    int32_t usable_y{};      ///< the usable area's top
+    int32_t usable_width{};  ///< the usable area's width
+    int32_t usable_height{}; ///< the usable area's height
+    bool main{};             ///< the system's main display
+};
+
+/// Where the next start opens.
+struct RestoredPlace {
+    bool full_screen{}; ///< open full screen
+    bool sized{};       ///< width and height name a window's size
+    bool positioned{};  ///< x and y name where the window opens
+    int32_t x{};        ///< the left, when positioned
+    int32_t y{};        ///< the top, when positioned
+    int32_t width{};    ///< the width, when sized
+    int32_t height{};   ///< the height, when sized
+};
+
+/// Writes a place as one preference value.
+///
+/// A window reads `window WIDTHxHEIGHT at X,Y on DX,DY,DW,DH`. Full screen
+/// reads `full-screen on DX,DY,DW,DH`, and when a window was left as well,
+/// ` window WIDTHxHEIGHT at X,Y` after the display.
+///
+/// @param place the place
+/// @return the value
+[[nodiscard]] std::string encode_window_place(const SavedWindow& place);
+
+/// Reads a place written by encode_window_place.
+///
+/// Sizes are from 1 to 16384 and coordinates from -100000 to 100000. Any
+/// other text, a trailing character included, is not a place.
+///
+/// @param text the preference value
+/// @return the place, or nothing when the text is not one
+[[nodiscard]] std::optional<SavedWindow> decode_window_place(std::string_view text);
+
+/// Reads the place stored under window_place_key.
+///
+/// @param values the preferences
+/// @return the place, or nothing when the key is absent or its text is not a place
+[[nodiscard]] std::optional<SavedWindow>
+window_place_in(const std::map<std::string, std::string>& values);
+
+/// Stores a place under window_place_key.
+///
+/// @param[in,out] values the preferences
+/// @param place the place
+void put_window_place(std::map<std::string, std::string>& values, const SavedWindow& place);
+
+/// Stores a place only when this run is allowed to remember it.
+///
+/// A command-line choice for one run passes write false, and the values
+/// are then left as they were, the remembered place included.
+///
+/// @param[in,out] values the preferences
+/// @param place the place just observed
+/// @param write true to store it
+/// @return true when it was stored
+bool store_window_place_unless(
+    std::map<std::string, std::string>& values, const SavedWindow& place, bool write
+);
+
+/// Decides how the next start opens.
+///
+/// A command-line choice wins for this start. Otherwise a remembered full
+/// screen opens full screen on the display it names when that display is
+/// still connected, and a remembered window opens at its size and place
+/// there. A display that is gone yields the main display, or the first one
+/// when none is the main. A window that fits is moved the least that puts
+/// it wholly inside the usable area; one larger than that area shrinks to
+/// it. With nothing remembered, the platform's first start is kept and the
+/// window is not given a place. With no display connected, a remembered
+/// window still names its size and is not given a place.
+///
+/// @param saved the remembered place; null when there is none
+/// @param command_line a choice for this run alone
+/// @param platform_full_screen the platform's first start (full screen on
+///        Windows for a player, a window otherwise)
+/// @param displays the displays connected now
+/// @return how to open
+[[nodiscard]] RestoredPlace restore_window_place(
+    const SavedWindow* saved,
+    PlaceOverride command_line,
+    bool platform_full_screen,
+    std::span<const DisplayArea> displays
+);
+
+/// A function told when the window's place may have changed.
+using WindowPlaceWatcher = void (*)(SDL_Window* window);
+
+/// Sets the function told when the window's place may have changed.
+///
+/// Null stops the telling. The tests that do not remember a place leave it null.
+///
+/// @param watcher the function, or null
+void set_window_place_watcher(WindowPlaceWatcher watcher);
+
+/// Opens the game's window, at a place when one is given.
+///
+/// The flags are the ones game_window_flags returns. A place is set only
+/// when both x and y are given, so a window with no remembered place is
+/// left for the window system to place.
+///
+/// @param title the window's title
+/// @param width the contents' width
+/// @param height the contents' height
+/// @param flags the window's flags
+/// @param x the left, when the window has a place
+/// @param y the top, when the window has a place
+/// @return the window, or null when it could not be opened, with SDL_GetError saying why
+[[nodiscard]] SDL_Window* create_game_window(
+    const char* title,
+    int width,
+    int height,
+    SDL_WindowFlags flags,
+    std::optional<int> x,
+    std::optional<int> y
+);
+
+/// Returns the displays connected now.
+///
+/// @return each display's bounds and usable area; empty when none is connected
+[[nodiscard]] std::vector<DisplayArea> connected_displays();
+
+/// Reads the remembered place from a preferences file.
+///
+/// A missing file and a file without the key are nothing. A file that
+/// cannot be read throws std::runtime_error.
+///
+/// @param file the preferences file
+/// @return the place, or nothing when it is not there or its text is not a place
+[[nodiscard]] std::optional<SavedWindow> read_window_place_file(const std::filesystem::path& file);
+
+/// Remembers where the game's window will be found next time.
+///
+/// Does nothing when this run was asked not to remember, when the window
+/// is minimised or hidden, or when the place is the one already stored.
+/// Full screen keeps the window's last size and place rather than the
+/// screen's pixel size. A failure is written to standard error.
+///
+/// @param window the game's window; null does nothing
+void remember_open_window(SDL_Window* window);
+
+/// Writes the window's current place even when this run was asked not to remember.
+///
+/// The check that starts twice uses this for the line it saves on the first start.
+///
+/// @param window the game's window
+/// @return false when the place could not be read or saved
+[[nodiscard]] bool save_window_place(SDL_Window* window);
+
+/// Points later remembers at a preferences file.
+///
+/// The place already in the file is kept, so a later full screen does not
+/// forget the window it was left from. A file that cannot be read is
+/// reported on standard error and remembered as empty.
+///
+/// @param file the preferences file
+/// @param enabled true when this run may remember a change
+void bind_window_place(const std::filesystem::path& file, bool enabled);
+
+/// Forgets the runtime's preferences, so a later change writes the file itself.
+void detach_window_place_values();
+
+/// Runs the window-place check and returns the process status.
+///
+/// A command-line choice prints that it was kept and writes nothing. With
+/// nothing remembered, the window is put at a size that fits the main
+/// display and that place is saved. With a place remembered, the window
+/// must already be that size and wholly on a connected display.
+///
+/// @param window the game's window
+/// @param preferences the preferences file
+/// @param command_line_wins true when -d or --resolution named this run
+/// @return 0 when the check passed
+[[nodiscard]] int check_saved_window_place(
+    SDL_Window* window, const std::filesystem::path& preferences, bool command_line_wins
 );
 
 } // namespace oa::app
