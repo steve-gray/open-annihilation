@@ -43,6 +43,9 @@ is 1 of 5. That footer's left button is **Quit** on a first start and
 and online features. The header shows Open Annihilation's app icon. The
 footer buttons are the dialog buttons Settings uses, with the primary
 button on the right, and the header and footer sit inside the window.
+The setup window is the window's size in points, drawn at the display's
+pixel density. A footer button is at least as wide as its caption, so
+**Copy the game** stays inside the window.
 
 The title is "Welcome to Open Annihilation" and the line under it is
 "Choose your language."

@@ -62,6 +62,10 @@ see [Playing the demo](../../README.md#playing-the-demo).
 2. The first time, it asks for your Total Annihilation folder. Choose the
    folder from step 3. It remembers your choice.
 
+On a Retina display the setup, Settings and the menus are laid out from
+the window's size in points and drawn at the display's pixel density. The
+same window is the same arrangement, with sharper edges.
+
 To choose a different folder later, start it once from Terminal with
 `--choose-game-dir`:
 

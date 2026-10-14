@@ -217,9 +217,11 @@ No window of a check opens at the display's own pixel density but
 `native-render-tiers-density`'s, which `--native-density` opens so, and
 `native-render-tiers-density-setting`'s, which the Native pixel density
 setting in its preferences file opens so: on the dummy video driver its
-density is 1, and the check holds the match laid out
-in window points, read back at the display's size, at zoom 1 equal to the
-processor's composition, and picking the unit drawn under the pointer. On a
+density is 1, unless `OA_PIXEL_DENSITY` names a whole density from 2 to 8,
+which grows that window to that many pixels per point. The check holds the
+match laid out in window points, read back at the display's size, at zoom 1
+equal to the processor's composition, and picking the unit drawn under the
+pointer. On a
 display above density 1, such as a laptop's built-in display, run the same
 check by hand, without `SDL_VIDEO_DRIVER`, to hold the read-back at zoom 1
 to the composition enlarged by nearest replication:
