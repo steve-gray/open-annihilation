@@ -296,8 +296,13 @@ is read, and where this game differs from 3.1c on purpose.
 
 The words that do not begin `--` are read as 3.1c reads its command line:
 
-- They are split at spaces and tabs. Quotes do not hold a word together, so
-  a file name with a space in it is two words.
+- Each argument the system passes is one word, spaces and all. The shell,
+  or Windows' own rules for a command line, has already split the line and
+  honoured its quotes, so `-c "/Users/me/Launch Files/host.oalaunch"` names
+  one file, and so does `-c"C:\Launch Files\host.ini"`. This differs from
+  3.1c, which split its whole line again at spaces and tabs, quotes and
+  all, so a quoted name with a space in it was two words there and no
+  launcher written for 3.1c relied on it.
 - A switch is `-` or `/` and its letter, in either case: `-c`, `-C` and `/c`
   are one switch.
 - A switch that takes a value reads the text right after its letter, or,
@@ -314,7 +319,8 @@ The words that do not begin `--` are read as 3.1c reads its command line:
   is neither kind, a map that is not installed, or a base game, expansion or
   mod this player does not have. An `.oalaunch` file's values are checked
   as [Launch files](multiplayer/launch-file.md) says. A line of game
-  switches of 4096 characters or more is refused too.
+  switches of 4096 characters or more, counting one space between each
+  word and the next, is refused too.
 
 The options that begin `--` are this game's own. They are taken out first,
 wherever they stand, and they win over a launch file and over the switches,
@@ -446,5 +452,8 @@ the -c file in src/app/netgame/launch_file.cpp, word for word. -->
   launch. 3.1c shows it only when a lobby program started the game.
 - **The window.** Without `-d` or `-df`, a player's run opens full screen on
   Windows and in a window on macOS and Linux. 3.1c always starts full screen.
+- **A name with a space in it is one word.** Each argument is one word
+  here, so a launch file in a folder whose name has a space works with
+  `-c`; 3.1c splits its line at every space, quotes and all.
 - **Long lines.** A line of game switches of 4096 characters or more is
   refused; 3.1c reads any length.

@@ -4,8 +4,9 @@
 // A launch fills one plan from Open Annihilation's .oalaunch file, from TA
 // Forever's INI, from the options that name each launch setting, or from a
 // launch piped in on standard input. -c and --launch read either file by
-// what it holds, an option beside the file replaces its field, and every
-// refusal names the field or the option. The INI is read as 3.1c reads it:
+// what it holds, from a path with spaces in it too, an option beside the
+// file replaces its field, and every refusal names the field or the option.
+// The INI is read as 3.1c reads it:
 // every key of its table, a Windows settings file's rules, hosting and joining
 // from connect, creator and address, -h, -n and -b around -c, and the lines
 // the start keeps for the log.
@@ -23,6 +24,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -899,6 +901,64 @@ void check_c_file(const Scratch& scratch) {
     );
 }
 
+/// -c reads a file of either kind whose path has a space in it, as -c, -C,
+/// /c or /C, with the file apart or attached, and a word after it is the
+/// language.
+///
+/// @param scratch the directory the files are written in
+void check_spaced_paths(const Scratch& scratch) {
+    const fs::path folder = scratch.dir / "G113 Launch Files";
+    fs::create_directories(folder);
+    const auto write = [&folder](const char* name, std::string_view text) {
+        const fs::path file = folder / name;
+        std::ofstream output(file, std::ios::binary);
+        output.write(text.data(), static_cast<std::streamsize>(text.size()));
+        expect(static_cast<bool>(output), "the spaced scratch file is written");
+        return oa::app::path_to_utf8(file);
+    };
+    const std::string launch = write("host game.oalaunch", kLaunch);
+    const std::string ini = write("TA Forever.ini", kIni);
+    const auto read = [](const std::vector<const char*>& arguments) -> std::optional<Parsed> {
+        try {
+            return parse(arguments);
+        } catch (const std::runtime_error& error) {
+            std::fprintf(stderr, "refused: %s\n", error.what());
+            return std::nullopt;
+        }
+    };
+    const auto read_launch = [&read](const std::vector<const char*>& arguments) {
+        const auto taken = read(arguments);
+        return taken && taken->net.launch_planned && taken->launch.block.computer_count == 2 &&
+               same_text(taken->launch.block.provider_label, "Ladder") &&
+               taken->app.launch.language[0] == '\0';
+    };
+    const auto read_ini = [&read](const std::vector<const char*>& arguments) {
+        const auto taken = read(arguments);
+        return taken && taken->net.launch_planned && taken->launch.block.watching == 2 &&
+               same_text(taken->launch.block.provider_label, "TAForever") &&
+               taken->app.launch.language[0] == '\0';
+    };
+    for (const char* letter : {"-c", "-C", "/c", "/C"}) {
+        const std::string attached_launch = letter + launch;
+        const std::string attached_ini = letter + ini;
+        expect(
+            read_launch({letter, launch.c_str()}) && read_launch({attached_launch.c_str()}),
+            std::string(letter) + " reads an .oalaunch file whose path has a space in it"
+        );
+        expect(
+            read_ini({letter, ini.c_str()}) && read_ini({attached_ini.c_str()}),
+            std::string(letter) + " reads TA Forever's file whose path has a space in it"
+        );
+    }
+    const auto with_language = read({"-c", ini.c_str(), "german", "-b", "permlos"});
+    expect(
+        with_language && with_language->launch.block.watching == 2 &&
+            std::string_view(with_language->app.launch.language) == "german" &&
+            with_language->launch.block.los == 3,
+        "a word after the spaced file is the language, and -b after it still applies"
+    );
+}
+
 /// The engine's switches with no effect here are noted, and the notes go to the log once.
 void check_switch_notes() {
     (void)parse({"-f", "-l", "-w", "-memfussy", "-gonzo", "-y"});
@@ -1620,6 +1680,7 @@ int main() {
     check_ini_hosting(scratch);
     check_battle_words(scratch);
     check_c_file(scratch);
+    check_spaced_paths(scratch);
     check_switch_notes();
     check_launch();
     check_options_match_the_file(
