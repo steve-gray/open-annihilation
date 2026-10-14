@@ -151,7 +151,9 @@ desktop entries and the MIME package are removed. Neither waits for a restart. T
 on the types it opens. Open a `.oamod` file from the file manager to
 install the mod it holds
 ([mods](../mods/README.md#installing-a-oamod-file)). Opened while the game
-runs, the file goes to the running game.
+runs, the file goes to the running game. A `.oalaunch` file starts the
+network game it describes
+([opening a launch file](../command-line.md#opening-a-launch-file)).
 
 For multiplayer, a firewall on the computer must let through UDP port
 47624, which other computers use to find a hosted game, TCP ports 2300 to

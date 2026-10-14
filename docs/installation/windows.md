@@ -158,7 +158,11 @@ put on the types it opens. Double-click a `.oamod` file to install the mod
 it holds ([mods](../mods/README.md#installing-a-oamod-file)).
 Opened while the game runs, the file goes to the running game. A file
 sync, such as OneDrive's of Documents, or a virus scanner can hold a new
-mod's files for a few seconds, and the install waits for them.
+mod's files for a few seconds, and the install waits for them. A
+`.oalaunch` file starts the network game it describes
+([opening a launch file](../command-line.md#opening-a-launch-file)). The
+installer registers launch files for everyone who uses the computer too,
+and that stays until the game is uninstalled, whatever the switch says.
 
 The first time you host or join a multiplayer game, Windows Defender
 Firewall may ask whether Open Annihilation may communicate on networks:

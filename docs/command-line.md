@@ -209,7 +209,7 @@ or full screen, and `-s` and `-w` turn the sound off
 | `--play-demo FILE.tad` | Plays back a recorded network game ([recordings](../README.md#demo-recorder)). |
 | `--demo-unit-table strict\|ignore` | `ignore` plays a recording back even when its units differ from the game's, for diagnosis only; `strict`, the default, refuses it. |
 | `--net-record FILE` | Records the next network game to `FILE`, replacing it, whatever the mod's profile says. |
-| `--replay-viewer` | Joins a game in which another player's replayer plays a recording, as a viewer of it. |
+| `--replay-viewer` | For joining a game in which another player's replayer plays a recording to those who join: the game presents itself as a viewer of that replay ([recordings](../README.md#demo-recorder)). |
 
 `--host`, `--join` and the names, the password and the DirectPlay options
 are launch settings too: [Launch settings](#launch-settings) gives each one's
@@ -468,8 +468,8 @@ needs one; a `-c` with no word after it starts no launch, as in 3.1c.
 Each setting of a launch file has an option of its own. An option beside a
 file replaces that field of the file, whichever is written first. The
 options work without a file too: `--host` or `--join ADDRESS` with any of
-them starts a launch of its own. Without either, a launch option is
-refused: `--metal needs --host or --join`.
+them starts a launch of its own. Without a launch file, `--host` or
+`--join`, a launch option is refused: `--metal needs --host or --join`.
 
 A value is checked as the file's value is. A launch the game cannot use
 ends the game as it starts, with status 2 and one line that names the file
