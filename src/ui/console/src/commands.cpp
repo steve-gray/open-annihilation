@@ -921,19 +921,24 @@ void mark_player_handed(uint8_t index, bool handed) noexcept {
 
 /// Hands a human to the computer, or hands them back ("AI [player]").
 ///
-/// A player who is already a computer, and was not handed there by +AI, is
-/// announced and left as they are. A computer seated beside them is not
-/// touched when another player is handed back. On the machine that simulates
-/// the player, the status and the info record change together. On a machine
-/// where the slot is mirrored, only the info record changes, so the other
-/// machine keeps the orders. The next computer-player tick builds a
-/// controller for a human handed to the computer.
+/// Only a player this machine runs can be handed over: each player runs +AI
+/// on their own machine for the players it drives, and a player another
+/// machine runs is refused with a notice. A player who is already a
+/// computer, and was not handed there by +AI, is announced and left as they
+/// are. A computer seated beside them is not touched when another player is
+/// handed back. The status and the info record change together. The next
+/// computer-player tick builds a controller for a human handed to the
+/// computer.
 ///
 /// @param line Command tokens; token 1 (default the local player) is the player.
 void toggle_computer_control(TokenLine* line) {
     const auto index = static_cast<uint8_t>(token_int(line, 1, game().local_player_index));
     if (!slot_active(index))
         return;
+    if (!machine_simulates(index)) {
+        console_post(&active(), "That player is run from another machine", kMessageNotice);
+        return;
+    }
     if (computer_player_slot(index) && !player_was_handed(index)) {
         console_post(&active(), "Already a computer player", kMessageNotice);
         return;
@@ -941,12 +946,6 @@ void toggle_computer_control(TokenLine* line) {
     Player& player = game().players[index];
     PlayerSetupInfo* info = world_player_info(active().world, &player);
     const bool to_computer = !computer_player_slot(index);
-    if (!machine_simulates(index)) {
-        if (info != nullptr)
-            info->state = to_computer ? OA_PLAYER_STATUS_COMPUTER : OA_PLAYER_STATUS_LOCAL;
-        mark_player_handed(index, to_computer);
-        return;
-    }
     player.status = to_computer ? OA_PLAYER_STATUS_COMPUTER : OA_PLAYER_STATUS_LOCAL;
     if (info != nullptr)
         info->state = player.status;
@@ -1666,64 +1665,6 @@ const char* line_for_sender(
     return spelled;
 }
 
-/// Maps a slot typed on the sender's machine onto this machine's slot.
-///
-/// Each battle room seats its own human at slot 0, so the sender's slot 0 is
-/// the sender. In a two-human game the other human sits in the slot where
-/// this machine sees the sender, and in slot 0 here. A computer seated in a
-/// later slot keeps that slot.
-///
-/// @param index Slot number in the typed command.
-/// @param sender Sender's slot on this machine.
-/// @return The slot of that same player here.
-uint8_t slot_from_sender(uint8_t index, uint8_t sender) noexcept {
-    if (sender >= OA_PLAYER_COUNT || index >= OA_PLAYER_COUNT)
-        return index;
-    if (index == 0)
-        return sender;
-    if (index == sender)
-        return 0;
-    return index;
-}
-
-/// Spells +AI for this machine's slot of the player the sender named.
-///
-/// A bare +AI names the sender. An explicit number is a slot on the sender's
-/// machine, not on this one. With no known sender the body is left as written.
-///
-/// @param body Command text, without a leading '+'.
-/// @param sender Player who typed the line; OA_PLAYER_COUNT or above leaves the body.
-/// @param spelled Buffer that receives "AI <slot>" when the player is rewritten.
-/// @param spelled_size Size of `spelled`.
-/// @return `spelled` when the player was written in, otherwise `body`.
-const char* ai_line_for_sender(
-    const char* body, uint8_t sender, char* spelled, std::size_t spelled_size
-) noexcept {
-    if (sender >= OA_PLAYER_COUNT)
-        return body;
-    if (body_names_only(body, "AI")) {
-        std::snprintf(spelled, spelled_size, "AI %u", static_cast<unsigned>(sender));
-        return spelled;
-    }
-    const char* rest = body;
-    while (*rest != '\0' && *rest != ' ')
-        ++rest;
-    while (*rest == ' ')
-        ++rest;
-    if (*rest < '0' || *rest > '9')
-        return body;
-    unsigned index = 0;
-    while (*rest >= '0' && *rest <= '9') {
-        index = index * 10u + static_cast<unsigned>(*rest - '0');
-        ++rest;
-        if (index >= OA_PLAYER_COUNT)
-            return body;
-    }
-    const auto mapped = slot_from_sender(static_cast<uint8_t>(index), sender);
-    std::snprintf(spelled, spelled_size, "AI %u", static_cast<unsigned>(mapped));
-    return spelled;
-}
-
 /// Returns the command body of a received chat line, without the speaker prefix.
 ///
 /// @param text "<Name> +command" or "+command".
@@ -1850,22 +1791,15 @@ void console_apply_remote_line(Console* console, const char* text, uint8_t sende
     const char* body = remote_command_body(text);
     if (console == nullptr || body == nullptr || body[0] == '\0')
         return;
-    // The sender already ran the line. Run here only what has to agree:
-    // +AI (the simulating machine changes status; every other machine mirrors
-    // it in the info record; a computer seated at the start is left alone),
-    // the shared resource and fire commands, and a
-    // unit name on the machine that simulates that player. The player number
-    // in +AI is a slot on the sender's machine, so it is read as that person
-    // here. A bare +NoMetal or +NoEnergy names the sender, not this machine's
-    // local player. +ATM, +Give and +Control stay on the machine that typed them.
+    // The sender already ran the line. Run here only what has to agree: the
+    // shared resource and fire commands, and a unit name on the machine that
+    // simulates that player. A bare +NoMetal or +NoEnergy names the sender,
+    // not this machine's local player. +AI, +ATM, +Give and +Control stay on
+    // the machine that typed them: each player hands over only the players
+    // their own machine runs.
     char spelled[32];
-    if (name_is(body, "AI")) {
-        if (console->cheats_enabled) {
-            const char* command = ai_line_for_sender(body, sender, spelled, sizeof spelled);
-            std::ignore = console_execute(console, command, command_class::cheat);
-        }
+    if (name_is(body, "AI"))
         return;
-    }
     if (name_is(body, "ShootAll") || name_is(body, "NoMetal") || name_is(body, "NoEnergy")) {
         const char* command = body;
         if (name_is(body, "NoMetal"))

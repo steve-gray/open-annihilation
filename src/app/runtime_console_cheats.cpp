@@ -409,16 +409,27 @@ void Runtime::check_console_network_takeover(
     const std::string ai_line = prefix + ai;
     const int ai_seen = count_line(peer, ai_line);
     if (allowed) {
+        // +AI hands over the player this machine runs, and nothing on the
+        // peer: each player runs it on their own machine. The line still
+        // reaches the peer as chat.
+        const auto peer_unchanged = [&] {
+            const auto& copy = peer.match_->state().game.players[peer_slot];
+            return copy.status == peer_status && peer_state_of() == peer_state;
+        };
         enter_console_check_line(ai.c_str());
         require(game.players[mine].status != mine_status, "+ai did not take the local player");
+        wait(
+            [&] { return count_line(peer, ai_line) >= ai_seen + 1; },
+            "+ai's line did not reach the peer"
+        );
+        require(peer_unchanged(), "+ai changed the peer's copy of the player");
         enter_console_check_line(ai.c_str());
         require(game.players[mine].status == mine_status, "+ai did not hand the local player back");
-        const auto arrived = [&] {
-            const auto& copy = peer.match_->state().game.players[peer_slot];
-            return count_line(peer, ai_line) >= ai_seen + 2 && copy.status == peer_status &&
-                   peer_state_of() == peer_state;
-        };
-        wait(arrived, "+ai did not reach the peer and hand the player back");
+        wait(
+            [&] { return count_line(peer, ai_line) >= ai_seen + 2; },
+            "+ai's second line did not reach the peer"
+        );
+        require(peer_unchanged(), "+ai changed the peer's copy of the player");
     } else {
         enter_console_check_line(ai.c_str());
         require(game.players[mine].status == mine_status, "+ai ran with cheats disallowed");

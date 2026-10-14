@@ -667,27 +667,23 @@ void test_logo_and_control() {
     CHECK(f.game().players[1].status == OA_PLAYER_STATUS_COMPUTER);
     CHECK(f.world->player_info[1].state == seated);
 
-    // A computer on another machine is announced and left. A human there is
-    // handed to the computer and back. This machine does not take the orders.
+    // A player another machine runs, human or computer, is refused here:
+    // that player's own machine runs +AI for them.
     oa::Player& remote = f.game().players[2];
     remote.in_use = 1;
     remote.status = OA_PLAYER_STATUS_MIRRORED;
     remote.index = 2;
     remote.info = oa::oa_ref_from_index(2);
-    f.world->player_info[2].state = OA_PLAYER_STATUS_COMPUTER;
-    g_rec.messages.clear();
-    f.run("AI 2");
-    CHECK(remote.status == OA_PLAYER_STATUS_MIRRORED);
-    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_COMPUTER);
-    CHECK(g_rec.messages.back() == "2:Already a computer player");
-
-    f.world->player_info[2].state = OA_PLAYER_STATUS_LOCAL;
-    f.run("AI 2");
-    CHECK(remote.status == OA_PLAYER_STATUS_MIRRORED);
-    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_COMPUTER);
-    f.run("AI 2");
-    CHECK(remote.status == OA_PLAYER_STATUS_MIRRORED);
-    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_LOCAL);
+    for (const uint8_t state : {OA_PLAYER_STATUS_COMPUTER, OA_PLAYER_STATUS_LOCAL}) {
+        f.world->player_info[2].state = state;
+        g_rec.messages.clear();
+        f.run("AI 2");
+        CHECK(remote.status == OA_PLAYER_STATUS_MIRRORED);
+        CHECK(f.world->player_info[2].state == state);
+        CHECK(!g_rec.messages.empty());
+        if (!g_rec.messages.empty())
+            CHECK(g_rec.messages.back() == "2:That player is run from another machine");
+    }
     CHECK(f.game().players[1].status == OA_PLAYER_STATUS_COMPUTER);
 }
 
@@ -1510,17 +1506,13 @@ void test_remote_command_lines() {
     console::console_apply_remote_line(&f.con, "<Alpha> +nometal 1 40");
     CHECK(f.game().players[1].metal == 40.0f);
 
-    // Player 0 is local, so this machine simulates it and +AI takes it.
-    // A bare +AI names the sender, even when this machine's local player is someone else.
-    f.game().local_player_index = 1;
+    // A received +AI is the sender's own: it hands over nothing here.
+    const auto local_status = f.game().players[0].status;
+    const auto local_state = f.world->player_info[0].state;
     console::console_apply_remote_line(&f.con, "<Alpha> +ai", 0);
-    CHECK(f.game().players[0].status == OA_PLAYER_STATUS_COMPUTER);
-    CHECK(f.world->player_info[0].state == OA_PLAYER_STATUS_COMPUTER);
-    CHECK(f.game().players[1].status == OA_PLAYER_STATUS_COMPUTER);
-    console::console_apply_remote_line(&f.con, "<Alpha> +ai", 0);
-    CHECK(f.game().players[0].status == OA_PLAYER_STATUS_LOCAL);
-    CHECK(f.game().players[1].status == OA_PLAYER_STATUS_COMPUTER);
-    f.game().local_player_index = 0;
+    console::console_apply_remote_line(&f.con, "<Alpha> +ai 0", 1);
+    CHECK(f.game().players[0].status == local_status);
+    CHECK(f.world->player_info[0].state == local_state);
 
     console::game_store(
         f.game(), console::game_offset::cursor_position, oa::FixedVec3{80 << 16, 0, 90 << 16}
@@ -1535,20 +1527,10 @@ void test_remote_command_lines() {
     remote.index = 2;
     remote.info = oa::oa_ref_from_index(2);
     f.world->player_info[2].state = OA_PLAYER_STATUS_LOCAL;
-    console::console_apply_remote_line(&f.con, "<Alpha> +ai 2");
-    CHECK(remote.status == OA_PLAYER_STATUS_MIRRORED);
-    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_COMPUTER);
+    // Nor does a received +AI that names another machine's player.
     console::console_apply_remote_line(&f.con, "<Alpha> +ai 2");
     CHECK(remote.status == OA_PLAYER_STATUS_MIRRORED);
     CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_LOCAL);
-    // A computer already recorded there, and not handed over by +AI, stays.
-    f.world->player_info[2].state = OA_PLAYER_STATUS_COMPUTER;
-    g_rec.messages.clear();
-    console::console_apply_remote_line(&f.con, "<Alpha> +ai 2");
-    CHECK(remote.status == OA_PLAYER_STATUS_MIRRORED);
-    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_COMPUTER);
-    CHECK(g_rec.messages.back() == "2:Already a computer player");
-    CHECK(f.game().players[1].status == OA_PLAYER_STATUS_COMPUTER);
     console::console_apply_remote_line(&f.con, "<Alpha> +ARMCOM 2");
     CHECK(g_rec.calls.empty());
 
@@ -1571,20 +1553,20 @@ void test_remote_command_lines() {
     CHECK(f.game().players[1].metal == 4.0f);
 }
 
-// Each machine seats its own human at slot 0, so "+ai 0" from the other
-// machine names the sender, not this machine's slot 0. A computer in a later
-// slot is the same slot and is left alone, including when the human is handed back.
-void test_remote_ai_follows_the_sender() {
+// +AI hands over only the players this machine runs: its own human, handed
+// to the computer and back, and never a player another machine runs, which
+// is refused with a notice. A computer seated beside them is left alone.
+void test_ai_is_this_machines_only() {
     Fixture f;
     f.con.cheats_enabled = true;
     oa::Game& g = f.game();
     g.players[0].status = OA_PLAYER_STATUS_LOCAL;
     f.world->player_info[0].state = OA_PLAYER_STATUS_LOCAL;
-    oa::Player& sender = g.players[1];
-    sender.in_use = 1;
-    sender.status = OA_PLAYER_STATUS_MIRRORED;
-    sender.index = 1;
-    sender.info = oa::oa_ref_from_index(1);
+    oa::Player& other = g.players[1];
+    other.in_use = 1;
+    other.status = OA_PLAYER_STATUS_MIRRORED;
+    other.index = 1;
+    other.info = oa::oa_ref_from_index(1);
     f.world->player_info[1].state = OA_PLAYER_STATUS_LOCAL;
     oa::Player& computer = g.players[2];
     computer.in_use = 1;
@@ -1593,35 +1575,28 @@ void test_remote_ai_follows_the_sender() {
     computer.info = oa::oa_ref_from_index(2);
     f.world->player_info[2].state = OA_PLAYER_STATUS_COMPUTER;
 
-    console::console_apply_remote_line(&f.con, "<Alpha> +ai 0", 1);
+    f.run("AI");
+    CHECK(g.players[0].status == OA_PLAYER_STATUS_COMPUTER);
+    CHECK(f.world->player_info[0].state == OA_PLAYER_STATUS_COMPUTER);
+    f.run("AI");
     CHECK(g.players[0].status == OA_PLAYER_STATUS_LOCAL);
     CHECK(f.world->player_info[0].state == OA_PLAYER_STATUS_LOCAL);
-    CHECK(sender.status == OA_PLAYER_STATUS_MIRRORED);
-    CHECK(f.world->player_info[1].state == OA_PLAYER_STATUS_COMPUTER);
-    CHECK(computer.status == OA_PLAYER_STATUS_COMPUTER);
-    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_COMPUTER);
-    console::console_apply_remote_line(&f.con, "<Alpha> +ai 0", 1);
-    CHECK(g.players[0].status == OA_PLAYER_STATUS_LOCAL);
-    CHECK(sender.status == OA_PLAYER_STATUS_MIRRORED);
-    CHECK(f.world->player_info[1].state == OA_PLAYER_STATUS_LOCAL);
     CHECK(computer.status == OA_PLAYER_STATUS_COMPUTER);
 
     g_rec.messages.clear();
-    console::console_apply_remote_line(&f.con, "<Alpha> +ai 2", 1);
-    CHECK(g_rec.messages.back() == "2:Already a computer player");
-    CHECK(computer.status == OA_PLAYER_STATUS_COMPUTER);
-    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_COMPUTER);
-    CHECK(g.players[0].status == OA_PLAYER_STATUS_LOCAL);
-
-    console::console_apply_remote_line(&f.con, "<Alpha> +ai 1", 1);
-    CHECK(g.players[0].status == OA_PLAYER_STATUS_COMPUTER);
-    CHECK(sender.status == OA_PLAYER_STATUS_MIRRORED);
+    f.run("AI 1");
+    CHECK(other.status == OA_PLAYER_STATUS_MIRRORED);
     CHECK(f.world->player_info[1].state == OA_PLAYER_STATUS_LOCAL);
+    CHECK(!g_rec.messages.empty());
+    if (!g_rec.messages.empty())
+        CHECK(g_rec.messages.back() == "2:That player is run from another machine");
+
+    g_rec.messages.clear();
+    f.run("AI 2");
     CHECK(computer.status == OA_PLAYER_STATUS_COMPUTER);
-    console::console_apply_remote_line(&f.con, "<Alpha> +ai 1", 1);
-    CHECK(g.players[0].status == OA_PLAYER_STATUS_LOCAL);
-    CHECK(computer.status == OA_PLAYER_STATUS_COMPUTER);
-    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_COMPUTER);
+    CHECK(!g_rec.messages.empty());
+    if (!g_rec.messages.empty())
+        CHECK(g_rec.messages.back() == "2:Already a computer player");
 }
 
 // Tab opens the team menu outside multiplayer under the alliance-menu rule.
@@ -1675,7 +1650,7 @@ int main() {
     test_listed_command_gates();
     test_unit_name_spawn();
     test_remote_command_lines();
-    test_remote_ai_follows_the_sender();
+    test_ai_is_this_machines_only();
     test_team_menu_every_game();
     if (g_failures != 0) {
         std::fprintf(stderr, "%d check(s) failed\n", g_failures);
