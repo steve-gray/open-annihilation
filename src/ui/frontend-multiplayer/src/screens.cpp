@@ -456,6 +456,49 @@ data::campaign::CampaignFiles map_files() {
     return data::campaign::campaign_asset_files(*ui().ctx->assets);
 }
 
+/// The row the battle room starts on: a map it can read, else one that can
+/// be played, else the first row.
+///
+/// @return that row; 0 when the list is empty
+int32_t starting_map_index();
+
+/// Orders the battle room's maps by the name each row shows.
+///
+/// A list past the sorting limits stays in the order it was gathered.
+///
+/// @param[in,out] maps the maps
+void order_listed_maps(std::vector<MapInfo>& maps) {
+    std::vector<MapListFact> facts;
+    facts.reserve(maps.size());
+    for (const MapInfo& map : maps) {
+        MapListFact fact;
+        fact.key = map.name;
+        fact.title = map.title;
+        fact.file_title = map.file_title;
+        fact.pack_name = map.pack_name;
+        fact.pack = map.pack;
+        fact.blocked_reason = map.blocked_reason;
+        facts.push_back(fact);
+    }
+    std::vector<std::size_t> order;
+    try {
+        order = map_list_order(facts);
+    } catch (const std::exception&) {
+        return;
+    }
+    if (order.size() != maps.size())
+        return;
+    for (const std::size_t index : order) {
+        if (index >= maps.size())
+            return;
+    }
+    std::vector<MapInfo> sorted;
+    sorted.reserve(maps.size());
+    for (const std::size_t index : order)
+        sorted.push_back(std::move(maps[index]));
+    maps = std::move(sorted);
+}
+
 void load_maps() {
     auto& state = ui();
     if (state.maps_loaded)
@@ -570,20 +613,13 @@ void load_maps() {
                 );
         }
     }
-    std::sort(state.maps.begin(), state.maps.end(), [](const MapInfo& a, const MapInfo& b) {
-        return a.name < b.name;
-    });
-    // A sorted list can open on a grey pack map. Start on the first map that
-    // can be played; a list of only grey maps stays on the first row.
-    if (!state.maps.empty() && state.map < 0) {
-        state.map = 0;
-        for (std::size_t index = 0; index < state.maps.size(); ++index) {
-            if (state.maps[index].blocked_reason.empty()) {
-                state.map = static_cast<int32_t>(index);
-                break;
-            }
-        }
-    }
+    order_listed_maps(state.maps);
+    // The room starts on a map it can read, so Select Map can open. A pack
+    // map that sorts first and has no file yet is not that map. A grey map
+    // is not either. When none can be read, the first map that can be played
+    // stays selected, and a list of only grey maps stays on the first row.
+    if (!state.maps.empty() && state.map < 0)
+        state.map = starting_map_index();
 }
 
 const MapInfo* current_map() {
@@ -630,6 +666,27 @@ bool maps_selected(void*) {
     return context != nullptr && data::campaign::campaign_mission_file_size(context) != 0;
 }
 
+int32_t starting_map_index() {
+    auto& state = ui();
+    const bool can_read = state.ctx != nullptr && state.ctx->assets != nullptr;
+    int32_t playable = -1;
+    for (std::size_t index = 0; index < state.maps.size(); ++index) {
+        if (!state.maps[index].blocked_reason.empty())
+            continue;
+        if (playable < 0)
+            playable = static_cast<int32_t>(index);
+        if (!can_read)
+            return playable;
+        state.map = static_cast<int32_t>(index);
+        const auto* held = bound_map_context();
+        if (held != nullptr && data::campaign::campaign_mission_file_size(held) != 0)
+            return state.map;
+    }
+    if (playable >= 0)
+        return playable;
+    return 0;
+}
+
 const char* maps_name(void*) {
     const auto* map = current_map();
     return map != nullptr ? map->name.c_str() : "";
@@ -668,9 +725,7 @@ void list_new_pack_map(const char* name) {
         info.blocked_reason = pack.blocked_reason != nullptr ? pack.blocked_reason : "";
         info.pack = true;
         state.maps.push_back(std::move(info));
-        std::sort(state.maps.begin(), state.maps.end(), [](const MapInfo& a, const MapInfo& b) {
-            return a.name < b.name;
-        });
+        order_listed_maps(state.maps);
         for (std::size_t at = 0; at < state.maps.size() && !selected.empty(); ++at)
             if (state.maps[at].name == selected)
                 state.map = static_cast<int32_t>(at);
@@ -4232,6 +4287,47 @@ int32_t multiplayer_map_count() {
     if (count > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
         return std::numeric_limits<int32_t>::max();
     return static_cast<int32_t>(count);
+}
+
+void multiplayer_order_map_names(std::vector<std::string>& names) {
+    load_maps();
+    const auto& maps = ui().maps;
+    std::vector<MapListFact> facts;
+    facts.reserve(names.size());
+    for (const std::string& key : names) {
+        const auto found = std::find_if(maps.begin(), maps.end(), [&](const MapInfo& info) {
+            return info.name == key;
+        });
+        MapListFact fact;
+        fact.key = key;
+        if (found == maps.end() && oa::data::map_pack::split_pack_map_name(key))
+            fact.pack = true;
+        if (found != maps.end()) {
+            fact.title = found->title;
+            fact.file_title = found->file_title;
+            fact.pack_name = found->pack_name;
+            fact.pack = found->pack;
+            fact.blocked_reason = found->blocked_reason;
+        }
+        facts.push_back(fact);
+    }
+    std::vector<std::size_t> order;
+    try {
+        order = map_list_order(facts);
+    } catch (const std::exception&) {
+        return;
+    }
+    if (order.size() != names.size())
+        return;
+    for (const std::size_t index : order) {
+        if (index >= names.size())
+            return;
+    }
+    std::vector<std::string> sorted;
+    sorted.reserve(names.size());
+    for (const std::size_t index : order)
+        sorted.push_back(std::move(names[index]));
+    names = std::move(sorted);
 }
 
 std::vector<std::string> multiplayer_map_texts(std::span<const std::string> names) {

@@ -42,6 +42,7 @@
 #include <map>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -1672,6 +1673,93 @@ void check_map_list_words() {
     expect(mp::map_list_row(texts, keys, "Missing") == -1, "an unknown choice matches nothing");
 }
 
+/// The keys `map_list_order` puts first.
+std::vector<std::string> ordered_keys(const mp::MapListFact* rows, std::size_t count) {
+    const std::vector<std::size_t> order = mp::map_list_order({rows, count});
+    std::vector<std::string> keys;
+    keys.reserve(order.size());
+    for (const std::size_t index : order)
+        keys.emplace_back(rows[index].key);
+    return keys;
+}
+
+/// Base maps, a pack map and a downloadable map are one name order. A greyed
+/// map keeps its place. Case, punctuation and equal names follow the game's
+/// own map list.
+void check_map_list_order() {
+    const mp::MapListFact mixed[] = {
+        {"Yerrot Mountains", {}, {}, {}, false},
+        {"Wretched Ridges", {}, {}, {}, false},
+        {"abysmal_lake@downloads", "Abysmal Lake", {}, "Downloads", true},
+        {"ancient_issaquah@downloads", "Ancient Issaquah", {}, "Downloads", true, "doesn't fit"},
+    };
+    expect(
+        ordered_keys(mixed, 4) ==
+            std::vector<std::string>{
+                "abysmal_lake@downloads",
+                "ancient_issaquah@downloads",
+                "Wretched Ridges",
+                "Yerrot Mountains",
+            },
+        "base, pack and downloadable maps are one shown-name order"
+    );
+    const mp::MapListFact grey_first[] = {
+        {"grey@id", "B", {}, "Only", true, "doesn't fit"},
+        {"B ", {}, {}, {}, false},
+    };
+    expect(
+        ordered_keys(grey_first, 2) == std::vector<std::string>{"grey@id", "B "},
+        "a grey reason does not move the row"
+    );
+    const mp::MapListFact letters[] = {
+        {"z", {}, {}, {}, false},
+        {"Alpha", {}, {}, {}, false},
+        {"alpha", {}, {}, {}, false},
+        {"B", {}, {}, {}, false},
+    };
+    expect(
+        ordered_keys(letters, 4) == std::vector<std::string>{"Alpha", "alpha", "B", "z"},
+        "letters fold and equal folds keep their order"
+    );
+    const mp::MapListFact marks[] = {
+        {"Coast_To", {}, {}, {}, false},
+        {"Coast-To", {}, {}, {}, false},
+        {"Coast To Coast", {}, {}, {}, false},
+    };
+    expect(
+        ordered_keys(marks, 3) ==
+            std::vector<std::string>{"Coast To Coast", "Coast-To", "Coast_To"},
+        "punctuation keeps its byte"
+    );
+    const mp::MapListFact same[] = {
+        {"b@one", "Alpha", {}, "Same", true},
+        {"a@two", "Alpha", {}, "Same", true},
+    };
+    expect(
+        ordered_keys(same, 2) == std::vector<std::string>{"b@one", "a@two"},
+        "equal shown names keep the order they were gathered in"
+    );
+    const mp::MapListFact split[] = {
+        {"z", {}, {}, {}, false},
+        {"B", {}, {}, {}, false},
+        {"\\folder", {}, {}, {}, false},
+        {"d", {}, {}, {}, false},
+        {"A", {}, {}, {}, false},
+    };
+    expect(
+        ordered_keys(split, 5) == std::vector<std::string>{"\\folder", "B", "z", "A", "d"},
+        "a name that starts with a backslash splits the list as the game's own list does"
+    );
+    bool caught = false;
+    try {
+        std::vector<mp::MapListFact> too_many(3001, mp::MapListFact{"x", {}, {}, {}, false});
+        (void)mp::map_list_order(too_many);
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    expect(caught, "a list past the sorting limit is refused");
+}
+
 /// Clicks a map row, scrolling it onto the page first.
 void click_map_row(Driver& d, mp::Control& names, int32_t row, int32_t ox, int32_t oy) {
     const int32_t visible =
@@ -1851,24 +1939,25 @@ void check_pack_map_titles(Driver& d) {
     if (names == nullptr)
         return;
     const std::vector<std::string> want_keys{
-        "Coast To Coast", "Comet Catcher", "comet@sample-comet", "ponds@sample-ponds"
+        "ponds@sample-ponds", "Coast To Coast", "Comet Catcher", "comet@sample-comet"
     };
     const std::vector<std::string> want_text{
+        "A Plethora of Ponds",
         "Coast To Coast",
         "Comet Catcher",
         "Comet Catcher (Cavedog: Comet Catcher)",
-        "A Plethora of Ponds",
     };
     const std::vector<std::string> shown(names->items.begin(), names->items.end());
     const std::vector<std::string> keys(names->item_keys.begin(), names->item_keys.end());
     expect(
-        shown == want_text && keys == want_keys, "the rows show titles, and the names stay in order"
+        shown == want_text && keys == want_keys,
+        "the rows are one name order, and the names stay with their titles"
     );
-    const int32_t by_text = mp::map_list_row(names->items, names->item_keys, want_text[2]);
+    const int32_t by_text = mp::map_list_row(names->items, names->item_keys, want_text[3]);
     const int32_t by_key = mp::map_list_row(names->items, names->item_keys, "comet@sample-comet");
     const int32_t base = mp::map_list_row(names->items, names->item_keys, "Comet Catcher");
     expect(
-        by_text == by_key && by_text == 2 && base == 1 &&
+        by_text == by_key && by_text == 3 && base == 2 &&
             map_row_key(*names, static_cast<std::size_t>(by_key)) == "comet@sample-comet",
         "the pack map's words and its name choose it, and the base map's words choose the base map"
     );
@@ -1896,8 +1985,10 @@ void check_pack_map_page(Driver& d) {
         static void release(void*) {}
 
         // One real installed map, so the battle room has a map file selected.
-        // Select Map stays closed when the selected map has no file. It sorts
-        // ahead of the generated names, and the pack map stays past the page.
+        // Select Map stays closed when the selected map has no file. Its name
+        // sorts ahead of the generated names, and the pack map stays past the
+        // page. The generated names start with d, which sorts after Coast and
+        // before the pack map's own name.
         static int32_t base_count(void*) { return 37; }
 
         static bool base_at(void*, int32_t index, mp::LobbyPackMap* out) {
@@ -1911,7 +2002,7 @@ void check_pack_map_page(Driver& d) {
             static bool filled = false;
             if (!filled) {
                 for (int place = 0; place < 36; ++place) {
-                    names[place][0] = 'a';
+                    names[place][0] = 'd';
                     names[place][1] = static_cast<char>('0' + place / 10);
                     names[place][2] = static_cast<char>('0' + place % 10);
                     names[place][3] = '\0';
@@ -2782,6 +2873,7 @@ void check_player_row_focus(Driver& d) {
 
 int main() {
     check_map_list_words();
+    check_map_list_order();
     const std::filesystem::path data = oa::test::require_game_directory("the multiplayer screens");
     mp::multiplayer_reset();
     Driver d(data);
