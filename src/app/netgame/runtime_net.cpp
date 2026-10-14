@@ -1111,15 +1111,24 @@ struct NetworkPlay::NetHost {
             throw std::runtime_error(
                 "the multiplayer bootstrap did not leave an empty match world"
             );
-        // The host's START plays its computer players at hard
-        // difficulty, after the preferences are saved. A difficulty chosen
-        // in the battle room replaces that for the computer player it names;
-        // one never chosen stays hard. Skirmish notes none, so it keeps the
-        // game's difficulty.
+        // The host's START plays at hard difficulty, after the preferences
+        // are saved. Skirmish notes none, so it keeps the game's difficulty.
         if (state.hosting)
             runtime.match_->set_difficulty(OA_DIFFICULTY_HARD);
-        if (runtime.match_) {
-            auto* ais = oa::sim::ai::match_computer_players(*runtime.match_);
+
+        auto& world = runtime.match_->state();
+        if (!nm::match_launch_apply(lobby, &world))
+            throw std::runtime_error("the lobby has no local slot");
+        play.start_reporter(world, lobby.game);
+        if (state.hosting)
+            world.game.session_flags =
+                static_cast<uint8_t>(world.game.session_flags | nm::kNetFlagGameStarted);
+        nm::match_binding_init(&state.binding, runtime.match_.get(), state.net.get());
+        // A difficulty chosen in the battle room replaces hard for the
+        // computer player it names; one never chosen stays hard. The match
+        // is the one the binding holds, and the first tick has not run.
+        if (state.binding.match != nullptr) {
+            auto* ais = oa::sim::ai::match_computer_players(*state.binding.match);
             for (int32_t slot = 0; slot < mp::kSlotCount; ++slot) {
                 const auto& seated = mp::slot_player(lobby, slot);
                 if (seated.status != mp::kSlotComputer || seated.in_use == 0)
@@ -1134,15 +1143,6 @@ struct NetworkPlay::NetHost {
                 );
             }
         }
-
-        auto& world = runtime.match_->state();
-        if (!nm::match_launch_apply(lobby, &world))
-            throw std::runtime_error("the lobby has no local slot");
-        play.start_reporter(world, lobby.game);
-        if (state.hosting)
-            world.game.session_flags =
-                static_cast<uint8_t>(world.game.session_flags | nm::kNetFlagGameStarted);
-        nm::match_binding_init(&state.binding, runtime.match_.get(), state.net.get());
         nm::net_match_begin(
             state.net.get(),
             &state.connection,
@@ -1567,10 +1567,14 @@ struct NetworkPlay::NetHost {
     /// strike sets out against its enemy's commander (the joiner's; the
     /// host's when the joiner watches) and fights until its units have fired,
     /// killed, and lost two; whatever is left of that commander then
-    /// self-destructs, and its player watches. When the joiner played, the
-    /// host's side has won: its final economy settles, the computer
-    /// player's among it. The host then leaves, and the joiner retires it
-    /// and the computer player, keeping their final figures.
+    /// self-destructs, and its player watches. When the joiner played and
+    /// seated no computer of its own, the host's side has won. A computer
+    /// the joiner seated stays in the game, so that seating does not wait
+    /// for a winner. When the joiner played, the final economy settles
+    /// either way, the computer player's among it. The host then leaves,
+    /// and the joiner retires it and the computer player, keeping their
+    /// final figures. The joiner's own computer player stays. A recording
+    /// of that match plays back when the check kept one.
     ///
     /// Throughout, the joiner's copy of every finished unit the computer
     /// player moves stays within a pixel of where its owner had it at the
@@ -1965,23 +1969,31 @@ struct NetworkPlay::NetHost {
             "record errors or refused creates"
         );
 
-        // The host's side won against the joiner: its final economy, the
-        // computer player's among it, settles before it leaves. Until then
-        // the joiner holds no economy figures for the computer player, which
-        // sends no periodic 0x28 (only the viewpoint player does).
+        // The host's final economy, the computer player's among it, settles
+        // before it leaves. Until then the joiner holds no economy figures
+        // for the computer player, which sends no periodic 0x28 (only the
+        // viewpoint player does). One computer on the host's team wins once
+        // the joiner's human watches. A computer the joiner seated stays
+        // alive and taking part, and a multiplayer win needs every other
+        // side out or sharing allied victory, which this seating does not
+        // set, so that check does not wait for a winner it cannot get.
         if (!watching) {
-            // The host's victory comes at one of its 30-tick outcome checks
-            // after its enemy watches; play on until the outcome is decided.
-            for (uint32_t tick = 0; tick < kLoopbackVictoryTicks &&
-                                    host_match.outcome() == sim::scenario::Outcome::ongoing;
-                 ++tick)
-                play_tick();
-            require(
-                host_match.outcome() == sim::scenario::Outcome::victory,
-                "the host's side did not win"
-            );
-            std::cout << "net loopback check: the host's side won at tick " << host_world.game.tick
-                      << "\n";
+            if (joiner_computer == nm::no_player_id) {
+                // The host's victory comes at one of its 30-tick outcome checks
+                // after its enemy watches; play on until the outcome is decided.
+                for (uint32_t tick = 0; tick < kLoopbackVictoryTicks &&
+                                        host_match.outcome() == sim::scenario::Outcome::ongoing;
+                     ++tick)
+                    play_tick();
+                require(
+                    host_match.outcome() == sim::scenario::Outcome::victory,
+                    "the host's side did not win"
+                );
+                std::cout << "net loopback check: the host's side won at tick "
+                          << host_world.game.tick << "\n";
+            } else {
+                std::cout << "net loopback check: both computer players stay in play\n";
+            }
             require(
                 computer_copy.energy_produced_total == 0.0 &&
                     computer_copy.metal_produced_total == 0.0,
