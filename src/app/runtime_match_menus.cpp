@@ -1052,6 +1052,9 @@ void append_merged_records(
         gadget.common.active = static_cast<int8_t>(control.active);
         layout.gadgets.push_back(std::move(gadget));
     }
+    if (next < sub.gadgets.size())
+        std::cerr << "options panel: " << (sub.gadgets.size() - next)
+                  << " controls were not shown\n";
     layout.gadgets.front().common.width = panel.controls[0].width;
     if (auto* fields = std::get_if<oa::ui::gui_layout::PanelFields>(&layout.gadgets.front().fields))
         fields->loaded_total_gadgets = static_cast<int16_t>(layout.gadgets.size() - 1U);
@@ -2763,6 +2766,138 @@ std::optional<oa::ui::display_layout::Rect> Runtime::placed_panel_area() const {
     return oa::ui::display_layout::Rect{x, y, width, height};
 }
 
+void Runtime::open_match_options_page(ui::OptionsPanel which) {
+    auto& session = match_menu_session();
+    auto& context = session.options;
+    bind_options_context();
+    const auto file = oa::data::defs::gui_path(ui::options_panel_file(which, true));
+    oa::ui::gui_layout::Layout sub;
+    try {
+        auto parsed = oa::ui::gui_layout::parse(
+            assets_.read(file).bytes, oa::ui::gui_layout::game_translation_lookup()
+        );
+        if (!parsed.ok() || parsed.layout->gadgets.empty())
+            throw std::runtime_error(parsed.error ? parsed.error->message : file + " has no panel");
+        sub = std::move(*parsed.layout);
+    } catch (const std::exception& error) {
+        status_ = "options panel unavailable: " + std::string(error.what());
+        std::cerr << status_ << '\n';
+        return;
+    }
+    // The in-match visuals column has no screen-size control of its
+    // own. The three from VISUALS.GUI are the same control, listed
+    // and applied by the same path as the settings.
+    if (which == ui::OptionsPanel::visuals) {
+        try {
+            auto visuals = oa::ui::gui_layout::parse(
+                assets_.read(oa::data::defs::gui_path("VISUALS.GUI")).bytes,
+                oa::ui::gui_layout::game_translation_lookup()
+            );
+            if (visuals.ok() && visuals.layout)
+                append_screen_size_controls(sub, *visuals.layout);
+            else
+                std::cerr << "options panel: VISUALS.GUI was not shown: "
+                          << (visuals.error ? visuals.error->message : "no panel") << '\n';
+        } catch (const std::exception& error) {
+            // The column still opens; it draws no screen-size control.
+            std::cerr << "options panel: the screen-size controls were not shown: " << error.what()
+                      << '\n';
+        }
+    }
+    if (!load_match_hud_layout(oa::data::defs::gui_path(kPreferencesLayout))) {
+        status_ = "options panel unavailable: PREFS.GUI did not load";
+        std::cerr << status_ << '\n';
+        return;
+    }
+    widget_gaf_frames_.clear();
+    widget_text_stages_.clear();
+    auto& layout = match_hud_->layout;
+    auto& panel = session.panel;
+    session.kind = which;
+    panel_from_widgets(panel, layout, widget_text_stages_);
+    panel_relative_to_root(panel);
+    ui::options_prepare_realtime_panel(panel, context);
+    ui::Panel loaded;
+    ui::panel_load_layout(loaded, sub);
+    ui::options_merge_realtime_panel(panel, loaded);
+    const auto first = layout.gadgets.size();
+    append_merged_records(layout, panel, sub);
+    // The merge draws the panel as its first draw, which binds the
+    // sub-panel's sliders: the sliders' handlers then read the
+    // positions the bound bars have.
+    bind_hud_scrolls(first);
+    if (auto* scrolls = hud_scrolls())
+        for (const auto& bar : scrolls->bars)
+            if (bar.gadget < ui::kPanelControls) {
+                auto& slider = panel.controls[bar.gadget].slider;
+                slider.range = bar.bar.range;
+                slider.knob_size = bar.bar.knob_size;
+                slider.knob = bar.bar.knob;
+            }
+    for (auto index = first; index < layout.gadgets.size(); ++index) {
+        const auto* button =
+            std::get_if<oa::ui::gui_layout::ButtonFields>(&layout.gadgets[index].fields);
+        match_hud_states_.push_back(
+            button != nullptr ? MatchGadgetState{button->status, button->grayed_out}
+                              : MatchGadgetState{}
+        );
+    }
+    // The sub-panel's own art, as PREFS.GAF is the panel's:
+    // MUSICRT.GAF gives CDPREV/CDSTOP/CDPLAY/CDNEXT their frames.
+    append_gaf_file(match_hud_->sprites, "anims/" + fs::path(file).stem().string() + ".GAF");
+    // Its buttons take the size of the frames they draw, keeping their
+    // colours, so each is hit where it is drawn.
+    renderer::fit_buttons_to_frames(*match_hud_, first);
+    // The sub-panel's picture is its image record, looked up in
+    // PREFS.GAF (the merged panel's own) and then the shared GAF.
+    oa::formats::gaf::Archive panel_art;
+    append_gaf_file(
+        panel_art,
+        "anims/" + fs::path(oa::data::defs::gui_path(kPreferencesLayout)).stem().string() + ".GAF"
+    );
+    const auto& palette =
+        match_hud_->background.palette ? *match_hud_->background.palette : match_hud_->gui_palette;
+    for (auto index = first; index < layout.gadgets.size(); ++index) {
+        const auto& common = layout.gadgets[index].common;
+        if (common.type != oa::ui::gui_layout::GadgetType::image || common.active == 0)
+            continue;
+        const auto* sequence = find_sequence(panel_art, common.name);
+        if (sequence == nullptr)
+            sequence = find_sequence(match_hud_->sprites, common.name);
+        if (sequence == nullptr || sequence->frames.empty())
+            std::cerr << "options panel: " << file << " has no picture named " << common.name
+                      << '\n';
+    }
+    draw_image_records(
+        match_hud_->background, layout.gadgets, first, panel_art, match_hud_->sprites, palette
+    );
+    switch (which) {
+    case ui::OptionsPanel::sound:
+        ui::options_enter_sound(panel, context);
+        break;
+    case ui::OptionsPanel::visuals:
+    case ui::OptionsPanel::select_video_mode:
+        ui::options_enter_visuals(panel, context, false);
+        break;
+    case ui::OptionsPanel::speeds:
+        ui::options_enter_speeds(panel, context);
+        break;
+    case ui::OptionsPanel::music:
+        ui::options_enter_music(panel, context);
+        music_panel_entered(panel, context);
+        break;
+    case ui::OptionsPanel::tabs:
+        ui::options_enter_tabs(panel, context);
+        break;
+    }
+    panel_to_widgets(panel, layout, widget_gaf_frames_, widget_text_stages_);
+    // Each sub-panel loader ends by giving its labels the shadow bit.
+    oa::ui::gui_input::mark_label_shadows(layout.gadgets);
+    // The page takes the place of the turned-over picture.
+    if (context.host.release_lightbar != nullptr)
+        context.host.release_lightbar(context.host.context);
+}
+
 void Runtime::activate_pause_gadget(std::string_view name) {
     auto& session = match_menu_session();
     auto& panel = session.panel;
@@ -2832,119 +2967,8 @@ void Runtime::activate_pause_gadget(std::string_view name) {
         panel_to_widgets(panel, layout, widget_gaf_frames_, widget_text_stages_);
         // Each tab loads PREFS.GUI afresh, widens it and merges the tab's
         // in-game sub-panel into it, beside the tabs over the battlefield.
-        const auto open_sub_panel = [this, &session, &context](ui::OptionsPanel which) {
-            const auto file = oa::data::defs::gui_path(ui::options_panel_file(which, true));
-            oa::ui::gui_layout::Layout sub;
-            try {
-                auto parsed = oa::ui::gui_layout::parse(
-                    assets_.read(file).bytes, oa::ui::gui_layout::game_translation_lookup()
-                );
-                if (!parsed.ok() || parsed.layout->gadgets.empty())
-                    throw std::runtime_error(
-                        parsed.error ? parsed.error->message : file + " has no panel"
-                    );
-                sub = std::move(*parsed.layout);
-            } catch (const std::exception& error) {
-                status_ = "options panel unavailable: " + std::string(error.what());
-                return;
-            }
-            // The in-match visuals column has no screen-size control of its
-            // own. The three from VISUALS.GUI are the same control, listed
-            // and applied by the same path as the settings.
-            if (which == ui::OptionsPanel::visuals) {
-                try {
-                    auto visuals = oa::ui::gui_layout::parse(
-                        assets_.read(oa::data::defs::gui_path("VISUALS.GUI")).bytes,
-                        oa::ui::gui_layout::game_translation_lookup()
-                    );
-                    if (visuals.ok() && visuals.layout)
-                        append_screen_size_controls(sub, *visuals.layout);
-                } catch (const std::exception&) {
-                    // The column still opens; it draws no screen-size control.
-                }
-            }
-            if (!load_match_hud_layout(oa::data::defs::gui_path(kPreferencesLayout)))
-                return;
-            widget_gaf_frames_.clear();
-            widget_text_stages_.clear();
-            auto& layout = match_hud_->layout;
-            auto& panel = session.panel;
-            session.kind = which;
-            panel_from_widgets(panel, layout, widget_text_stages_);
-            panel_relative_to_root(panel);
-            ui::options_prepare_realtime_panel(panel, context);
-            ui::Panel loaded;
-            ui::panel_load_layout(loaded, sub);
-            ui::options_merge_realtime_panel(panel, loaded);
-            const auto first = layout.gadgets.size();
-            append_merged_records(layout, panel, sub);
-            // The merge draws the panel as its first draw, which binds the
-            // sub-panel's sliders: the sliders' handlers then read the
-            // positions the bound bars have.
-            bind_hud_scrolls(first);
-            if (auto* scrolls = hud_scrolls())
-                for (const auto& bar : scrolls->bars)
-                    if (bar.gadget < ui::kPanelControls) {
-                        auto& slider = panel.controls[bar.gadget].slider;
-                        slider.range = bar.bar.range;
-                        slider.knob_size = bar.bar.knob_size;
-                        slider.knob = bar.bar.knob;
-                    }
-            for (auto index = first; index < layout.gadgets.size(); ++index) {
-                const auto* button =
-                    std::get_if<oa::ui::gui_layout::ButtonFields>(&layout.gadgets[index].fields);
-                match_hud_states_.push_back(
-                    button != nullptr ? MatchGadgetState{button->status, button->grayed_out}
-                                      : MatchGadgetState{}
-                );
-            }
-            // The sub-panel's own art, as PREFS.GAF is the panel's:
-            // MUSICRT.GAF gives CDPREV/CDSTOP/CDPLAY/CDNEXT their frames.
-            append_gaf_file(
-                match_hud_->sprites, "anims/" + fs::path(file).stem().string() + ".GAF"
-            );
-            // Its buttons take the size of the frames they draw, keeping their
-            // colours, so each is hit where it is drawn.
-            renderer::fit_buttons_to_frames(*match_hud_, first);
-            // The sub-panel's picture is its image record, looked up in
-            // PREFS.GAF (the merged panel's own) and then the shared GAF.
-            oa::formats::gaf::Archive panel_art;
-            append_gaf_file(
-                panel_art,
-                "anims/" + fs::path(oa::data::defs::gui_path(kPreferencesLayout)).stem().string() +
-                    ".GAF"
-            );
-            draw_image_records(
-                match_hud_->background,
-                layout.gadgets,
-                first,
-                panel_art,
-                match_hud_->sprites,
-                match_hud_->background.palette ? *match_hud_->background.palette
-                                               : match_hud_->gui_palette
-            );
-            switch (which) {
-            case ui::OptionsPanel::sound:
-                ui::options_enter_sound(panel, context);
-                break;
-            case ui::OptionsPanel::visuals:
-            case ui::OptionsPanel::select_video_mode:
-                ui::options_enter_visuals(panel, context, false);
-                break;
-            case ui::OptionsPanel::speeds:
-                ui::options_enter_speeds(panel, context);
-                break;
-            case ui::OptionsPanel::music:
-                ui::options_enter_music(panel, context);
-                music_panel_entered(panel, context);
-                break;
-            case ui::OptionsPanel::tabs:
-                ui::options_enter_tabs(panel, context);
-                break;
-            }
-            panel_to_widgets(panel, layout, widget_gaf_frames_, widget_text_stages_);
-            // Each sub-panel loader ends by giving its labels the shadow bit.
-            oa::ui::gui_input::mark_label_shadows(layout.gadgets);
+        const auto open_sub_panel = [this](ui::OptionsPanel which) {
+            open_match_options_page(which);
         };
         switch (action) {
         case ui::OptionsAction::open_sound:
@@ -3604,9 +3628,53 @@ void Runtime::restart_match() {
     std::cerr << status_ << '\n';
 }
 
+void Runtime::advance_options_lightbar() {
+    // Only the preferences a match opens sweep the in-game menu away; the
+    // full-screen options of the frontend set the lightbar up and never draw it.
+    auto& session = match_menu_session();
+    if (session.ingame_panel != IngamePanel::preferences || options_parent_ != Screen::match ||
+        !match_ || !match_hud_ ||
+        match_hud_panel_ != oa::data::defs::gui_path(kPreferencesLayout) ||
+        session.options.lightbar.active == 0 || options_flip_.rgb.empty() || !session.lightbar_due)
+        return;
+    session.lightbar_due = false;
+    session.lightbar_step = ui::options_lightbar_step(session.options.lightbar);
+    const auto& step = session.lightbar_step;
+    const auto stamp = static_cast<std::size_t>(ui::kLightbarStampFrame);
+    if (step.stamp_lightbar) {
+        const auto* bar = gaf_sequence(match_hud_->sprites, "LIGHTBAR");
+        if (bar == nullptr)
+            bar = gaf_sequence(match_hud_->shared_sprites, "LIGHTBAR");
+        if (bar != nullptr && bar->frames.size() > stamp)
+            stamp_frame(
+                bar->frames[stamp],
+                match_hud_->background.palette ? *match_hud_->background.palette
+                                               : match_hud_->gui_palette,
+                options_flip_
+            );
+    }
+    if (step.play_options_sound) {
+        play_ui_sound("Options", 0);
+        ++options_lightbar_sounds_;
+        // The turned-over picture is the menu opening, not a page. Sound is
+        // the first of the four pages, and it shows once the sweep ends.
+        open_match_options_page(ui::OptionsPanel::sound);
+    }
+    // The radar picture is drawn again with the frame, and the game marks
+    // the frame drawn. A page opened above has left the match in place.
+    if (match_) {
+        auto& game = match_->state().game;
+        game.radar_blink_flags = static_cast<uint16_t>(
+            game.radar_blink_flags | oa::present::world_renderer::radar_flag_redraw
+        );
+        game.options_lightbar_drawn = 1;
+    }
+}
+
 void Runtime::draw_options_lightbar() {
     // Only the preferences a match opens sweep the in-game menu away; the
     // full-screen options of the frontend set the lightbar up and never draw it.
+    // The sound page, once the sweep has opened it, draws in the menu's place.
     auto& session = match_menu_session();
     if (session.ingame_panel != IngamePanel::preferences || options_parent_ != Screen::match ||
         !match_ || !match_hud_ ||
@@ -3614,35 +3682,6 @@ void Runtime::draw_options_lightbar() {
         session.options.lightbar.active == 0 || options_flip_.rgb.empty() ||
         match_hud_cpu_.rgb.empty() || match_world_cpu_.rgb.empty())
         return;
-    if (session.lightbar_due) {
-        session.lightbar_due = false;
-        session.lightbar_step = ui::options_lightbar_step(session.options.lightbar);
-        const auto& step = session.lightbar_step;
-        const auto stamp = static_cast<std::size_t>(ui::kLightbarStampFrame);
-        if (step.stamp_lightbar) {
-            const auto* bar = gaf_sequence(match_hud_->sprites, "LIGHTBAR");
-            if (bar == nullptr)
-                bar = gaf_sequence(match_hud_->shared_sprites, "LIGHTBAR");
-            if (bar != nullptr && bar->frames.size() > stamp)
-                stamp_frame(
-                    bar->frames[stamp],
-                    match_hud_->background.palette ? *match_hud_->background.palette
-                                                   : match_hud_->gui_palette,
-                    options_flip_
-                );
-        }
-        if (step.play_options_sound) {
-            play_ui_sound("Options", 0);
-            ++options_lightbar_sounds_;
-        }
-        // The radar picture is drawn again with the frame, and the game marks
-        // the frame drawn.
-        auto& game = match_->state().game;
-        game.radar_blink_flags = static_cast<uint16_t>(
-            game.radar_blink_flags | oa::present::world_renderer::radar_flag_redraw
-        );
-        game.options_lightbar_drawn = 1;
-    }
     const auto& step = session.lightbar_step;
     if (!step.drawn)
         return;
@@ -4098,6 +4137,7 @@ void Runtime::enter_options_panel() {
             session.options_open = false;
             options_parent_ = Screen::main_menu;
             status_ = "Preferences unavailable";
+            std::cerr << status_ << '\n';
             render_match_surface();
             return;
         }
