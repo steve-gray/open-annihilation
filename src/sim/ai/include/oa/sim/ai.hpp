@@ -256,6 +256,20 @@ void computer_players_release(ComputerPlayers* state) noexcept;
 /// @return false for a null state, world or type table
 bool computer_players_initialize(ComputerPlayers* state, const ComputerHost& host) noexcept;
 
+/// Gives a computer player the controller it would have had at the start.
+///
+/// +AI hands a human to the computer after the game has started. The next
+/// order tick of the machine that simulates that player calls this. A player
+/// who already has a controller, or who is not a computer, is left alone, and
+/// the other computers' weights are not scaled again.
+///
+/// @param[in,out] state computer players; nothing before the first initialisation
+/// @param host world, map and random stream
+/// @param player player index
+void computer_players_adopt(
+    ComputerPlayers* state, const ComputerHost& host, uint8_t player
+) noexcept;
+
 /// Notes the difficulty one computer player plays at.
 ///
 /// Call it before computer_players_initialize. A value outside easy, medium

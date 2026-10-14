@@ -57,6 +57,12 @@ struct ConsoleHost {
     /// kMessageNoSender; a line with a sender starts with that player's logo
     /// and plays the arrival sound. Null posts nothing.
     void (*post_message)(void* context, const char* text, uint8_t kind, uint8_t sender){};
+    /// Runs a chat line another machine delivered, after it has been posted.
+    ///
+    /// The sender already ran the line. This runs only the commands that have
+    /// to agree on every machine. Null does nothing. `sender` is the player
+    /// who typed it; a bare +AI, +NoMetal or +NoEnergy names that player.
+    void (*apply_remote_line)(void* context, const char* line, uint8_t sender){};
     void (*compact_render_cache)(void* context){};
     void (*set_gamma)(void* context, float gamma){};
     void (*set_lighting)(void* context, int32_t a, int32_t b, int32_t c){};
@@ -156,14 +162,19 @@ struct Console {
     /// teams.alliance-menu-all-game-types: Tab opens the team menu in every
     /// game type, not the options panel outside multiplayer (hotkey_dispatch).
     bool team_menu_every_game{};
+    /// Bit per player that +AI handed from human to computer. A computer
+    /// seated at the start has no bit, so +AI on them says so and leaves
+    /// them. Handing that human back clears only their bit.
+    uint16_t handed_to_computer{};
 };
 
 /// Clears `console`, registers every command list and the spawn fallback, then lets the host's extend add its commands.
 ///
 /// Registers the option, cheat and developer lists and the AI-profile
-/// directives ("plan", "weight", "limit"), then console_spawn_by_pattern as the
-/// developer-class fallback for unknown names. ConsoleHost::extend runs last,
-/// with ConsoleHost::extension_context.
+/// directives ("plan", "weight", "limit"), then a developer-class fallback
+/// that runs a debugdat script for an unknown name. A unit name is spawned
+/// by console_execute when cheats are allowed, not by that fallback.
+/// ConsoleHost::extend runs last, with ConsoleHost::extension_context.
 ///
 /// @param[out] console Console to set up; every field is reset first.
 /// @param world World the commands change.
@@ -181,12 +192,12 @@ bool console_init(Console* console, World* world, const ConsoleHost* host) noexc
 
 /// Applies the console rules of the match the console serves.
 ///
-/// Sets the classes of "AI", "Control" and "LOSType" (cheats under
-/// console.ai-control-cheat-group and console.lostype-cheat-group, their
-/// developer and option classes otherwise), Console::atm_amount from
-/// console.atm-amount, Console::key_remaps from console.key-remaps and
+/// Sets "AI" and "Control" to the cheat class (OA runs them whenever cheats
+/// are allowed; console.ai-control-cheat-group no longer changes the class),
+/// "LOSType" to the cheat class under console.lostype-cheat-group and the
+/// option class otherwise, Console::atm_amount from console.atm-amount,
+/// Console::key_remaps from console.key-remaps and
 /// Console::team_menu_every_game from teams.alliance-menu-all-game-types.
-/// Applying 3.1c's rules leaves the console as console_init made it.
 ///
 /// @param[in,out] console Console set up by console_init.
 /// @param rules The match's rules.
@@ -207,9 +218,9 @@ uint32_t console_execute(Console* console, const char* text, uint32_t mask) noex
 /// Computes the mask the chat line dispatches with.
 ///
 /// @param console Console whose world and cheat flag decide the mask.
-/// @return Options (with the private echo) always; cheat and developer commands
-///         once the passphrase set console_flag::developer; cheats when
-///         Console::cheats_enabled is set.
+/// @return Options (with the private echo) always; developer commands once
+///         the passphrase set console_flag::developer; cheats when
+///         Console::cheats_enabled is set. The passphrase does not add cheats.
 [[nodiscard]] uint32_t console_chat_mask(const Console* console) noexcept;
 
 /// Runs the '+' branch of chat entry: a line starting with '+' after leading spaces is dispatched with console_chat_mask.
@@ -221,10 +232,30 @@ uint32_t console_execute(Console* console, const char* text, uint32_t mask) noex
 /// @param line Typed chat text.
 /// @param current_mode Chat mode (Game.chat_mode value) the echo uses by default.
 /// @param[out] echo Receives the text after the leading spaces; may be null.
-/// @return kChatModeEveryone after a cheat, kChatModeLocalOnly after an option
-///         command, otherwise `current_mode` (also for a line without '+').
+/// @return kChatModeEveryone after a cheat, or after +ShootAll, +NoMetal or
+///         +NoEnergy (they change the shared simulation); kChatModeLocalOnly
+///         after another option command; otherwise `current_mode` (also for a
+///         line without '+').
 uint8_t console_submit_chat_line(
     Console* console, const char* line, uint8_t current_mode, const char** echo
+) noexcept;
+
+/// Runs a received chat line's shared commands on this machine.
+///
+/// The sender already ran the line. This runs +AI (status on the simulating
+/// machine, the info record elsewhere), +ShootAll, +NoMetal, +NoEnergy, and
+/// a unit name when cheats are allowed and this machine simulates that
+/// player. A bare +AI, +NoMetal or +NoEnergy names `sender`, not this
+/// machine's local player. +ATM, +Give, +Control and the view commands are
+/// not run again. +AI's player number is the sender's slot, and this
+/// machine follows that person.
+///
+/// @param[in,out] console Console of this machine; null does nothing.
+/// @param text The line as chat shows it, "<Name> +command" or "+command".
+/// @param sender Player who typed the line. OA_PLAYER_COUNT or above leaves
+///        a bare command to this machine's local player.
+void console_apply_remote_line(
+    Console* console, const char* text, uint8_t sender = OA_PLAYER_COUNT
 ) noexcept;
 
 /// Returns the console whose command is being dispatched.
@@ -273,10 +304,11 @@ bool console_run_debug_script(
 /// World::unit_def_count are tested with console_name_matches. Each match is
 /// snapped to a build position and created for the player; x then advances
 /// past the unit's footprint bounds plus a 32-pixel gap, and a row that
-/// reaches the map's right edge continues 160 pixels lower at x = 160. With
-/// no match the debugdat script named by the pattern runs instead, with the
-/// line as its arguments. This is the developer-class fallback console_init
-/// registers for unknown command names.
+/// reaches the map's right edge continues 160 pixels lower at x = 160.
+/// A player that is not in the game is announced ("No such player") and
+/// nothing is created. A player another machine simulates is not created
+/// here. With no matching type the debugdat script named by the pattern
+/// runs instead, with the line as its arguments.
 ///
 /// @param[in,out] console Console whose world and host create the units.
 /// @param line Tokens: the pattern (token 0) and the owning player (token 1,

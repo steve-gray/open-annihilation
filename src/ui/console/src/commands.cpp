@@ -868,26 +868,88 @@ void make_poster(TokenLine* line) {
         g.last_frame_time = host().now_ms(host().context);
 }
 
-// --- Developer commands -----------------------------------------------------
-
-/// Swaps an active player between local and computer control ("AI [player]").
+/// Tells whether this machine simulates a player: a local or a computer slot.
 ///
-/// A local player in use becomes a computer player; anything else becomes
-/// local. The player's info record mirrors the new status.
+/// A mirrored slot is simulated on another machine. +AI must not make it
+/// local here, or both machines would give it orders.
+///
+/// @param index Player index.
+/// @return False for a slot this machine does not simulate.
+bool machine_simulates(uint8_t index) noexcept {
+    if (index >= OA_PLAYER_COUNT)
+        return false;
+    const Player& player = game().players[index];
+    return player.in_use != 0 &&
+           (player.status == OA_PLAYER_STATUS_LOCAL || player.status == OA_PLAYER_STATUS_COMPUTER);
+}
+
+/// Tells whether a slot is a computer player, here or only recorded from elsewhere.
+///
+/// @param index Player index.
+/// @return True for a computer this machine plays, or a mirrored slot whose
+///         info record says computer.
+bool computer_player_slot(uint8_t index) noexcept {
+    const Player& player = game().players[index];
+    if (player.status == OA_PLAYER_STATUS_COMPUTER)
+        return true;
+    if (machine_simulates(index))
+        return false;
+    const PlayerSetupInfo* info = world_player_info(active().world, &player);
+    return info != nullptr && info->state == OA_PLAYER_STATUS_COMPUTER;
+}
+
+/// Tells whether +AI handed this player from human to computer.
+///
+/// @param index Player index.
+/// @return True when this console's handed bit is set.
+bool player_was_handed(uint8_t index) noexcept {
+    return (active().handed_to_computer & static_cast<uint16_t>(1u << index)) != 0;
+}
+
+/// Records that +AI handed a player to the computer, or handed them back.
+///
+/// @param index Player index.
+/// @param handed True after a human becomes a computer; false after the hand-back.
+void mark_player_handed(uint8_t index, bool handed) noexcept {
+    const auto bit = static_cast<uint16_t>(1u << index);
+    if (handed)
+        active().handed_to_computer = static_cast<uint16_t>(active().handed_to_computer | bit);
+    else
+        active().handed_to_computer =
+            static_cast<uint16_t>(active().handed_to_computer & static_cast<uint16_t>(~bit));
+}
+
+/// Hands a human to the computer, or hands them back ("AI [player]").
+///
+/// Only a player this machine runs can be handed over: each player runs +AI
+/// on their own machine for the players it drives, and a player another
+/// machine runs is refused with a notice. A player who is already a
+/// computer, and was not handed there by +AI, is announced and left as they
+/// are. A computer seated beside them is not touched when another player is
+/// handed back. The status and the info record change together. The next
+/// computer-player tick builds a controller for a human handed to the
+/// computer.
 ///
 /// @param line Command tokens; token 1 (default the local player) is the player.
 void toggle_computer_control(TokenLine* line) {
     const auto index = static_cast<uint8_t>(token_int(line, 1, game().local_player_index));
     if (!slot_active(index))
         return;
+    if (!machine_simulates(index)) {
+        console_post(&active(), "That player is run from another machine", kMessageNotice);
+        return;
+    }
+    if (computer_player_slot(index) && !player_was_handed(index)) {
+        console_post(&active(), "Already a computer player", kMessageNotice);
+        return;
+    }
     Player& player = game().players[index];
-    const uint8_t status = player.in_use != 0 && player.status == OA_PLAYER_STATUS_LOCAL
-                               ? OA_PLAYER_STATUS_COMPUTER
-                               : OA_PLAYER_STATUS_LOCAL;
-    player.status = status;
     PlayerSetupInfo* info = world_player_info(active().world, &player);
+    const bool to_computer = !computer_player_slot(index);
+    player.status = to_computer ? OA_PLAYER_STATUS_COMPUTER : OA_PLAYER_STATUS_LOCAL;
     if (info != nullptr)
-        info->state = status;
+        info->state = player.status;
+    mark_player_handed(index, to_computer);
 }
 
 /// Makes an active player the local and viewed player ("Control <player>").
@@ -899,6 +961,8 @@ void take_control(TokenLine* line) {
     game().local_player_index = static_cast<uint8_t>(token_int(line, 1, 0));
     game().viewpoint_player = static_cast<uint8_t>(token_int(line, 1, 0));
 }
+
+// --- Developer commands -----------------------------------------------------
 
 /// Destroys every unit ("Kill") or one player's units ("Kill <player>"), then disables the mission conditions.
 ///
@@ -1276,11 +1340,14 @@ void ai_limit(TokenLine* line) {
     }
 }
 
-/// Runs console_spawn_by_pattern on the dispatching console; the developer fallback for unknown command names.
+/// Runs the debugdat script named by an unknown command; the developer fallback.
 ///
-/// @param line Command tokens; token 0 is the pattern.
+/// A unit name is not a script. console_execute spawns matching units when
+/// cheats are allowed, and does not reach this fallback for those names.
+///
+/// @param line Command tokens; token 0 is the script name.
 void spawn_fallback(TokenLine* line) {
-    console_spawn_by_pattern(&active(), line);
+    console_run_debug_script(&active(), token(line, 0), line);
 }
 
 constexpr uint32_t kOptionList = command_class::option | command_class::private_echo;
@@ -1326,6 +1393,7 @@ const services::CommandRegistration kOptionCommands[] = {
     {"SetShareMetal", set_metal_share_threshold, kOptionList},
     {"SetShareEnergy", set_energy_share_threshold, kOptionList},
     {"SFX", toggle_sfx_flag, kOptionList},
+    {"MakePoster", make_poster, kOptionList},
     {nullptr, nullptr, 0},
 };
 
@@ -1339,13 +1407,12 @@ const services::CommandRegistration kCheatCommands[] = {
     {"HalfShot", toggle_half_shot, command_class::cheat},
     {"NowISee", reveal_map, command_class::cheat},
     {"Meteor", meteor_command, command_class::cheat},
-    {"MakePoster", make_poster, command_class::cheat},
+    {"AI", toggle_computer_control, command_class::cheat},
+    {"Control", take_control, command_class::cheat},
     {nullptr, nullptr, 0},
 };
 
 const services::CommandRegistration kDeveloperCommands[] = {
-    {"AI", toggle_computer_control, command_class::developer},
-    {"Control", take_control, command_class::developer},
     {"Kill", kill_command, command_class::developer},
     {"IWin", force_win, command_class::developer},
     {"ILose", force_loss, command_class::developer},
@@ -1411,6 +1478,211 @@ char upper_ascii(char c) noexcept {
     return c >= 'a' && c <= 'z' ? static_cast<char>(c - 'a' + 'A') : c;
 }
 
+/// Tests whether any unit type matches the line's pattern.
+///
+/// @param console Console whose unit types are tested.
+/// @param line Tokens; token 0 is the pattern.
+/// @return True when at least one type matches.
+bool unit_pattern_matches(const Console* console, const services::TokenLine* line) noexcept {
+    const World* world = console->world;
+    const Game& g = world->game;
+    const char* pattern = services::token_line_get(line, 0, kEmpty);
+    if (pattern[0] == '\0')
+        return false;
+    const int32_t type_count = g.unit_def_count < static_cast<int32_t>(world->unit_def_count)
+                                   ? g.unit_def_count
+                                   : static_cast<int32_t>(world->unit_def_count);
+    for (int32_t type = 1; type < type_count; type = static_cast<int32_t>(type + 1))
+        if (console_name_matches(world->unit_defs[type].unit_name, pattern))
+            return true;
+    return false;
+}
+
+/// Creates every unit type matching the pattern, for a player, at the cursor.
+///
+/// A pattern that matches nothing is not this command. A player number that
+/// is not a slot is announced and no unit is created. A free slot is still a
+/// slot on this machine, so the unit is created here. A player another
+/// machine simulates is left for that machine: creating here as well would
+/// duplicate the unit. The cursor is Game.cursor_position. x then advances
+/// past the unit's footprint plus a 32-pixel gap, and a row that reaches the
+/// map's right edge continues 160 pixels lower at x = 160.
+///
+/// @param[in,out] console Console whose world and host create the units.
+/// @param line Tokens: the pattern (token 0) and the owning player (token 1,
+///             default 0).
+/// @return True when the pattern named a unit, whether or not one was created.
+bool spawn_named_units(Console* console, services::TokenLine* line) noexcept {
+    if (!unit_pattern_matches(console, line))
+        return false;
+    const int32_t player = services::token_line_get_int(line, 1, 0);
+    if (player < 0 || player >= OA_PLAYER_COUNT) {
+        console_post(console, "No such player", kMessageNotice);
+        return true;
+    }
+    const auto owner = static_cast<uint8_t>(player);
+    const Player& named = game().players[owner];
+    if (named.in_use != 0 && named.status == OA_PLAYER_STATUS_MIRRORED)
+        return true;
+    World* world = console->world;
+    Game& g = world->game;
+    const ConsoleHost* host = console->host;
+    FixedVec3 position = game_load<FixedVec3>(g, game_offset::cursor_position);
+    const char* pattern = services::token_line_get(line, 0, kEmpty);
+    const int32_t type_count = g.unit_def_count < static_cast<int32_t>(world->unit_def_count)
+                                   ? g.unit_def_count
+                                   : static_cast<int32_t>(world->unit_def_count);
+    int32_t placed = 0;
+    for (int32_t type = 1; type < type_count; type = static_cast<int32_t>(type + 1)) {
+        const UnitDef& def = world->unit_defs[type];
+        if (!console_name_matches(def.unit_name, pattern))
+            continue;
+        if (placed != 0)
+            position.x -= def.bounds_min_x;
+        const auto type_id = static_cast<uint16_t>(type);
+        if (host != nullptr && host->snap_build_position != nullptr)
+            host->snap_build_position(host->context, type_id, &position);
+        if (host != nullptr && host->create_unit != nullptr)
+            host->create_unit(host->context, owner, type_id, &position);
+        position.x += def.bounds_max_x + kSpawnColumnGap;
+        if (static_cast<int32_t>(static_cast<uint32_t>(g.map_pixel_width) << 16) <= position.x) {
+            position.z += kSpawnRowStart;
+            position.x = kSpawnRowStart;
+        }
+        ++placed;
+    }
+    return true;
+}
+
+/// Tests whether a command body starts with a name, ignoring ASCII case.
+///
+/// @param body Command text, without a leading '+'.
+/// @param name Name to match.
+/// @return True when the name is the whole first token.
+bool name_is(const char* body, const char* name) noexcept {
+    for (; *name != '\0'; ++body, ++name)
+        if (lower_ascii(*body) != lower_ascii(*name))
+            return false;
+    return *body == '\0' || *body == ' ';
+}
+
+/// Tests whether the first token is a command whose class is not developer.
+///
+/// The debug-script fallback runs for a name the table does not have. A cheat
+/// or an option, such as "AI", is already a command: the developer class does
+/// not run it, and it is not a script. Command words ignore capitals. The '+'
+/// is only how the chat line marks a command; it is not part of the word.
+///
+/// @param console Console whose command table is searched.
+/// @param body Command text, without a leading '+'.
+/// @return True when the table has that name and its class omits developer.
+bool registered_without_developer(const Console* console, const char* body) noexcept {
+    char name[services::command_name_capacity];
+    std::size_t length = 0;
+    while (body[length] != '\0' && body[length] != ' ' && length + 1 < sizeof name) {
+        name[length] = body[length];
+        ++length;
+    }
+    name[length] = '\0';
+    for (std::size_t index = 0; index < console->commands.count; ++index) {
+        const auto& entry = console->commands.entries[index];
+        if (!equal_nocase(entry.name, name))
+            continue;
+        return (entry.mask & command_class::developer) == 0;
+    }
+    return false;
+}
+
+/// Tests whether the first token of a command body is a registered command.
+///
+/// @param console Console whose command table is searched.
+/// @param body Command text, without a leading '+'.
+/// @return True when the table has that name.
+bool command_registered(const Console* console, const char* body) noexcept {
+    char name[services::command_name_capacity];
+    std::size_t length = 0;
+    while (body[length] != '\0' && body[length] != ' ' && length + 1 < sizeof name) {
+        name[length] = body[length];
+        ++length;
+    }
+    name[length] = '\0';
+    for (std::size_t index = 0; index < console->commands.count; ++index)
+        if (equal_nocase(console->commands.entries[index].name, name))
+            return true;
+    return false;
+}
+
+/// Tests whether a chat line is a universal command whose effect is shared.
+///
+/// +ShootAll changes who every machine's units fire at. +NoMetal and
+/// +NoEnergy set a resource on every machine. The line is sent to every
+/// player, and each machine runs it once.
+///
+/// @param line Chat text, possibly with leading spaces.
+/// @return True for those three commands.
+bool shared_sim_line(const char* line) noexcept {
+    while (*line == ' ')
+        ++line;
+    if (*line != '+')
+        return false;
+    ++line;
+    return name_is(line, "ShootAll") || name_is(line, "NoMetal") || name_is(line, "NoEnergy");
+}
+
+/// Tests whether a command body is only a name, with no further token.
+///
+/// @param body Command text, without a leading '+'.
+/// @param name Name to match.
+/// @return True when the name is the whole body.
+bool body_names_only(const char* body, const char* name) noexcept {
+    if (!name_is(body, name))
+        return false;
+    const char* rest = body;
+    while (*rest != '\0' && *rest != ' ')
+        ++rest;
+    while (*rest == ' ')
+        ++rest;
+    return *rest == '\0';
+}
+
+/// Spells a bare command with the sender's player, or returns the body unchanged.
+///
+/// +AI, +NoMetal and +NoEnergy with no player mean the player who typed them.
+/// Another machine's local player is someone else, so the index is written in.
+///
+/// @param body Command text, without a leading '+'.
+/// @param name Canonical command name.
+/// @param sender Player who typed the line; OA_PLAYER_COUNT or above leaves the body.
+/// @param spelled Buffer that receives "<name> <sender>" when the body is bare.
+/// @param spelled_size Size of `spelled`.
+/// @return `spelled` when the sender was written in, otherwise `body`.
+const char* line_for_sender(
+    const char* body, const char* name, uint8_t sender, char* spelled, std::size_t spelled_size
+) noexcept {
+    if (sender >= OA_PLAYER_COUNT || !body_names_only(body, name))
+        return body;
+    std::snprintf(spelled, spelled_size, "%s %u", name, static_cast<unsigned>(sender));
+    return spelled;
+}
+
+/// Returns the command body of a received chat line, without the speaker prefix.
+///
+/// @param text "<Name> +command" or "+command".
+/// @return The text after '+', or null when the line is not a command.
+const char* remote_command_body(const char* text) noexcept {
+    if (text == nullptr)
+        return nullptr;
+    if (text[0] == '<') {
+        const char* end = std::strstr(text, "> ");
+        if (end == nullptr)
+            return nullptr;
+        text = end + 2;
+    }
+    if (text[0] != '+')
+        return nullptr;
+    return text + 1;
+}
+
 } // namespace
 
 bool console_init(Console* console, World* world, const ConsoleHost* host) noexcept {
@@ -1437,10 +1709,14 @@ float console_atm_amount(const data::match_rules::MatchRules& rules) noexcept {
 
 void console_apply_rules(Console* console, const data::match_rules::MatchRules& rules) noexcept {
     auto* table = &console->commands;
-    const bool ai_cheats = rules.console.ai_control_cheat_group.enabled;
-    const uint32_t ai_class = ai_cheats ? command_class::cheat : command_class::developer;
-    std::ignore = services::command_table_set(table, "AI", toggle_computer_control, ai_class);
-    std::ignore = services::command_table_set(table, "Control", take_control, ai_class);
+    // OA runs +AI and +Control whenever cheats are allowed: every
+    // single-player mode, and a multiplayer game whose room allows cheats.
+    // console.ai-control-cheat-group stays in the profile hash and no longer
+    // chooses the class. The passphrase does not grant that class.
+    std::ignore = rules.console.ai_control_cheat_group.enabled;
+    std::ignore =
+        services::command_table_set(table, "AI", toggle_computer_control, command_class::cheat);
+    std::ignore = services::command_table_set(table, "Control", take_control, command_class::cheat);
     const uint32_t los_class =
         rules.console.lostype_cheat_group.enabled ? command_class::cheat : kOptionList;
     std::ignore = services::command_table_set(table, "LOSType", toggle_los_type, los_class);
@@ -1460,13 +1736,31 @@ uint32_t console_execute(Console* console, const char* text, uint32_t mask) noex
     services::token_line_clear(&line);
     services::token_line_parse(&line, text, nullptr);
     ActiveScope scope(console);
-    return services::command_dispatch(&console->commands, &line, mask);
+    // The developer fallback is a debugdat script. Hold it back until a unit
+    // name has had its chance, so a cheat spawn does not also run a script
+    // and a unit name is not a script when cheats are off.
+    const uint32_t without_developer = mask & ~command_class::developer;
+    const uint32_t result =
+        services::command_dispatch(&console->commands, &line, without_developer);
+    if (result != 0)
+        return result;
+    if ((mask & command_class::cheat) != 0 && spawn_named_units(console, &line))
+        return command_class::cheat;
+    // A unit name is not a script. Neither is a command of another class:
+    // "AI" stays a cheat, so the developer class does not run it or a script.
+    if ((mask & command_class::developer) != 0 && !unit_pattern_matches(console, &line) &&
+        !registered_without_developer(console, text))
+        return services::command_dispatch(&console->commands, &line, command_class::developer);
+    return 0;
 }
 
 uint32_t console_chat_mask(const Console* console) noexcept {
     uint32_t mask = kOptionList;
+    // The passphrase opens the developer commands only. Listed cheats,
+    // including +AI, +Control and a unit name, run when cheats are allowed
+    // and stay refused when they are not.
     if ((console_flags(console->world->game) & console_flag::developer) != 0)
-        mask |= command_class::cheat | command_class::developer;
+        mask |= command_class::developer;
     if (console->cheats_enabled)
         mask |= command_class::cheat;
     return mask;
@@ -1484,9 +1778,44 @@ uint8_t console_submit_chat_line(
     const uint32_t result = console_execute(console, line + 1, console_chat_mask(console));
     if ((result & command_class::cheat) != 0)
         return kChatModeEveryone;
+    // A universal command that changes the shared simulation is sent to every
+    // machine, the way a cheat's line is. Its echo is still the command.
+    if (result != 0 && shared_sim_line(line))
+        return kChatModeEveryone;
     if ((result & command_class::private_echo) != 0)
         return kChatModeLocalOnly;
     return current_mode;
+}
+
+void console_apply_remote_line(Console* console, const char* text, uint8_t sender) noexcept {
+    const char* body = remote_command_body(text);
+    if (console == nullptr || body == nullptr || body[0] == '\0')
+        return;
+    // The sender already ran the line. Run here only what has to agree: the
+    // shared resource and fire commands, and a unit name on the machine that
+    // simulates that player. A bare +NoMetal or +NoEnergy names the sender,
+    // not this machine's local player. +AI, +ATM, +Give and +Control stay on
+    // the machine that typed them: each player hands over only the players
+    // their own machine runs.
+    char spelled[32];
+    if (name_is(body, "AI"))
+        return;
+    if (name_is(body, "ShootAll") || name_is(body, "NoMetal") || name_is(body, "NoEnergy")) {
+        const char* command = body;
+        if (name_is(body, "NoMetal"))
+            command = line_for_sender(body, "NoMetal", sender, spelled, sizeof spelled);
+        else if (name_is(body, "NoEnergy"))
+            command = line_for_sender(body, "NoEnergy", sender, spelled, sizeof spelled);
+        std::ignore = console_execute(console, command, kOptionList);
+        return;
+    }
+    if (!console->cheats_enabled || command_registered(console, body))
+        return;
+    services::TokenLine line;
+    services::token_line_clear(&line);
+    services::token_line_parse(&line, body, nullptr);
+    ActiveScope scope(console);
+    std::ignore = spawn_named_units(console, &line);
 }
 
 std::string output_directory(const Game& game, const ConsoleHost* host) {
@@ -1537,41 +1866,10 @@ bool console_run_debug_script(
 }
 
 void console_spawn_by_pattern(Console* console, services::TokenLine* line) noexcept {
-    World* world = console->world;
-    Game& g = world->game;
-    const ConsoleHost* host = console->host;
-    FixedVec3 position = game_load<FixedVec3>(g, game_offset::cursor_position);
-    const char* pattern = services::token_line_get(line, 0, kEmpty);
-    const int32_t type_count = g.unit_def_count < static_cast<int32_t>(world->unit_def_count)
-                                   ? g.unit_def_count
-                                   : static_cast<int32_t>(world->unit_def_count);
-    int32_t placed = 0;
-    for (int32_t type = 1; type < type_count; type = static_cast<uint16_t>(type + 1)) {
-        const UnitDef& def = world->unit_defs[type];
-        if (!console_name_matches(def.unit_name, pattern))
-            continue;
-        if (placed != 0)
-            position.x -= def.bounds_min_x;
-        const auto type_id = static_cast<uint16_t>(type);
-        if (host != nullptr && host->snap_build_position != nullptr)
-            host->snap_build_position(host->context, type_id, &position);
-        if (host != nullptr && host->create_unit != nullptr)
-            host->create_unit(
-                host->context,
-                static_cast<uint8_t>(services::token_line_get_int(line, 1, 0)),
-                type_id,
-                &position
-            );
-        position.x += def.bounds_max_x + kSpawnColumnGap;
-        if (static_cast<int32_t>(static_cast<uint32_t>(g.map_pixel_width) << 16) <= position.x) {
-            position.z += kSpawnRowStart;
-            position.x = kSpawnRowStart;
-        }
-        ++placed;
-    }
-    if (placed != 0)
+    ActiveScope scope(console);
+    if (spawn_named_units(console, line))
         return;
-    console_run_debug_script(console, pattern, line);
+    console_run_debug_script(console, services::token_line_get(line, 0, kEmpty), line);
 }
 
 bool console_name_matches(const char* name, const char* pattern) noexcept {

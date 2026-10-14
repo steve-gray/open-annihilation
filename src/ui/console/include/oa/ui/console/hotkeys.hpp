@@ -90,7 +90,7 @@ struct HotkeyHost {
 ///  - '1'..'9' select that squad when Alt is held (without Alt under
 ///    SwitchAlt), playing "SelectSquad"; otherwise build item 0..8.
 ///  - 'T'/'t' set the debug index to 1/0; 'n' calls debug_select_next; '\'
-///    re-runs the last console line once the passphrase is accepted; 'h'
+///    re-runs the last console line under the same gate as typing it; 'h'
 ///    opens the share panel in a multiplayer game.
 ///  - Ctrl+A selects all, Ctrl+C the commander, Ctrl+D toggles self-destruct,
 ///    Ctrl+S selects on screen, Ctrl+Z the matching type; any other Ctrl+letter

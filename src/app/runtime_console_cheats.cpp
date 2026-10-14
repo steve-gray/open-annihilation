@@ -73,6 +73,56 @@ constexpr int32_t kTestShotDamage = 1000;
 /// The folder below the save root that "+MakePoster" writes to in the check.
 constexpr const char* kPosterFolder = "cheat-posters";
 
+/// Counts live units in a match.
+std::size_t live_unit_count(const oa::sim::match_runtime::Match& match) {
+    std::size_t count = 0;
+    for (const auto& slot : match.world().slots)
+        if (slot.unit != nullptr && slot.record.type_index != 0 &&
+            (slot.record.flags & OA_UNIT_FLAG_LIVE) != 0)
+            ++count;
+    return count;
+}
+
+/// Tests whether a message logged at or after `from` contains `text`.
+bool lines_contain(const std::vector<std::string>& lines, std::size_t from, std::string_view text) {
+    for (std::size_t index = from; index < lines.size(); ++index)
+        if (lines[index].find(text) != std::string::npos)
+            return true;
+    return false;
+}
+
+char upper_ascii(char letter) {
+    return letter >= 'a' && letter <= 'z' ? static_cast<char>(letter - 'a' + 'A') : letter;
+}
+
+bool same_unit_name(const char* unit, const char* wanted) {
+    while (*unit != '\0' && *wanted != '\0' && upper_ascii(*unit) == upper_ascii(*wanted)) {
+        ++unit;
+        ++wanted;
+    }
+    return *unit == '\0' && *wanted == '\0';
+}
+
+/// A unit name the spawn check can type as one token. A commander or a kbot
+/// when the data has one, otherwise the first name with no space.
+const char* spawn_unit_name(const oa::World& world) {
+    for (const char* wanted : {"ARMCOM", "CORCOM", "ARMPW", "CORAK"})
+        for (uint32_t type = 1; type < world.unit_def_count; ++type)
+            if (same_unit_name(world.unit_defs[type].unit_name, wanted))
+                return world.unit_defs[type].unit_name;
+    for (uint32_t type = 1; type < world.unit_def_count; ++type) {
+        const char* unit = world.unit_defs[type].unit_name;
+        if (unit[0] == '\0')
+            continue;
+        bool spaced = false;
+        for (const char* letter = unit; *letter != '\0'; ++letter)
+            spaced = spaced || *letter == ' ';
+        if (!spaced)
+            return unit;
+    }
+    return nullptr;
+}
+
 } // namespace
 
 void Runtime::check_console_skirmish_cheats(const std::function<void(const char*)>& enter_line) {
@@ -135,9 +185,11 @@ void Runtime::check_console_skirmish_cheats(const std::function<void(const char*
         "the sheet's OK did not return to the options panel"
     );
     resume_match_pause();
+    check_console_takeover_and_spawn(enter_line);
     std::cout << "console cheat check: a skirmish runs +atm and echoes it to everyone, sends an "
                  "unknown +word as chat and shows its Game Settings without Cheat Codes; "
-              << effects << '\n';
+              << effects << "; +control and +ai take a player and hand it back, and a unit name "
+              << "refuses a missing player\n";
 }
 
 void Runtime::check_console_campaign_cheats() {
@@ -177,9 +229,296 @@ void Runtime::check_console_campaign_cheats() {
     enter_line("+clock");
     const auto effects = check_console_cheat_effects(enter_line, true);
     const auto sung = check_console_sing_command(enter_line);
+    check_console_takeover_and_spawn(enter_line);
     require(!developer(game), "a cheat set the developer passphrase");
     std::cout << "console cheat check: a campaign runs +atm and echoes it, runs +clock; " << effects
-              << "; +sing " << sung << '\n';
+              << "; +sing " << sung
+              << "; +control and +ai take a player and hand it back, and a unit name refuses a "
+                 "missing player\n";
+}
+
+void Runtime::check_console_takeover_and_spawn(const std::function<void(const char*)>& enter_line) {
+    oa::World& world = match_->state();
+    oa::Game& game = world.game;
+    const uint8_t local = game.local_player_index;
+    uint8_t other = OA_PLAYER_COUNT;
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT && other == OA_PLAYER_COUNT; ++index)
+        if (index != local && sim::simulation_state::player_slot_active(index, game.players[index]))
+            other = index;
+    require(other != OA_PLAYER_COUNT, "no other player to take over");
+    const auto line = [&](const std::string& text) { enter_line(text.c_str()); };
+
+    line("+control " + std::to_string(other));
+    require(
+        game.local_player_index == other && game.viewpoint_player == other,
+        "+control did not take the other player"
+    );
+    line("+control " + std::to_string(local));
+    require(
+        game.local_player_index == local && game.viewpoint_player == local,
+        "+control did not hand the player back"
+    );
+
+    // A computer seated in the game is already a computer. +AI says so and
+    // leaves them, including when a human beside them is handed back.
+    const auto computer_status = game.players[other].status;
+    auto* computer_info = oa::world_player_info(&world, &game.players[other]);
+    const auto computer_state =
+        computer_info != nullptr ? computer_info->state : static_cast<uint8_t>(0);
+    const auto noticed = match_message_lines().size();
+    line("+ai " + std::to_string(other));
+    require(
+        game.players[other].status == computer_status &&
+            (computer_info == nullptr || computer_info->state == computer_state),
+        "+ai changed a computer player"
+    );
+    require(
+        lines_contain(match_message_lines(), noticed, "Already a computer player"),
+        "+ai on a computer player said nothing"
+    );
+
+    const auto mine_status = game.players[local].status;
+    auto* mine_info = oa::world_player_info(&world, &game.players[local]);
+    const auto mine_state = mine_info != nullptr ? mine_info->state : mine_status;
+    line("+ai " + std::to_string(local));
+    require(game.players[local].status != mine_status, "+ai did not take the local player");
+    line("+ai " + std::to_string(local));
+    require(
+        game.players[local].status == mine_status &&
+            (mine_info == nullptr || mine_info->state == mine_state),
+        "+ai did not hand the local player back"
+    );
+    require(
+        game.players[other].status == computer_status &&
+            (computer_info == nullptr || computer_info->state == computer_state),
+        "+ai's hand-back changed the computer player"
+    );
+
+    const char* found = spawn_unit_name(world);
+    require(found != nullptr, "the match has no unit name to spawn");
+    const std::string name(found, strnlen(found, sizeof oa::UnitDef::unit_name));
+    const auto before = live_unit_count(*match_);
+    const auto noticed_at = match_message_lines().size();
+    line("+" + name + " 99");
+    require(live_unit_count(*match_) == before, "+UNITNAME for a missing player created a unit");
+    require(
+        lines_contain(match_message_lines(), noticed_at, "No such player"),
+        "+UNITNAME for a missing player said nothing"
+    );
+
+    const oa::Unit* anchor = nullptr;
+    for (const auto& slot : match_->world().slots)
+        if (anchor == nullptr && slot.unit != nullptr && slot.record.type_index != 0 &&
+            slot.record.owner_index == local && (slot.record.flags & OA_UNIT_FLAG_LIVE) != 0)
+            anchor = &slot.record;
+    if (anchor != nullptr) {
+        constexpr int32_t kBeside = 128 << 16;
+        game.cursor_position = anchor->position;
+        const int64_t limit = static_cast<int64_t>(game.map_pixel_width) << 16;
+        if (static_cast<int64_t>(game.cursor_position.x) + kBeside < limit)
+            game.cursor_position.x += kBeside;
+        else if (game.cursor_position.x >= kBeside)
+            game.cursor_position.x -= kBeside;
+    }
+    const auto spawned_at = match_message_lines().size();
+    line("+" + name);
+    const bool spawned = live_unit_count(*match_) > before;
+    const bool refused = lines_contain(match_message_lines(), spawned_at, "spawn:");
+    require(spawned || refused, "+UNITNAME neither created a unit nor said why");
+}
+
+void Runtime::check_console_network_takeover(
+    Runtime& peer, const std::function<void(bool)>& advance
+) {
+    constexpr int kNetworkCheatWait = 200;
+    oa::World& world = match_->state();
+    oa::Game& game = world.game;
+    const bool allowed = session_cheats_allowed_;
+    const auto wait = [&](const auto& done, const char* what) {
+        for (int i = 0; i < kNetworkCheatWait && !done(); ++i)
+            advance(true);
+        require(done(), what);
+    };
+    const auto count_line = [](Runtime& side, std::string_view sought) {
+        int count = 0;
+        for (const auto& row : side.match_message_lines())
+            count += row == sought ? 1 : 0;
+        return count;
+    };
+    const auto flag_on = [](Runtime& side) {
+        return (console::console_flags(side.match_->state().game) &
+                console::console_flag::shoot_all) != 0;
+    };
+    const auto prefix = speaker_prefix(world);
+    // +ShootAll changes who units fire at, so both machines run it. Turn it
+    // back off before the wait, or the units keep firing while the line travels.
+    const bool shoot = flag_on(*this);
+    const std::string shoot_line = prefix + "+shootall";
+    const int shoot_seen = count_line(peer, shoot_line);
+    enter_console_check_line("+shootall");
+    require(flag_on(*this) != shoot, "+shootall did not run");
+    enter_console_check_line("+shootall");
+    require(flag_on(*this) == shoot, "+shootall did not turn back");
+    wait(
+        [&] { return count_line(peer, shoot_line) >= shoot_seen + 2 && flag_on(peer) == shoot; },
+        "+shootall did not run on the peer and turn back"
+    );
+
+    const uint8_t mine = game.local_player_index;
+    const auto mine_status = game.players[mine].status;
+    const uint32_t mine_id = game.players[mine].player_id;
+    // The same person is a different slot on each machine: each human is
+    // seated at slot 0 on their own. Follow the player id.
+    const auto slot_for_id = [](const oa::Game& players, uint32_t id) -> int {
+        for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index)
+            if (players.players[index].in_use != 0 && players.players[index].player_id == id)
+                return static_cast<int>(index);
+        return -1;
+    };
+    uint8_t other_status[OA_PLAYER_COUNT];
+    uint8_t other_state[OA_PLAYER_COUNT];
+    uint8_t other_known[OA_PLAYER_COUNT];
+    uint8_t peer_other_status[OA_PLAYER_COUNT];
+    uint8_t peer_other_state[OA_PLAYER_COUNT];
+    uint8_t peer_other_known[OA_PLAYER_COUNT];
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index) {
+        other_status[index] = game.players[index].status;
+        const auto* info = oa::world_player_info(&world, &game.players[index]);
+        other_known[index] = info != nullptr ? 1 : 0;
+        other_state[index] = info != nullptr ? info->state : static_cast<uint8_t>(0);
+        peer_other_status[index] = peer.match_->state().game.players[index].status;
+        const auto* remote_info =
+            oa::world_player_info(&peer.match_->state(), &peer.match_->state().game.players[index]);
+        peer_other_known[index] = remote_info != nullptr ? 1 : 0;
+        peer_other_state[index] =
+            remote_info != nullptr ? remote_info->state : static_cast<uint8_t>(0);
+    }
+    oa::Game& remote_game = peer.match_->state().game;
+    const int peer_found = slot_for_id(remote_game, mine_id);
+    require(peer_found >= 0, "the peer has no copy of this player");
+    const auto peer_slot = static_cast<uint8_t>(peer_found);
+    const auto peer_status = remote_game.players[peer_slot].status;
+    const auto peer_state_of = [&] {
+        const auto* info = oa::world_player_info(
+            &peer.match_->state(), &peer.match_->state().game.players[peer_slot]
+        );
+        return info != nullptr ? info->state : static_cast<uint8_t>(0);
+    };
+    const auto peer_state = peer_state_of();
+    const std::string ai = "+ai " + std::to_string(static_cast<unsigned>(mine));
+    const std::string ai_line = prefix + ai;
+    const int ai_seen = count_line(peer, ai_line);
+    if (allowed) {
+        // +AI hands over the player this machine runs, and nothing on the
+        // peer: each player runs it on their own machine. The line still
+        // reaches the peer as chat.
+        const auto peer_unchanged = [&] {
+            const auto& copy = peer.match_->state().game.players[peer_slot];
+            return copy.status == peer_status && peer_state_of() == peer_state;
+        };
+        enter_console_check_line(ai.c_str());
+        require(game.players[mine].status != mine_status, "+ai did not take the local player");
+        wait(
+            [&] { return count_line(peer, ai_line) >= ai_seen + 1; },
+            "+ai's line did not reach the peer"
+        );
+        require(peer_unchanged(), "+ai changed the peer's copy of the player");
+        enter_console_check_line(ai.c_str());
+        require(game.players[mine].status == mine_status, "+ai did not hand the local player back");
+        wait(
+            [&] { return count_line(peer, ai_line) >= ai_seen + 2; },
+            "+ai's second line did not reach the peer"
+        );
+        require(peer_unchanged(), "+ai changed the peer's copy of the player");
+    } else {
+        enter_console_check_line(ai.c_str());
+        require(game.players[mine].status == mine_status, "+ai ran with cheats disallowed");
+        for (int waited = 0; waited < kNetworkCheatWait && count_line(peer, ai_line) == ai_seen;
+             ++waited)
+            advance(true);
+        require(
+            peer.match_->state().game.players[peer_slot].status == peer_status &&
+                peer_state_of() == peer_state,
+            "+ai changed the peer with cheats disallowed"
+        );
+    }
+    // A computer seated beside this player, and every other person, stays as
+    // they were. Handing this player back does not take their controller.
+    // The same slot number is a different person on the peer.
+    for (uint8_t slot = 0; slot < OA_PLAYER_COUNT; ++slot) {
+        if (game.players[slot].in_use != 0 && game.players[slot].player_id == mine_id)
+            continue;
+        require(game.players[slot].status == other_status[slot], "+ai changed another player");
+        if (other_known[slot] != 0) {
+            const auto* kept = oa::world_player_info(&world, &game.players[slot]);
+            require(
+                kept != nullptr && kept->state == other_state[slot],
+                "+ai changed another player's record"
+            );
+        }
+    }
+    for (uint8_t slot = 0; slot < OA_PLAYER_COUNT; ++slot) {
+        const auto& remote_player = peer.match_->state().game.players[slot];
+        if (remote_player.in_use != 0 && remote_player.player_id == mine_id)
+            continue;
+        require(
+            remote_player.status == peer_other_status[slot],
+            "+ai changed another player on the peer"
+        );
+        if (peer_other_known[slot] != 0) {
+            const auto* kept = oa::world_player_info(&peer.match_->state(), &remote_player);
+            require(
+                kept != nullptr && kept->state == peer_other_state[slot],
+                "+ai changed another player's record on the peer"
+            );
+        }
+    }
+    require(
+        peer.match_->state().game.players[peer_slot].status == OA_PLAYER_STATUS_MIRRORED,
+        "the peer's copy of this player is not mirrored"
+    );
+
+    uint8_t target = OA_PLAYER_COUNT;
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index)
+        if (index != mine && sim::simulation_state::player_slot_active(index, game.players[index]))
+            target = index;
+    require(target != OA_PLAYER_COUNT, "no other player to control");
+    const auto peer_index = peer.match_->state().game.local_player_index;
+    const std::string control = "+control " + std::to_string(static_cast<unsigned>(target));
+    const std::string control_line = prefix + control;
+    if (allowed) {
+        enter_console_check_line(control.c_str());
+        require(game.local_player_index == target, "+control did not take the other player");
+        enter_console_check_line(
+            ("+control " + std::to_string(static_cast<unsigned>(mine))).c_str()
+        );
+        require(game.local_player_index == mine, "+control did not hand the player back");
+        // The command runs before the line is shown, so the echo carries the
+        // player just taken, not the one who typed it.
+        wait(
+            [&] {
+                const auto lines = peer.match_message_lines();
+                return std::any_of(lines.begin(), lines.end(), [&](const std::string& row) {
+                    return row.find(control) != std::string::npos;
+                });
+            },
+            "+control did not reach the peer"
+        );
+    } else {
+        enter_console_check_line(control.c_str());
+        require(game.local_player_index == mine, "+control ran with cheats disallowed");
+        for (int waited = 0;
+             waited < kNetworkCheatWait && !logged(peer.match_message_lines(), control_line);
+             ++waited)
+            advance(true);
+    }
+    require(
+        peer.match_->state().game.local_player_index == peer_index,
+        "+control changed the peer's player"
+    );
+    std::cout << "console cheat check: +shootall ran on both machines; +ai "
+              << (allowed ? "took this player and handed it back" : "was refused")
+              << " without changing the peer's player; +control stayed on this machine\n";
 }
 
 std::string Runtime::check_console_cheat_effects(

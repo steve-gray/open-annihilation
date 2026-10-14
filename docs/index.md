@@ -70,6 +70,10 @@ Every document in the repository, by what you want to do.
   the chat lines, a saved game's name and the whiteboard: input methods,
   commands, saves and recordings named in any script, the iPhone and iPad
   keyboard and the Steam Deck's.
+- [console.md](console.md): the chat line's commands, the `\` repeat and
+  the developer passphrase.
+- [cheats.md](cheats.md): every cheat and command, what it does, and
+  where it works in a skirmish, a campaign and a multiplayer game.
 - [languages.md](languages.md): the language the game shows its text in:
   how it is chosen (3.1c's command line, the Language setting, the
   operating system), the notice at start for a language to download, what

@@ -442,7 +442,9 @@ class NetworkPlay {
     /// must run only when the option is on, and either way its line must reach
     /// the other machine and the match report. A watching peer's Enter must
     /// open no chat line; a playing peer's "+atm" must follow the option and
-    /// reach this machine the same way. A failure throws std::runtime_error.
+    /// reach this machine the same way. The shared commands and the takeover
+    /// cheats are checked by Runtime::check_console_network_takeover. A failure
+    /// throws std::runtime_error.
     ///
     /// @param peer The other machine of the loopback game.
     /// @param step Runs one networked tick on this machine, and on the peer too

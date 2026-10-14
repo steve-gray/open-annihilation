@@ -13,7 +13,6 @@
 #include "oa/ui/frontend/ingame_menu.hpp"
 
 #include <SDL3/SDL.h>
-#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -153,6 +152,7 @@ void NetworkPlay::check_console_session_cheats(
             "the peer's +atm line did not reach this machine"
         );
     }
+
     std::cout << "console cheat check: both machines take the host's CHEATING option ("
               << (allowed ? "allowed" : "disallowed") << "), +atm "
               << (allowed ? "ran" : "was refused") << " and its line reached the peer and the "

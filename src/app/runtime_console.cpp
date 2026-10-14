@@ -155,6 +155,10 @@ console::Console* Runtime::match_console() {
         host.post_message = [](void* context, const char* text, uint8_t kind, uint8_t sender) {
             runtime_of(context)->console_post_message(text, kind, sender);
         };
+        host.apply_remote_line = [](void* context, const char* line, uint8_t sender) {
+            auto* runtime = runtime_of(context);
+            oa::ui::console::console_apply_remote_line(runtime->match_console(), line, sender);
+        };
         host.compact_render_cache = [](void* context) {
             runtime_of(context)->release_model_images();
         };
@@ -752,9 +756,9 @@ bool Runtime::handle_console_hotkey(const SDL_KeyboardEvent& key) {
     // '`' key, such as the Italian one, where it types '\', has the key too.
     else if (key.key == SDLK_GRAVE || key.scancode == SDL_SCANCODE_GRAVE)
         code = '`';
-    else if (developer && !remaps && key.key == SDLK_BACKSLASH)
+    else if (!remaps && key.key == SDLK_BACKSLASH)
         code = console::hotkey::repeat_command;
-    else if (developer && remaps && key.key == SDLK_INSERT)
+    else if (remaps && key.key == SDLK_INSERT)
         code = console::hotkey::insert;
     else if (developer && key.key == SDLK_F11)
         code = console::hotkey::f11;

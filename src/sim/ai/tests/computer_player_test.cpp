@@ -406,6 +406,35 @@ weight ARMSOLAR 0.1 # trailing comment
     }
 }
 
+// +AI hands a human to the computer after the start. That player gets a
+// controller and one pass of the profile; the computer already playing is
+// not scaled again.
+void test_adopt_handed_player() {
+    Fake fake;
+    fake.player(0, OA_PLAYER_STATUS_LOCAL, 1, 5);
+    fake.player(1, OA_PLAYER_STATUS_COMPUTER, 10, 30);
+    auto host = host_for(fake);
+    ComputerPlayers state{};
+    describe_catalog(state);
+    check(
+        computer_players_configure(&state, "plan any\nweight ARM 0.5\n", kBuildLists), "configure"
+    );
+    check(computer_players_initialize(&state, host), "initialize");
+    check(!state.players[0].present && state.players[1].present, "only the computer starts");
+    const auto kept = state.players[1].knowledge.weight_percent[ARMPW];
+    fake.player(0, OA_PLAYER_STATUS_COMPUTER, 1, 5);
+    computer_players_adopt(&state, host, 0);
+    check(state.players[0].present != 0, "a handed player gets a controller");
+    check(state.players[0].knowledge.weight_percent[ARMPW] == kept, "the profile applies once");
+    check(state.players[1].knowledge.weight_percent[ARMPW] == kept, "the other computer is kept");
+    computer_players_adopt(&state, host, 0);
+    check(state.players[0].present != 0, "a second adopt leaves the controller");
+    fake.player(2, OA_PLAYER_STATUS_LOCAL, 40, 50);
+    computer_players_adopt(&state, host, 2);
+    check(state.players[2].present == 0, "a human is not adopted");
+    computer_players_release(&state);
+}
+
 // The downloadable weight and limit passes run once per computer player, each applying the
 // downloadable types' directives to every controller in type order. With two
 // computer players a category weight compounds over four passes (100 -> 50
@@ -1644,6 +1673,7 @@ int main(int argc, char** argv) {
     test_build_list_limits();
     test_whole_build_lists();
     test_profile();
+    test_adopt_handed_player();
     test_downloadable_directives();
     test_weight_report();
     test_score_and_pick();

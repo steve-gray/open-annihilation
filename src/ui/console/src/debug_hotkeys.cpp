@@ -355,8 +355,9 @@ void hotkey_dispatch(Console* console, const HotkeyHost* host_in, uint32_t press
         call(host, host.set_debug_index, 0);
         break;
     case hotkey::repeat_command:
-        if (developer(game))
-            console_execute(console, nullptr, command_class::all);
+        // The same gate as typing the line again: options always, cheats
+        // when the session allows them. The passphrase is not required.
+        console_execute(console, nullptr, console_chat_mask(console));
         break;
     case 'h':
         if (host.session_kind != nullptr &&

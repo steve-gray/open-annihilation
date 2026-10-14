@@ -32,7 +32,7 @@ With the hack on:
 - **Insert** re-runs the last console line, as backslash does in 3.1c.
 - **F10** toggles the debug keys, as F11 does. Ctrl+F10 keeps its own meaning.
 
-Both remapped keys still need the developer passphrase, exactly as the keys they stand in for. Without it, Insert and F10 do nothing.
+F10 still needs the developer passphrase, as F11 does. Without it, F10 does nothing. Insert re-runs the last console line under the same rule as typing it: an option repeats with no passphrase, and a cheat repeats only while cheats are allowed.
 
 ### 3.1c behaviour
 
@@ -50,7 +50,7 @@ Keys act on the local machine only. The hack is part of the profile hash, so eve
 
 - The app maps keys in `Runtime::handle_console_hotkey` (`src/app/runtime_console.cpp`). The console dispatcher turns Insert into the repeat key, F10 into F11 and backslash into no key in `key_acted_on` (`src/ui/console/src/debug_hotkeys.cpp`).
 - `console_apply_rules` (`src/ui/console/src/commands.cpp`) copies the rules record field `rules.console.key_remaps.enabled` into `Console::key_remaps`.
-- Tests: `ui-console` (`src/ui/console/tests/console_test.cpp`, `test_key_remaps`: both keys need the passphrase, Insert repeats, F10 toggles, backslash does nothing; without the hack Insert and F10 do nothing).
+- Tests: `ui-console` (`src/ui/console/tests/console_test.cpp`, `test_key_remaps`: F10 needs the passphrase, Insert repeats a cheat only while cheats are allowed, backslash does nothing; without the hack Insert and F10 do nothing).
 
 ## Full configuration schema
 
