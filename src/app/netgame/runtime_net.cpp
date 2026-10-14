@@ -17,6 +17,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/app/user_folder.hpp"
 #include "demo_state.hpp"
+#include "oa/session/demo.hpp"
 #include "net_options.hpp"
 #include "net_state.hpp"
 #include "traffic_overlay.hpp"
@@ -1111,9 +1112,28 @@ struct NetworkPlay::NetHost {
                 "the multiplayer bootstrap did not leave an empty match world"
             );
         // The host's START plays its computer players at hard
-        // difficulty, after the preferences are saved.
+        // difficulty, after the preferences are saved. A difficulty chosen
+        // in the battle room replaces that for the computer player it names;
+        // one never chosen stays hard. Skirmish notes none, so it keeps the
+        // game's difficulty.
         if (state.hosting)
             runtime.match_->set_difficulty(OA_DIFFICULTY_HARD);
+        if (runtime.match_) {
+            auto* ais = oa::sim::ai::match_computer_players(*runtime.match_);
+            for (int32_t slot = 0; slot < mp::kSlotCount; ++slot) {
+                const auto& seated = mp::slot_player(lobby, slot);
+                if (seated.status != mp::kSlotComputer || seated.in_use == 0)
+                    continue;
+                const auto noted = lobby.computer_difficulty[slot];
+                const auto chosen =
+                    lobby.computer_difficulty_set[slot] && noted <= OA_DIFFICULTY_HARD
+                        ? static_cast<int32_t>(noted)
+                        : OA_DIFFICULTY_HARD;
+                oa::sim::ai::computer_players_set_difficulty(
+                    ais, static_cast<uint8_t>(slot), chosen
+                );
+            }
+        }
 
         auto& world = runtime.match_->state();
         if (!nm::match_launch_apply(lobby, &world))
@@ -1566,12 +1586,14 @@ struct NetworkPlay::NetHost {
     /// @param build_ticks ticks the computer player builds before the strike
     /// @param computer_id session id of the computer player
     /// @param watching whether the joiner only watches
+    /// @param joiner_computer session id of the joiner's computer player, or none
     static void computer_match(
         NetworkPlay& host,
         NetworkPlay& joiner,
         std::size_t build_ticks,
         uint32_t computer_id,
-        bool watching
+        bool watching,
+        uint32_t joiner_computer
     ) {
         const auto require = [](bool ok, const char* what) {
             if (!ok)
@@ -1611,6 +1633,32 @@ struct NetworkPlay::NetHost {
         const bool allied =
             computer_here.alliance[host_local] != 0 && computer_copy.alliance[host_on_client] != 0;
         require(allied != watching, "the computer player's team did not reach the match");
+
+        // The joiner's computer player is allied with everyone, and they with
+        // it, before any tick. It builds, and it is not the host computer
+        // player's nearest enemy, so the strike still meets the joiner's
+        // commander. Both matches agree, and a later follow reads the same
+        // rows from the player records.
+        if (joiner_computer != nm::no_player_id) {
+            const auto ally_with_all = [&](sim::match_runtime::Match& match, World& world) {
+                const auto allied_slot = player_slot(world, joiner_computer);
+                require(allied_slot < OA_PLAYER_COUNT, "the joiner's computer player has no slot");
+                std::array<uint8_t, 10> row{};
+                row.fill(1);
+                match.configure_player_alliances(allied_slot, row);
+                for (uint8_t other = 0; other < OA_PLAYER_COUNT; ++other) {
+                    if (other == allied_slot || world.game.players[other].in_use == 0)
+                        continue;
+                    std::array<uint8_t, 10> allies{};
+                    for (std::size_t index = 0; index < allies.size(); ++index)
+                        allies[index] = world.game.players[other].alliance[index];
+                    allies[allied_slot] = 1;
+                    match.configure_player_alliances(other, allies);
+                }
+            };
+            ally_with_all(host_match, host_world);
+            ally_with_all(client_match, client_world);
+        }
 
         // The owner's pose of every unit slot at each of the last ticks.
         std::vector<std::vector<OwnerPose>> owner_poses(
@@ -1712,6 +1760,29 @@ struct NetworkPlay::NetHost {
         );
         std::cout << "net loopback check: the computer player built " << built - 1
                   << " units by tick " << host_world.game.tick << "; both machines hold them\n";
+        if (joiner_computer != nm::no_player_id) {
+            const auto joiner_ai = player_slot(client_world, joiner_computer);
+            const auto joiner_copy = player_slot(host_world, joiner_computer);
+            const auto joiner_on_host = player_slot(host_world, client_id);
+            require(
+                joiner_ai < OA_PLAYER_COUNT && joiner_copy < OA_PLAYER_COUNT &&
+                    client_world.game.players[joiner_ai].status == OA_PLAYER_STATUS_COMPUTER &&
+                    host_world.game.players[joiner_copy].status == OA_PLAYER_STATUS_MIRRORED &&
+                    host_world.game.players[joiner_copy].machine_group != 0 &&
+                    joiner_on_host < OA_PLAYER_COUNT &&
+                    host_world.game.players[joiner_copy].machine_group ==
+                        host_world.game.players[joiner_on_host].machine_group,
+                "the joiner's computer player is not played on the joiner's machine alone"
+            );
+            const auto joiner_built = live_units(client_world, joiner_ai);
+            require(
+                joiner_built >= kComputerBuiltUnits &&
+                    live_units(host_world, joiner_copy) == joiner_built,
+                "the joiner's computer player did not build on both machines"
+            );
+            std::cout << "net loopback check: the joiner's computer player built "
+                      << joiner_built - 1 << " units; both machines hold them\n";
+        }
 
         // A finished unit for a player, standing on its own machine beside
         // another unit, as its factory would have made it.
@@ -1961,6 +2032,47 @@ struct NetworkPlay::NetHost {
                         static_cast<float>(computer_here.metal_produced_total),
                 "the joiner's figures for the computer player differ from its final ones"
             );
+        if (joiner_computer != nm::no_player_id) {
+            const auto kept = player_slot(client_world, joiner_computer);
+            require(
+                kept < OA_PLAYER_COUNT && client_world.game.players[kept].in_use != 0 &&
+                    client_world.game.players[kept].reject_reason == 0,
+                "the joiner retired its own computer player with the host"
+            );
+            std::cout << "net loopback check: the joiner's computer player stayed\n";
+            if (!net_options().net_record.empty()) {
+                oa::session::demo::DemoPlayback playback;
+                std::string error;
+                require(
+                    oa::session::demo::demo_open(&playback, host.net_->recording_path, &error) &&
+                        !playback.frames.empty(),
+                    "the recording did not open"
+                );
+                int32_t named = 0;
+                for (const auto& recorded : playback.demo.players)
+                    if (recorded.name.rfind("AI:", 0) == 0)
+                        ++named;
+                require(named >= 2, "the recording does not name both computer players");
+                playback.tick = 0xffffffffu;
+                const auto transport = oa::session::demo::demo_transport(&playback);
+                std::vector<uint8_t> buffer(65536);
+                int32_t delivered = 0;
+                for (;;) {
+                    uint32_t from_id = 0;
+                    uint32_t to_id = 0;
+                    auto size = static_cast<uint32_t>(buffer.size());
+                    const auto result = transport.receive(
+                        transport.context, &from_id, &to_id, buffer.data(), &size
+                    );
+                    if (result != oa::netgame::transport_result::ok)
+                        break;
+                    ++delivered;
+                }
+                require(delivered != 0, "the recording played back no frames");
+                std::cout << "net loopback check: recording played back " << delivered
+                          << " frames\n";
+            }
+        }
         joiner.net_leave();
     }
 };
@@ -2456,8 +2568,10 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
     require(host.net.open(host.net.context, &providers[0], "127.0.0.1"), "host open");
     require(mp::connect_host(*host.lobby, *host.connect), "host session");
     // The host may seat a computer player, which then plays the joiner, or
-    // the host while the joiner watches.
-    const bool computer = net_options().net_loopback_computer;
+    // the host while the joiner watches. --net-loopback-each-ai seats one
+    // on the joiner as well.
+    const bool each_ai = net_options().net_loopback_each_ai;
+    const bool computer = net_options().net_loopback_computer || each_ai;
     auto& host_info = mp::local_info(*host.lobby);
     host_info.max_units = computer ? kLoopbackComputerUnitsPerPlayer : kLoopbackUnitsPerPlayer;
     host_info.metal_hundreds = 10;
@@ -2621,6 +2735,63 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
                   << field_text(mp::slot_player(*host.lobby, seat).name, sizeof(Player::name))
                   << " in slot " << seat << (watching ? " against itself" : " on its team")
                   << ", on " << host_info.map_name << "\n";
+    }
+    uint32_t joiner_computer_id = nm::no_player_id;
+    if (each_ai) {
+        int32_t joiner_seat = -1;
+        for (int32_t slot = 0; slot < mp::kSlotCount && joiner_seat < 0; ++slot) {
+            const auto& player = mp::slot_player(*client.lobby, slot);
+            if (player.in_use == 0 && player.status == mp::kSlotOpen)
+                joiner_seat = slot;
+        }
+        require(joiner_seat >= 0, "no open slot for the joiner's computer player");
+        mp::lobby_add_computer(*client.lobby, joiner_seat);
+        auto* joiner_info = mp::slot_info(*client.lobby, joiner_seat);
+        require(joiner_info != nullptr, "the joiner's computer player has no setup block");
+        joiner_info->color = static_cast<uint8_t>(mp::lobby_next_free_color(*client.lobby));
+        joiner_info->side = 0;
+        joiner_computer_id = mp::slot_player(*client.lobby, joiner_seat).player_id;
+        mp::lobby_send_player_info(*client.lobby);
+        uint32_t group_rounds = 0;
+        wait_until(
+            [&] {
+                if (++group_rounds % 50 == 0)
+                    mp::lobby_send_player_info(*client.lobby);
+                drain(host);
+                drain(client);
+                const auto seen = mp::slot_for_player_id(*host.lobby, joiner_computer_id);
+                const auto client_seen = mp::slot_for_player_id(*host.lobby, client_id);
+                return seen >= 0 && client_seen >= 0 &&
+                       mp::slot_player(*host.lobby, seen).machine_group != 0 &&
+                       mp::slot_player(*host.lobby, seen).machine_group ==
+                           mp::slot_player(*host.lobby, client_seen).machine_group;
+            },
+            "the joiner's computer player did not join its machine"
+        );
+        // Allied with everyone before the match copies the rows, so the
+        // strike still finds the joiner's commander.
+        const auto ally_lobby = [](mp::Lobby& lobby, uint32_t id) {
+            const auto slot = mp::slot_for_player_id(lobby, id);
+            if (slot < 0)
+                return;
+            auto& player = mp::slot_player(lobby, slot);
+            for (int32_t other = 0; other < mp::kSlotCount; ++other) {
+                if (other == slot)
+                    continue;
+                auto& mate = mp::slot_player(lobby, other);
+                if (mate.in_use == 0)
+                    continue;
+                player.alliance[other] = 1;
+                mate.alliance[slot] = 1;
+            }
+        };
+        ally_lobby(*host.lobby, joiner_computer_id);
+        ally_lobby(*client.lobby, joiner_computer_id);
+        std::cout << "net loopback check: the joiner seated computer player "
+                  << field_text(
+                         mp::slot_player(*client.lobby, joiner_seat).name, sizeof(Player::name)
+                     )
+                  << " in slot " << joiner_seat << "\n";
     }
 
     // The battle room's unit sync over the installed unit table. The
@@ -2840,7 +3011,9 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
         "a remote setup block carried bytes after the engine signature"
     );
     if (computer) {
-        NetHost::computer_match(*this, joiner_play, ticks, computer_id, watching);
+        NetHost::computer_match(
+            *this, joiner_play, ticks, computer_id, watching, joiner_computer_id
+        );
         return 0;
     }
     const auto host_commander = NetHost::local_commander(*this);

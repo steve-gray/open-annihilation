@@ -13,8 +13,10 @@
 
 ## Description
 
-One machine can seat more than one computer player in the multiplayer battle
-room. 3.1c allows each machine a single computer player.
+OA's battle room seats several computer players for each human, up to the
+free slots. The hack remains so a profile that names it still loads; the
+battle room no longer reads it. 3.1c's own battle room seats one computer
+player per machine, and accepts any number another machine seats.
 
 ## Configuration example
 
@@ -30,14 +32,15 @@ The hack has no parameters.
 ### Behaviour
 
 In the battle room, clicking a blocked slot's player control seats a
-computer player there. In 3.1c that happens only while the machine has no
-computer player yet; with the hack on it happens whatever the count. The
-other conditions are unchanged: the game must not be closed, and the
-commander option must not be deathmatch.
+computer player there, whatever the count already seated. The other
+conditions are unchanged: the game must not be closed, and the commander
+option must not be deathmatch. The hack is not consulted.
 
 ### Baseline
 
-3.1c seats at most one computer player per machine.
+3.1c's battle room seats at most one computer player per machine. Another
+machine's extra computer players are ordinary players of that machine, and
+3.1c plays with them.
 
 ### Network games
 
@@ -57,9 +60,10 @@ of the profile hash, so every machine plays under the same profile.
 ### Implementation notes
 
 - `handle_panel_event` in `src/ui/frontend-multiplayer/src/battleroom.cpp`
-  reads `setup.multiple_local_ai.enabled` before `lobby_add_computer`.
+  seats another computer player without reading `setup.multiple_local_ai`.
+  The profile still parses the hack.
 - Test: `ui-multiplayer-lobby-rules` (`test_several_computers`) seats two
-  computer players with the hack on and one with it off.
+  computer players with the hack on and with it off.
 
 ## Full configuration schema
 
@@ -69,7 +73,7 @@ Hack id `setup.multiple-local-ai`, written under the profile's `hacks` block.
 | Write | Means |
 | --- | --- |
 | `setup.multiple-local-ai: true` | On. |
-| `setup.multiple-local-ai: false` | Off, the same as leaving it out: 3.1c behaviour. |
+| `setup.multiple-local-ai: false` | Off, the same as leaving it out. OA's battle room still seats several computer players; the value is kept so a profile that names the hack still loads. |
 
 ### Parameters
 

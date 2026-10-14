@@ -36,6 +36,10 @@ struct NetOptions {
     // The loopback host seats a computer player, which plays the joiner, or
     // the host while the joiner watches.
     bool net_loopback_computer = false;
+    // The loopback host and the joiner each seat one computer player. Implies
+    // the computer-player match, and plays its recording back when --net-record
+    // names a file.
+    bool net_loopback_each_ai = false;
     // A join whose host is not found, played through the main loop (with
     // --frames and "-n1:<address>" naming an address where no game is
     // hosted): a launch counts as active until the game list begins to wait

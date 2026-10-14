@@ -449,6 +449,17 @@ struct Lobby {
     /// The presence record this machine sends to the OA players of other
     /// machines, and the ones they sent (PresenceRecords).
     PresenceRecords presence_records{};
+    /// Difficulty of a computer player in this slot, 0 easy, 1 medium, 2 hard.
+    /// Shown before the start. Zero, and computer_difficulty_set false, until
+    /// this machine seats the player or a presence record names it.
+    uint8_t computer_difficulty[kSlotCount]{};
+    bool computer_difficulty_set[kSlotCount]{};
+    /// A change the host asked of another machine's computer player, kept
+    /// until that machine echoes it. Kind 0 is none. The player id names the
+    /// computer player, so a slot swap does not move the command.
+    uint32_t computer_command_player{};
+    uint8_t computer_command_kind{};
+    uint8_t computer_command_value{};
 };
 
 // ---------------------------------------------------------------------------
