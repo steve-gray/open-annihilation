@@ -46,7 +46,7 @@ for those who write a program that drives the game.
   any of them is on, the extension asks the main loop to keep running
   while the window is inactive, so the lines keep coming.
 - A launch's `status` block
-  ([docs/multiplayer/launch-file.md](../../../docs/multiplayer/launch-file.md))
+  ([launch files](../../../docs/command-line.md#launch-files))
   turns the same three on. Network play reads the launch, from `-c`,
   `--launch` or standard input, refuses one that cannot be used, and keeps
   its status block (`oa::app::netgame::kept_launch_status`). Its check comes

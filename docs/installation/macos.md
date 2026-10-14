@@ -83,6 +83,10 @@ To choose a different folder later, start it once from Terminal with
 open -a "Open Annihilation" --args --choose-game-dir
 ```
 
+Every option the game takes, and every way to start a network game from
+Terminal or a launcher, is in
+[Command Line and Game Launching](../command-line.md).
+
 Open Annihilation's own settings open with **Cmd+,**, or from
 **SETTINGS…** at the foot of the Library, which the **OA** button at the
 bottom right of the main menu opens. See [Settings](../settings.md), and
@@ -92,7 +96,9 @@ The app declares `.oamod`, `.oalang`, `.oamap`, `.oareg` and `.oalaunch`
 files.
 Double-click a `.oamod` file to install the mod it holds in Open
 Annihilation ([mods](../mods/README.md#installing-a-oamod-file)) while
-Open Annihilation is the program Finder uses for that type.
+Open Annihilation is the program Finder uses for that type, and a
+`.oalaunch` file to start the network game it describes
+([opening a launch file](../command-line.md#opening-a-launch-file)).
 [Settings › System](../settings.md#system) lists a switch for each type
 under **File Type Registration**. On makes this copy the program Finder
 opens that type with. Off hands it back to the program that opens a zip

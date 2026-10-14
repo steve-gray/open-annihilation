@@ -4052,7 +4052,15 @@ friend `RecorderExtension`.
 
 `netgame/` is network play's extension, `oa-app-netgame`, which the engine
 always builds and registers. It takes the 3.1c network switches
-`-e -h -n -p -t`, binds the network session (`src/netgame`) to the
+`-b -c -e -h -n -p -t -y` and the launch: `-c FILE` or `--launch FILE`
+(an `.oalaunch` file or TA Forever's, told apart by what it holds), a
+launch piped in on standard input, and an option for each launch setting,
+made from one table (`oa/app/netgame/launch_file.hpp`) that also makes
+those options' part of `--help`.
+[Command Line and Game Launching](../../docs/command-line.md) is every
+option and way to launch; `netgame-launch-help` checks that page against
+that table and against `--help`, and reads every launch file it shows. It
+binds the network session (`src/netgame`) to the
 multiplayer screens (`src/ui/frontend-multiplayer`), launches the
 match from the battle room and runs it over the network, and replays
 recorded games (`.tad`, `src/formats/tad` and `src/session/demo`) through

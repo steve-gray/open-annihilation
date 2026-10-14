@@ -132,6 +132,10 @@ the game still draws straight to the screen.
 If the shell says `Permission denied`, the unzip tool lost the program's
 permission: run `chmod +x open-annihilation` once.
 
+Every option the game takes, and every way to start a network game from a
+terminal or a launcher, is in
+[Command Line and Game Launching](../command-line.md).
+
 Open Annihilation's own settings open with **Ctrl+,**, or from
 **SETTINGS…** at the foot of the Library, which the **OA** button at the
 bottom right of the main menu opens. See [Settings](../settings.md), and
@@ -147,7 +151,9 @@ desktop entries and the MIME package are removed. Neither waits for a restart. T
 on the types it opens. Open a `.oamod` file from the file manager to
 install the mod it holds
 ([mods](../mods/README.md#installing-a-oamod-file)). Opened while the game
-runs, the file goes to the running game.
+runs, the file goes to the running game. A `.oalaunch` file starts the
+network game it describes
+([opening a launch file](../command-line.md#opening-a-launch-file)).
 
 For multiplayer, a firewall on the computer must let through UDP port
 47624, which other computers use to find a hosted game, TCP ports 2300 to
@@ -248,13 +254,15 @@ command, still takes the screenshots and films.
 - **To remove:** delete the game's folder. To remove your settings and logs
   too, delete the two folders above; your saved games, screenshots, films,
   recordings and mods are in the Open Annihilation folder in Documents. To make your
-  desktop forget the game as the opener of `.oamod`, `.oalang`, `.oamap` and
-  `.oareg` files, delete
+  desktop forget the game as the opener of `.oamod`, `.oalang`, `.oamap`,
+  `.oareg` and `.oalaunch` files, delete
   `~/.local/share/mime/packages/net.coreprime.open-annihilation.xml`,
   `~/.local/share/applications/net.coreprime.open-annihilation.desktop`,
-  the five icon files `apps/net.coreprime.open-annihilation.png`,
+  `~/.local/share/applications/net.coreprime.open-annihilation.launch.desktop`,
+  the six icon files `apps/net.coreprime.open-annihilation.png`,
   `mimetypes/application-x-oamod.png`, `mimetypes/application-x-oalang.png`,
-  `mimetypes/application-x-oamap.png` and `mimetypes/application-x-oareg.png`
+  `mimetypes/application-x-oamap.png`, `mimetypes/application-x-oareg.png`
+  and `mimetypes/application-x-oalaunch.png`
   under `~/.local/share/icons/hicolor/256x256`, and the hidden empty
   `.net.coreprime.open-annihilation.updated` files in the `mime`,
   `applications` and `icons/hicolor` folders there.

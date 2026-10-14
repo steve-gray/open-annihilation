@@ -1,9 +1,119 @@
-# The command line
+# Command Line and Game Launching
 
-`open-annihilation --help` lists every option. This page is the ones an
-installer or a launcher uses before the game starts.
+Open Annihilation takes options on its command line, and the switches of
+Total Annihilation 3.1c's command line, so a launcher or a shortcut written
+for 3.1c starts it the same way. This page lists every option, by what it is
+for, and every way to start a network game from another program, a script
+or a shortcut: a launch file, options alone, TA Forever's settings file, a
+launch piped in on standard input, and a launch file opened from the
+desktop. `open-annihilation --help` lists the same options.
 
-## `--version`
+## Contents
+
+- [Starting the program](#starting-the-program): where the program is, and
+  how it reads its options and 3.1c's switches
+- [Every option](#every-option), by group: information; game data, folders
+  and files; mods; display and sound; network play; launch; status;
+  recordings and video; checks; tools
+- [Ways to launch a game](#ways-to-launch-a-game), and
+  [examples](#examples) to copy
+- [Launch files](#launch-files): the `.oalaunch` file, group by group, with
+  a full example
+- [Launch settings](#launch-settings): every setting of a launch, its field
+  and its option
+- [Standard input and pipes](#standard-input-and-pipes): Linux, macOS and
+  Windows
+- [Opening a launch file](#opening-a-launch-file): the file type, and what
+  opening one does
+- [Listing what is installed](#listing-what-is-installed):
+  `--list-content --json`
+- [The 3.1c command line](#the-31c-command-line): 3.1c's switches, the `-c`
+  file and where this game differs
+- [Exit statuses and refusals](#exit-statuses-and-refusals)
+
+## Starting the program
+
+The program is `open-annihilation`:
+
+| System | The program | Where options go |
+|---|---|---|
+| Windows | `open-annihilation.exe`, in the install folder or the folder you unzipped | after the program's name in a Command Prompt, or in a shortcut's **Target** |
+| macOS | `open-annihilation`, inside the app: `Open Annihilation.app/Contents/MacOS/open-annihilation` | after `open -a "Open Annihilation" --args`, or after the program inside the app, in Terminal |
+| Linux and Raspberry Pi | `open-annihilation`, in the package's folder | after the program's name in a terminal |
+| Steam Deck | as on Linux | in the game's **Launch Options** in Steam ([Steam Deck](installation/steam-deck.md)) |
+| iPhone and iPad | the app you build with Xcode | in the scheme's **Arguments** in Xcode ([iPhone and iPad](installation/ios.md)) |
+
+The examples on this page write the program as `open-annihilation`. On
+Windows, in a Command Prompt in the game's folder:
+
+```bat
+open-annihilation.exe --version
+```
+
+On macOS, in Terminal, either of:
+
+```sh
+open -a "Open Annihilation" --args --skip-intro
+"/Applications/Open Annihilation.app/Contents/MacOS/open-annihilation" --version
+```
+
+`open -a` starts the app as Finder does. The options after `--args` reach
+the game only when `open` starts it: a copy that already runs is brought to
+the front and gets none. `open` does not connect the game to Terminal, so
+what the game prints goes to its log, and nothing typed or piped in Terminal
+reaches it. The program inside the app is the same game, started by
+Terminal itself: it prints to Terminal and reads its standard input.
+
+On Linux, in a terminal in the game's folder:
+
+```sh
+./open-annihilation --version
+```
+
+### How options and switches are read
+
+- An option begins with `--`, such as `--skip-intro`. The options are this
+  game's own. One that takes a value takes the next word: `--game-dir PATH`.
+  A few take theirs after `=` instead: `--hardware-acceleration=basic`,
+  `--quit-after-game=after-score`, `--tournament=off`, `--closed=off` and
+  `--lock-options=off`.
+- A word that begins with `-` or `/` and a letter, such as `-c` or `/d`, is
+  one of 3.1c's switches ([The 3.1c command line](#the-31c-command-line)).
+  Any other word names the language, as in 3.1c: `german`.
+- A `.oamod`, `.oalang`, `.oamap` or `.oareg` file named on its own is opened
+  as `--open FILE` opens it. A launch file is named with `-c` or `--launch`:
+  on its own, its name is just a word of 3.1c's command line, and no launch
+  starts.
+- The options are read first, wherever they stand. They win over the
+  switches and over a launch file, whatever their order.
+- Each argument the system passes is one word, spaces and all, so a path in
+  quotes is one path.
+- `--version` prints one line and ends before anything else is read.
+  `--help` prints every option and ends.
+- An option the game does not know, or a value it cannot use, ends the game
+  with status 1 and one line that names it:
+  `open-annihilation: unknown option: --nope`. A launch the game cannot use
+  ends it with status 2. [Exit statuses and refusals](#exit-statuses-and-refusals)
+  lists them all.
+
+## Every option
+
+`open-annihilation --help` lists these options, and the switches of
+[the 3.1c command line](#the-31c-command-line), as one line of usage. Each
+group below is a table of its options. The options of the last two groups,
+[checks](#checks) and [tools](#tools), are for the engine's tests and its
+developers; a player needs none of them.
+
+### Information
+
+| Option | What it does |
+|---|---|
+| `--version` | Prints the version line and ends with status 0. [Below](#--version). |
+| `--help` | Prints every option and switch, as one line of usage, and ends with status 0. `-h` as the last word does the same. |
+| `--list-content --json` | Prints the installed maps, mods and expansions as one line of JSON and ends ([Listing what is installed](#listing-what-is-installed)). |
+| `--print-profile` | Prints the mod profile a run would play and the version line, and ends ([Mods](#mods)). |
+
+#### `--version`
 
 ```sh
 open-annihilation --version
@@ -25,14 +135,89 @@ the console it was started from.
 
 `oa-tool --version` prints the same line.
 
-## `--print-profile`
+### Game data, folders and files
+
+| Option | What it does |
+|---|---|
+| `--game-dir PATH` | Plays the Total Annihilation folder at `PATH` for this run, as it stands, without remembering it. It cannot be given with `--choose-game-dir`. |
+| `--choose-game-dir` | Asks for the Total Annihilation folder even when one is remembered, and remembers the answer. A run nobody watches cannot ask, and refuses it. |
+| `--content GAME[:EXPANSION,...]` | The base game and expansions this run plays, by their ids, such as `totala:core-contingency,battle-tactics`, in place of the Library's choice, for this run only ([game content](game-content.md)). |
+| `--archive PATH` | Reads this archive in place of the archives the game folder holds; give it once for each archive. A relative path is read from the game folder. |
+| `--user-folder PATH` | Your Open Annihilation folder, which holds saved games, screenshots, films, recordings and mods, is `PATH` for this run. |
+| `--preferences-file PATH` | Reads and writes the preferences in `PATH` instead of the usual file. Your Open Annihilation folder is then the one beside it ([settings](settings.md#where-the-settings-are-kept)). |
+| `--data-dir PATH` | Keeps the data the game unpacks for itself in `PATH`, in place of the system's per-user data folder. |
+| `--log-dir PATH` | Writes this run's log into `PATH`, whatever kind of run it is. What the game prints goes into the log too; only `--status-stdout`'s lines stay on standard output. |
+| `--open FILE` | Opens a `.oamod`, `.oalang`, `.oamap` or `.oareg` file once the main menu shows, as opening it from the desktop does; give it once for each file. |
+| `--install-mod FILE` | The same as `--open FILE`. |
+| `--no-game-files-screen` | With no usable game folder, shows the notice with its look-again button instead of the Game files screen, where a system offers both ([game files](game-files.md)). |
+
+The installation guides say where the usual folders are
+([macOS](installation/macos.md#where-it-keeps-its-files),
+[Windows](installation/windows.md#where-it-keeps-its-files),
+[Linux](installation/linux.md#where-it-keeps-its-files)).
+
+### Mods
+
+| Option | What it does |
+|---|---|
+| `--mod-dir PATH` | Plays the mod folder at `PATH` for this run. It cannot be given with `--base-game`. |
+| `--base-game` | Plays without the mod you chose, for this run. |
+| `--mod FILE` | Reads the mod profile from `FILE` instead of the folder's own `oamod.yaml`, for development and for mods that ship none. |
+| `--print-profile` | Prints the profile a run would play, and the version line, and ends. [Below](#--print-profile). |
+| `--accept-unimplemented-hacks` | Accepts, with a warning each, the hacks this build does not implement yet, for development. It needs a mod: `--mod`, `--mod-dir`, `--game-dir` or `--print-profile`. |
+
+[The OAMOD standard](mods/oamod-standard.md#43-command-line-options) says
+more about each, and [mods](mods/README.md) how a mod is chosen.
+
+#### `--print-profile`
 
 `--print-profile` prints the resolved mod profile and then the same version
 line, and exits. It needs `--mod FILE`, `--mod-dir PATH` or `--game-dir PATH`.
 The profile comes first, so a program that reads the profile's JSON still
 finds it at the start of the output. The version line is the last line.
 
-## `--dplay-guid`
+### Display and sound
+
+| Option | What it does |
+|---|---|
+| `--skip-intro` | Skips the logo and the intro movie. |
+| `--mute` | Plays no sound. |
+| `--first-run` | Shows the welcome at the first main menu again, even when it is done ([first run](first-run.md)). |
+| `--resolution WxH` | Opens the window at that size, for this run only, such as `--resolution 1280x720`. |
+| `--max-fps N` | The most frames a second, from 30 through 1000, or 0 for no limit, for this run. |
+| `--hardware-acceleration[=off\|basic\|full]` | Sets Hardware acceleration for this run; alone it is `full`. |
+| `--no-hardware-acceleration` | Turns Hardware acceleration off for this run. |
+| `--native-density` | Opens the window at the display's own pixel density for this run. |
+| `--touch-controls` | Turns the touch controls on with no touch screen ([touch controls](touch-controls.md)). |
+
+None of these is remembered: [settings](settings.md#for-one-run-the-command-line)
+says what each one shows in Settings. 3.1c's `-d` and `-df` choose a window
+or full screen, and `-s` and `-w` turn the sound off
+([The 3.1c command line](#the-31c-command-line)).
+
+### Network play
+
+| Option | What it does |
+|---|---|
+| `--host` | Hosts a TCP/IP game at once and opens its battle room. |
+| `--join ADDRESS` | Joins the game at `ADDRESS`, an IPv4 address or a host name, at once, and opens its battle room. |
+| `--player-name NAME` | Your name in the game. |
+| `--game-name NAME` | With `--host`, the game's name; with `--join`, the game to join when several answer at the address. |
+| `--game-password PASSWORD` | With `--host`, the game's password; with `--join`, the password sent. |
+| `--dplay-guid GUID` | The application GUID this game hosts under and looks for. [Below](#--dplay-guid). |
+| `--dplay-port PORT` | The DirectPlay port this game hosts on and looks for games at, from 1 through 65535, in place of the standard 47624. |
+| `--play-demo FILE.tad` | Plays back a recorded network game ([recordings](../README.md#demo-recorder)). |
+| `--demo-unit-table strict\|ignore` | `ignore` plays a recording back even when its units differ from the game's, for diagnosis only; `strict`, the default, refuses it. |
+| `--net-record FILE` | Records the next network game to `FILE`, replacing it, whatever the mod's profile says. |
+| `--replay-viewer` | For joining a game in which another player's replayer plays a recording to those who join: the game presents itself as a viewer of that replay ([recordings](../README.md#demo-recorder)). |
+
+`--host`, `--join` and the names, the password and the DirectPlay options
+are launch settings too: [Launch settings](#launch-settings) gives each one's
+field and limits, and any other launch setting may stand beside them. The
+README's [network games from the command line](../README.md#network-games-from-the-command-line)
+says what the game prints as it hosts or joins.
+
+#### `--dplay-guid`
 
 `--dplay-guid GUID` sets the application GUID this game hosts under and
 looks for. A search lists a game only when that game was hosted under the
@@ -67,130 +252,545 @@ derive it.
 opened from the multiplayer screens uses it too.
 See [which games are listed](multiplayer/application-guid.md).
 
-## Starting a network game: `-c FILE` and `--launch FILE`
+### Launch
 
-`-c FILE` and `--launch FILE` are one option. Each names a launch file and
-starts a network game from it: the battle room opens with the file's map,
-rules, players and content, and the intro is skipped. The file is either
-Open Annihilation's own `.oalaunch` file or the settings file TA Forever
-already writes. The game tells them apart by what the file holds, whatever
-its name: a file whose first line is `oalaunch: 1` is an `.oalaunch` file,
-and a file with a `[totala]` section is TA Forever's. A file that is neither
-is refused. `-c -` and `--launch -` read the file from standard input. The
-schema of both files, and an example, are in
-[Launch files](multiplayer/launch-file.md).
+| Option | What it does |
+|---|---|
+| `-c FILE` | Starts a network game from a launch file: an `.oalaunch` file or TA Forever's settings file. `-c -` reads it from standard input. This is 3.1c's switch ([below](#the-31c-command-line)). |
+| `--launch FILE` | The same as `-c FILE`; `--launch -` reads standard input. |
+| the launch settings' options | `--map NAME`, `--metal N`, `--computer-player SIDE` and the rest, one for each setting: [Launch settings](#launch-settings). |
+| `--list-content --json` | Prints the installed maps, mods and expansions, for a launcher to choose from ([Listing what is installed](#listing-what-is-installed)). |
 
-`-c` and `--launch` cannot both name a file. `--launch` needs one; a `-c`
-with no word after it starts no launch, as in 3.1c. `-c` keeps 3.1c's other
-rules too, which [The 3.1c command line](#the-31c-command-line) gives.
+[Ways to launch a game](#ways-to-launch-a-game) shows how they work
+together.
 
-Each setting of a launch file has an option of its own, listed in
-[Launch settings](#launch-settings). An option beside a file replaces that
-field of the file, whichever is written first. The options work without a
-file too: `--host` or `--join ADDRESS` with any of them starts a launch of
-its own, so a launcher can write
+### Status
 
-```sh
-open-annihilation --host --game-name "Friday game" --map "Acid Foursome" \
-    --commander-death ends --metal 2000 --computer-player core:2::hard
-```
+| Option | What it does |
+|---|---|
+| `--status-stdout` | Writes what the game is doing, and how it ended, as one line of JSON for each event on standard output. |
+| `--status-file PATH` | Writes the same lines to a file. |
+| `--quit-after-game[=after-score]` | Leaves once the game has ended, or, with `=after-score`, once the player has left the score screen. |
+| `--fark` | Serves the automation endpoint, through which a program on this machine drives the game ([automation](automation.md)). |
+| `--fark-address 127.0.0.1:PORT\|[::1]:PORT` | The loopback address and port the endpoint listens at. It needs `--fark`. |
+| `--fark-file PATH` | Where the endpoint writes its address and token. It needs `--fark`. |
+
+`--status-stdout` writes what the game is doing, and how it ended for
+each player, as one JSON object a line on standard output. The game's
+own log goes to the log folder, so the lines are the only text there.
+`--status-file PATH` writes the same lines to a file. Both options
+together write every line to both. `--quit-after-game` leaves once the
+game has ended. `--quit-after-game=after-score` waits until the player
+has left the score screen. A launch file's `status` group turns the same
+options on.
+
+A missing file, or a file the game cannot open, is refused, and the game
+ends as it does for any other refused option, before the first line.
+See [what a game reports as it is played](multiplayer/status.md).
+
+### Recordings and video
+
+| Option | What it does |
+|---|---|
+| `--capture-video PATH.mp4` | Records what the window shows to an MP4 video; it needs the `ffmpeg` program ([capturing video](capture.md)). |
+| `--showcase arm-first-mission\|skirmish-battle` | Plays a scripted run for a showcase video, in place of a player ([capturing video](capture.md)). |
+| `--generate-script RECORDING` | Plans a director script's camera shots from a recorded game ([director scripts](director.md)). |
+| `--render-script PATH.oascript\|PATH.oamovie` | Renders a director script, or a bundle of one and its recording, to video with its sound ([director scripts](director.md)). |
+| `--output PATH` | Where `--generate-script` writes its script or bundle, or the folder `--render-script` renders into. |
+| `--chunks A-B` | The chunks `--render-script` draws, counted from 0. |
+| `--stills F,F...` | The frames `--render-script` also writes as pictures, counted from 0. |
+
+`--play-demo` and `--net-record` are under [Network play](#network-play).
+
+### Checks
+
+The checks drive the game by themselves, with no player, and end with
+status 0 when they pass and 1 when they fail; one that cannot run on this
+machine, such as one that needs 2 GiB of memory, ends with 77. The engine's
+tests run them ([testing](development/testing.md)). Check and Debug builds
+hold the self-checks, the `--check-` options and `--reclaim-check`; the
+release packages leave them out and refuse them with a line that says so.
+Network play's own checks, the last rows, are in every build.
+
+| Option | What it does |
+|---|---|
+| `--headless-check` | Runs without a window or sound: reads the game data and checks the main menu, or plays the run the other options set up. |
+| `--frames N` | Ends the run after N frames of the main menu's loop. |
+| `--snapshot PATH.ppm` | Writes a picture of what a headless run ends on, such as the main menu, to `PATH`; a check writes its own pictures beside it. |
+| `--display-modes MODES` | A made-up monitor for a check on SDL's dummy video driver: `WIDTHxHEIGHT[@RATE][/DENSITY]` modes, separated by commas, or `none`. |
+| `--force-capable` | Counts the renderer as one the graphics card can scale frames on, for `--check-render-tiers`, `--check-build-preview`, `--check-engine-settings` and `--check-kill-board` only. |
+| `--check-navigation [GROUP]` | Walks the menus and a skirmish through their keys and buttons: every group, or one of `screens`, `orders`, `outcomes`, `zoom`, `zoom-1366x768`, `zoom-1920x1080`, `zoom-2560x1440` and `campaign`. |
+| `--check-match-dialogs` | Opens the help dialog over a live match. |
+| `--check-match-layers` | Checks the presented match frame against the processor's composition. |
+| `--check-render-tiers` | Checks the accelerated drawing of the main menu and a skirmish against the processor's. |
+| `--check-match-orders` | Clicks the order page's buttons and checks what the units do. |
+| `--check-factory-orders` | Gives a Kbot Lab a move and checks the unit it builds carries it out. |
+| `--check-unit-speech` | Selects and orders the commander and checks what it says. |
+| `--check-download-builds` | Builds a unit from a download page. |
+| `--check-stockpile-builds` | Queues and builds rounds for every unit that stockpiles, through a save and a load. |
+| `--check-unit-page-memory` | Checks each unit keeps its order page through reselection, a save and a load. |
+| `--check-side-column` | Checks the commander's build pages fit the side column at several window sizes. |
+| `--check-match-bars` | Checks the top and bottom bars reach the window's edge at several shapes. |
+| `--check-unit-pages whole\|scaled:TYPE,...` | Checks the named unit types' pages at several window sizes. |
+| `--check-kill-board` | Checks the kills board F4 shows. |
+| `--check-paused-save` | Saves a paused skirmish, loads it and checks it runs. |
+| `--check-simulation-hash` | Checks the simulation hash with no mod, with a mod and after a Developer Mode override. |
+| `--check-zoom-memory` | Zooms a large battlefield out and back with a small model budget. |
+| `--check-unit-language TAG` | Checks units' names and descriptions show in the language `TAG` names. |
+| `--check-language-switch` | Changes the language over the main menu and over a skirmish. |
+| `--check-language-registry` | Lists every language the game knows. |
+| `--check-language-notice` | Shows the notice for a language that is only available to download. |
+| `--check-first-run` | Walks the welcome at the first main menu. |
+| `--check-setup-window` | Walks the window before the game: the language, the game and the copy. |
+| `--check-window-place` | Checks the next start opens the window at the same size and place. |
+| `--check-progress` | Shows the progress dialog for a slow piece of work. |
+| `--check-text-fit` | Opens every Open Annihilation screen in each built-in language at two sizes, and fails when a text does not fit. |
+| `--check-folder-chooser` | Chooses the game folder in the game's own locator. |
+| `--check-patrol-reclaim` | Checks a construction kbot on patrol reclaims on its way. |
+| `--check-reclaim-cursor` | Checks the cursor over trees, features and wrecks. |
+| `--check-build-preview` | Checks the building drawn under the build cursor. |
+| `--check-megamap-clicks` | Checks clicks on the megamap. |
+| `--check-radar-orders` | Checks presses on the radar for every order. |
+| `--check-pointer-interfaces` | Drives the pointer's buttons in both interface types. |
+| `--check-pad-controls` | Drives the gamepad controls with SDL's virtual pads ([controllers](controllers.md)). |
+| `--check-touch-controls` | Drives the touch controls with finger events ([touch controls](touch-controls.md)). |
+| `--check-running-while-inactive` | Checks the game keeps running while its window is inactive, when it must. |
+| `--check-game-files` | Drives the Game files screen through a route ([game files](game-files.md)). |
+| `--game-files-route folder\|demo\|copy-yourself\|manage` | The route `--check-game-files` takes. |
+| `--game-files-expect main-menu\|stopped-kept\|resumed\|not-a-game\|short-space\|next-start` | What `--check-game-files` expects the route to reach. |
+| `--game-files-source PATH` | The folder or installer the check's picker answers with. |
+| `--game-files-free-bytes N` | The free space the check reports. |
+| `--game-files-copy-rate BYTES` | The bytes a second the check's copy is held to. |
+| `--game-files-stop-after BYTES` | Presses STOP once the check's copy has copied this much. |
+| `--check-content-copy PATH` | Copies a small fixture into `PATH` and checks the copy, and does nothing else. |
+| `--check-installer FILE` | Lists the bundles a recognised installer holds and every file's SHA-256, and copies nothing. |
+| `--check-multiplayer-menu` | Clicks MULTI and checks the multiplayer screens. |
+| `--check-load-save` | Checks the save and load dialogs. |
+| `--check-frontend-controls` | Clicks every option of the skirmish, campaign and options screens. |
+| `--check-scroll-bars` | Drives the scroll bars of the lists and the options. |
+| `--check-engine-settings` | Drives Open Annihilation's own settings. |
+| `--check-registered-kit` | Drives a settings page, a screen, a notice and a prompt registered from inside the engine. |
+| `--check-kit-gallery` | Opens the UI kit's gallery at three window sizes. |
+| `--check-user-folder` | Drives your Open Annihilation folder and its buttons in Settings. |
+| `--check-mod-switch` | Switches the mod ten times and checks the memory in use stays level. |
+| `--check-map-packs` | Checks which maps of two map packs the skirmish list shows. |
+| `--check-map-pack-lists` | Installs a map pack while both map lists exist. |
+| `--check-map-browser` | Checks the map browser at four window sizes. |
+| `--check-mod-warning` | Checks the warning for a mod whose files are missing. |
+| `--check-mod-install` | Installs, rolls back and replaces made-up mod packages. |
+| `--check-language-install` | Installs a language pack from a dropped file. |
+| `--check-challenge` | Shows a made-up check that you are a person. |
+| `--check-registries` | Adds, switches and removes a registry in Settings › Downloads. |
+| `--check-library` | Opens the Library over made-up packages and carries out its actions. |
+| `--check-library-install` | Installs made-up mod packages from three registries while the Library shows. |
+| `--check-library-map-previews` | Checks the Library's map pictures. |
+| `--check-library-content` | Turns Core Contingency off in the Library, and chooses the demo when its installer is there. |
+| `--check-renderer-ladder` | Forces each renderer failure the game handles and checks it goes on. |
+| `--render-fault POINT[@FRAME]` | Forces only that failure, for `--check-renderer-ladder`. |
+| `--check-briefing-narration` | Checks a briefing's narration plays and stops when it should. |
+| `--check-director-view` | Checks the director's view of a headless skirmish. |
+| `--check-director-render` | Renders a small director script and checks the files it writes. |
+| `--check-interpolation` | Checks the frames drawn between ticks. |
+| `--check-unit-playout` | Checks another machine's units move evenly. |
+| `--reclaim-check` | Has the commander reclaim the nearest feature in a headless skirmish. |
+| `--net-loopback-check TICKS` | Hosts and joins a match in one process over 127.0.0.1 and compares both worlds after `TICKS` ticks. |
+| `--net-loopback-watcher` | The loopback check's joiner watches. |
+| `--net-loopback-computer` | The loopback check's host seats a computer player. |
+| `--net-loopback-each-ai` | The loopback check's host and joiner each seat a computer player. |
+| `--check-host-not-found` | Checks a joiner whose host is never found. |
+| `--check-opened-launch start\|menu FILE` | Opens `FILE` as the system opens a launch file: as the window first shows, or once the main menu has settled. |
+| `--check-recording-hook` | Checks the game declines bytes that are no recording and refuses a cut one. |
+
+### Tools
+
+These options set up and measure a run without a player, mostly a headless
+one, for the engine's developers.
+
+| Option | What it does |
+|---|---|
+| `--benchmark FRAMES` | Draws a skirmish and a campaign mission, each still and scrolling, for `FRAMES` frames each, and reports the frame times and the memory in use. |
+| `--match-ticks N` | With `--headless-check`, plays a skirmish, a campaign mission or a recording for `N` ticks. |
+| `--campaign NAME` | The campaign of the mission a headless run plays. It needs `--mission`. |
+| `--mission N` | The mission of `--campaign` a headless run plays. |
+| `--past-outcome` | Plays the mission on past its victory or defeat. |
+| `--restart-at TICK` | Restarts the mission at that tick and checks it starts again alike. |
+| `--combat UNITS` | Gives each side of the headless skirmish an army of that many units. |
+| `--busy-combat` | Adds every kind of drawing to the `--combat` armies. |
+| `--stage FILE` | Places units and gives orders, as the file lists them, in the headless skirmish. |
+| `--camera X,Z` | Places the camera's top left at that map pixel. |
+| `--zoom FACTOR` | The battlefield's zoom in a headless run. |
+| `--frame-rate FPS` | Draws every frame of a headless skirmish at that rate, between its ticks. |
+| `--frame-log FILE` | Writes one line a frame of that run. It needs `--frame-rate`, as do the next four. |
+| `--scroll-camera` | Sweeps the camera right and back over the army. |
+| `--march` | Orders the army to march south. |
+| `--follow` | Has the camera follow a unit. |
+| `--frame-clock MS` | Starts that run's clock this many milliseconds in. |
+| `--save-after TICK` | Saves the headless run once it reaches that tick. |
+| `--save-file PATH.sav` | Where `--save-after` saves. |
+| `--load PATH.sav` | Starts the headless run from a saved game. |
+| `--give-orders` | Gives the units orders in a headless run. |
+| `--seed N` | Starts the random numbers from `N`, so two runs play alike. |
+| `--trace-digest FILE` | Writes a digest of the match at each tick. |
+| `--trace-units FILE` | Adds a line for each unit to it. It needs `--trace-digest`. |
+| `--trace-lookups FILE` | Writes every game file and listing the run looks up. |
+| `--trace-input` | Prints each press of the pointer's buttons, and where it lands, on standard error. |
+| `--debug-order-lines` | Draws each construction beam as a plain line, to debug it. |
+| `--draw-threads N` | The threads that draw, from 1 through 32. |
+
+## Ways to launch a game
+
+A launcher, a server or a shortcut can start a network game with the map,
+the rules, the players, the content and the status stream already chosen.
+The battle room then opens ready, and the intro is skipped. There are five
+ways to say what the game is:
+
+| Way | For example | What it reads |
+|---|---|---|
+| A launch file | `open-annihilation -c host-now.oalaunch` | an `.oalaunch` file: every setting of the battle room ([Launch files](#launch-files)) |
+| Options alone | `open-annihilation --host --map "Acid Foursome"` | the same settings, an option for each ([Launch settings](#launch-settings)) |
+| TA Forever's settings file | `open-annihilation -c taforever.ini` | the settings 3.1c's `-c` file holds ([The `-c` file](#the--c-file)) |
+| A pipe | `cat host-now.oalaunch \| open-annihilation` | a launch file, from standard input ([Standard input and pipes](#standard-input-and-pipes)) |
+| Opening the file | a double-click on `host-now.oalaunch` | a launch file, as `-c FILE` reads it ([Opening a launch file](#opening-a-launch-file)) |
+
+3.1c's `-h`, `-n` and `-b` switches work beside `-c` as they do in 3.1c
+([The 3.1c command line](#the-31c-command-line)). On their own they start no
+game: with `-n1:192.0.2.10` alone the game opens on its main menu.
+
+`-c FILE` and `--launch FILE` are one option. Each names a launch file, which
+is either Open Annihilation's own `.oalaunch` file or the settings file TA
+Forever already writes. The game tells them apart by what the file holds,
+whatever its name: a file whose first line is `oalaunch: 1` is an
+`.oalaunch` file, and a file with a `[totala]` section is TA Forever's. A
+file that is neither is refused. `-c -` and `--launch -` read the file from
+standard input. `-c` and `--launch` cannot both name a file. `--launch`
+needs one; a `-c` with no word after it starts no launch, as in 3.1c.
+
+Each setting of a launch file has an option of its own. An option beside a
+file replaces that field of the file, whichever is written first. The
+options work without a file too: `--host` or `--join ADDRESS` with any of
+them starts a launch of its own. Without a launch file, `--host` or
+`--join`, a launch option is refused: `--metal needs --host or --join`.
 
 A value is checked as the file's value is. A launch the game cannot use
-ends the game before a window opens, with status 2 and one line that names
-the file and the field (`host.oalaunch: rules.metal: 250000 is above 10000`),
-or the option (`--metal: 250000 is above 10000`). The password is never
-part of that line and is never written to the log.
+ends the game as it starts, with status 2 and one line that names the file
+and the field (`host.oalaunch: rules.metal: 250000 is above 10000`), or the
+option (`--metal: 250000 is above 10000`). The password is never part of
+that line and is never written to the log.
 
-`--join ADDRESS` beside TA Forever's file joins that address instead of
-hosting. A player who joins takes the file's player settings and computer
-players; the host's rules are the ones that play.
+The launch stays active for the whole run, and every battle room applies it
+as it opens. A player who joins takes the launch's player settings and
+computer players; the host's rules are the ones that play.
 
-## Standard input
+### Examples
 
-When the game is given no launch file, and its standard input is a pipe or
-a file rather than a terminal, it looks at the first bytes. When they are
-`oalaunch:` the game reads the launch from standard input, as `--launch -`
-would, so
+Each example names its files from the folder the game is started in. A
+launch file named without a folder is looked for there first, then in the
+game folder.
 
-```sh
-cat host-now.oalaunch | open-annihilation
+#### Hosting from a launch file
+
+`host-now.oalaunch`:
+
+```yaml
+oalaunch: 1
+game:
+  role: host
+  name: Friday game
+player:
+  name: Ann
+  side: arm
+map: Acid Foursome
+rules:
+  commander-death: ends
+  metal: 2000
+computer-players:
+  - side: core
+    team: 2
+    difficulty: hard
 ```
 
-starts that launch. The game waits at most a quarter of a second for the
-first byte. When none comes, or the bytes do not begin `oalaunch:`, it
-starts as usual, so a program that starts the game with a pipe it never
-writes to does not hold the start up. Once a launch has begun, the rest of
-it must arrive within two seconds, and the game refuses a launch that does
-not end by then. TA Forever's file is read from standard input only with
-`-c -` or `--launch -`.
+```sh
+open-annihilation -c host-now.oalaunch
+```
 
-On Windows the same works from the command prompt:
+The battle room of Friday game opens on Acid Foursome, with Ann on Arm and
+a Core computer player on team 2 that plays hard, a commander's death ending
+that player's game, and 2000 metal to start. `--launch host-now.oalaunch`
+does the same. The other players join at this computer's address.
+
+#### Joining from a launch file
+
+`join-friday.oalaunch`:
+
+```yaml
+oalaunch: 1
+game:
+  role: join
+  address: 192.0.2.10
+player:
+  name: Ben
+  side: core
+  team: 1
+```
+
+```sh
+open-annihilation -c join-friday.oalaunch
+```
+
+The game joins the game at 192.0.2.10 at once, as `--join 192.0.2.10` does,
+and takes its seat as Ben, on Core and team 1. A file that joins leaves
+`rules` out: the host's rules play. `game.password` is the password sent,
+and `game.name` chooses among several games at the address. When no game
+answers there, the game list says so, and you can try again by hand.
+
+#### TA Forever's settings file
+
+`taforever.ini`:
+
+```ini
+[totala]
+watching=2
+mapmode=2
+location=2
+cheats=1
+los=1
+deathopt=2
+metal=1000
+energy=1000
+lockOptions=0
+playerlimit=4
+pfs=0
+session=Friday game
+provider=TAForever
+mission=Acid Foursome
+timelimit=0
+registeredonly=0
+tournment=1
+tournament=1
+```
+
+```sh
+open-annihilation -c taforever.ini
+```
+
+The file names no `connect`, `creator` or `address`, so the game hosts over
+TCP/IP at once, on Acid Foursome for four players, with watchers allowed,
+a mapped start, random positions, cheats off, true line of sight, a
+commander's death ending that player's game and 1000 metal and energy. The
+battle room's Previous Menu reads TAForever. The log names `tournment` and
+`tournament`, which 3.1c does not read. `--join 192.0.2.10` beside the file
+joins that address instead.
+
+#### A launch on one line
+
+The launch of `host-now.oalaunch`, as options:
+
+```sh
+open-annihilation --host --game-name "Friday game" --player-name Ann --side arm --map "Acid Foursome" --commander-death ends --metal 2000 --computer-player core:2::hard
+```
+
+An option beside a file replaces that field. This hosts the file's game
+with 5000 metal instead:
+
+```sh
+open-annihilation -c host-now.oalaunch --metal 5000
+```
+
+#### A launch piped in
+
+On Linux:
+
+```sh
+cat host-now.oalaunch | ./open-annihilation
+```
+
+On macOS, to the program inside the app, or to the app through `open`:
+
+```sh
+cat host-now.oalaunch | "/Applications/Open Annihilation.app/Contents/MacOS/open-annihilation"
+cat host-now.oalaunch | open -f -a "Open Annihilation"
+```
+
+On Windows, in a Command Prompt:
 
 ```bat
 type host-now.oalaunch | open-annihilation.exe
 ```
 
-A program started on macOS from the Finder or the Dock has no standard
-input to read, so there the launch is handed to the game as a file:
+A script can write the launch itself, with no file:
 
 ```sh
-cat host-now.oalaunch | open -f -a "Open Annihilation"
+open-annihilation --launch - <<'EOF'
+oalaunch: 1
+game:
+  role: host
+  name: Quick game
+map: Acid Foursome
+EOF
 ```
 
-`open -f` writes what it is given to a temporary `.txt` file and opens that
-file in the game, which reads it by what it holds, as the next section says.
+TA Forever's file is read from standard input only after `-c -` or
+`--launch -`:
 
-## Opening a launch file
+```sh
+cat taforever.ini | open-annihilation -c -
+```
 
-`.oalaunch` is one of the file types the game registers, with the game's
-icon, so a launch file a lobby or a friend gives you opens with a
-double-click, from Open With, or dropped on the game's window:
+#### A shortcut
 
-- **Windows:** the game registers it for you each time it starts, under
-  `HKEY_CURRENT_USER\Software\Classes`, and the installer registers it for
-  everyone who uses the computer. Both open it with
-  `"<install folder>\open-annihilation.exe" -c "%1"`; uninstalling removes
-  the installer's association.
-- **Linux:** the game adds the MIME type `application/x-oalaunch` to your
-  data folder, for files named `*.oalaunch` and for any text that begins
-  `oalaunch:`, and a desktop entry of its own that opens it with
-  `open-annihilation -c %f`.
-- **macOS:** the app declares the type and is its owner, so Finder opens it
-  with Open Annihilation. The app also takes a plain text file it is handed
-  without being its opener, which is what `open -f -a` sends.
+A Windows shortcut's **Target** starts a launch file with:
 
-Settings › System › **Launch files (.oalaunch)** chooses whether this copy
-opens them, On at first: Off withdraws the registration the game made for
-you on Windows and Linux, and on macOS hands them to the program that opens
-plain text ([Settings](settings.md#system)). The installer's registration
-for everyone on Windows stays until the game is uninstalled.
+```bat
+"C:\Program Files\Open Annihilation\open-annihilation.exe" -c "C:\Users\Ann\Documents\host-now.oalaunch"
+```
 
-What an opened launch file does depends on when it arrives:
+On a Steam Deck the same goes in the game's **Launch Options**:
+`-c /home/deck/host-now.oalaunch`.
 
-- **When it starts the game,** it is the start's launch, exactly as
-  `-c FILE`: the intro is skipped, the launch's content chooses what the
-  game plays, and the battle room opens on the file's map, rules and
-  players. A file the game cannot use ends the game with status 2 and a
-  message that names the file and the field.
-- **While the game shows the main menu,** the game goes to that launch's
-  battle room. From the single-player menu it goes back to the main menu
-  first.
-- **During a match,** while a game is being set up (a skirmish, a campaign
-  mission, the multiplayer screens), or on any other screen, the game opens
-  nothing and says so: in the match's message log, or with a notice. A
-  launch is not opened while another launch is under way either.
-- **While the game runs,** a launch whose `content` names a mod, base game
-  or expansions other than those the game plays is not opened; the notice
-  says to quit the game and open the file again, which then starts it with
-  that content. A file the battle room cannot use is not opened, and the
-  notice names the file and the field.
+#### A launch the game refuses
 
-The `status` group of a launch file opened in the game has no effect: the
-status stream is set up from the command line, before the file arrives.
+```sh
+open-annihilation --host --metal 20000
+```
 
-On Windows and Linux, opening a launch file while the game runs starts a
-second copy of the game with `-c FILE`, which starts as any second copy
-does. On macOS the system hands the file to the copy that runs.
+prints `open-annihilation: --metal: 20000 is above 10000` and ends with
+status 2, before a window opens.
+
+## Launch files
+
+The `.oalaunch` file is YAML. Its first line is `oalaunch: 1`; blank lines
+and comments may come before it. A missing header, or another number, is
+refused. Every other key is a setting's field, grouped by the field's first
+word, and a key that is not one is refused with its full name
+(`rules.nope`). Each key is named in full words for what it holds.
+
+| Group | What it holds |
+|---|---|
+| `game` | The network game: whether this player hosts or joins, the address to join, the game's name and password, the player limit, the launcher's name on the battle room's caption, a tournament game, a game closed to more players, and the DirectPlay application GUID and port (`game.directplay`). |
+| `player` | This player's seat: name, side or watching, team and colour. |
+| `map` | The map the host plays. |
+| `rules` | The host's rules: commander death, starting metal and energy, the unit limit, line of sight, mapping, start positions, cheats, watchers, the time limit, the lock on the options and the unit restrictions. A player who joins does not apply them: the host's rules are the ones that play. |
+| `computer-players` | The computer players this machine seats, a list. |
+| `content` | The base game, expansions and mod this run plays. |
+| `status` | The status stream ([multiplayer/status.md](multiplayer/status.md)). |
+
+A setting written `on` or `off` may also be written `true` or `false`. A
+setting the file leaves out keeps the battle room's own choice.
+
+`game.role` is `host` or `join`. A file that leaves it out needs `--host` or
+`--join ADDRESS` on the command line. A host plays over TCP/IP. A player who
+joins needs `game.address`, or `--join ADDRESS`.
+
+Each item of `computer-players` is a group of `side` (`arm` or `core`),
+`team` (`1` to `5`, or `none`), `colour` (`1` to `10`) and `difficulty`
+(`easy`, `medium` or `hard`). Any but the side may be left out, and the
+battle room then chooses it as it does for a computer player a click seats:
+no team, the next free colour, and hard. A refusal names an item by its
+place, counting from 1 (`computer-players[2].team`). A deathmatch or a
+tournament game seats no computer players, and the computer players and the
+player must fit `game.player-limit`.
+
+`rules.unit-restrictions` is a group of units and their limits, each unit by
+its FBI UnitName in any case: `0` cannot be built, `1` to `100` is the most
+each player may build, and `no-limit` lifts the limit, as the battle room's
+Restrictions does. A unit the game's content does not have is left out.
+
+`content` chooses what this run plays, as the Library's choice would, and
+only for this run. `base-game` is the base game's id, `expansions` a list of
+expansion ids, which needs a base game, and `mod` a mod's id, or the path of
+a mod folder or a mod profile. If this player does not have the base game,
+an expansion or the mod, the game ends as it starts, with status 2, and the
+line says which (`host.oalaunch: content.mod: "ridge" is not an installed
+mod`). A file that leaves `content` out plays what the Library has chosen.
+`--content`, `--base-game`, `--mod` and `--mod-dir` beside the file replace
+that choice.
+
+`map` is the map's shown name, or its key (`name@package` for a pack map). A
+map that is not installed is refused as the game starts
+(`host.oalaunch: map: "Acid Foursum" is not an installed map`). The game
+does not open on a different map.
+
+`status` turns on the status stream. `standard-output: on` is
+`--status-stdout`, `file` is `--status-file`, `quit-after-game: on` is
+`--quit-after-game` and `after-score` is `--quit-after-game=after-score`.
+The options beside the file replace the field they name. A launch from
+standard input sets the status stream too.
+
+### A full example
+
+A host on Acid Foursome for four players, Core on team 1, with two computer
+players and the made-up mod Ridge, which must be installed for the file to
+start. The GUID in the example is Total Annihilation's own; a launcher such
+as TA Forever passes the GUID it uses for Ridge.
+
+```yaml
+oalaunch: 1
+game:
+  role: host
+  name: Example game
+  password: secret
+  player-limit: 4
+  launcher-name: Ladder
+  tournament: off
+  closed: off
+  directplay:
+    application-guid: "{99797420-F5F5-11CF-9827-00A0241496C8}"
+    port: 47624
+player:
+  name: Commander
+  side: core
+  team: 1
+  colour: 2
+map: Acid Foursome
+rules:
+  commander-death: ends
+  metal: 1000
+  energy: 1000
+  unit-limit: 250
+  line-of-sight: true
+  mapping: mapped
+  start-positions: random
+  cheats: off
+  watchers: on
+  time-limit: 0
+  lock-options: false
+  unit-restrictions:
+    CORKROG: 0
+    ARMFLASH: no-limit
+computer-players:
+  - side: arm
+    team: 2
+    colour: 5
+    difficulty: hard
+  - side: core
+    team: 1
+content:
+  base-game: totala
+  expansions: [core-contingency]
+  mod: ridge
+status:
+  standard-output: on
+  file: status.jsonl
+  quit-after-game: on
+```
+
+The battle room then uses commander ends, metal 1000, energy 1000, a unit
+limit of 250, true line of sight, a mapped start, random positions, cheats
+off, watchers on and a player limit of 4, with the Krogoth out and the Flash
+without a limit. The host is Core on team 1 in colour 2, beside an Arm
+computer player on team 2 in colour 5 and a Core one on team 1. The map is
+Acid Foursome. The same launch on the command line, the content and status
+groups left out:
+
+```sh
+open-annihilation --host --game-name "Example game" --game-password secret \
+    --player-limit 4 --launcher-name Ladder --player-name Commander --side core --team 1 \
+    --colour 2 --map "Acid Foursome" --commander-death ends --metal 1000 --energy 1000 \
+    --unit-limit 250 --line-of-sight true --mapping mapped --start-positions random \
+    --cheats off --watchers on --unit-restriction CORKROG=0 \
+    --unit-restriction ARMFLASH=no-limit --computer-player arm:2:5:hard \
+    --computer-player core:1
+```
 
 ## Launch settings
 
@@ -266,30 +866,125 @@ players and the player must fit the player limit, and a host who watches
 needs `rules.watchers` on. The game refuses a launch that breaks one of
 these, naming the field or the option.
 
-## `--list-content --json`
+## Standard input and pipes
+
+When the game is given no launch file, and its standard input is a pipe or
+a file rather than a terminal, it looks at the first bytes. When they are
+`oalaunch:` the game reads the launch from standard input, as `--launch -`
+would, so
+
+```sh
+cat host-now.oalaunch | open-annihilation
+```
+
+starts that launch. The game waits at most a quarter of a second for the
+first byte. When none comes, or the bytes do not begin `oalaunch:`, it
+starts as usual, so a program that starts the game with a pipe it never
+writes to does not hold the start up. Once a launch has begun, the rest of
+it must arrive within two seconds, and the game refuses a launch that does
+not end by then. TA Forever's file is read from standard input only with
+`-c -` or `--launch -`.
+
+- **Linux:** the program reads its standard input when it is started from
+  a terminal or by another program, as above.
+- **Windows:** the same works from a Command Prompt:
+  `type host-now.oalaunch | open-annihilation.exe`.
+- **macOS:** the program inside the app reads its standard input when
+  Terminal or another program starts it:
+
+  ```sh
+  cat host-now.oalaunch | "/Applications/Open Annihilation.app/Contents/MacOS/open-annihilation"
+  ```
+
+  An app started through `open`, from Finder or from the Dock has no
+  standard input to read. `open -f -a` hands it the launch as a file
+  instead:
+
+  ```sh
+  cat host-now.oalaunch | open -f -a "Open Annihilation"
+  ```
+
+  `open -f` writes what it is given to a temporary `.txt` file, and `-a`
+  opens that file in the app, which reads it by what it holds, as
+  [Opening a launch file](#opening-a-launch-file) says: at once when the
+  game was not running, or from the main menu when it was.
+
+`open "Open Annihilation"` alone cannot take a pipe: `open` does not pass
+its standard input to the program it starts, and without `-a` it looks for
+a file of that name. Use `open -f -a "Open Annihilation"`, or the program
+inside the app.
+
+## Opening a launch file
+
+`.oalaunch` is one of the file types the game registers, with the game's
+icon, so a launch file a lobby or a friend gives you opens with a
+double-click, from Open With, or dropped on the game's window:
+
+- **Windows:** the game registers it for you each time it starts, under
+  `HKEY_CURRENT_USER\Software\Classes`, and the installer registers it for
+  everyone who uses the computer. Both open it with
+  `"<install folder>\open-annihilation.exe" -c "%1"`; uninstalling removes
+  the installer's association.
+- **Linux:** the game adds the MIME type `application/x-oalaunch` to your
+  data folder, for files named `*.oalaunch` and for any text that begins
+  `oalaunch:`, and a desktop entry of its own that opens it with
+  `open-annihilation -c %f`.
+- **macOS:** the app declares the type and is its owner, so Finder opens it
+  with Open Annihilation. The app also takes a plain text file it is handed
+  without being its opener, which is what `open -f -a` sends.
+
+Settings › System › **Launch files (.oalaunch)** chooses whether this copy
+opens them, On at first: Off withdraws the registration the game made for
+you on Windows and Linux, and on macOS hands them to the program that opens
+plain text ([Settings](settings.md#system)). The installer's registration
+for everyone on Windows stays until the game is uninstalled.
+
+What an opened launch file does depends on when it arrives:
+
+- **When it starts the game,** it is the start's launch, exactly as
+  `-c FILE`: the intro is skipped, the launch's content chooses what the
+  game plays, and the battle room opens on the file's map, rules and
+  players. A file the game cannot use ends the game with status 2 and a
+  message that names the file and the field.
+- **While the game shows the main menu,** the game goes to that launch's
+  battle room. From the single-player menu it goes back to the main menu
+  first.
+- **During a match,** while a game is being set up (a skirmish, a campaign
+  mission, the multiplayer screens), or on any other screen, the game opens
+  nothing and says so: in the match's message log, or with a notice. A
+  launch is not opened while another launch is under way either.
+- **While the game runs,** a launch whose `content` names a mod, base game
+  or expansions other than those the game plays is not opened; the notice
+  says to quit the game and open the file again, which then starts it with
+  that content. A file the battle room cannot use is not opened, and the
+  notice names the file and the field.
+
+The `status` group of a launch file opened in the game has no effect: the
+status stream is set up from the command line, before the file arrives.
+
+On Windows and Linux, opening a launch file while the game runs starts a
+second copy of the game with `-c FILE`, which starts as any second copy
+does. On macOS the system hands the file to the copy that runs.
+
+## Listing what is installed
 
 `--list-content --json` prints the installed maps, mods and expansions as
-one JSON object and exits with status 0. It does not open a window. Each
-map has its shown name, key, player count and size. Each mod and expansion
-has its id and name. The shape is in
-[Launch files](multiplayer/launch-file.md).
+one JSON object and exits with status 0, before the game's first screen.
+The maps are sorted by key, and the mods and expansions by id. The object
+is one line of standard output, the line that begins `{`; lines of the
+game's log may come before it. Leave `--log-dir` out: with it, the log
+takes standard output, and the object goes into the log.
+
+```json
+{"maps":[{"shown-name":"Acid Foursome","key":"Acid Foursome","players":4,"size":"13 x 13"}],"mods":[{"id":"ridge","name":"Ridge"}],"expansions":[{"id":"core-contingency","name":"Core Contingency"}]}
+```
+
+A map's `shown-name` is the name players see, `key` the name a launch file
+uses, `players` how many it is for and `size` its width and height. A mod
+or expansion has its `id` and the `name` players see.
 
 `--list-content` without `--json`, or `--json` without `--list-content`,
 is refused.
-
-## `--status-stdout`, `--status-file` and `--quit-after-game`
-
-`--status-stdout` writes what the game is doing, and how it ended for
-each player, as one JSON object a line on standard output. The game's
-own log goes to the log folder, so the lines are the only text there.
-`--status-file PATH` writes the same lines to a file. Both options
-together write every line to both. `--quit-after-game` leaves once the
-game has ended. `--quit-after-game=after-score` waits until the player
-has left the score screen.
-
-A missing file, or a file the game cannot open, is refused, and the game
-ends as it does for any other refused option, before the first line.
-See [what a game reports as it is played](multiplayer/status.md).
 
 ## The 3.1c command line
 
@@ -319,14 +1014,14 @@ The words that do not begin `--` are read as 3.1c reads its command line:
 - A word that does not begin with `-` or `/` names the language. The last
   one counts, and its first 63 characters are kept.
 - A letter that is not a switch, a lone `-` or `/`, and a digit are ignored.
-- No switch is refused, and no value of the `-c` file. The game ends before
-  a window opens, with status 2 and a line that names the file and the key,
-  only when it cannot use the launch: a launch file it cannot read, or that
-  is neither kind, a map that is not installed, or a base game, expansion or
-  mod this player does not have. An `.oalaunch` file's values are checked
-  as [Launch files](multiplayer/launch-file.md) says. A line of game
-  switches of 4096 characters or more, counting one space between each
-  word and the next, is refused too.
+- No switch is refused, and no value of the `-c` file. The game ends with
+  status 2 and a line that names the file and the key only when it cannot
+  use the launch: a launch file it cannot read, or that is neither kind, a
+  map that is not installed, or a base game, expansion or mod this player
+  does not have. An `.oalaunch` file's values are checked as
+  [Launch files](#launch-files) says. A line of game switches of 4096
+  characters or more, counting one space between each word and the next,
+  is refused too.
 
 The options that begin `--` are this game's own. They are taken out first,
 wherever they stand, and they win over a launch file and over the switches,
@@ -360,7 +1055,8 @@ switches, a `-b` that does nothing, a `-c` with no file, and `-h`, `-n` and
 ### The `-c` file
 
 TA Forever, and other launchers written for 3.1c, write a settings file and
-pass it with `-c`. This game reads it as 3.1c reads it:
+pass it with `-c`: a `[TotalA]` section of `key=value` lines. This game reads
+it as 3.1c reads it:
 
 - A name with no `\`, `/` or `:` in it is looked for in the current folder,
   then in the game folder: the one `--game-dir` names, or else the one this
@@ -383,7 +1079,8 @@ no address, the multiplayer screens ask for the address; with another
 transport they open on the provider list; with none, the main menu waits for
 the player. When the file names none of the three, as TA Forever's does, the
 game hosts over TCP/IP at once: that rule is this game's own, so that those
-launchers start a game.
+launchers start a game. `--join ADDRESS` beside such a file joins that
+address instead.
 
 `-c` clears the launch before it reads the file, as 3.1c does, so `-h`, `-n`
 and `-b` written before `-c` are lost, and the log says so. Written after
@@ -463,3 +1160,38 @@ the -c file in src/app/netgame/launch_file.cpp, word for word. -->
   `-c`; 3.1c splits its line at every space, quotes and all.
 - **Long lines.** A line of game switches of 4096 characters or more is
   refused; 3.1c reads any length.
+
+## Exit statuses and refusals
+
+| Status | When |
+|---|---|
+| 0 | The player left the game. `--version`, `--help`, `-r`, `--list-content --json` and a `--print-profile` of a usable profile end with 0 too, and so does a check that passed. With `--quit-after-game`, the game ended. |
+| 1 | An option or a value was refused, an error stopped the game, such as game data it cannot read, or a check failed. A `--print-profile` of a profile with errors ends with 1. |
+| 2 | A launch the game cannot use: a launch file it cannot read, or that is neither kind; a field or an option out of range, or one that needs another; a map, a base game, an expansion or a mod that is not installed. |
+| 3 | The game ran out of memory, and said so in a box and in `ErrorLog.txt` beside the program. With `--quit-after-game`, the player left the game or lost the connection. |
+| 77 | A check that cannot run on this machine. |
+
+A refusal is one line that begins `open-annihilation: `, on standard error,
+and in the log when there is one. A game started with no terminal, from
+the desktop, shows it in a box instead. A launch's refusal names where the
+value came from, the file and its field or key, or the option, then why:
+
+```text
+open-annihilation: unknown option: --nope
+open-annihilation: --metal: 20000 is above 10000
+open-annihilation: --metal needs --host or --join
+open-annihilation: -c and --launch cannot both be given
+open-annihilation: host.oalaunch: rules.metal: 250000 is above 10000
+open-annihilation: host.oalaunch: map: "Acid Foursum" is not an installed map
+open-annihilation: taforever.ini: mission: "Acid Foursum" is not an installed map
+open-annihilation: nothere.oalaunch: the file: cannot be read from the current folder or the game folder
+```
+
+A value refused on the command line, or in the launch file it names, ends
+the game before a window opens. A map or content that is not installed is
+found as the game starts, and ends it before its first screen. The password
+is never part of a refusal, and never written to the log.
+
+With `--status-stdout` the status lines own standard output; the refusal
+goes to the log, and `--log-dir` names where that is
+([what a game reports](multiplayer/status.md)).

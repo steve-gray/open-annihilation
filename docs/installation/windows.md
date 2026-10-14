@@ -139,6 +139,10 @@ Or, in a Command Prompt in the game's folder:
 open-annihilation.exe --choose-game-dir
 ```
 
+Every option the game takes, and every way to start a network game from a
+shortcut or a launcher, is in
+[Command Line and Game Launching](../command-line.md).
+
 Open Annihilation's own settings open with **Ctrl+,**, or from
 **SETTINGS…** at the foot of the Library, which the **OA** button at the
 bottom right of the main menu opens. See [Settings](../settings.md), and
@@ -154,7 +158,11 @@ put on the types it opens. Double-click a `.oamod` file to install the mod
 it holds ([mods](../mods/README.md#installing-a-oamod-file)).
 Opened while the game runs, the file goes to the running game. A file
 sync, such as OneDrive's of Documents, or a virus scanner can hold a new
-mod's files for a few seconds, and the install waits for them.
+mod's files for a few seconds, and the install waits for them. A
+`.oalaunch` file starts the network game it describes
+([opening a launch file](../command-line.md#opening-a-launch-file)). The
+installer registers launch files for everyone who uses the computer too,
+and that stays until the game is uninstalled, whatever the switch says.
 
 The first time you host or join a multiplayer game, Windows Defender
 Firewall may ask whether Open Annihilation may communicate on networks:
@@ -262,13 +270,16 @@ command, still takes the screenshots and films.
   folder in Documents is separate and stays until you delete it yourself.
 - **To remove your settings and logs too,** delete the Local AppData folder
   above. To make Windows forget the game as the opener of `.oamod`,
-  `.oalang`, `.oamap` and `.oareg` files, delete these eight keys with the
-  Registry Editor:
+  `.oalang`, `.oamap`, `.oareg` and `.oalaunch` files, delete these ten
+  keys with the Registry Editor:
   `HKEY_CURRENT_USER\Software\Classes\.oamod`,
   `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Mod`,
   `HKEY_CURRENT_USER\Software\Classes\.oalang`,
   `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Language`,
   `HKEY_CURRENT_USER\Software\Classes\.oamap`,
   `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.MapPack`,
-  `HKEY_CURRENT_USER\Software\Classes\.oareg` and
-  `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Registry`.
+  `HKEY_CURRENT_USER\Software\Classes\.oareg`,
+  `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Registry`,
+  `HKEY_CURRENT_USER\Software\Classes\.oalaunch` and
+  `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Launch`. The
+  uninstaller removes the launch file association the installer made.
