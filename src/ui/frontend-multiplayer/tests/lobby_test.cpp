@@ -77,6 +77,12 @@ void sound(void*, const char* name) {
 oa::ui::frontend_multiplayer::launch::LaunchBlock launch_block{};
 bool active_launch = false;
 bool refuse_map = false;
+// The id the loopback session gives the next player a Fixture's room adds as
+// it opens; 0 keeps the session's own first id.
+uint32_t fixture_next_player_id = 0;
+// The unit types a Fixture's room knows as it opens; none when null.
+mp::LobbyUnit* fixture_units = nullptr;
+int32_t fixture_unit_count = 0;
 std::vector<std::string> failed_joins;
 std::string saved_address;
 int32_t address_saves = 0;
@@ -207,6 +213,12 @@ struct Fixture {
         mp::lobby_max_units_default(*game) = 250;
         game->side_count = 2;
         loopback.opened = true;
+        if (fixture_next_player_id != 0)
+            loopback.next_player_id = fixture_next_player_id;
+        if (fixture_units != nullptr) {
+            lobby.units = fixture_units;
+            lobby.unit_count = fixture_unit_count;
+        }
         game->players[0].player_id = 0x100;
         mp::lobby_seat_local(lobby, 0, host, "Host");
         mp::panel_load(panel, "guis/lounge2.gui", layout);
@@ -6101,6 +6113,157 @@ void test_launch_battleroom(const oa::ui::gui_layout::Layout& lounge) {
     reset_launch();
 }
 
+/// A launch seats the player and this machine's computer players: the
+/// player's colour and watching, and each computer player's side, team,
+/// colour and difficulty, for a host and for a player who joins. A
+/// deathmatch seats no computer players, and a second entry seats none again.
+void test_launch_seats(const oa::ui::gui_layout::Layout& lounge) {
+    namespace nl = oa::ui::frontend_multiplayer::launch;
+    reset_launch();
+    active_launch = true;
+    launch_block.faction = nl::faction::core;
+    launch_block.team = 3;
+    launch_block.color = 5;
+    launch_block.watching = 2;
+    launch_block.computer_count = 2;
+    launch_block.computers[0] = nl::LaunchComputer{nl::faction::core, 2, 7, nl::difficulty::medium};
+    launch_block.computers[1] = nl::LaunchComputer{nl::faction::arm, 0, 0, nl::difficulty::none};
+    const auto link = launch_link();
+    // The host is 0x100; the computer players the launch seats come after.
+    fixture_next_player_id = 0x101;
+    {
+        Fixture host(lounge, &link);
+        const auto& info = mp::local_info(host.lobby);
+        expect(
+            info.side == 1 && mp::lobby_player_team(mp::local_player(host.lobby)) == 2 &&
+                info.color == 4,
+            "the host takes Core, team 3 and colour 5"
+        );
+        expect(
+            mp::slot_player(host.lobby, 1).status == mp::kSlotComputer &&
+                mp::slot_player(host.lobby, 2).status == mp::kSlotComputer &&
+                mp::slot_player(host.lobby, 3).status == mp::kSlotOpen,
+            "the launch's two computer players take the next open slots"
+        );
+        const auto first = arrive_computer(host);
+        const auto second = arrive_computer(host);
+        expect(first != 0 && second != 0, "both computer players arrive");
+        const auto* one = mp::slot_info(host.lobby, 1);
+        const auto* two = mp::slot_info(host.lobby, 2);
+        expect(
+            one != nullptr && one->side == 1 && one->color == 6 &&
+                mp::lobby_player_team(mp::slot_player(host.lobby, 1)) == 1 &&
+                host.lobby.computer_difficulty[1] == 1 && host.lobby.computer_difficulty_set[1],
+            "the first computer player is Core, team 2, colour 7, medium"
+        );
+        expect(
+            two != nullptr && two->side == 0 && two->color != 4 && two->color != 6 &&
+                mp::lobby_player_team(mp::slot_player(host.lobby, 2)) == mp::kNoTeam &&
+                host.lobby.computer_difficulty[2] == 2,
+            "the second computer player is Arm on no team, in a free colour, hard"
+        );
+        expect(
+            mp::panel_text(host.panel, "MEM1") == "Medium" &&
+                mp::panel_text(host.panel, "MEM2") == "Hard",
+            "the rows show the computer players' difficulty"
+        );
+        expect(
+            host.sent_of(oa::netgame::RecordType::player_team) >= 2,
+            "the computer players' teams are sent"
+        );
+        mp::lobby_enter_battleroom(host.lobby, host.panel);
+        expect(
+            mp::slot_player(host.lobby, 3).status == mp::kSlotOpen,
+            "entering the room again seats no more computer players"
+        );
+    }
+    launch_block.watcher = 1;
+    {
+        Fixture watching(lounge, &link);
+        expect(
+            (mp::local_info(watching.lobby).options & mp::option::watcher) != 0,
+            "a launch's watcher watches"
+        );
+    }
+    launch_block.watcher = 0;
+    // The launch's unit restrictions, by FBI UnitName in any case, and a game
+    // closed to more players.
+    mp::LobbyUnit units[] = {
+        {"", "", 0, 0, 0, 0, "", 0, 0},
+        {"Peewee", "ARM", 1000, 50, 0, 22, "ARMPW", 0, 0},
+        {"AK", "CORE", 900, 45, 0, 33, "CORAK", 0, 0},
+        {"Nuke", "ARM", 90000, 1500, mp::kUnitDisabledDefault, 44, "ARMSILO", 0, 0},
+    };
+    fixture_units = units;
+    fixture_unit_count = 4;
+    launch_block.computer_count = 0;
+    launch_block.closed = 1;
+    launch_block.restriction_count = 4;
+    launch_block.restrictions[0] = nl::LaunchRestriction{"CORAK", 0};
+    launch_block.restrictions[1] = nl::LaunchRestriction{"armpw", 7};
+    launch_block.restrictions[2] = nl::LaunchRestriction{"ARMSILO", nl::kLaunchNoLimit};
+    launch_block.restrictions[3] = nl::LaunchRestriction{"NOSUCH", 3};
+    {
+        Fixture restricted(lounge, &link);
+        mp::UnitSyncRecord ak{};
+        mp::UnitSyncRecord peewee{};
+        mp::UnitSyncRecord nuke{};
+        (void)mp::unit_sync_lookup(restricted.lobby, 33, &ak);
+        (void)mp::unit_sync_lookup(restricted.lobby, 22, &peewee);
+        (void)mp::unit_sync_lookup(restricted.lobby, 44, &nuke);
+        expect(ak.limit == 0 && ak.local == 0, "a restriction of 0 disables the unit");
+        expect(peewee.limit == 7 && peewee.local != 0, "a restriction names the unit in any case");
+        expect(nuke.limit == nl::kLaunchNoLimit && nuke.local != 0, "no-limit enables a unit");
+        expect(restricted.lobby.sync.record_count == 3, "a unit the content lacks is left out");
+        expect(
+            (mp::local_info(restricted.lobby).options & mp::option::game_closed) != 0,
+            "a launch closes the game"
+        );
+    }
+    {
+        Fixture joined(lounge, &link, false);
+        mp::UnitSyncRecord ak{};
+        (void)mp::unit_sync_lookup(joined.lobby, 33, &ak);
+        expect(
+            ak.limit != 0 && (mp::local_info(joined.lobby).options & mp::option::game_closed) == 0,
+            "a joiner leaves the restrictions and the game's openness to the host"
+        );
+    }
+    fixture_units = nullptr;
+    fixture_unit_count = 0;
+    launch_block.closed = 0;
+    launch_block.restriction_count = 0;
+    launch_block.computer_count = 2;
+    launch_block.death_option = 3;
+    {
+        Fixture deathmatch(lounge, &link);
+        expect(
+            mp::slot_player(deathmatch.lobby, 1).status == mp::kSlotOpen,
+            "a deathmatch seats no computer players"
+        );
+    }
+    launch_block.death_option = 0;
+    launch_block.computer_count = 1;
+    {
+        Fixture joined(lounge, &link, false);
+        const auto& info = mp::local_info(joined.lobby);
+        expect(
+            info.side == 1 && mp::lobby_player_team(mp::local_player(joined.lobby)) == 2,
+            "a joiner takes the launch's side and team"
+        );
+        expect(
+            joined.sent_of(oa::netgame::RecordType::player_value_request) >= 1,
+            "a joiner asks the host for the launch's colour"
+        );
+        expect(
+            mp::slot_player(joined.lobby, 1).status == mp::kSlotComputer,
+            "a joiner seats its own computer player"
+        );
+    }
+    fixture_next_player_id = 0;
+    reset_launch();
+}
+
 } // namespace
 
 // Without arguments the self-contained cases; with --data the lounge and game
@@ -6567,6 +6730,7 @@ int main(int argc, char** argv) {
             test_ping_column(*lounge.layout);
             test_closing_slots_republishes(*lounge.layout);
             test_launch_battleroom(*lounge.layout);
+            test_launch_seats(*lounge.layout);
         }
         test_game_list(assets);
         test_launch_screens(assets);

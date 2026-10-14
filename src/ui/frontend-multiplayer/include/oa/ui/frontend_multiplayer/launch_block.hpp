@@ -38,6 +38,46 @@ inline constexpr int32_t arm = 1;
 inline constexpr int32_t core = 2;
 } // namespace faction
 
+/// The most computer players a launch seats: every seat but the player's own.
+inline constexpr int32_t kLaunchComputerLimit = 9;
+/// The teams a launch names, 1 through 5, which the battle room shows as its five team icons.
+inline constexpr int32_t kLaunchTeamFirst = 1;
+inline constexpr int32_t kLaunchTeamLast = 5;
+/// The colours a launch names, 1 through 10, in the order the battle room steps through them.
+inline constexpr int32_t kLaunchColourFirst = 1;
+inline constexpr int32_t kLaunchColourLast = 10;
+
+/// LaunchComputer::difficulty: how well a computer player plays; none leaves the room's own.
+namespace difficulty {
+inline constexpr int32_t none = 0;
+inline constexpr int32_t easy = 1;
+inline constexpr int32_t medium = 2;
+inline constexpr int32_t hard = 3;
+} // namespace difficulty
+
+/// The most unit restrictions a launch sets.
+inline constexpr int32_t kLaunchRestrictionLimit = 256;
+/// Room for a unit's FBI UnitName in a restriction, with its terminating NUL.
+inline constexpr std::size_t kLaunchUnitNameBytes = 0x20;
+/// LaunchRestriction::limit of a unit that may be built without a limit.
+inline constexpr int32_t kLaunchNoLimit = -1;
+/// The most a restriction lets a player build of one unit; the battle room's slider stops here.
+inline constexpr int32_t kLaunchHighestLimit = 100;
+
+/// One unit restriction a launch sets, as the battle room's Restrictions sets it.
+struct LaunchRestriction {
+    char unit[kLaunchUnitNameBytes]{}; ///< the unit's FBI UnitName, matched in any case
+    int32_t limit{};                   ///< 0 to 100, or kLaunchNoLimit; 0 cannot be built
+};
+
+/// One computer player a launch seats in the battle room.
+struct LaunchComputer {
+    int32_t faction{};    ///< faction values; none leaves the battle room's side
+    int32_t team{};       ///< 1 to 5; 0 seats it on no team
+    int32_t color{};      ///< 1 to 10; 0 takes the next free colour
+    int32_t difficulty{}; ///< difficulty values
+};
+
 // One launch. Texts are terminated within their fields.
 struct LaunchBlock {
     // The transport to connect with (connection_type values); the connection
@@ -67,6 +107,13 @@ struct LaunchBlock {
     int32_t tournament{};                // nonzero for a tournament game
     int32_t faction{};                   // faction values
     int32_t team{};
+    int32_t color{};          // 1 to 10, the player's colour; 0 leaves it to the battle room
+    uint32_t watcher{};       // 1: the player watches instead of playing
+    int32_t computer_count{}; // computer players seated from computers, in order
+    LaunchComputer computers[kLaunchComputerLimit]{};
+    uint32_t closed{};           // 1: the host closes the game to more players
+    int32_t restriction_count{}; // unit restrictions set from restrictions, in order
+    LaunchRestriction restrictions[kLaunchRestrictionLimit]{};
 };
 
 } // namespace oa::ui::frontend_multiplayer::launch
