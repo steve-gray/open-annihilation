@@ -56,6 +56,25 @@ void note_kind(const PackageKind& kind);
 /// @return true when it was removed
 bool remove_entry(const std::filesystem::path& path, std::error_code& error) noexcept;
 
+/// Tells whether a folder holds nothing but empty folders: no file, link or
+/// junction anywhere in it, and at most 256 folders, its own included. A file
+/// sync that brings back the folders of a pack the player removed leaves one.
+///
+/// @param folder the folder
+/// @return true when it is such a folder; false for a link or junction, a
+///         file, a missing path or one that cannot be read
+[[nodiscard]] bool holds_only_empty_folders(const std::filesystem::path& folder) noexcept;
+
+/// Removes a folder that holds nothing but empty folders, the deepest first,
+/// each with the system's call that removes only an empty folder: nothing the
+/// player put in it is ever removed. A folder that holds anything else is
+/// left whole.
+///
+/// @param folder the folder
+/// @return true when it was removed; false when it held anything else, or a
+///         folder could not be removed, which leaves what is left in place
+bool remove_empty_folders(const std::filesystem::path& folder) noexcept;
+
 /// Syncs a folder's entries to the disk where the system needs it (not on
 /// Windows); a folder that cannot be opened is left.
 ///

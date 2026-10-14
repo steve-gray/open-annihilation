@@ -7,7 +7,9 @@
 // the check is one turn. The first: the command line's missing package
 // refused; a catalogue map pack installed from the skirmish setup with no
 // prompt, and a catalogue mod installed on the main menu with no notice,
-// the same files opened as --open does still showing theirs; a package
+// the same files opened as --open does still showing theirs, a map pack
+// refused, and logged, over a folder holding the player's own file, then
+// installed into that folder's empty folders once the file is gone; a package
 // the Finder made installed with no question from a dropped file; an update
 // asked and cancelled, then replaced; a third
 // revision replacing, keeping one .backup; a reinstall dropping a file
@@ -57,7 +59,9 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <sstream>
 #include <stdexcept>
+#include <streambuf>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -727,6 +731,42 @@ void Runtime::check_mod_install() {
         require(!remove_error, "the opened map pack's folder could not be removed");
         const fs::path opened_pack = packages / "opened-pack.oamap";
         write_ridge_pack(opened_pack, options_.game_dir, "opened-pack", "zz opened marker");
+        // A folder of the pack's id that holds the player's own file is
+        // refused and left as it is, and the log says so.
+        const fs::path own_file = opened_folder / "maps" / "notes.txt";
+        fs::create_directories(opened_folder / "previews");
+        fs::create_directories(own_file.parent_path());
+        std::ofstream(own_file) << "the player's own notes";
+        {
+            std::ostringstream logged;
+
+            const struct Captured {
+                std::streambuf* previous;
+
+                ~Captured() { std::cerr.rdbuf(previous); }
+            } captured{std::cerr.rdbuf(logged.rdbuf())};
+
+            install::post_opened_file(opened_pack);
+            until_prompt("the map pack opened into the player's folder");
+            require(
+                titled("MAP PACK NOT INSTALLED"),
+                "a folder holding the player's file did not refuse the map pack"
+            );
+            require(
+                logged.str().find(
+                    "opened-pack.oamap: The folder opened-pack does not hold this map pack. "
+                    "It is left as it is."
+                ) != std::string::npos,
+                "the map pack's refusal is not in the log"
+            );
+        }
+        require(fs::exists(own_file), "the player's file was not left as it is");
+        key(SDLK_RETURN);
+        require(state.prompt == nullptr, "Enter did not close the refusal");
+        // With that file gone, the empty folders left, as a file sync brings
+        // back after an uninstall, are free to install into.
+        fs::remove(own_file, remove_error);
+        require(!remove_error, "the player's file could not be removed");
         install::post_opened_file(opened_pack);
         until_prompt("the map pack opened as --open opens it");
         require(titled("INSTALL MAP PACK"), "--open did not ask before installing the map pack");

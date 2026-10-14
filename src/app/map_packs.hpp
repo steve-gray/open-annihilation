@@ -134,6 +134,53 @@ class MapPacks {
     std::string_view id
 );
 
+/// Lists the folders whose content a map pack's maps are checked against as
+/// it installs: where the game finds a map's features.
+///
+/// They are the folders the game plays without the mod's (the expansions
+/// that are on, then the base game), with each expansion the pack's
+/// `requiredExpansions` names, and each expansion that one needs, that the
+/// player has copied (`Expansions/<base>/<id>` with a record that lists all
+/// its files) and that is not listed yet, put before the base game. A mod is
+/// never one of them.
+///
+/// @param played the folders the game plays, highest precedence first: the
+///        mod folder when one is layered, the expansions that are on, then the
+///        base game; empty means the game folder alone
+/// @param mod_folder the mod folder layered over the game; empty when none
+/// @param game_dir the base game's folder, used when `played` lists nothing else
+/// @param user_folder the player's folder, which holds `Expansions/`; empty for none
+/// @param required the expansions the pack needs
+/// @return the folders, highest precedence first, the base game last
+[[nodiscard]] std::vector<std::filesystem::path> map_pack_fit_folders(
+    std::span<const std::filesystem::path> played,
+    const std::filesystem::path& mod_folder,
+    const std::filesystem::path& game_dir,
+    const std::filesystem::path& user_folder,
+    std::span<const std::string> required
+);
+
+/// Checks one map in a folder against the content of the folders given.
+///
+/// One folder is the base game alone, checked as check_base_game_fit checks
+/// it. With more, their archives, as the game's discovery mounts them from
+/// the folders together, and their loose files are the store, so a feature
+/// an expansion defines is found as the game finds it. An archive that cannot
+/// be opened is skipped, as the game skips it.
+///
+/// @param folders the base game and its expansions, highest precedence
+///        first, as map_pack_fit_folders lists them
+/// @param folder the map pack's folder, staged or installed
+/// @param map the map's manifest entry
+/// @param id the pack's id
+/// @return every rule the map broke; a failure when no archive can be read
+[[nodiscard]] oa::data::map_fit::Fit check_content_fit(
+    std::span<const std::filesystem::path> folders,
+    const std::filesystem::path& folder,
+    const oa::data::map_pack::MapEntry& map,
+    std::string_view id
+);
+
 /// The compatibility key of a base game, the expansions that are on, and a mod.
 ///
 /// The base game comes first. An empty base game is Total Annihilation.

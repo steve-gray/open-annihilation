@@ -141,9 +141,11 @@ and refuses with every problem named:
 - `requires.engine`, when the manifest writes one, is met by this build.
   The range is read with the shared engine-range rules, and the sentence
   names the range and this build's version.
-- Every map fits the base game. `check_staged` calls the `FitHooks` that
-  `PackageOptions::context` points to, once per map, and the runtime's hook
-  builds the base store. No hooks, which only a test gives, skips the check.
+- Every map fits the game's content. `check_staged` calls the `FitHooks`
+  that `PackageOptions::context` points to, once per map, with the
+  expansions the manifest's `requiredExpansions` names, and the runtime's
+  hook builds the store from the base game, the expansions that are on and
+  those the pack needs. No hooks, which only a test gives, skips the check.
   The kind does not build that store itself. A clash with a mod is not a
   reason to refuse.
 
@@ -153,7 +155,14 @@ replace as a mod does. Nothing is installed alongside. A catalogue package
 whose target's origin record names the same registry replaces that folder
 with no question and keeps one `.backup`. The same id from another registry
 asks to replace, and the question names both registries. A folder that does
-not hold this pack's `oamap.yaml` is left as it is.
+not hold this pack's `oamap.yaml` is left as it is. A folder that holds
+nothing but empty folders (no file, link or junction, at most 256 folders)
+reads as missing: an install goes there, and `commit_change` removes those
+folders, deepest first and each only while it is empty, before the staged
+files move in. One that holds anything more by then is refused, and the
+log says so. When the `Discarder` has deleted a discard folder, it removes
+the folder of that discard's package name if it holds nothing but empty
+folders, as a file sync can bring them back after an uninstall.
 
 A catalogue map pack also installs when the main menu is not showing, on
 any screen except while a match loads or runs, and it shows no prompt. A
@@ -388,6 +397,13 @@ a replace that fails leaves the previous record as it was.
   they were; and a deletion stopped before its first step and after one,
   leaving only D, which a plan never takes for the mod and recovery
   deletes.
+- `app-package-install-oamap`: a map pack installed, replaced and asked
+  about in a scratch Maps folder, each refusal of a pack, and the fit hook,
+  told the expansions the pack needs; an install, an uninstall that a file
+  sync follows with the pack's empty folders and an install again, three
+  times, leaving no folder in Maps; a folder of empty folders installed
+  into; and a folder holding the player's own file refused by the plan,
+  then by the change with a log line, the file kept.
 - `app-mod-install-handoff`: the instance lock and the hand-off folder,
   including a `.oareg` and a `.oalang` taken back in order.
 - `app-package-install-inbox`: `post_opened_file` routes each extension in

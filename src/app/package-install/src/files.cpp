@@ -12,10 +12,13 @@
 #include "oa/base/threads.hpp"
 
 #include <algorithm>
+#include <cstddef>
+#include <exception>
 #include <map>
 #include <memory>
 #include <string>
 #include <system_error>
+#include <vector>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -139,6 +142,83 @@ bool remove_entry(const fs::path& path, std::error_code& error) noexcept {
     error = {errno, std::generic_category()};
     return false;
 #endif
+}
+
+namespace {
+
+/// The most folders an empty tree may hold, its top included; a larger tree
+/// is not taken for one, so a look never walks far into a player's folder.
+constexpr std::size_t most_empty_folders = 256;
+
+/// Lists a tree that holds nothing but folders, its top first and each
+/// folder before those inside it.
+///
+/// @param folder the top
+/// @param[out] folders the folders; complete only when the return is true
+/// @return true when the top is a folder, not a link or junction, and
+///         nothing in it is a file, a link or a junction
+bool list_empty_tree(const fs::path& folder, std::vector<fs::path>& folders) {
+    folders.clear();
+    std::error_code error;
+    if (is_link_or_junction(folder) || !fs::is_directory(fs::symlink_status(folder, error)) ||
+        error)
+        return false;
+    folders.push_back(folder);
+    for (std::size_t next = 0; next < folders.size(); ++next) {
+        const fs::path at = folders[next];
+        fs::directory_iterator entry{at, error};
+        for (const fs::directory_iterator end; !error && entry != end; entry.increment(error)) {
+            const fs::path path = entry->path();
+            std::error_code status_error;
+            if (is_link_or_junction(path) ||
+                !fs::is_directory(fs::symlink_status(path, status_error)) || status_error)
+                return false;
+            if (folders.size() >= most_empty_folders)
+                return false;
+            folders.push_back(path);
+        }
+        if (error)
+            return false;
+    }
+    return true;
+}
+
+/// Removes one empty folder, never a file and never a folder that holds anything.
+///
+/// @param folder the folder
+/// @return true when it was removed
+bool remove_empty_folder(const fs::path& folder) noexcept {
+#ifdef _WIN32
+    return RemoveDirectoryW(extended_path(folder).c_str()) != 0;
+#else
+    return ::rmdir(folder.c_str()) == 0;
+#endif
+}
+
+} // namespace
+
+bool holds_only_empty_folders(const fs::path& folder) noexcept {
+    try {
+        std::vector<fs::path> folders;
+        return list_empty_tree(folder, folders);
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool remove_empty_folders(const fs::path& folder) noexcept {
+    try {
+        std::vector<fs::path> folders;
+        if (!list_empty_tree(folder, folders))
+            return false;
+        // The deepest first: each folder is empty by the time it is removed.
+        for (auto at = folders.rbegin(); at != folders.rend(); ++at)
+            if (!remove_empty_folder(*at))
+                return false;
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 void sync_folder(const fs::path& folder) noexcept {

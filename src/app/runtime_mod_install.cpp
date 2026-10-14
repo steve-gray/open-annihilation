@@ -943,6 +943,7 @@ void Runtime::tell_mod_installs() {
             install::Problem problem{};
             problem.refusal = state.plan.refusal;
             problem.subject = state.incoming.id;
+            log_line(name + ": " + install::refusal_text(kind, problem));
             state.report(
                 *this, install::OutcomeResult::refused, install::refusal_text(kind, problem)
             );

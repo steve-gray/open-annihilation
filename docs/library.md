@@ -906,6 +906,15 @@ deleting, the next start finishes the job. When it cannot remove the
 folder, because another program is using it, or the folder changed since
 the Library listed it, a notice says so and the package stays as it was.
 
+A file sync, such as iCloud Drive's Desktop & Documents or OneDrive, can
+bring back the package's empty folders, `Maps/<id>/maps` and
+`Maps/<id>/previews` say, after the folder was moved aside. Once the
+deletion is done, OA removes a folder of the package's name that holds
+nothing but empty folders, and GET installs into such a folder as into a
+missing one. A folder that holds anything else, a file of your own
+included, is left as it is: GET then says "The folder <id> does not hold
+this map pack. It is left as it is.", and the log says so too.
+
 ## Finishes when you leave …
 
 The mod being played cannot change under the running game, so an update to

@@ -35,12 +35,15 @@ inline constexpr uint64_t most_preview_bytes = 2 << 20;
 /// or a null context, skips the check: only a test that gives no hooks does.
 struct FitHooks {
     void* context{}; ///< passed to check_base_fit
-    /// Checks one map in the staging folder against the base game.
+    /// Checks one map in the staging folder against the content the game
+    /// finds its features in: the base game and its expansions, with the
+    /// expansions the pack's `requiredExpansions` names, never a mod.
     oa::data::map_fit::Fit (*check_base_fit)(
         void* context,
         const std::filesystem::path& staged_folder,
         const oa::data::map_pack::MapEntry& map,
-        std::string_view id
+        std::string_view id,
+        std::span<const std::string> required_expansions
     ){};
 };
 

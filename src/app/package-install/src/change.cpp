@@ -190,6 +190,40 @@ std::optional<fs::path> backup_in(const fs::path& folder) {
     return entry_without_case(folder, backup_folder_name);
 }
 
+/// Removes the folder a discard folder was the target's, when it holds
+/// nothing but empty folders: a file sync can bring back the folders of a
+/// package an uninstall moved aside while it deleted that package's files.
+/// A folder that holds anything else, the player's own files among them, is
+/// left whole.
+///
+/// @param kind the kind whose discard prefix the folder's name starts with
+/// @param discarded the discard folder, <prefix><target>-<number>, now deleted
+void clear_target_of(const PackageKind& kind, const fs::path& discarded) noexcept {
+    try {
+        const std::string name = detail::utf8_of(discarded.filename());
+        const std::string prefix = folder_names(kind).discard;
+        const auto dash = name.rfind('-');
+        if (!name.starts_with(prefix) || dash == std::string::npos || dash <= prefix.size() ||
+            dash + 1 == name.size())
+            return;
+        for (const char digit : std::string_view(name).substr(dash + 1))
+            if (digit < '0' || digit > '9')
+                return;
+        const std::string target = name.substr(prefix.size(), dash - prefix.size());
+        if (!plain_folder_name(target))
+            return;
+        const fs::path folder = discarded.parent_path() / detail::path_of(target);
+        if (!present(folder) || !detail::holds_only_empty_folders(folder))
+            return;
+        if (detail::remove_empty_folders(folder))
+            detail::log_line(
+                detail::utf8_of(folder) + ": the empty folders left in its place are removed"
+            );
+    } catch (const std::exception&) {
+        // The folder is left as it is; the next install takes it as free.
+    }
+}
+
 /// Returns a failed change's result.
 ///
 /// @param refusal why
@@ -254,6 +288,17 @@ ChangeResult commit_change(
         std::error_code error;
         switch (change) {
         case Change::install:
+            // A target that holds only empty folders, which the kind's read
+            // took for a missing one, makes way: they hold nothing.
+            if (present(folder)) {
+                if (!detail::remove_empty_folders(folder))
+                    return fail(
+                        Refusal::not_placed,
+                        "the folder " + detail::utf8_of(folder) +
+                            " holds more than empty folders; it is left as it is"
+                    );
+                lines.push_back("removed the empty folders left in its place");
+            }
             if ((error = move(options, staged, folder)))
                 return fail(
                     Refusal::not_placed, "cannot put the files in place: " + error.message()
@@ -645,8 +690,10 @@ bool Discarder::step() {
                     skip(folder, removal);
                 ++removed;
                 stack_.pop_back();
-                if (stack_.empty())
+                if (stack_.empty()) {
+                    clear_target_of(*kind, folders_.front());
                     folders_.erase(folders_.begin());
+                }
                 continue;
             }
             // A link or junction is removed itself, never entered.

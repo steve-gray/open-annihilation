@@ -54,16 +54,29 @@ path. It waits for the main menu, and asks before it writes anything:
 | the same pack and version, another revision | **UPDATE MAP PACK**: replace it with that revision, **CANCEL** or **REPLACE**; it says when the file's revision is the older |
 | the same pack, version and revision | **REINSTALL MAP PACK**: install its files again, **CANCEL** or **REINSTALL** |
 | the same pack at another version | **REPLACE MAP PACK**, **CANCEL** or **REPLACE** |
-| a folder of that name that holds something else | refused: the folder is left as it is |
+| a folder of that name that holds something else | refused: the folder is left as it is, and the log says so |
+
+A folder of the pack's id that holds nothing but empty folders, as a file
+sync can bring back after you uninstall the pack, counts as no folder: the
+install removes those empty folders and puts the pack there. One file in
+it, of your own or anyone's, and it holds something else.
 
 A replace keeps the copy it replaced in the pack's folder, as `.backup`.
 When the pack is in place, **MAP PACK INSTALLED** says where, with **OPEN
 FOLDER** and **OK**.
 
-Nothing installs during a game. Every map in a pack is checked against
-Total Annihilation 3.1c as it is installed, and a pack with a map that
-clashes with 3.1c itself is refused ([whether a map fits](#whether-a-map-fits)):
-**MAP PACK NOT INSTALLED** names the file and why. A pack is refused too
+Nothing installs during a game. Every map in a pack is checked as it is
+installed against the game you have, where the game finds a map's
+features: Total Annihilation 3.1c, the expansions that are on, and each
+expansion the pack's `requiredExpansions` names (with those it needs) that
+you have copied, but never a mod. A pack with a map that clashes with them
+is refused ([whether a map fits](#whether-a-map-fits)), and so is one with
+a map that places a feature none of them defines, naming it:
+**MAP PACK NOT INSTALLED** names the file and why. Core Contingency's
+water metal (`ArchiAquaOre1` to `ArchiAquaOre3`), which Cavedog's Starfish
+Isle, Tropical Paradise and Long Lakes place, is defined in Core
+Contingency's own archive, so those packs install while Core Contingency
+is on. A pack is refused too
 when its manifest has errors, when it holds files outside the folders a map
 pack may hold (`maps`, `features`, `anims`, `objects3d` and `previews`) or
 files no map uses, when a preview is not a PNG of at most 2 MiB and 1024
@@ -72,9 +85,10 @@ registry that is refused says only "the package was refused" in the
 Library's queue, the map browser or GET MAP's line. Nothing is changed
 when a pack is refused.
 
-To remove a pack, delete its folder while the game is not playing one of
-its maps (**OPEN FOLDER** in the Library shows it). In 0.8 a map pack does
-not roll back: ROLL BACK is for mods.
+To remove a pack, use **UNINSTALL** in the Library
+([uninstalling](../library.md#uninstalling)), or delete its folder while
+the game is not playing one of its maps (**OPEN FOLDER** in the Library
+shows it). In 0.8 a map pack does not roll back: ROLL BACK is for mods.
 
 ## Map names
 

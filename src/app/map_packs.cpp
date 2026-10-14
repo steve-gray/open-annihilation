@@ -7,6 +7,7 @@
 #include "map_packs.hpp"
 
 #include "oa/app/game_directory.hpp"
+#include "oa/app/mod_profile_loader.hpp"
 #include "oa/app/package_install/origin.hpp"
 #include "oa/app/user_folder.hpp"
 #include "oa/base/sha256.hpp"
@@ -25,6 +26,7 @@
 #include <optional>
 #include <string>
 #include <system_error>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -289,6 +291,82 @@ void MapPacks::refresh() {
     });
 }
 
+namespace {
+
+/// Checks one map in a folder against a store that holds the game's content.
+///
+/// @param store the game's content, mounted; the map's files are laid over it
+/// @param folder the map pack's folder, staged or installed
+/// @param map the map's manifest entry
+/// @param id the pack's id
+/// @return every rule the map broke
+fit::Fit fit_in_store(
+    oa::AssetStore& store, const fs::path& folder, const pack::MapEntry& map, std::string_view id
+) {
+    oa::PackLayerSpec spec{};
+    spec.kind = oa::PackLayerKind::folder;
+    spec.location = folder;
+    spec.files = fit::layer_files(map, id);
+    spec.label = std::string(id);
+    std::string error;
+    if (!store.mount_pack_layer(std::move(spec), &error))
+        return store_failure(error.empty() ? "the map's files cannot be read" : error);
+    const oa::data::defs::DataLayout layout{};
+    const fit::GameNames names = fit::collect_game_names(store, layout);
+    const std::unique_ptr<fit::MapFiles> files = fit::mounted_map_files(store);
+    if (!files)
+        return store_failure("the map's files cannot be read");
+    return fit::check_map(store, names, *files, map, id, layout);
+}
+
+/// Tells whether two paths name one folder.
+///
+/// @param left one path
+/// @param right the other
+/// @return true when the system finds them the same, or they read the same
+bool same_place(const fs::path& left, const fs::path& right) {
+    std::error_code error;
+    if (fs::equivalent(left, right, error))
+        return true;
+    return left.lexically_normal() == right.lexically_normal();
+}
+
+/// Tells whether a list holds a folder.
+///
+/// @param folders the folders
+/// @param folder the folder
+/// @return true when one of them names it
+bool listed_folder(std::span<const fs::path> folders, const fs::path& folder) {
+    return std::any_of(folders.begin(), folders.end(), [&](const fs::path& listed) {
+        return same_place(listed, folder);
+    });
+}
+
+/// Finds the folder the player's copy of an expansion is in.
+///
+/// @param user_folder the player's folder
+/// @param bundle the expansion
+/// @return `Expansions/<base>/<id>`, whose record lists every file of it;
+///         nothing when the player has not copied it
+std::optional<fs::path>
+copied_expansion(const fs::path& user_folder, const oa::data::content_bundles::Bundle& bundle) {
+    const fs::path expansions =
+        user_folder / std::string(oa::data::content_bundles::managed_expansions_folder);
+    std::vector<fs::path> candidates;
+    for (const std::string_view game : bundle.extends)
+        candidates.push_back(expansions / std::string(game) / std::string(bundle.id));
+    if (bundle.extends.empty())
+        candidates.push_back(expansions / std::string(bundle.id));
+    for (const fs::path& candidate : candidates) {
+        const std::vector<std::string> copied = copied_content_bundles(candidate);
+        if (std::find(copied.begin(), copied.end(), bundle.id) != copied.end())
+            return candidate;
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
 fit::Fit check_base_game_fit(
     const fs::path& game_dir, const fs::path& folder, const pack::MapEntry& map, std::string_view id
 ) {
@@ -304,20 +382,67 @@ fit::Fit check_base_game_fit(
                     error.empty() ? "an archive of the base game cannot be read" : error
                 );
         }
-        oa::PackLayerSpec spec{};
-        spec.kind = oa::PackLayerKind::folder;
-        spec.location = folder;
-        spec.files = fit::layer_files(map, id);
-        spec.label = std::string(id);
-        std::string error;
-        if (!store.mount_pack_layer(std::move(spec), &error))
-            return store_failure(error.empty() ? "the map's files cannot be read" : error);
-        const oa::data::defs::DataLayout layout{};
-        const fit::GameNames names = fit::collect_game_names(store, layout);
-        const std::unique_ptr<fit::MapFiles> files = fit::mounted_map_files(store);
-        if (!files)
-            return store_failure("the map's files cannot be read");
-        return fit::check_map(store, names, *files, map, id, layout);
+        return fit_in_store(store, folder, map, id);
+    } catch (const std::exception& error) {
+        return store_failure(error.what());
+    } catch (...) {
+        return store_failure("the base game cannot be read");
+    }
+}
+
+std::vector<fs::path> map_pack_fit_folders(
+    std::span<const fs::path> played,
+    const fs::path& mod_folder,
+    const fs::path& game_dir,
+    const fs::path& user_folder,
+    std::span<const std::string> required
+) {
+    namespace bundles = oa::data::content_bundles;
+    std::vector<fs::path> folders;
+    for (const fs::path& folder : played)
+        if (folder.empty() || mod_folder.empty() || !same_place(folder, mod_folder))
+            folders.push_back(folder);
+    if (folders.empty())
+        folders.push_back(game_dir);
+    const fs::path base_folder = folders.back();
+    folders.pop_back();
+    if (!user_folder.empty()) {
+        std::vector<std::string_view> asked;
+        asked.reserve(required.size());
+        for (const std::string& id : required)
+            asked.emplace_back(id);
+        for (const std::string_view id : bundles::requirement_closure(asked)) {
+            const bundles::Bundle* bundle = bundles::find_bundle(id);
+            if (bundle == nullptr || bundle->kind != bundles::Kind::expansion)
+                continue;
+            const std::optional<fs::path> copy = copied_expansion(user_folder, *bundle);
+            if (copy && !listed_folder(folders, *copy) && !same_place(*copy, base_folder))
+                folders.push_back(*copy);
+        }
+    }
+    folders.push_back(base_folder);
+    return folders;
+}
+
+fit::Fit check_content_fit(
+    std::span<const fs::path> folders,
+    const fs::path& folder,
+    const pack::MapEntry& map,
+    std::string_view id
+) {
+    if (folders.empty())
+        return store_failure("the base game cannot be read");
+    if (folders.size() == 1)
+        return check_base_game_fit(folders.front(), folder, map, id);
+    try {
+        // The archives of every folder, mounted as the game mounts a base
+        // game and its expansions, with their loose files. An archive that
+        // cannot be opened is skipped, as the game skips it.
+        oa::AssetStore store(std::vector<fs::path>(folders.begin(), folders.end()));
+        std::ignore = store.discover(discovery_plan_of(nullptr));
+        if (store.mount_paths().empty())
+            return store_failure("the base game cannot be read");
+        return fit_in_store(store, folder, map, id);
     } catch (const std::exception& error) {
         return store_failure(error.what());
     } catch (...) {
