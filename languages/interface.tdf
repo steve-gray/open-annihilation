@@ -2682,6 +2682,14 @@
 	it=Esc apre il menu di gioco;
 	}
 
+[Easy]
+	{
+	de=Leicht;
+	fr=Facile;
+	es=Fácil;
+	it=Facile;
+	}
+
 [Every part of OA's own screens, in each of its states, at this size.]
 	{
 	de=Jeder Teil der eigenen Bildschirme von OA, in jedem Zustand, in dieser Größe.;
@@ -3472,6 +3480,14 @@
 	fr=Retour haptique;
 	es=Háptica;
 	it=Aptica;
+	}
+
+[Hard]
+	{
+	de=Schwer;
+	fr=Difficile;
+	es=Difícil;
+	it=Difficile;
 	}
 
 [Hardware acceleration]
@@ -5088,6 +5104,14 @@
 	fr=Zoom arrière maximal;
 	es=Zoom de alejamiento máximo;
 	it=Zoom indietro massimo;
+	}
+
+[Medium]
+	{
+	de=Mittel;
+	fr=Moyen;
+	es=Medio;
+	it=Medio;
 	}
 
 [Megamap]

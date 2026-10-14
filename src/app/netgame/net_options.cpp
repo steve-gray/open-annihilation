@@ -105,6 +105,8 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
         result.net_loopback_watcher = true;
     else if (argument == "--net-loopback-computer")
         result.net_loopback_computer = true;
+    else if (argument == "--net-loopback-each-ai")
+        result.net_loopback_each_ai = true;
     else if (argument == "--check-host-not-found") {
         result.check_host_not_found = true;
         effects |= option_effect::unattended | option_effect::skip_intro;
@@ -364,6 +366,7 @@ const char* text(void* /*context*/, ExtensionText which) {
         return "[--host | --join ADDRESS] [--player-name NAME] [--game-name NAME] "
                "[--game-password PASSWORD] [--launch FILE] [--list-content --json] "
                "[--net-loopback-check TICKS] [--net-loopback-watcher] [--net-loopback-computer] "
+               "[--net-loopback-each-ai] "
                "[--check-host-not-found] [--dplay-port PORT] [--dplay-guid GUID] "
                "[--play-demo FILE.tad] "
                "[--demo-unit-table strict|ignore] [--net-record FILE] [--replay-viewer] ";

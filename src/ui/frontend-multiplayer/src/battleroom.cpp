@@ -411,18 +411,6 @@ int32_t idle_participant_count(Lobby& lobby) noexcept {
     return count;
 }
 
-/// Counts the occupied computer slots.
-///
-/// @param lobby Lobby state.
-/// @return The count.
-int32_t computer_count(Lobby& lobby) noexcept {
-    int32_t count = 0;
-    for (int32_t slot = 0; slot < kSlotCount; ++slot)
-        if (occupied_by(slot_player(lobby, slot), kSlotComputer))
-            ++count;
-    return count;
-}
-
 void set_group(Panel& panel, const char* pattern, int32_t slot, int32_t value) {
     char name[64];
     format(name, pattern, slot);
@@ -873,6 +861,369 @@ void presence_ask_pack(Lobby& lobby) noexcept {
         presence_take_pack(records, std::move(pack));
 }
 
+/// Difficulty a computer player shows, matching the game's easy, medium and hard.
+constexpr uint8_t kDifficultyEasy = 0;
+constexpr uint8_t kDifficultyMedium = 1;
+constexpr uint8_t kDifficultyHard = 2;
+constexpr uint8_t kDifficultyCount = 3;
+/// Kinds of a host's request to change another machine's computer player.
+constexpr uint8_t kComputerEditSide = 1;
+constexpr uint8_t kComputerEditColor = 2;
+constexpr uint8_t kComputerEditTeam = 3;
+constexpr uint8_t kComputerEditDifficulty = 4;
+
+/// Stores a little-endian 32-bit value.
+///
+/// @param[out] out four bytes
+/// @param value the value
+void store_u32_le(uint8_t* out, uint32_t value) noexcept {
+    out[0] = static_cast<uint8_t>(value);
+    out[1] = static_cast<uint8_t>(value >> 8);
+    out[2] = static_cast<uint8_t>(value >> 16);
+    out[3] = static_cast<uint8_t>(value >> 24);
+}
+
+/// Reads a little-endian 32-bit value.
+///
+/// @param in four bytes
+/// @return the value
+uint32_t load_u32_le(const uint8_t* in) noexcept {
+    return static_cast<uint32_t>(in[0]) | (static_cast<uint32_t>(in[1]) << 8) |
+           (static_cast<uint32_t>(in[2]) << 16) | (static_cast<uint32_t>(in[3]) << 24);
+}
+
+/// Returns the English word a difficulty shows.
+///
+/// @param difficulty 0 easy, 1 medium, anything else hard
+/// @return the word
+const char* difficulty_word(uint8_t difficulty) noexcept {
+    switch (difficulty) {
+    case kDifficultyEasy:
+        return "Easy";
+    case kDifficultyMedium:
+        return "Medium";
+    default:
+        return "Hard";
+    }
+}
+
+/// Returns the difficulty a slot shows. Unset, or out of range, shows hard.
+///
+/// @param lobby Lobby state.
+/// @param slot Player slot.
+/// @return 0, 1 or 2.
+uint8_t shown_difficulty(const Lobby& lobby, int32_t slot) noexcept {
+    if (slot < 0 || slot >= kSlotCount || !lobby.computer_difficulty_set[slot])
+        return kDifficultyHard;
+    const auto noted = lobby.computer_difficulty[slot];
+    return noted < kDifficultyCount ? noted : kDifficultyHard;
+}
+
+/// Notes a computer player's difficulty.
+///
+/// @param[in,out] lobby Lobby state.
+/// @param slot Player slot.
+/// @param difficulty 0 easy, 1 medium or 2 hard; anything else is ignored.
+void note_computer_difficulty(Lobby& lobby, int32_t slot, uint8_t difficulty) noexcept {
+    if (slot < 0 || slot >= kSlotCount || difficulty >= kDifficultyCount)
+        return;
+    lobby.computer_difficulty[slot] = difficulty;
+    lobby.computer_difficulty_set[slot] = true;
+}
+
+/// Forgets a slot's difficulty and a host command that names its player.
+///
+/// @param[in,out] lobby Lobby state.
+/// @param slot Player slot.
+void clear_computer_difficulty(Lobby& lobby, int32_t slot) noexcept {
+    if (slot < 0 || slot >= kSlotCount)
+        return;
+    const auto id = slot_player(lobby, slot).player_id;
+    lobby.computer_difficulty[slot] = 0;
+    lobby.computer_difficulty_set[slot] = false;
+    if (lobby.computer_command_kind != 0 && lobby.computer_command_player == id)
+        lobby.computer_command_kind = 0;
+}
+
+/// Tells whether a remote slot is a computer player before the start.
+///
+/// After the start a defeated human uses the same state, so it is not one.
+///
+/// @param lobby Lobby state.
+/// @param slot Player slot.
+/// @return True for a seated remote computer player.
+bool remote_computer(Lobby& lobby, int32_t slot) noexcept {
+    const auto& player = slot_player(lobby, slot);
+    if (!occupied_by(player, kSlotRemote) || (lobby.game->session_flags & kNetFlagGameStarted) != 0)
+        return false;
+    const auto* info = slot_info(lobby, slot);
+    return info != nullptr && info->state == kInfoStateDefeated;
+}
+
+/// Tells whether a row is a computer player.
+///
+/// @param lobby Lobby state.
+/// @param slot Player slot.
+/// @return True for this machine's computer player, or a remote one before the start.
+bool computer_row(Lobby& lobby, int32_t slot) noexcept {
+    if (slot < 0 || slot >= kSlotCount)
+        return false;
+    return occupied_by(slot_player(lobby, slot), kSlotComputer) || remote_computer(lobby, slot);
+}
+
+/// Returns the human who runs a computer player.
+///
+/// This machine's computer player is the local human's. A remote one shares
+/// a machine group with a human still playing. A group of 0 names no one.
+///
+/// @param lobby Lobby state.
+/// @param slot The computer player's slot.
+/// @return The human's slot, or -1.
+int32_t computer_owner_slot(Lobby& lobby, int32_t slot) noexcept {
+    const auto& player = slot_player(lobby, slot);
+    if (occupied_by(player, kSlotComputer))
+        return lobby.game->local_player_index;
+    if (!remote_computer(lobby, slot) || player.machine_group == 0)
+        return -1;
+    for (int32_t other = 0; other < kSlotCount; ++other) {
+        if (other == slot)
+            continue;
+        const auto& mate = slot_player(lobby, other);
+        if (mate.machine_group != player.machine_group)
+            continue;
+        if (!occupied_by(mate, kSlotRemote) && !occupied_by(mate, kSlotLocal))
+            continue;
+        const auto* info = slot_info(lobby, other);
+        if (info != nullptr && info->state == kInfoStatePlaying)
+            return other;
+    }
+    return -1;
+}
+
+/// Tells whether the human who runs a computer player is on OA.
+///
+/// The local human is. A remote human is when its block carries the signature.
+///
+/// @param lobby Lobby state.
+/// @param owner The human's slot; negative is no.
+/// @return True when that machine runs OA.
+bool owner_runs_oa(Lobby& lobby, int32_t owner) noexcept {
+    if (owner < 0 || owner >= kSlotCount)
+        return false;
+    if (occupied_by(slot_player(lobby, owner), kSlotLocal))
+        return true;
+    const auto* info = slot_info(lobby, owner);
+    return info != nullptr &&
+           netgame::sent_by_open_annihilation(reinterpret_cast<const uint8_t*>(info));
+}
+
+/// Tells whether the local host may change a remote computer player.
+///
+/// A computer player whose human is on 3.1c can be removed, not restyled.
+///
+/// @param lobby Lobby state.
+/// @param slot The computer player's slot.
+/// @return True when this machine hosts and the owner's machine runs OA.
+bool host_edits_remote_computer(Lobby& lobby, int32_t slot) noexcept {
+    if (!host_is_local(lobby) || !remote_computer(lobby, slot))
+        return false;
+    return owner_runs_oa(lobby, computer_owner_slot(lobby, slot));
+}
+
+/// Tells whether the viewer may change a computer player's row.
+///
+/// The local human may change this machine's. The host may change a remote
+/// one whose human runs OA. Neither may while the launch is locked or the
+/// local player is ready.
+///
+/// @param lobby Lobby state.
+/// @param slot The computer player's slot.
+/// @return True when a click on the row should change it.
+bool edits_computer(Lobby& lobby, int32_t slot) noexcept {
+    if (lobby_launch_locked(lobby))
+        return false;
+    if ((info_of(lobby, local_player(lobby)).options & option::ready) != 0)
+        return false;
+    if (occupied_by(slot_player(lobby, slot), kSlotComputer))
+        return true;
+    return host_edits_remote_computer(lobby, slot);
+}
+
+/// Asks the owner of a remote computer player to change it.
+///
+/// The command stays until that player's block, team or difficulty list
+/// echoes the same kind and value. A newer command replaces an older one.
+///
+/// @param[in,out] lobby Lobby state.
+/// @param player_id The computer player's session id.
+/// @param kind Side, colour, team or difficulty.
+/// @param value The new value.
+void queue_computer_edit(Lobby& lobby, uint32_t player_id, uint8_t kind, uint8_t value) noexcept {
+    lobby.computer_command_player = player_id;
+    lobby.computer_command_kind = kind;
+    lobby.computer_command_value = value;
+}
+
+/// Drops a host command once the owner's echo matches it.
+///
+/// An older echo does not retire a newer command.
+///
+/// @param[in,out] lobby Lobby state.
+/// @param player_id The computer player's session id.
+/// @param kind The kind the echo answers.
+/// @param value The value the echo carries.
+void note_computer_command_echo(
+    Lobby& lobby, uint32_t player_id, uint8_t kind, uint8_t value
+) noexcept {
+    if (lobby.computer_command_kind == kind && lobby.computer_command_player == player_id &&
+        lobby.computer_command_value == value)
+        lobby.computer_command_kind = 0;
+}
+
+/// Applies a host's change to a computer player this machine runs.
+///
+/// Side and colour go out with the player's block, team with its team record.
+/// Difficulty is published with this machine's presence record.
+///
+/// @param[in,out] lobby Lobby state.
+/// @param player_id The computer player's session id.
+/// @param kind Side, colour, team or difficulty.
+/// @param value The new value.
+void apply_host_computer_edit(
+    Lobby& lobby, uint32_t player_id, uint8_t kind, uint8_t value
+) noexcept {
+    const auto slot = slot_for_player_id(lobby, player_id);
+    if (slot < 0)
+        return;
+    auto& player = slot_player(lobby, slot);
+    if (!occupied_by(player, kSlotComputer))
+        return;
+    auto* info = slot_info(lobby, slot);
+    if (info == nullptr)
+        return;
+    switch (kind) {
+    case kComputerEditSide:
+        info->side = value;
+        lobby_send_player_info(lobby);
+        break;
+    case kComputerEditColor:
+        info->color = value;
+        lobby_send_player_info(lobby);
+        break;
+    case kComputerEditTeam:
+        lobby_player_team(player) = value;
+        lobby_send_team(lobby, player);
+        lobby_update_ally_matrix(lobby);
+        break;
+    case kComputerEditDifficulty:
+        note_computer_difficulty(lobby, slot, value);
+        break;
+    default:
+        break;
+    }
+}
+
+/// Reads computer players and a host command from a presence record just kept.
+///
+/// @param[in,out] lobby Lobby state.
+/// @param sender_slot Slot of the player who sent the record.
+void take_computer_presence(Lobby& lobby, int32_t sender_slot) noexcept {
+    const auto& records = lobby.presence_records;
+    if (sender_slot < 0 || sender_slot >= kSlotCount || records.peer_size[sender_slot] == 0)
+        return;
+    const auto* bytes = records.peer[sender_slot];
+    const auto size = records.peer_size[sender_slot];
+    std::span<const uint8_t> listed;
+    if (netgame::find_presence_field(bytes, size, netgame::PresenceTag::computers, &listed)) {
+        for (std::size_t at = 0; at + 5 <= listed.size(); at += 5) {
+            const auto id = load_u32_le(listed.data() + at);
+            const auto difficulty = listed[at + 4];
+            const auto seated = slot_for_player_id(lobby, id);
+            if (seated >= 0)
+                note_computer_difficulty(lobby, seated, difficulty);
+            note_computer_command_echo(lobby, id, kComputerEditDifficulty, difficulty);
+        }
+    }
+    const auto host = lobby_host_slot(lobby);
+    if (host_is_local(lobby) || host == kNoSlot || sender_slot != static_cast<int32_t>(host))
+        return;
+    std::span<const uint8_t> command;
+    if (!netgame::find_presence_field(bytes, size, netgame::PresenceTag::computer_edit, &command) ||
+        command.size() < 6)
+        return;
+    apply_host_computer_edit(lobby, load_u32_le(command.data()), command[4], command[5]);
+}
+
+/// Appends this machine's computer players, then a host command, to a presence record.
+///
+/// A computer player is listed only once its difficulty has been chosen and
+/// the session has seated it, so a room that never chose one sends nothing more.
+///
+/// @param lobby Lobby state.
+/// @param[in,out] record Presence record being composed.
+/// @param[in,out] size Its length so far.
+/// @param capacity Bytes available at record.
+void append_computer_presence(
+    Lobby& lobby, uint8_t* record, std::size_t& size, std::size_t capacity
+) noexcept {
+    uint8_t listed[kSlotCount * 5];
+    std::size_t count = 0;
+    for (int32_t slot = 0; slot < kSlotCount; ++slot) {
+        const auto& player = slot_player(lobby, slot);
+        if (!occupied_by(player, kSlotComputer) || !lobby.computer_difficulty_set[slot])
+            continue;
+        store_u32_le(listed + count, player.player_id);
+        listed[count + 4] = lobby.computer_difficulty[slot];
+        count += 5;
+    }
+    if (count != 0) {
+        std::size_t written = 0;
+        if (netgame::append_presence_field(
+                record,
+                size,
+                capacity,
+                netgame::PresenceTag::computers,
+                std::span<const uint8_t>(listed, count),
+                &written
+            ) == netgame::WireError::ok)
+            size = written;
+    }
+    if (lobby.computer_command_kind == 0)
+        return;
+    uint8_t body[6];
+    store_u32_le(body, lobby.computer_command_player);
+    body[4] = lobby.computer_command_kind;
+    body[5] = lobby.computer_command_value;
+    std::size_t written = 0;
+    if (netgame::append_presence_field(
+            record,
+            size,
+            capacity,
+            netgame::PresenceTag::computer_edit,
+            std::span<const uint8_t>(body, sizeof body),
+            &written
+        ) == netgame::WireError::ok)
+        size = written;
+}
+
+/// Returns the next free colour after a computer player's current one.
+///
+/// @param lobby Lobby state.
+/// @param player The computer player.
+/// @param color Its current colour.
+/// @return The next free colour, or the current one when none is free.
+uint8_t next_computer_color(Lobby& lobby, const Player& player, uint8_t color) noexcept {
+    auto next = static_cast<uint32_t>(color == kNoColor ? 0 : color + 1U);
+    for (int32_t tries = 0; tries < kColorCount; ++tries) {
+        if (next >= static_cast<uint32_t>(kColorCount))
+            next = 0;
+        if (lobby_color_available(lobby, player.player_id, static_cast<int32_t>(next)))
+            return static_cast<uint8_t>(next);
+        ++next;
+    }
+    return color;
+}
+
 /// Keeps a presence record a seated remote player sent as that player's.
 ///
 /// @param[in,out] lobby Lobby state.
@@ -891,6 +1242,7 @@ bool presence_keep(Lobby& lobby, const LobbyEvent& event) noexcept {
     std::memcpy(records.peer[slot], event.data, event.size);
     records.peer_size[slot] = event.size;
     records.peer_id[slot] = event.player_id;
+    take_computer_presence(lobby, slot);
     return true;
 }
 
@@ -1021,6 +1373,7 @@ void presence_refresh(Lobby& lobby) noexcept {
                 &written
             ) == netgame::WireError::ok)
             size = written;
+        append_computer_presence(lobby, composed, size, sizeof composed);
     }
     if (size == records.local_size && std::memcmp(composed, records.local, size) == 0)
         return;
@@ -1387,6 +1740,13 @@ void lobby_reset(Lobby& lobby, Game& game) noexcept {
     // The other players' presence records are forgotten; this machine's stays.
     for (int32_t slot = 0; slot < kSlotCount; ++slot)
         presence_forget(lobby.presence_records, slot);
+    std::fill(std::begin(lobby.computer_difficulty), std::end(lobby.computer_difficulty), 0);
+    std::fill(
+        std::begin(lobby.computer_difficulty_set), std::end(lobby.computer_difficulty_set), false
+    );
+    lobby.computer_command_player = 0;
+    lobby.computer_command_kind = 0;
+    lobby.computer_command_value = 0;
     lobby.presence_records.plain_sim_hash = plain_baseline_sim_hash();
     // The recorder's session starts again; the line it answers with stays.
     char program[sizeof lobby.recorder.program];
@@ -1643,6 +2003,8 @@ void lobby_swap_slots(Lobby& lobby, int32_t first, int32_t second) noexcept {
     std::swap(records.block_player[first], records.block_player[second]);
     std::swap(records.sent_generation[first], records.sent_generation[second]);
     std::swap(records.sent_to[first], records.sent_to[second]);
+    std::swap(lobby.computer_difficulty[first], lobby.computer_difficulty[second]);
+    std::swap(lobby.computer_difficulty_set[first], lobby.computer_difficulty_set[second]);
     slot_set_status(lobby, a, kSlotOpen);
     a.in_use = 0;
     // The game renumbers eleven records; the eleventh lies past the table.
@@ -1688,6 +2050,17 @@ void control_make_label(Control& control) noexcept {
     control.x = static_cast<int16_t>(control.x + 2);
     control.type = ControlType::label;
     control.attributes |= kAttributeLabelText;
+}
+
+/// Restores a row label to the button it was cloned from.
+///
+/// @param[in,out] control A label made from a button; anything else is left.
+void control_make_button(Control& control) noexcept {
+    if (control.type != ControlType::label)
+        return;
+    control.x = static_cast<int16_t>(control.x - 2);
+    control.type = ControlType::button;
+    control.attributes &= ~kAttributeLabelText;
 }
 
 void lobby_build_rows(Lobby& lobby, Panel& panel) noexcept {
@@ -2042,7 +2415,9 @@ void lobby_update_status(Lobby& lobby, Panel& panel) noexcept {
         if (auto* side = row_control(panel, "SIDE%d", slot)) {
             lobby_update_side_button(lobby, panel, slot);
             side->active = 1;
-            side->grayed = !local_or_computer(player) || my_ready != 0;
+            side->grayed =
+                (!local_or_computer(player) && !host_edits_remote_computer(lobby, slot)) ||
+                my_ready != 0;
         }
         if (auto* ally = row_control(panel, "ALLY%d", slot)) {
             ally->stage =
@@ -2056,7 +2431,9 @@ void lobby_update_status(Lobby& lobby, Panel& panel) noexcept {
         }
         if (auto* team = row_control(panel, "TEAMICONS%d", slot)) {
             team->active = watcher ? 0 : 1;
-            team->grayed = !local_or_computer(player) || my_ready != 0;
+            team->grayed =
+                (!local_or_computer(player) && !host_edits_remote_computer(lobby, slot)) ||
+                my_ready != 0;
         }
         if (auto* res = row_control(panel, "RES%d", slot)) {
             char text[64] = "";
@@ -2087,12 +2464,29 @@ void lobby_update_status(Lobby& lobby, Panel& panel) noexcept {
             ping->active = 1;
         }
         if (auto* mem = row_control(panel, "MEM%d", slot)) {
-            char text[64] = "";
-            if (present)
-                format(text, "%d", info.memory_mb);
-            set_control_text(*mem, text);
-            mem->color = info.memory_mb < map_memory(lobby) ? kWarningColor : 0;
-            mem->active = 1;
+            if (computer_row(lobby, slot)) {
+                set_control_text(
+                    *mem, lobby_translated(lobby, difficulty_word(shown_difficulty(lobby, slot)))
+                );
+                mem->color = 0;
+                mem->active = 1;
+                if (edits_computer(lobby, slot)) {
+                    control_make_button(*mem);
+                    mem->grayed = false;
+                } else {
+                    control_make_label(*mem);
+                    mem->grayed = true;
+                }
+            } else {
+                control_make_label(*mem);
+                char text[64] = "";
+                if (present)
+                    format(text, "%d", info.memory_mb);
+                set_control_text(*mem, text);
+                mem->color = info.memory_mb < map_memory(lobby) ? kWarningColor : 0;
+                mem->active = 1;
+                mem->grayed = false;
+            }
         }
         if (auto* ready = row_control(panel, "READY%d", slot)) {
             ready->active = 1;
@@ -2338,11 +2732,19 @@ LobbyAction handle_panel_event(Lobby& lobby, Panel& panel) noexcept {
         auto& info = info_of(lobby, player);
 
         format(name, "LOGO%d", slot);
-        if (panel_selected_is(panel, name) && local_or_computer(player)) {
+        if (panel_selected_is(panel, name) &&
+            (local_or_computer(player) || host_edits_remote_computer(lobby, slot))) {
             play(lobby, "Multi");
-            lobby_request_color(lobby, info.color + 1U);
+            if (occupied_by(player, kSlotLocal)) {
+                lobby_request_color(lobby, info.color + 1U);
+            } else {
+                info.color = next_computer_color(lobby, player, info.color);
+                if (!local_or_computer(player))
+                    queue_computer_edit(lobby, player.player_id, kComputerEditColor, info.color);
+            }
             game.gui_flags |= 1U;
-            lobby_send_player_info(lobby);
+            if (local_or_computer(player))
+                lobby_send_player_info(lobby);
         }
 
         format(name, "PLAYER%d", slot);
@@ -2382,7 +2784,6 @@ LobbyAction handle_panel_event(Lobby& lobby, Panel& panel) noexcept {
                     publish = false;
                 } else if (
                     (host_options & option::commander_mask) != option::commander_deathmatch &&
-                    (computer_count(lobby) == 0 || setup_rules(lobby).multiple_local_ai.enabled) &&
                     !lobby.option_4
                 ) {
                     // The game colours the slot and notifies whether or
@@ -2422,6 +2823,8 @@ LobbyAction handle_panel_event(Lobby& lobby, Panel& panel) noexcept {
                 }
                 game.gui_flags |= 1U;
                 notify(lobby, 4);
+                if (host_edits_remote_computer(lobby, slot))
+                    queue_computer_edit(lobby, player.player_id, kComputerEditSide, info.side);
                 lobby_send_player_info(lobby);
             } else {
                 play(lobby, "notoktobuild");
@@ -2467,9 +2870,24 @@ LobbyAction handle_panel_event(Lobby& lobby, Panel& panel) noexcept {
                 play(lobby, "Ally");
                 lobby_cycle_team(lobby, panel, slot);
                 lobby_send_team(lobby, player);
+                if (host_edits_remote_computer(lobby, slot))
+                    queue_computer_edit(
+                        lobby, player.player_id, kComputerEditTeam, lobby_player_team(player)
+                    );
             } else {
                 play(lobby, "notoktobuild");
             }
+        }
+
+        format(name, "MEM%d", slot);
+        if (panel_selected_is(panel, name) && edits_computer(lobby, slot)) {
+            play(lobby, "Multi");
+            const auto next =
+                static_cast<uint8_t>((shown_difficulty(lobby, slot) + 1U) % kDifficultyCount);
+            note_computer_difficulty(lobby, slot, next);
+            if (!local_or_computer(player))
+                queue_computer_edit(lobby, player.player_id, kComputerEditDifficulty, next);
+            game.gui_flags |= 1U;
         }
 
         format(name, "RES%d", slot);
@@ -3269,6 +3687,7 @@ void retire_slot(Lobby& lobby, Player& player) noexcept {
     if (!started || !local_or_computer(player)) {
         if (!started && occupied_by(player, kSlotComputer) && lobby.net.remove_player != nullptr)
             lobby.net.remove_player(lobby.net.context, player.player_id);
+        clear_computer_difficulty(lobby, static_cast<int32_t>(&player - game.players));
         slot_set_status(lobby, player, kSlotOpen);
         player.in_use = 0;
         player.machine_group = 0;
@@ -3496,7 +3915,12 @@ void lobby_add_computer(Lobby& lobby, int32_t slot) noexcept {
     player.player_id = id;
     player.index = static_cast<uint8_t>(slot);
     player.machine_group = 0;
-    std::snprintf(player.name, sizeof(player.name), "%s", "Computer");
+    // The row carries the session name, which names the human who runs it.
+    std::snprintf(player.name, sizeof(player.name), "%s", name);
+    copy_text(
+        player.second_name, sizeof(player.second_name), text_view(player.name, sizeof(player.name))
+    );
+    note_computer_difficulty(lobby, slot, kDifficultyHard);
 }
 
 // ---------------------------------------------------------------------------
@@ -3721,6 +4145,7 @@ bool lobby_apply_event(Lobby& lobby, const LobbyEvent& event) noexcept {
         // A slot the rejection did not retire (one already rejected) is
         // retired here.
         if (player.in_use != 0) {
+            clear_computer_difficulty(lobby, static_cast<int32_t>(&player - game.players));
             slot_set_status(lobby, player, kSlotOpen);
             player.in_use = 0;
             if (lobby_player_count(game) > 0)
@@ -3786,6 +4211,10 @@ bool lobby_apply_event(Lobby& lobby, const LobbyEvent& event) noexcept {
             bytes + netgame::player_info_tail_offset, record.info_tail, sizeof(record.info_tail)
         );
         lobby.presence_records.block_player[slot] = record.player_id;
+        if (const auto* echoed = slot_info(lobby, slot)) {
+            note_computer_command_echo(lobby, record.player_id, kComputerEditSide, echoed->side);
+            note_computer_command_echo(lobby, record.player_id, kComputerEditColor, echoed->color);
+        }
         note_shared_machines(game);
         recorder_note_block(lobby, slot);
         // A player who arrived, or whose block now says OA, gets this
@@ -3836,10 +4265,17 @@ bool lobby_apply_event(Lobby& lobby, const LobbyEvent& event) noexcept {
             if (result.store)
                 lobby_player_team(slot_player(lobby, slot)) = static_cast<uint8_t>(result.team);
             lobby_apply_team_steps(lobby, result.steps);
+            note_computer_command_echo(
+                lobby,
+                record.player_id,
+                kComputerEditTeam,
+                lobby_player_team(slot_player(lobby, slot))
+            );
             game.gui_flags |= 1U;
             return true;
         }
         lobby_player_team(slot_player(lobby, slot)) = record.value;
+        note_computer_command_echo(lobby, record.player_id, kComputerEditTeam, record.value);
         return true;
     }
     case netgame::RecordType::alliance: {

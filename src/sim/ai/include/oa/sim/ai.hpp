@@ -155,6 +155,11 @@ struct ComputerPlayers {
     uint8_t initialized{};
     uint8_t downloadables_restricted{}; // options state 1 skips downloadable types
     bool plan_matches{}; // the last plan line named the difficulty; kept between passes
+    // A difficulty chosen for one computer player (0 easy, 1 medium, 2 hard).
+    // difficulty_set false leaves that player on the game's difficulty, which
+    // is what a zeroed ComputerPlayer would have meant and must not.
+    bool difficulty_set[OA_PLAYER_COUNT]{};
+    uint8_t difficulty[OA_PLAYER_COUNT]{};
     char* profile_text{};
     uint32_t profile_length{};
     // Every unit type's build list (UnitDef.build_ids: its SIDEDATA CANBUILD
@@ -250,6 +255,27 @@ void computer_players_release(ComputerPlayers* state) noexcept;
 /// @param host world, map, difficulty and random stream
 /// @return false for a null state, world or type table
 bool computer_players_initialize(ComputerPlayers* state, const ComputerHost& host) noexcept;
+
+/// Notes the difficulty one computer player plays at.
+///
+/// Call it before computer_players_initialize. A value outside easy, medium
+/// and hard is ignored. A later profile pass takes up a change made after.
+///
+/// @param[in,out] state computer players; null does nothing
+/// @param player player index
+/// @param difficulty OA_DIFFICULTY_EASY, MEDIUM or HARD
+void computer_players_set_difficulty(
+    ComputerPlayers* state, uint8_t player, int32_t difficulty
+) noexcept;
+
+/// Returns the difficulty noted for one computer player.
+///
+/// @param state computer players; null, or a player with none noted, returns fallback
+/// @param player player index
+/// @param fallback the game's difficulty
+/// @return the noted difficulty, or fallback
+[[nodiscard]] int32_t
+computer_player_difficulty(const ComputerPlayers* state, uint8_t player, int32_t fallback) noexcept;
 
 /// Reloads the AI profile (ReloadAIProfiles).
 ///

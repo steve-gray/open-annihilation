@@ -1514,7 +1514,9 @@ void test_slot_cycle(const oa::ui::gui_layout::Layout& lounge) {
     expect(f.press("PLAYER3"), "PLAYER3 clickable");
     expect(f.press("PLAYER3"), "PLAYER3 clickable again");
     expect(
-        mp::slot_player(f.lobby, 3).status == mp::kSlotOpen, "only one computer player is added"
+        mp::slot_player(f.lobby, 3).status == mp::kSlotComputer &&
+            mp::slot_player(f.lobby, 3).in_use == 0,
+        "a second computer player waits for its session arrival"
     );
     clock_ticks += 0x1f;
     expect(f.press("PLAYER2"), "PLAYER2 clickable as computer");
@@ -4351,6 +4353,186 @@ bool blocks_without_presence(const Room& room) {
     return true;
 }
 
+/// Seats the session player a click on a blocked slot asked for.
+///
+/// @param[in,out] room the battle room
+/// @return the arrival's player id, or 0 when none came
+uint32_t arrive_computer(Fixture& room) {
+    mp::LobbyEvent arrival{};
+    if (!room.lobby.net.receive(room.lobby.net.context, &arrival) ||
+        !mp::lobby_apply_event(room.lobby, arrival))
+        return 0;
+    mp::lobby_update_status(room.lobby, room.panel);
+    return arrival.player_id;
+}
+
+/// Battle-room rows for computer players: several per human, difficulty on
+/// the row, a host change of another OA machine's, and a 3.1c machine's
+/// left as a label the host can still remove.
+void test_computer_rows(const oa::ui::gui_layout::Layout& lounge) {
+    Fixture host(lounge);
+    host.loopback.next_player_id = 0x101;
+    expect(host.press("PLAYER1") && host.press("PLAYER1"), "a blocked slot seats a computer");
+    const auto first = arrive_computer(host);
+    auto& seated = mp::slot_player(host.lobby, 1);
+    expect(
+        first != 0 && seated.status == mp::kSlotComputer && seated.in_use != 0 &&
+            mp::panel_text(host.panel, "PLAYER1") == "AI:Host",
+        "the computer player's row names the human who runs it"
+    );
+    const auto* mem = mp::panel_control(host.panel, "MEM1");
+    expect(
+        mem != nullptr && mem->type == mp::ControlType::button && !mem->grayed &&
+            mp::panel_text(host.panel, "MEM1") == "Hard" && host.lobby.computer_difficulty[1] == 2,
+        "a computer player's row shows its difficulty"
+    );
+    expect(host.press("MEM1"), "the difficulty can be changed");
+    mp::lobby_update_status(host.lobby, host.panel);
+    expect(
+        mp::panel_text(host.panel, "MEM1") == "Easy" && host.lobby.computer_difficulty[1] == 0 &&
+            host.lobby.computer_difficulty_set[1],
+        "the difficulty cycles to easy"
+    );
+    const auto side_before = mp::slot_info(host.lobby, 1)->side;
+    const auto team_before = mp::lobby_player_team(seated);
+    expect(host.press("SIDE1") && host.press("TEAMICONS1"), "side and team can be changed");
+    expect(
+        mp::slot_info(host.lobby, 1)->side != side_before &&
+            mp::lobby_player_team(seated) != team_before,
+        "the computer player's side and team changed"
+    );
+    expect(host.press("PLAYER2") && host.press("PLAYER2"), "a second computer player is added");
+    expect(
+        mp::slot_player(host.lobby, 2).status == mp::kSlotComputer,
+        "the second computer player is seated"
+    );
+    clock_ticks += 0x1f;
+    expect(host.press("PLAYER1"), "the first computer player can be removed");
+    expect(
+        seated.status == mp::kSlotOpen && seated.in_use == 0 &&
+            mp::slot_player(host.lobby, 2).status == mp::kSlotComputer,
+        "removing one computer player leaves the other"
+    );
+
+    Fixture mixed(lounge);
+    mixed.loopback.next_player_id = 0x301;
+    mixed.join(0x301, "Rival");
+    mixed.remote_info(0x301, 0, 4);
+    expect(
+        !oa::netgame::sent_by_open_annihilation(
+            reinterpret_cast<const uint8_t*>(mp::slot_info(mixed.lobby, 1))
+        ),
+        "the other player is not on OA"
+    );
+    expect(mixed.press("PLAYER2") && mixed.press("PLAYER2"), "a 3.1c peer does not block adding");
+    expect(
+        mp::slot_player(mixed.lobby, 2).status == mp::kSlotComputer,
+        "a computer player is added while a 3.1c player is in the room"
+    );
+
+    Fixture remote(lounge);
+    remote.join(0x401, "Friend");
+    remote.remote_info(0x401, 0, 5);
+    oa::netgame::mark_engine_signature(reinterpret_cast<uint8_t*>(mp::slot_info(remote.lobby, 1)));
+    remote.join(0x402, "AI:Friend");
+    const auto computer = mp::slot_for_player_id(remote.lobby, 0x402);
+    expect(computer >= 0, "the remote computer player is seated");
+    mp::slot_info(remote.lobby, computer)->state = mp::kInfoStateDefeated;
+    mp::slot_player(remote.lobby, 1).machine_group = 4;
+    mp::slot_player(remote.lobby, computer).machine_group = 4;
+    mp::lobby_update_status(remote.lobby, remote.panel);
+    char mem_name[16];
+    std::snprintf(mem_name, sizeof mem_name, "MEM%d", static_cast<int>(computer));
+    const auto* remote_mem = mp::panel_control(remote.panel, mem_name);
+    expect(
+        remote_mem != nullptr && remote_mem->type == mp::ControlType::button && !remote_mem->grayed,
+        "the host can change another OA machine's computer player"
+    );
+    expect(remote.press(mem_name), "the host sets that computer player's difficulty");
+    expect(
+        remote.lobby.computer_command_kind == 4 && remote.lobby.computer_command_player == 0x402 &&
+            remote.lobby.computer_command_value == 0,
+        "the change waits for the machine that runs it"
+    );
+    const auto source = small_presence("0.8.0");
+    bind_presence_source(remote.lobby, source);
+    mp::presence_refresh(remote.lobby);
+    std::span<const uint8_t> command;
+    expect(
+        oa::netgame::find_presence_field(
+            remote.lobby.presence_records.local,
+            remote.lobby.presence_records.local_size,
+            oa::netgame::PresenceTag::computer_edit,
+            &command
+        ) && command.size() >= 6 &&
+            command[4] == 4 && command[5] == 0,
+        "the host's presence record carries the change"
+    );
+
+    Fixture owner(lounge, nullptr, false);
+    owner.loopback.next_player_id = 0x210;
+    owner.join(0x200, "Boss");
+    mp::slot_info(owner.lobby, mp::slot_for_player_id(owner.lobby, 0x200))->role = mp::kRoleHost;
+    expect(owner.press("PLAYER2"), "the joiner seats its own computer player");
+    const auto owned = arrive_computer(owner);
+    expect(owned != 0 && mp::slot_player(owner.lobby, 2).status == mp::kSlotComputer, "it arrived");
+    uint8_t body[6] = {
+        static_cast<uint8_t>(owned),
+        static_cast<uint8_t>(owned >> 8),
+        static_cast<uint8_t>(owned >> 16),
+        static_cast<uint8_t>(owned >> 24),
+        4,
+        0
+    };
+    auto asked = small_presence("0.8.0");
+    asked.resize(asked.size() + 16);
+    std::size_t written = 0;
+    expect(
+        oa::netgame::append_presence_field(
+            asked.data(),
+            asked.size() - 16,
+            asked.size(),
+            oa::netgame::PresenceTag::computer_edit,
+            std::span<const uint8_t>(body, sizeof body),
+            &written
+        ) == oa::netgame::WireError::ok,
+        "a host command encodes"
+    );
+    asked.resize(written);
+    const auto event = presence_event(0x200, asked);
+    expect(mp::lobby_apply_event(owner.lobby, event), "the host's presence record is kept");
+    expect(
+        owner.lobby.computer_difficulty_set[2] && owner.lobby.computer_difficulty[2] == 0,
+        "the machine that runs the computer player applies the difficulty"
+    );
+
+    Fixture plain(lounge);
+    plain.join(0x501, "Old");
+    plain.remote_info(0x501, 0, 6);
+    plain.join(0x502, "AI:Old");
+    const auto plain_computer = mp::slot_for_player_id(plain.lobby, 0x502);
+    expect(plain_computer >= 0, "a 3.1c machine's computer player is seated");
+    mp::slot_info(plain.lobby, plain_computer)->state = mp::kInfoStateDefeated;
+    mp::slot_player(plain.lobby, 1).machine_group = 5;
+    mp::slot_player(plain.lobby, plain_computer).machine_group = 5;
+    mp::lobby_update_status(plain.lobby, plain.panel);
+    char plain_mem[16];
+    std::snprintf(plain_mem, sizeof plain_mem, "MEM%d", static_cast<int>(plain_computer));
+    const auto* plain_control = mp::panel_control(plain.panel, plain_mem);
+    expect(
+        plain_control != nullptr && plain_control->type == mp::ControlType::label &&
+            plain_control->grayed && !plain.press(plain_mem),
+        "a 3.1c machine's computer player is not restyled"
+    );
+    char plain_row[16];
+    std::snprintf(plain_row, sizeof plain_row, "PLAYER%d", static_cast<int>(plain_computer));
+    expect(plain.press(plain_row), "the host can remove it");
+    expect(
+        plain.lobby.confirm_slot == static_cast<uint8_t>(plain_computer),
+        "removing it asks, as for any remote player"
+    );
+}
+
 // The battle room sends this machine's presence record alone in its frame,
 // to each human player whose block carries the 'OA' signature, once for each
 // change and once to a player who arrives later; never to a block without
@@ -6376,6 +6558,7 @@ int main(int argc, char** argv) {
             test_start_doors(*lounge.layout);
             test_row_indicators(*lounge.layout);
             test_slot_cycle(*lounge.layout);
+            test_computer_rows(*lounge.layout);
             test_chat_and_leave(*lounge.layout);
             test_mod_lobby_buttons(*lounge.layout);
             test_client_rules(*lounge.layout);
