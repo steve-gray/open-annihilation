@@ -6,7 +6,12 @@
 // PNG or is too large, and an engine this build does not meet; a catalogue
 // release of the same registry replaced with no question, keeping .backup; a
 // file of another version and another registry, each asking; and a fit check
-// that refuses through the hooks, changing nothing.
+// that refuses through the hooks, changing nothing, and is told the
+// expansions the pack needs; an install, an uninstall that a file sync
+// follows with the pack's empty folders, and an install again, three times,
+// leaving no folder behind; a folder of empty folders installed into; and a
+// folder holding the player's own file refused, its file kept and the
+// refusal logged.
 
 #include "oa/app/package_install.hpp"
 #include "oa/app/package_install/oamap.hpp"
@@ -23,9 +28,15 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
+#include <iostream>
 #include <iterator>
+#include <span>
+#include <sstream>
+#include <streambuf>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -299,23 +310,109 @@ void expect_refused(
     OA_CHECK(!fs::exists(maps));
 }
 
-/// The fit hook's count, and the failure it answers with once.
+/// The fit hook's count, the failure it answers with once, and the
+/// expansions it was told the pack needs.
 struct HookState {
     int calls{};
     oa::data::map_fit::Fit failure{};
+    std::vector<std::string> required{};
 };
 
 /// Answers the fit check: the first map fails, and the next fits.
 ///
 /// @param context the hook's state
+/// @param required the expansions the pack needs
 /// @return the fit
-oa::data::map_fit::Fit
-fail_first(void* context, const fs::path&, const pack::MapEntry&, std::string_view) {
+oa::data::map_fit::Fit fail_first(
+    void* context,
+    const fs::path&,
+    const pack::MapEntry&,
+    std::string_view,
+    std::span<const std::string> required
+) {
     auto* state = static_cast<HookState*>(context);
     ++state->calls;
+    state->required.assign(required.begin(), required.end());
     if (state->calls == 1)
         return state->failure;
     return {};
+}
+
+/// Lists the folders a Maps folder holds, at any depth, the installer's own
+/// lock file aside.
+///
+/// @param maps the Maps folder
+/// @return each folder's path below Maps
+std::vector<std::string> folders_in(const fs::path& maps) {
+    std::vector<std::string> folders;
+    std::error_code error;
+    for (fs::recursive_directory_iterator entry{maps, error}, end; !error && entry != end;
+         entry.increment(error))
+        if (entry->is_directory())
+            folders.push_back(entry->path().lexically_relative(maps).generic_string());
+    return folders;
+}
+
+/// Writes the standard error stream into a string while it lives.
+class CapturedErrors {
+  public:
+
+    CapturedErrors() : previous_(std::cerr.rdbuf(text_.rdbuf())) {}
+
+    ~CapturedErrors() { std::cerr.rdbuf(previous_); }
+
+    CapturedErrors(const CapturedErrors&) = delete;
+    CapturedErrors& operator=(const CapturedErrors&) = delete;
+
+    /// Returns what was written so far.
+    ///
+    /// @return the text
+    [[nodiscard]] std::string text() const { return text_.str(); }
+
+  private:
+
+    std::ostringstream text_;
+    std::streambuf* previous_;
+};
+
+/// Moves the pack's folder aside as the uninstall asks, then makes its two
+/// folders again, empty, at the old place, as a file sync that copied the
+/// pack's folders before it was moved can.
+///
+/// @param from the path
+/// @param to the new path
+/// @param[out] error set when the rename fails
+void rename_then_sync_back(
+    void*, const fs::path& from, const fs::path& to, std::error_code& error
+) {
+    install::rename_exclusively(from, to, error);
+    if (error || from.filename() != fs::path(std::string(kPackId)))
+        return;
+    fs::create_directories(from / "maps");
+    fs::create_directories(from / "previews");
+}
+
+/// Uninstalls the pack and deletes what the uninstall moved aside.
+///
+/// @param maps the Maps folder
+/// @param sync_back true to have a file sync make the pack's folders again
+/// @return true when the pack was removed
+bool uninstall_pack(const fs::path& maps, bool sync_back) {
+    const install::PackageKind* kind = install::find_kind("oamap");
+    OA_CHECK(kind != nullptr);
+    if (kind == nullptr)
+        return false;
+    install::ChangeOptions options{};
+    options.first_retry_ms = 0;
+    if (sync_back)
+        options.hooks.rename = &rename_then_sync_back;
+    const install::UninstallResult removed =
+        install::uninstall_package(*kind, maps, kPackId, options);
+    install::Discarder discarder;
+    discarder.add(removed.discards);
+    while (discarder.step()) {
+    }
+    return removed.removed;
 }
 
 void test_installs(const Scratch& scratch) {
@@ -473,7 +570,9 @@ void test_fit_hook(const Scratch& scratch) {
     const fs::path maps = scratch.path() / "fit" / "Maps";
     const fs::path file = scratch.path() / "fit" / "ridge-pack.oamap";
     const std::vector<uint8_t> preview = png_rgb(1, 1);
-    write_zip(file, pieces_of(manifest_of("1.0", 1, {}), preview));
+    pack::Manifest needing = manifest_of("1.0", 1, {});
+    needing.required_expansions = {"core-contingency"};
+    write_zip(file, pieces_of(needing, preview));
     const auto opened = install::open_package(file);
     OA_CHECK(opened.package.has_value());
     if (!opened.package)
@@ -507,6 +606,8 @@ void test_fit_hook(const Scratch& scratch) {
     install::Problem unfit{};
     OA_CHECK(!kind->check_staged(unpacking.staging(), *opened.package, options, unfit));
     OA_CHECK(state.calls == 2);
+    // The check looks in the expansions the pack needs too.
+    OA_CHECK(state.required == std::vector<std::string>{"core-contingency"});
     OA_CHECK(unfit.refusal == install::Refusal::unfit);
     const std::string sentence = oa::data::map_fit::describe(failure);
     OA_CHECK(oamap::refusal_text(unfit).find(sentence) != std::string::npos);
@@ -518,6 +619,115 @@ void test_fit_hook(const Scratch& scratch) {
     OA_CHECK(!fs::exists(maps / std::string(kPackId)));
 }
 
+void test_reinstall_after_uninstall(const Scratch& scratch) {
+    const fs::path maps = scratch.path() / "again" / "Maps";
+    const fs::path file = scratch.path() / "again" / "ridge-pack.oamap";
+    write_zip(file, pieces_of(manifest_of("1.0", 1, {}), png_rgb(1, 1)));
+    const install::Origin origin = catalogue_origin("ridge", 1, file);
+    const Change install_change = Change::install;
+    const fs::path folder = maps / std::string(kPackId);
+    for (int round = 0; round < 3; ++round) {
+        const Installed done = open_and_plan(file, maps, origin, &install_change);
+        OA_CHECK(done.plan.kind == install::PlanKind::install && done.result.changed);
+        OA_CHECK(fs::exists(folder / "oamap.yaml") && fs::exists(folder / "maps" / "north.tnt"));
+        // The first two uninstalls meet a file sync that makes the pack's
+        // folders again; the deletion removes them once it is done.
+        OA_CHECK(uninstall_pack(maps, round < 2));
+        const std::vector<std::string> left = folders_in(maps);
+        OA_CHECK(left.empty());
+        for (const std::string& name : left)
+            std::fprintf(stderr, "left in Maps: %s\n", name.c_str());
+    }
+}
+
+void test_empty_folders_free(const Scratch& scratch) {
+    const fs::path maps = scratch.path() / "empty" / "Maps";
+    const fs::path file = scratch.path() / "empty" / "ridge-pack.oamap";
+    write_zip(file, pieces_of(manifest_of("1.0", 1, {}), png_rgb(1, 1)));
+    const fs::path folder = maps / std::string(kPackId);
+    fs::create_directories(folder / "maps");
+    fs::create_directories(folder / "previews" / "deeper");
+    OA_CHECK(oamap::read_installed(folder).kind == install::FolderKind::missing);
+    // A file the player opens asks first, as for a missing folder.
+    const Installed asked = open_and_plan(file, maps, file_origin(), nullptr);
+    OA_CHECK(asked.plan.kind == install::PlanKind::ask_install);
+    const Change install_change = Change::install;
+    const Installed done =
+        open_and_plan(file, maps, catalogue_origin("ridge", 1, file), &install_change);
+    OA_CHECK(done.plan.kind == install::PlanKind::install && done.plan.target == kPackId);
+    OA_CHECK(done.result.changed);
+    OA_CHECK(oamap::read_installed(folder).kind == install::FolderKind::package);
+    OA_CHECK(fs::exists(folder / "maps" / "north.ota") && fs::exists(folder / "previews"));
+    OA_CHECK(!fs::exists(folder / "previews" / "deeper"));
+}
+
+void test_own_file_refused(const Scratch& scratch) {
+    const fs::path maps = scratch.path() / "own" / "Maps";
+    const fs::path file = scratch.path() / "own" / "ridge-pack.oamap";
+    write_zip(file, pieces_of(manifest_of("1.0", 1, {}), png_rgb(1, 1)));
+    const fs::path folder = maps / std::string(kPackId);
+    const fs::path notes = folder / "maps" / "notes.txt";
+    fs::create_directories(folder / "previews");
+    {
+        fs::create_directories(notes.parent_path());
+        std::ofstream out(notes, std::ios::binary);
+        out << "the player's own notes\n";
+    }
+    OA_CHECK(oamap::read_installed(folder).kind == install::FolderKind::other);
+    for (const install::Origin& origin : {file_origin(), catalogue_origin("ridge", 1, file)}) {
+        const Installed refused = open_and_plan(file, maps, origin, nullptr);
+        OA_CHECK(refused.plan.kind == install::PlanKind::refuse);
+        OA_CHECK(refused.plan.refusal == install::Refusal::not_a_pack);
+        install::Problem problem{};
+        problem.refusal = refused.plan.refusal;
+        problem.subject = std::string(kPackId);
+        OA_CHECK(
+            oamap::refusal_text(problem) ==
+            "The folder ridge-pack does not hold this map pack. It is left as it is."
+        );
+    }
+    // The player's file put there after the plan found the folder free: the
+    // change refuses, says so in the log, and leaves the file.
+    const install::PackageKind* kind = install::find_kind("oamap");
+    const auto opened = install::open_package(file);
+    OA_CHECK(kind != nullptr && opened.package.has_value());
+    if (kind == nullptr || !opened.package)
+        return;
+    fs::remove(notes);
+    install::Problem problem{};
+    install::Unpacking unpacking;
+    OA_CHECK(unpacking.start(*opened.package, maps, kPackId, {}, file_origin(), problem));
+    auto step = zip::StreamStep::more;
+    while (step == zip::StreamStep::more)
+        step = unpacking.step(uint64_t{1} << 20, problem);
+    OA_CHECK(step == zip::StreamStep::done);
+    {
+        std::ofstream out(notes, std::ios::binary);
+        out << "the player's own notes\n";
+    }
+    install::ChangeResult result{};
+    std::string logged;
+    {
+        const CapturedErrors captured;
+        install::ChangeOptions options{};
+        options.first_retry_ms = 0;
+        result = install::commit_change(*kind, maps, kPackId, Change::install, options);
+        logged = captured.text();
+    }
+    OA_CHECK(!result.changed && result.refusal == install::Refusal::not_placed);
+    OA_CHECK(
+        logged.find("holds more than empty folders; it is left as it is") != std::string::npos
+    );
+    OA_CHECK(fs::exists(notes) && !fs::exists(folder / "oamap.yaml"));
+    install::Discarder discarder;
+    discarder.add(result.discards);
+    discarder.add(unpacking.discards());
+    while (discarder.step()) {
+    }
+    // The deletion of what the change dropped leaves the player's folder.
+    OA_CHECK(fs::exists(notes) && fs::exists(folder / "previews"));
+}
+
 } // namespace
 
 int main() {
@@ -525,5 +735,8 @@ int main() {
     test_installs(scratch);
     test_refusals(scratch);
     test_fit_hook(scratch);
+    test_reinstall_after_uninstall(scratch);
+    test_empty_folders_free(scratch);
+    test_own_file_refused(scratch);
     return oa::test::check_exit_status();
 }

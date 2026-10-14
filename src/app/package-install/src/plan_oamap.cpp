@@ -322,9 +322,14 @@ InstalledPackage read_installed(const fs::path& folder) {
         if (is_link_or_junction(folder) || !fs::is_directory(status))
             return installed;
         pack::Manifest manifest;
-        if (!read_folder_manifest(folder, manifest) || manifest.id.empty())
-            return installed;
-        return installed_of(manifest);
+        if (read_folder_manifest(folder, manifest) && !manifest.id.empty())
+            return installed_of(manifest);
+        // Empty folders alone, as a file sync can bring back after an
+        // uninstall, hold nothing of the player's: the folder is free, and
+        // an install removes them first.
+        if (detail::holds_only_empty_folders(folder))
+            return InstalledPackage{};
+        return installed;
     } catch (const std::exception&) {
         return installed;
     }
@@ -434,8 +439,9 @@ bool check_staged(
         }
         std::vector<oa::data::map_fit::Failure> failures;
         for (const pack::MapEntry& map : manifest.maps) {
-            const oa::data::map_fit::Fit fit =
-                hooks->check_base_fit(hooks->context, staging, map, manifest.id);
+            const oa::data::map_fit::Fit fit = hooks->check_base_fit(
+                hooks->context, staging, map, manifest.id, manifest.required_expansions
+            );
             for (const oa::data::map_fit::Failure& failure : fit.failures)
                 failures.push_back(failure);
         }

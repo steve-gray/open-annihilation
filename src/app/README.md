@@ -3254,8 +3254,26 @@ Before the pack is put in place it is checked: the manifest, that the pack
 holds the files it lists and nothing else, that those files sit in the
 folders a map pack may hold, that each preview is a PNG of at most 2 MiB
 and 1024 pixels on a side, that this build meets `requires.engine`, and that
-every map fits the base game, which is the game folder with no mod. A clash
-with the mod being played does not refuse the install.
+every map fits the content the game finds its features in, with no mod:
+the folders the game plays without the mod's (the expansions that are on,
+then the base game), with each expansion the pack's `requiredExpansions`
+names, and those it needs, that the player has copied
+(`map_pack_fit_folders` and `check_content_fit` in `map_packs.hpp`). Their
+archives are mounted as the game's discovery mounts them from those folders
+together, so a feature an expansion defines, such as Core Contingency's
+`ArchiAquaOre1` to `ArchiAquaOre3` in its own archive, is found, and a
+feature none of them defines is refused, named. A clash with the mod being
+played does not refuse the install.
+
+A folder of the pack's id that holds nothing but empty folders, at most
+256 of them, is free: the kind reads it as missing, the install removes
+those folders (each with the call that removes only an empty folder)
+before the staged files move in, and the deletion of a discard folder
+removes such a folder at its package's name once it is done, as a file sync
+can bring the empty folders of an uninstalled pack back. A folder that
+holds anything else is refused as before, and the plan's refusal is logged
+(`open-annihilation: package install: <file>: The folder <id> does not
+hold this map pack. It is left as it is.`).
 
 The runtime keeps one index of the installed packs (`MapPacks`,
 `src/app/map_packs.cpp`) over that Maps folder, made when the packs are

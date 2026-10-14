@@ -3,15 +3,22 @@
 
 // Installed map packs: two packs list four maps, sorted, and a refresh reads
 // a manifest again only when that pack's key changed. A broken manifest is
-// named and left out. Removing a folder drops its maps. With the game's
-// data, a map that uses only its own feature fits the base game, and one
-// that defines DragonsTeeth does not.
+// named and left out. Removing a folder drops its maps. The folders an
+// install is checked against: the game's own without the mod, and the
+// copied expansions the pack needs. With the game's data, a map that uses
+// only its own feature fits the base game, and one that defines
+// DragonsTeeth does not; a map placing a feature an expansion's archive
+// defines fits only with that expansion laid over, one placing a feature
+// nothing defines is refused naming it, and Core Contingency's
+// ArchiAquaOre1 is found in its own archive beside the base game's.
 
 #include "map_packs.hpp"
 
 #include "oa/app/game_directory.hpp"
 #include "oa/app/package_install/origin.hpp"
+#include "oa/app/user_folder.hpp"
 #include "oa/base/sha256.hpp"
+#include "oa/data/content_bundles.hpp"
 #include "oa/data/map_fit/map_fit.hpp"
 #include "oa/data/map_pack/manifest.hpp"
 #include "oa/formats/hpi.hpp"
@@ -26,10 +33,12 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 namespace {
@@ -385,6 +394,128 @@ std::string marker_tdf(std::string_view stem, bool clash) {
     return text;
 }
 
+/// Writes a pack folder's map that places one feature it does not define.
+///
+/// @param folder the pack's folder
+/// @param stem the map's stem
+/// @param feature the feature's name
+/// @return the map's manifest entry
+pack::MapEntry
+write_placing_map(const fs::path& folder, const std::string& stem, std::string_view feature) {
+    write_bytes(folder / "maps" / (stem + ".ota"), ota_placing(feature));
+    const auto terrain = tnt_named(feature);
+    write_bytes(
+        folder / "maps" / (stem + ".tnt"),
+        std::string_view(reinterpret_cast<const char*>(terrain.data()), terrain.size())
+    );
+    pack::MapEntry map;
+    map.stem = stem;
+    map.title = stem;
+    map.players = 2;
+    map.size = "4x4";
+    map.files = {"maps/" + stem + ".ota", "maps/" + stem + ".tnt"};
+    return map;
+}
+
+/// Tells whether a fit names a feature that is defined nowhere.
+///
+/// @param checked the fit
+/// @param feature the feature's name
+/// @return true when one failure says so
+bool undefined(const oa::data::map_fit::Fit& checked, std::string_view feature) {
+    for (const auto& failure : checked.failures) {
+        const std::string sentence = oa::data::map_fit::describe(failure);
+        if (sentence.find(feature) != std::string::npos &&
+            sentence.find("defined nowhere") != std::string::npos)
+            return true;
+    }
+    return false;
+}
+
+/// Prints each failure of a fit.
+///
+/// @param label what was checked
+/// @param checked the fit
+void print_failures(std::string_view label, const oa::data::map_fit::Fit& checked) {
+    for (const auto& failure : checked.failures)
+        std::fprintf(
+            stderr,
+            "%.*s: %s\n",
+            static_cast<int>(label.size()),
+            label.data(),
+            oa::data::map_fit::describe(failure).c_str()
+        );
+}
+
+/// A map whose feature an expansion defines fits once that expansion's
+/// folder is laid over the base game, and one whose feature nothing defines
+/// is refused, naming it.
+///
+/// @param game_dir the game's folder
+/// @param gaf the stem of an animation the base game holds
+void test_content_fit(const fs::path& game_dir, const std::string& gaf) {
+    Scratch scratch;
+    const fs::path expansion = scratch.path() / "Expansions" / "totala" / "ridge";
+    const std::string tdf = "[zz ridge ore]\n{\nfilename=" + gaf + ";\n}\n";
+    const oa::HpiWriteFile ore{"features/ridge/ore.tdf", {tdf.begin(), tdf.end()}};
+    const std::vector<uint8_t> archive = oa::write_hpi(std::span<const oa::HpiWriteFile>(&ore, 1));
+    write_bytes(
+        expansion / "ridgeore.ufo",
+        std::string_view(reinterpret_cast<const char*>(archive.data()), archive.size())
+    );
+    const fs::path folder = scratch.path() / "ridge-pack";
+    const pack::MapEntry east = write_placing_map(folder, "east", "zz ridge ore");
+    const pack::MapEntry west = write_placing_map(folder, "west", "zz nowhere ore");
+
+    const oa::data::map_fit::Fit alone =
+        oa::app::check_base_game_fit(game_dir, folder, east, "ridge-pack");
+    OA_CHECK(undefined(alone, "zz ridge ore"));
+    const std::vector<fs::path> just_the_game{game_dir};
+    OA_CHECK(undefined(
+        oa::app::check_content_fit(just_the_game, folder, east, "ridge-pack"), "zz ridge ore"
+    ));
+    const std::vector<fs::path> with_expansion{expansion, game_dir};
+    const oa::data::map_fit::Fit fitted =
+        oa::app::check_content_fit(with_expansion, folder, east, "ridge-pack");
+    print_failures("east", fitted);
+    OA_CHECK(fitted.fits());
+    const oa::data::map_fit::Fit missing =
+        oa::app::check_content_fit(with_expansion, folder, west, "ridge-pack");
+    OA_CHECK(!missing.fits() && undefined(missing, "zz nowhere ore"));
+
+    // Core Contingency's water metal, which three of Cavedog's maps place,
+    // from the game's own archives laid out as the player's copies are:
+    // the base game's in one folder and the expansion's in another.
+    const fs::path base = scratch.path() / "Games" / "totala";
+    const fs::path contingency = scratch.path() / "Expansions" / "totala" / "core-contingency";
+    fs::create_directories(base);
+    fs::create_directories(contingency);
+    bool linked = true;
+    const auto link_into = [&](std::string_view name, const fs::path& into) {
+        const auto found = oa::app::entry_without_case(game_dir, name);
+        std::error_code error;
+        if (found)
+            fs::create_hard_link(*found, into / std::string(name), error);
+        linked = linked && found && !error;
+    };
+    for (const std::string_view name : {"totala1.hpi", "totala2.hpi", "rev31.gp3"})
+        link_into(name, base);
+    link_into("ccdata.ccx", contingency);
+    if (!linked) {
+        std::printf("skipped Core Contingency's features: the game's archives cannot be linked\n");
+        return;
+    }
+    const pack::MapEntry isle = write_placing_map(folder, "isle", "ArchiAquaOre1");
+    OA_CHECK(
+        undefined(oa::app::check_base_game_fit(base, folder, isle, "ridge-pack"), "ArchiAquaOre1")
+    );
+    const std::vector<fs::path> copies{contingency, base};
+    const oa::data::map_fit::Fit watered =
+        oa::app::check_content_fit(copies, folder, isle, "ridge-pack");
+    print_failures("isle", watered);
+    OA_CHECK(watered.fits());
+}
+
 void test_base_fit() {
     const fs::path game_dir =
         oa::test::require_game_directory("a map checked against the base game");
@@ -466,6 +597,70 @@ void test_base_fit() {
             std::fprintf(stderr, "clash: %s\n", oa::data::map_fit::describe(failure).c_str());
     }
     OA_CHECK(redefined);
+    test_content_fit(game_dir, stem);
+}
+
+/// Writes the record of a copied bundle that lists every file of it.
+///
+/// @param folder the bundle's folder
+/// @param id the bundle's id
+void write_copy_record(const fs::path& folder, std::string_view id) {
+    const oa::data::content_bundles::Bundle* bundle = oa::data::content_bundles::find_bundle(id);
+    OA_CHECK(bundle != nullptr);
+    if (bundle == nullptr)
+        return;
+    std::string record = "oa-content 1\nbundle " + std::string(id) + "\nsource G125\n";
+    for (const oa::data::content_bundles::ContentFile& file : bundle->files)
+        record += "file " + std::string(file.copy_name) + "\nsize 1\nmodified 1\nsha256 " +
+                  std::string(64, '0') + "\n";
+    write_bytes(folder / ".oa-content", record);
+}
+
+/// The folders a map pack's install is checked against.
+void test_fit_folders(const Scratch& scratch) {
+    const fs::path user = scratch.path() / "player";
+    const fs::path base = user / "Games" / "totala";
+    const fs::path expansions = user / "Expansions" / "totala";
+    const fs::path campaign = expansions / "campaign";
+    const fs::path contingency = expansions / "core-contingency";
+    const fs::path tactics = expansions / "battle-tactics";
+    const fs::path mod = user / "Mods" / "ridge";
+    for (const fs::path& folder : {base, campaign, contingency, tactics, mod})
+        fs::create_directories(folder);
+    write_copy_record(campaign, "campaign");
+    write_copy_record(contingency, "core-contingency");
+    const std::vector<std::string> none;
+    const std::vector<std::string> needs_contingency{"core-contingency"};
+    const std::vector<std::string> needs_tactics{"battle-tactics"};
+
+    // The game's own folders, the mod's left out.
+    const std::vector<fs::path> played{mod, contingency, campaign, base};
+    OA_CHECK(
+        oa::app::map_pack_fit_folders(played, mod, base, user, none) ==
+        std::vector<fs::path>({contingency, campaign, base})
+    );
+    // An expansion the pack needs that is off, with the one it needs, before
+    // the base game.
+    const std::vector<fs::path> base_alone{base};
+    OA_CHECK(
+        oa::app::map_pack_fit_folders(base_alone, {}, base, user, needs_contingency) ==
+        std::vector<fs::path>({campaign, contingency, base})
+    );
+    // One that is on already is not listed twice.
+    OA_CHECK(
+        oa::app::map_pack_fit_folders(played, mod, base, user, needs_contingency) ==
+        std::vector<fs::path>({contingency, campaign, base})
+    );
+    // One the player has not copied (no record) is not there to look in.
+    OA_CHECK(
+        oa::app::map_pack_fit_folders(base_alone, {}, base, user, needs_tactics) ==
+        std::vector<fs::path>({campaign, base})
+    );
+    // No folders listed: the game folder alone.
+    OA_CHECK(
+        oa::app::map_pack_fit_folders({}, {}, base, {}, needs_contingency) ==
+        std::vector<fs::path>({base})
+    );
 }
 
 /// The compatibility key, the catalogue's answer and the greyed reasons.
@@ -621,6 +816,7 @@ int main(int argc, char** argv) {
         test_list_rules();
         const Scratch scratch;
         test_index(scratch);
+        test_fit_folders(scratch);
     }
     return oa::test::check_exit_status();
 }
