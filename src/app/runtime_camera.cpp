@@ -10,6 +10,8 @@
 #include "oa/sim/feature_runtime.hpp"
 #include "oa/sim/selection.hpp"
 #include "oa/platform/memory_status.hpp"
+#include "oa/platform/system.hpp"
+#include "oa/present/model/rgb_bridge.hpp"
 #include "oa/present/scene_grid.hpp"
 #include "oa/present/world_renderer/world_camera.hpp"
 #include <SDL3/SDL.h>
@@ -18,6 +20,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -50,6 +53,38 @@ static_assert(
         kMaxBattlefieldZoom,
     "Maximum zoom in's closest choice is the closest any view zooms in"
 );
+static_assert(
+    kRenderedUnitsMemoryShare == oa::present::model::bridge_memory_share &&
+        kRenderedUnitsUnknownBudget == oa::present::model::bridge_unknown_budget &&
+        kRenderedUnitsAddressCap == oa::present::model::bridge_address_cap,
+    "the model budget's share, unknown budget and address cap are the bridge's"
+);
+
+// OA_RENDERED_UNITS_BUDGET, a number of bytes, or nothing when it is unset
+// or not a number. Read once; a failure to read it leaves the machine's budget.
+std::optional<uint64_t> rendered_units_budget_override() noexcept {
+    static const std::optional<uint64_t> parsed = []() noexcept -> std::optional<uint64_t> {
+        try {
+            const std::optional<std::string> text =
+                oa::platform::environment_value("OA_RENDERED_UNITS_BUDGET");
+            if (!text || text->empty())
+                return std::nullopt;
+            uint64_t value = 0;
+            for (const unsigned char digit : *text) {
+                if (digit < '0' || digit > '9')
+                    return std::nullopt;
+                const auto next = static_cast<uint64_t>(digit - '0');
+                if (value > (std::numeric_limits<uint64_t>::max() - next) / 10)
+                    return std::nullopt;
+                value = value * 10 + next;
+            }
+            return value;
+        } catch (...) {
+            return std::nullopt;
+        }
+    }();
+    return parsed;
+}
 
 } // namespace
 
@@ -548,27 +583,43 @@ bool Runtime::dots_frame() const noexcept {
     if (chosen.zoomed_out_units == settings::ZoomedOutUnits::dots &&
         match_zoom_ < settings::zoomed_out_zoom(chosen.zoomed_out_after))
         return true;
-    // Past the drawing's floor, models whose drawing would take more of the
-    // machine's memory than it can spare, or a view whose units drawn reach
-    // farther from the camera than the models' places do, are drawn as
-    // dots.
-    if (!far_view_frame())
-        return false;
+    // At every zoom, models whose drawing would take more of the machine's
+    // memory than it can spare are drawn as dots. Past the drawing's floor,
+    // so is a view whose units drawn reach farther from the camera than the
+    // models' places do.
     const auto zoom = static_cast<double>(match_zoom_);
     const double wide = static_cast<double>(match_layout_.battlefield_width()) / zoom;
     const double high = static_cast<double>(match_layout_.battlefield_height()) / zoom;
-    return wide * high * static_cast<double>(kModelBridgeBytesPerMapPixel) >
-               static_cast<double>(rendered_units_budget()) ||
-           std::max(wide, high) + kFarCullMarginMapPixels > kMostModelOffset;
+    if (wide * high * static_cast<double>(kModelBridgeBytesPerMapPixel) >
+        static_cast<double>(rendered_units_budget()))
+        return true;
+    if (!far_view_frame())
+        return false;
+    return std::max(wide, high) + kFarCullMarginMapPixels > kMostModelOffset;
 }
 
 uint64_t Runtime::rendered_units_budget() const noexcept {
-    // The machine's physical memory, read once.
+    // The machine's physical memory and, on Windows, its free address space,
+    // read once.
     static const uint64_t physical = [] {
         oa::platform::SystemMemorySample sample{};
         return oa::platform::sample_system_memory(&sample) ? sample.physical : uint64_t{0};
     }();
-    return physical != 0 ? physical / kRenderedUnitsMemoryShare : kRenderedUnitsUnknownBudget;
+    static const std::optional<uint64_t> address = oa::platform::available_virtual_bytes();
+    constexpr bool narrow = sizeof(void*) <= 4;
+    uint64_t budget = oa::present::model::bridge_byte_budget(physical, address, narrow);
+    if (const std::optional<uint64_t> forced = rendered_units_budget_override()) {
+        budget = *forced;
+        if (narrow) {
+            uint64_t cap = address ? *address : kRenderedUnitsAddressCap;
+            constexpr uint64_t addressable = uint64_t{2} << 30;
+            if (cap > addressable)
+                cap = addressable;
+            if (budget > cap)
+                budget = cap;
+        }
+    }
+    return budget;
 }
 
 float Runtime::most_match_zoom() const noexcept {

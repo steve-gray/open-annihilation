@@ -38,13 +38,13 @@ inline constexpr int kGraphGap = 2;
 inline constexpr int kGraphEdge = 1;
 /// Source pixels across each column of the graph.
 inline constexpr int kBarWidth = 1;
-/// Source pixels of the graph's height: one for each millisecond up to
-/// kGraphTopNs.
-inline constexpr int kGraphHeight = 40;
+/// Source pixels of the graph's height: three for every four milliseconds up
+/// to kGraphTopNs, so that the panel, with the units' picture's row, still
+/// fits a quarter of a 640x480 battlefield.
+inline constexpr int kGraphHeight = 30;
 /// The frame time a bar of the graph's whole height stands for, in
 /// nanoseconds; a longer frame's bar stops there.
-inline constexpr uint64_t kGraphTopNs =
-    uint64_t{kGraphHeight} * frame_pacing::kNanosecondsPerMillisecond;
+inline constexpr uint64_t kGraphTopNs = uint64_t{40} * frame_pacing::kNanosecondsPerMillisecond;
 /// Source pixels from one dot of the graph's line at the frame's allowance
 /// to the next.
 inline constexpr int kDotPitch = 2;

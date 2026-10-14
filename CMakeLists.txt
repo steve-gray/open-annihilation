@@ -1125,6 +1125,7 @@ set(oa_game_self_check_sources src/app/runtime_checks.cpp src/app/runtime_order_
   src/app/runtime_reclaim_cursor_check.cpp src/app/runtime_build_preview_check.cpp
   src/app/runtime_pointer_check.cpp src/app/runtime_dgun_check.cpp
   src/app/runtime_attack_command_check.cpp src/app/runtime_tracking_zoom_check.cpp
+  src/app/runtime_zoom_memory_check.cpp
   src/app/runtime_match_panel_keys_check.cpp src/app/runtime_turret_draw_check.cpp
   src/app/runtime_megamap_check.cpp src/app/runtime_radar_orders_check.cpp
   src/app/runtime_inactive_loop_check.cpp src/app/runtime_factory_check.cpp
@@ -2860,6 +2861,21 @@ endforeach()
           set_tests_properties(native-navigation-${oa_navigation_group} PROPERTIES
             TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
         endforeach()
+        # A large battlefield eased out and back three times with the model
+        # picture limited to 8 MiB, then back at the main menu. The budget is
+        # the test's own; a replaced environment has to name the dummy drivers too.
+        set(oa_zoom_memory_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/G98-zoom-memory")
+        file(MAKE_DIRECTORY "${oa_zoom_memory_dir}")
+        add_test(NAME native-zoom-memory COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+          --skip-intro --mute --headless-check --check-zoom-memory --resolution 1920x1080
+          --user-folder "${oa_zoom_memory_dir}/user"
+          --preferences-file "${oa_zoom_memory_dir}/preferences.conf")
+        set_tests_properties(native-zoom-memory PROPERTIES
+          TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+          WORKING_DIRECTORY "${oa_zoom_memory_dir}"
+          ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;OA_RENDERED_UNITS_BUDGET=8388608"
+          PASS_REGULAR_EXPRESSION "zoom memory check: main menu")
+        oa_game_data_tests(native-zoom-memory)
         # --trace-digest streams of seeded headless skirmishes repeat byte
         # for byte and follow the trace stream layout.
         add_test(NAME native-trace COMMAND ${Python3_EXECUTABLE}

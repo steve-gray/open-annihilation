@@ -73,7 +73,12 @@ of them forgets it.
 Memory: besides the 8-bit surface and its captured indices (one byte each per
 8-bit pixel), the copy holds four bytes (colour and index) for each distinct
 frame pixel captured from, so never more than four bytes per frame pixel of the
-rectangle.
+rectangle. The picture and the captured indices grow by doubling, never past
+the bridge's byte budget (none when that budget is zero), and are released
+down to the picture after the view has needed at most half of them for a
+while. They are taken with malloc: a picture that would pass the budget, or
+that cannot be allocated, makes `bridge_begin` return false and the match
+draws that frame's units as dots.
 
 ## Drawing a frame in bands
 

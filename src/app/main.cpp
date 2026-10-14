@@ -44,6 +44,7 @@
 #include "oa/base/float_precision.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/defs/layout.hpp"
+#include "oa/platform/allocator.hpp"
 #include "oa/platform/machine.hpp"
 #include "oa/platform/memory_status.hpp"
 #include "oa/platform/file_types.hpp"
@@ -119,20 +120,42 @@ std::string error_log_folder;
 
 /// Reports running out of memory and ends the process.
 ///
-/// Appends the out-of-memory message to ErrorLog.txt beside the application
-/// (error_log_folder), shows it in an "Open Annihilation" error box, then
-/// exits at once with status 3 (kOutOfMemoryExitStatus).
+/// Appends 3.1c's out-of-memory line to ErrorLog.txt (error_log_folder),
+/// then tells the player what happened: the heap's state, where the log is,
+/// and that closing other programs may help. The handler cannot know the
+/// size that was asked for. The box is built on the stack. The process then
+/// exits at once with status 3 (kOutOfMemoryExitStatus). A second entry,
+/// from the report itself running out of memory, exits without reporting again.
 [[noreturn]] void handle_out_of_memory() {
+    static std::atomic_flag entered;
+    if (entered.test_and_set(std::memory_order_relaxed))
+        std::_Exit(kOutOfMemoryExitStatus);
     // The process ends whatever happens: a log that cannot be written still
     // leaves the box, and a box that cannot be shown the log.
     std::ignore = oa::platform::append_error_log(
         error_log_folder.c_str(), oa::platform::out_of_memory_message
     );
+    const oa::platform::HeapStats heap = oa::platform::heap_stats();
+    char box[768];
+    const bool known_folder = !error_log_folder.empty();
+    std::snprintf(
+        box,
+        sizeof box,
+        "Open Annihilation ran out of memory while allocating memory for the game.\n"
+        "The heap holds %" PRIu64 " live blocks, %" PRIu64 " live bytes, and peaked at %" PRIu64
+        " bytes.\n"
+        "ErrorLog.txt is %s%s.\n"
+        "Closing other programs may help.\n",
+        heap.live_blocks,
+        heap.live_bytes,
+        heap.peak_bytes,
+        known_folder ? "in " : "",
+        known_folder ? error_log_folder.c_str() : "beside the program"
+    );
+    std::ignore = oa::platform::append_error_log(error_log_folder.c_str(), box);
     // The box needs the pointer, which full screen keeps on the window.
     release_pointer(SDL_GetGrabbedWindow());
-    std::ignore = SDL_ShowSimpleMessageBox(
-        SDL_MESSAGEBOX_ERROR, "Open Annihilation", oa::platform::out_of_memory_message, nullptr
-    );
+    std::ignore = SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Open Annihilation", box, nullptr);
     std::_Exit(kOutOfMemoryExitStatus);
 }
 

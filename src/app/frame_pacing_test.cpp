@@ -773,7 +773,7 @@ void test_frame_stats() {
     CHECK(!roll_frame_stats(window, kClockStart));
     FrameStatsTable table = oa::app::frame_pacing::frame_stats_table(window, notes, renderer);
     CHECK(table.row_count == oa::app::frame_pacing::kFrameStatsRowsMost);
-    CHECK(table.row_count == 11);
+    CHECK(table.row_count == 12);
     CHECK(table.rows[0].kind == FrameStatsRowKind::title);
     CHECK(row_reads(table.rows[0], "Frame stats (ms)", "", "", "", ""));
     CHECK(table.rows[1].kind == FrameStatsRowKind::heading);
@@ -788,12 +788,15 @@ void test_frame_stats() {
     // The units row shows from the start, so the panel keeps its height.
     CHECK(table.rows[8].kind == FrameStatsRowKind::count);
     CHECK(row_reads(table.rows[8], "units", "", "0", "", "0 between ticks"));
+    // The units' picture: nothing held, and no budget named.
+    CHECK(table.rows[9].kind == FrameStatsRowKind::count);
+    CHECK(row_reads(table.rows[9], "models", "", "0", "", "MB"));
     // The renderer row: the tier and the driver, and the adapter as its note.
-    CHECK(table.rows[9].kind == FrameStatsRowKind::renderer);
-    CHECK(row_reads(table.rows[9], "standard: metal", "", "", "", "Apple M2"));
+    CHECK(table.rows[10].kind == FrameStatsRowKind::renderer);
+    CHECK(row_reads(table.rows[10], "standard: metal", "", "", "", "Apple M2"));
     // The display row, last: no window was named.
-    CHECK(table.rows[10].kind == FrameStatsRowKind::display);
-    CHECK(row_reads(table.rows[10], "no window", "", "", "", ""));
+    CHECK(table.rows[11].kind == FrameStatsRowKind::display);
+    CHECK(row_reads(table.rows[11], "no window", "", "", "", ""));
     // A second of 120 frames 8 to 9 ms apart, 30 ticks of 2 to 4 ms.
     for (uint32_t frame = 0; frame < 120; ++frame) {
         note_frame_measure(
@@ -838,6 +841,21 @@ void test_frame_stats() {
     table = oa::app::frame_pacing::frame_stats_table(window, {120, 120, 40, 38}, renderer);
     CHECK(row_reads(table.rows[8], "units", "", "40", "", "38 between ticks"));
     CHECK(table.rows[8].values[1].severity == TimeSeverity::none);
+    // The units' picture in whole megabytes rounded up, against its budget,
+    // and "dots" when the frame drew the units as dots.
+    {
+        oa::app::frame_pacing::FrameStatsNotes held{120, 120, 40, 38};
+        held.model_bytes = (uint64_t{48} << 20) + 1;
+        held.model_budget = uint64_t{512} << 20;
+        table = oa::app::frame_pacing::frame_stats_table(window, held, renderer);
+        CHECK(row_reads(table.rows[9], "models", "", "49", "", "MB of 512"));
+        held.units_as_dots = true;
+        table = oa::app::frame_pacing::frame_stats_table(window, held, renderer);
+        CHECK(row_reads(table.rows[9], "models", "", "49", "", "MB of 512, dots"));
+        held.model_budget = 0;
+        table = oa::app::frame_pacing::frame_stats_table(window, held, renderer);
+        CHECK(row_reads(table.rows[9], "models", "", "49", "", "MB, dots"));
+    }
     // The rate shown beside them grades nothing: each time keeps the grade
     // it had when it was taken.
     table = oa::app::frame_pacing::frame_stats_table(window, {240, 240, 0, 0}, renderer);

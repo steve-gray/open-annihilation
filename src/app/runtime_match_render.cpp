@@ -827,10 +827,11 @@ void Runtime::render_match_surface() {
     // the far view: the processor draws it at the zoom in every tier, the
     // terrain from the map's pyramid.
     const bool far = !directed && far_view_frame();
-    // Zoomed out past After zoom with Zoomed out units at Dots, or past the
-    // tier's floor where the models would take too much memory, each unit
-    // is a dot of its owner's colour and no model is drawn at all.
-    const bool dots = !directed && dots_frame();
+    // Zoomed out past After zoom with Zoomed out units at Dots, or at any
+    // zoom where the models would take too much memory, each unit is a dot
+    // of its owner's colour and no model is drawn at all. A director's frame
+    // stays rendered until its picture cannot be allocated.
+    bool dots = !directed && dots_frame();
     // The map the view shows: the fill below draws nothing beyond it. The
     // player's camera is held within the view's limits, which let it go
     // past the map's edges (view_camera), and the limits then hold the next
@@ -1344,9 +1345,31 @@ void Runtime::render_match_surface() {
     oa::present::bind_display(&models.display.context);
     draw_match_debug_grid(models.bridge, models.display, rgb_frame, bridge_area, scale);
     mark_profile(OA_PROFILE_RENDER_STATIC);
-    model_render::bridge_begin(
-        models.bridge, rgb_frame, bridge_area, scale, models.display.palette, phase[0], phase[1]
-    );
+    models.bridge.byte_budget = rendered_units_budget();
+    if (!model_render::bridge_begin(
+            models.bridge, rgb_frame, bridge_area, scale, models.display.palette, phase[0], phase[1]
+        )) {
+        // One line for the run: the picture could not be held, so this frame
+        // draws dots. The process carries on.
+        static bool reported = false;
+        if (!reported) {
+            reported = true;
+            std::cerr << "open-annihilation: the units' picture could not be allocated ("
+                      << models.bridge.refused_bytes << " bytes); units are drawn as dots\n";
+        }
+        dots = true;
+        const oa::Rect32 one_pixel{
+            scene_view.destination_x,
+            scene_view.destination_y,
+            scene_view.destination_x,
+            scene_view.destination_y
+        };
+        std::ignore = model_render::bridge_begin(
+            models.bridge, rgb_frame, one_pixel, scale, models.display.palette, phase[0], phase[1]
+        );
+    }
+    // The "+stats" panel says when this frame drew the units as dots.
+    frame_draws_.units_as_dots = dots;
     // Models draw into the bridge and sprites straight into the RGB frame,
     // so the bridge's pixels go back to the frame before a sprite draws over
     // them (a commit), and the next model captures the frame again.

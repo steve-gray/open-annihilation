@@ -19,6 +19,8 @@ Every document in the repository, by what you want to do.
 - [command-line.md](command-line.md): `--version`, which prints one line and
   exits before the game starts, and `--print-profile`, which ends with that
   same line.
+- [troubleshooting.md](troubleshooting.md): zooming out when memory is
+  short, and the message the game shows when it runs out of memory.
 - [settings.md](settings.md): Open Annihilation's own settings, with a
   picture of each section: opening them, OK, Cancel and Restore defaults,
   and what every setting in Mods, Controls, Engine Limits, Language & Text,

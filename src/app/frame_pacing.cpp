@@ -118,8 +118,10 @@ constexpr std::size_t kRateRow = 2;
 constexpr std::size_t kFirstMeasureRow = 3;
 /// The row of the units drawn.
 constexpr std::size_t kCountRow = kFirstMeasureRow + kFrameMeasureCount;
+/// The row of the units' picture: the megabytes it holds, and its budget.
+constexpr std::size_t kModelRow = kCountRow + 1;
 /// The row of the renderer.
-constexpr std::size_t kRendererRow = kCountRow + 1;
+constexpr std::size_t kRendererRow = kModelRow + 1;
 /// The row of the window and the display.
 constexpr std::size_t kDisplayRow = kRendererRow + 1;
 static_assert(kDisplayRow + 1 == kFrameStatsRowsMost);
@@ -172,6 +174,8 @@ FrameStatsTable table_rows() noexcept {
     }
     table.rows[kCountRow].kind = FrameStatsRowKind::count;
     set_text(table.rows[kCountRow].label, "units");
+    table.rows[kModelRow].kind = FrameStatsRowKind::count;
+    set_text(table.rows[kModelRow].label, "models");
     table.rows[kRendererRow].kind = FrameStatsRowKind::renderer;
     table.rows[kDisplayRow].kind = FrameStatsRowKind::display;
     return table;
@@ -630,6 +634,31 @@ FrameStatsTable frame_stats_table(
         "%u between ticks",
         notes.units_between_ticks
     );
+    // The units' picture: its megabytes, rounded up so that a picture held
+    // never reads 0, then its budget in the note, and "dots" when the last
+    // frame drew the units as dots.
+    constexpr uint64_t kMegabyte = uint64_t{1} << 20;
+    const auto megabytes = [](uint64_t bytes) {
+        return static_cast<unsigned long long>((bytes + kMegabyte - 1) / kMegabyte);
+    };
+    auto& models = table.rows[kModelRow];
+    std::snprintf(
+        models.values[kFrameStatsMeanColumn].text.data(),
+        models.values[kFrameStatsMeanColumn].text.size(),
+        "%llu",
+        megabytes(notes.model_bytes)
+    );
+    const char* dots = notes.units_as_dots ? ", dots" : "";
+    if (notes.model_budget == 0)
+        std::snprintf(models.note.text.data(), models.note.text.size(), "MB%s", dots);
+    else
+        std::snprintf(
+            models.note.text.data(),
+            models.note.text.size(),
+            "MB of %llu%s",
+            megabytes(notes.model_budget),
+            dots
+        );
     set_renderer_row(table.rows[kRendererRow], renderer);
     set_display_row(table.rows[kDisplayRow], display);
     return table;
@@ -650,6 +679,8 @@ FrameStatsTable frame_stats_widest_table() noexcept {
     );
     set_text(table.rows[kCountRow].values[kFrameStatsMeanColumn], "0000");
     set_text(table.rows[kCountRow].note, "0000 between ticks");
+    set_text(table.rows[kModelRow].values[kFrameStatsMeanColumn], "0000");
+    set_text(table.rows[kModelRow].note, "MB of 0000, dots");
     // The renderer and display rows stay empty: the panel cuts their texts
     // to its width.
     return table;

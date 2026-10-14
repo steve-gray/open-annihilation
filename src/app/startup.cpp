@@ -319,6 +319,7 @@ void check_game_files_options(Options& options) {
         {options.check_kill_board, "--check-kill-board"},
         {options.check_paused_save, "--check-paused-save"},
         {options.check_simulation_hash, "--check-simulation-hash"},
+        {options.check_zoom_memory, "--check-zoom-memory"},
         {!options.check_unit_language.empty(), "--check-unit-language"},
         {options.check_language_switch, "--check-language-switch"},
         {options.check_language_registry, "--check-language-registry"},
@@ -537,6 +538,7 @@ void check_director_options(Options& options) {
         {options.check_kill_board, "--check-kill-board"},
         {options.check_paused_save, "--check-paused-save"},
         {options.check_simulation_hash, "--check-simulation-hash"},
+        {options.check_zoom_memory, "--check-zoom-memory"},
         {!options.check_unit_language.empty(), "--check-unit-language"},
         {options.check_language_switch, "--check-language-switch"},
         {options.check_language_registry, "--check-language-registry"},
@@ -618,6 +620,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_kill_board, "--check-kill-board"},
             {options.check_paused_save, "--check-paused-save"},
             {options.check_simulation_hash, "--check-simulation-hash"},
+            {options.check_zoom_memory, "--check-zoom-memory"},
             {!options.check_unit_language.empty(), "--check-unit-language"},
             {options.check_language_switch, "--check-language-switch"},
             {options.check_language_registry, "--check-language-registry"},
@@ -826,6 +829,7 @@ constexpr FlagOption kFlagOptions[] = {
     {"--check-kill-board", &Options::check_kill_board},
     {"--check-paused-save", &Options::check_paused_save},
     {"--check-simulation-hash", &Options::check_simulation_hash},
+    {"--check-zoom-memory", &Options::check_zoom_memory},
     {"--check-language-switch", &Options::check_language_switch},
     {"--check-language-registry", &Options::check_language_registry},
     {"--check-language-notice", &Options::check_language_notice},
@@ -1409,6 +1413,7 @@ std::string launch_content_error(std::string_view problem) {
                      "[--check-unit-page-memory] [--check-side-column] [--check-match-bars] "
                      "[--check-unit-pages whole|scaled:TYPE,...] "
                      "[--check-kill-board] [--check-paused-save] [--check-simulation-hash] "
+                     "[--check-zoom-memory] "
                      "[--check-unit-language TAG] "
                      "[--check-language-switch] "
                      "[--check-language-registry] "
@@ -1622,12 +1627,13 @@ std::string launch_content_error(std::string_view problem) {
         result.check_pad_controls || result.check_running_while_inactive ||
         result.check_director_view || result.check_director_render || result.check_interpolation ||
         result.check_unit_playout || result.check_paused_save || result.check_simulation_hash ||
-        result.check_map_packs || result.check_map_browser || result.check_map_pack_lists;
+        result.check_zoom_memory || result.check_map_packs || result.check_map_browser ||
+        result.check_map_pack_lists;
     // A capture and a showcase need the application's own loop and window,
     // which checks and benchmarks do not run.
     const bool check_run = result.fixed_clock || result.check_navigation ||
-                           result.check_multiplayer_menu || result.check_briefing_narration ||
-                           result.benchmark_frames;
+                           result.check_zoom_memory || result.check_multiplayer_menu ||
+                           result.check_briefing_narration || result.benchmark_frames;
 #if OA_PROCESS_SPAWNING == 0
     // The capture and the director's encoder run the ffmpeg program, which a
     // build without OA_PROCESS_SPAWNING cannot start. A render with encoding

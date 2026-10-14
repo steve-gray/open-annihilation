@@ -579,9 +579,15 @@ int Runtime::run() {
         }
         if (extension_run(RunPhase::headless_first))
             return exit_code;
-        if constexpr (self_checks_built)
+        if constexpr (self_checks_built) {
             if (options_.check_navigation)
                 check_navigation();
+            if (options_.check_zoom_memory) {
+                check_zoom_memory();
+                flush_preferences();
+                return 0;
+            }
+        }
         if (extension_run(RunPhase::headless))
             return exit_code;
         if (options_.save_after || !options_.load_file.empty()) {
@@ -1142,6 +1148,7 @@ void Runtime::idle_tick() {
     // chose; whatever draws after it shows whole ticks.
     frame_draws_.units_drawn = 0;
     frame_draws_.units_between_ticks = 0;
+    frame_draws_.units_as_dots = false;
     frame_draws_.probe_drawn = false;
     // A new renderer record is told of once the main menu shows, the saved
     // games' move once that notice is closed, where the game folder was

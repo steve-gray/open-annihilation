@@ -8,11 +8,162 @@
 #include "oa/present/surface.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <optional>
 
 namespace oa::present::model {
+namespace {
+
+std::atomic<bool> allocations_fail{false};
+
+// A picture block. A refusal returns null and does not call the new handler.
+void* allocate_bridge_bytes(std::size_t bytes) noexcept {
+    if (bytes == 0 || allocations_fail.load(std::memory_order_relaxed))
+        return nullptr;
+    return std::malloc(bytes);
+}
+
+std::size_t doubled_room(std::size_t room) noexcept {
+    if (room > std::numeric_limits<std::size_t>::max() / 2)
+        return std::numeric_limits<std::size_t>::max();
+    return room * 2;
+}
+
+uint64_t twice_bytes(std::size_t bytes) noexcept {
+    if (static_cast<uint64_t>(bytes) > std::numeric_limits<uint64_t>::max() / 2)
+        return std::numeric_limits<uint64_t>::max();
+    return static_cast<uint64_t>(bytes) * 2;
+}
+
+void take_block(
+    BridgeBytes& block, uint8_t* storage, std::size_t need, std::size_t target
+) noexcept {
+    std::memset(storage, 0, target);
+    block.storage = storage;
+    block.count = need;
+    block.room = target;
+}
+
+// Grows both blocks to `target`, used as `need`. Tries while the old blocks
+// are live, then frees them and tries once more, so a peak of the old and
+// the new together does not refuse a picture that fits on its own.
+bool grow_picture(
+    BridgeBytes& picture,
+    BridgeBytes& captured,
+    std::size_t need,
+    std::size_t target,
+    uint32_t& growths
+) noexcept {
+    uint8_t* fresh_picture = static_cast<uint8_t*>(allocate_bridge_bytes(target));
+    uint8_t* fresh_captured = static_cast<uint8_t*>(allocate_bridge_bytes(target));
+    if (fresh_picture == nullptr || fresh_captured == nullptr) {
+        std::free(fresh_picture);
+        std::free(fresh_captured);
+        picture.release();
+        captured.release();
+        fresh_picture = static_cast<uint8_t*>(allocate_bridge_bytes(target));
+        fresh_captured = static_cast<uint8_t*>(allocate_bridge_bytes(target));
+        if (fresh_picture == nullptr || fresh_captured == nullptr) {
+            std::free(fresh_picture);
+            std::free(fresh_captured);
+            return false;
+        }
+    } else {
+        std::free(picture.storage);
+        std::free(captured.storage);
+        picture.storage = nullptr;
+        captured.storage = nullptr;
+    }
+    take_block(picture, fresh_picture, need, target);
+    take_block(captured, fresh_captured, need, target);
+    ++growths;
+    return true;
+}
+
+// Releases both blocks down to `need`. A refusal keeps the room they have.
+void release_picture(BridgeBytes& picture, BridgeBytes& captured, std::size_t need) noexcept {
+    uint8_t* fresh_picture = static_cast<uint8_t*>(allocate_bridge_bytes(need));
+    uint8_t* fresh_captured = static_cast<uint8_t*>(allocate_bridge_bytes(need));
+    if (fresh_picture == nullptr || fresh_captured == nullptr) {
+        std::free(fresh_picture);
+        std::free(fresh_captured);
+        picture.count = need;
+        captured.count = need;
+        return;
+    }
+    picture.release();
+    captured.release();
+    take_block(picture, fresh_picture, need, need);
+    take_block(captured, fresh_captured, need, need);
+}
+
+// Holds `need` bytes in each block. `budget` is the two together; zero means
+// no limit. Grows by doubling, never past the budget, and releases after
+// bridge_release_frames begins that needed at most half the room.
+bool hold_picture(
+    BridgeBytes& picture,
+    BridgeBytes& captured,
+    std::size_t need,
+    uint64_t budget,
+    uint32_t& growths,
+    uint32_t& small_frames,
+    uint64_t& refused
+) noexcept {
+    const bool unlimited = budget == 0;
+    std::size_t limit = std::numeric_limits<std::size_t>::max();
+    if (!unlimited) {
+        const uint64_t half = budget / 2;
+        limit = static_cast<std::size_t>(
+            std::min(half, static_cast<uint64_t>(std::numeric_limits<std::size_t>::max()))
+        );
+    }
+    if (need > limit) {
+        refused = twice_bytes(need);
+        return false;
+    }
+    if (picture.room >= need && captured.room >= need) {
+        const bool small = picture.room > need && captured.room > need &&
+                           need <= picture.room / 2 && need <= captured.room / 2;
+        if (small) {
+            if (++small_frames >= bridge_release_frames) {
+                small_frames = 0;
+                release_picture(picture, captured, need);
+            }
+        } else {
+            small_frames = 0;
+        }
+        picture.count = need;
+        captured.count = need;
+        refused = 0;
+        return true;
+    }
+    small_frames = 0;
+    const std::size_t room = std::max(picture.room, captured.room);
+    std::size_t target = room == 0 ? need : std::max(need, doubled_room(room));
+    if (target > limit)
+        target = limit;
+    if (target < need) {
+        refused = twice_bytes(need);
+        return false;
+    }
+    if (!grow_picture(picture, captured, need, target, growths)) {
+        refused = twice_bytes(target);
+        return false;
+    }
+    refused = 0;
+    return true;
+}
+
+} // namespace
+
+void bridge_fail_allocations(bool fail) noexcept {
+    allocations_fail.store(fail, std::memory_order_relaxed);
+}
+
 namespace {
 
 constexpr std::size_t exact_slots = 1024; // power of two, > 2 * palette size
@@ -747,7 +898,7 @@ uint8_t bridge_index(RgbBridge& bridge, uint8_t r, uint8_t g, uint8_t b) {
     return lookup_index(bridge, bridge.nearest_keys, bridge.nearest_values, r, g, b);
 }
 
-void bridge_begin(
+bool bridge_begin(
     RgbBridge& bridge,
     const RgbFrame& frame,
     const Rect32& area,
@@ -799,36 +950,80 @@ void bridge_begin(
         }
     }
     // The 8-bit view holds every map pixel a frame pixel of the rectangle
-    // shows when written back.
+    // shows when written back. A span that does not fit the surface, or a
+    // picture past the budget or that cannot be allocated, returns; it does
+    // not end the process.
+    const auto span_of = [](int32_t first, int32_t last) -> std::optional<int32_t> {
+        const auto span = static_cast<int64_t>(last) - static_cast<int64_t>(first) + 1;
+        if (span <= 0 || span > std::numeric_limits<int32_t>::max())
+            return std::nullopt;
+        return static_cast<int32_t>(span);
+    };
+    const std::optional<int32_t> across = span_of(area.x1, area.x2);
+    const std::optional<int32_t> down = span_of(area.y1, area.y2);
+    if (!across || !down) {
+        bridge.refused_bytes = 0;
+        return false;
+    }
     const uint32_t step = written_step(bridge);
-    const auto covered = [&](int32_t pixels, uint32_t phase) {
+    const auto covered = [&](int32_t pixels, uint32_t phase) -> std::optional<int32_t> {
         if (pixels <= 0)
             return 0;
-        return std::max(
-            static_cast<int32_t>(std::ceil(pixels / bridge.scale)),
-            static_cast<int32_t>(map_pixel_shown(pixels - 1, step, phase) + 1)
-        );
+        const float rounded = std::ceil(static_cast<float>(pixels) / bridge.scale);
+        if (!(rounded <= static_cast<float>(std::numeric_limits<int32_t>::max())))
+            return std::nullopt;
+        const int64_t shown = map_pixel_shown(static_cast<int64_t>(pixels) - 1, step, phase) + 1;
+        if (shown > std::numeric_limits<int32_t>::max())
+            return std::nullopt;
+        return std::max(static_cast<int32_t>(rounded), static_cast<int32_t>(shown));
     };
-    const int32_t width = covered(area.x2 - area.x1 + 1, bridge.phase_x);
-    const int32_t height = covered(area.y2 - area.y1 + 1, bridge.phase_y);
-    const auto size = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
-    if (bridge.pixels.size() < size + 1) {
-        bridge.pixels.resize(size + 1);
-        bridge.baseline.resize(size + 1);
+    const std::optional<int32_t> width = covered(*across, bridge.phase_x);
+    const std::optional<int32_t> height = covered(*down, bridge.phase_y);
+    if (!width || !height ||
+        *width > std::numeric_limits<int32_t>::max() - (bridge_tile_side - 1) ||
+        *height > std::numeric_limits<int32_t>::max() - (bridge_tile_side - 1)) {
+        bridge.refused_bytes = 0;
+        return false;
     }
-    present::init_surface(bridge.surface, width, height, width, bridge.pixels.data());
-    bridge.tiles_x = (width + bridge_tile_side - 1) / bridge_tile_side;
-    bridge.tiles_y = (height + bridge_tile_side - 1) / bridge_tile_side;
-    const auto tiles = static_cast<std::size_t>(bridge.tiles_x) * bridge.tiles_y;
+    const auto product = static_cast<uint64_t>(*width) * static_cast<uint64_t>(*height);
+    if (product >= std::numeric_limits<std::size_t>::max()) {
+        bridge.refused_bytes = 0;
+        return false;
+    }
+    const auto bytes = static_cast<std::size_t>(product) + 1;
+    if (!hold_picture(
+            bridge.pixels,
+            bridge.baseline,
+            bytes,
+            bridge.byte_budget,
+            bridge.buffer_growths,
+            bridge.small_frames,
+            bridge.refused_bytes
+        )) {
+        if (bridge.pixels.storage == nullptr)
+            present::init_surface(bridge.surface, 0, 0, 0, nullptr);
+        return false;
+    }
+    present::init_surface(bridge.surface, *width, *height, *width, bridge.pixels.data());
+    bridge.tiles_x = (*width + bridge_tile_side - 1) / bridge_tile_side;
+    bridge.tiles_y = (*height + bridge_tile_side - 1) / bridge_tile_side;
+    const auto tile_product =
+        static_cast<uint64_t>(bridge.tiles_x) * static_cast<uint64_t>(bridge.tiles_y);
+    if (tile_product > std::numeric_limits<std::size_t>::max()) {
+        bridge.refused_bytes = twice_bytes(bytes);
+        return false;
+    }
+    const auto tiles = static_cast<std::size_t>(tile_product);
     bridge.open_tiles.clear();
     if (layout_kept && bridge.tiles.size() == tiles) {
         for (uint8_t& state : bridge.tiles)
             state = static_cast<uint8_t>(state & ~bridge_tile_open);
-        return;
+        return true;
     }
     bridge.tiles.assign(tiles, 0);
     bridge.open_tiles.reserve(tiles);
     bridge.copy.laid_out = false;
+    return true;
 }
 
 void bridge_open(RgbBridge& bridge, const Rect32& region) {

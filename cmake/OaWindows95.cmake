@@ -55,3 +55,15 @@ if(OA_WINDOWS_95)
   target_link_libraries(oa-options INTERFACE
     "$<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:$<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_NAME_IF_EXISTS:oa-platform-xp-runtime>>>")
 endif()
+
+# A 32-bit Windows process is marked large-address aware, so it may use the
+# address space above 2 GiB on a 64-bit Windows and on a 32-bit Windows
+# booted with that increase. Windows 95 gives a process 2 GiB and does not
+# honour the mark, so that build stays unmarked.
+if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT OA_WINDOWS_95)
+  if(MSVC)
+    target_link_options(oa-options INTERFACE "LINKER:/LARGEADDRESSAWARE")
+  else()
+    target_link_options(oa-options INTERFACE "LINKER:--large-address-aware")
+  endif()
+endif()
