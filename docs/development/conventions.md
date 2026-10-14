@@ -741,6 +741,19 @@ sections of the settings, in `docs/images/settings/`, the UI kit gallery at
 its three size classes, in `docs/images/ui-kit/`, and the trailer's
 picture at the top of the README, `docs/images/trailer.jpg`.
 
+The settings pictures are drawn, not edited by hand.
+`oa-ui-engine-settings-pictures DIRECTORY` (built with the tests) draws
+each section of the dialog alone, unlocked, at Compact and 2×, 960 by 648,
+in the installed game's fonts, and writes them under the names that folder
+uses (`engine-limits.png`, `controls-1.png`, `downloads-2.png` for
+Downloads scrolled to its end, and the same for the other sections). It
+needs `OA_GAME_DIR`. The data test `ui-engine-settings-pictures` runs it
+into a scratch folder. Refresh the manual with:
+
+```sh
+oa-ui-engine-settings-pictures docs/images/settings
+```
+
 ## Checks
 
 One command builds everything and runs every test, the source checks among
