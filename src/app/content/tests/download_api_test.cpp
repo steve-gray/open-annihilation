@@ -1,11 +1,14 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The download API's bodies and readers, with no network.
+// The download API's bodies and readers, the checks meant for a web
+// browser and the log text of an answer, and what a failed download tells
+// the player, with no network.
 #include "oa/app/content/download_api.hpp"
 
 #include "oa/base/sha256.hpp"
 #include "oa/data/catalogue/catalogue.hpp"
+#include "oa/netgame/http/client.hpp"
 #include "oa/test/check.hpp"
 
 #include <cstdint>
@@ -323,6 +326,168 @@ void test_results_and_names() {
     OA_CHECK(content::engine_version() == "0.8.0");
 }
 
+/// An answer's head, as the client reads it.
+///
+/// @param status the HTTP status
+/// @param headers the headers, as the server sent them
+oa::netgame::http::Response head_of(int status, std::vector<oa::netgame::http::Header> headers) {
+    oa::netgame::http::Response response;
+    response.status = status;
+    response.headers = std::move(headers);
+    return response;
+}
+
+void test_browser_checks() {
+    // The firewall's captcha (405) and challenge (202), whatever the case of
+    // the header's name and value.
+    OA_CHECK(
+        content::browser_check(head_of(
+            405, {{"Content-Type", "text/html; charset=UTF-8"}, {"x-amzn-waf-action", "captcha"}}
+        ))
+    );
+    OA_CHECK(content::browser_check(head_of(202, {{"X-Amzn-Waf-Action", "Challenge"}})));
+    OA_CHECK(content::browser_check(head_of(403, {{"cf-mitigated", "challenge"}})));
+    // A web page where a package or JSON was expected.
+    OA_CHECK(content::browser_check(head_of(200, {{"Content-Type", "TEXT/HTML"}})));
+    OA_CHECK(content::browser_check(head_of(403, {{"Content-Type", "application/xhtml+xml"}})));
+    // A server's error page, a refused signed address, JSON, a package and no answer are not.
+    OA_CHECK(!content::browser_check(head_of(502, {{"Content-Type", "text/html"}})));
+    OA_CHECK(!content::browser_check(head_of(403, {{"Content-Type", "text/xml"}})));
+    OA_CHECK(!content::browser_check(head_of(403, {{"Content-Type", "application/json"}})));
+    OA_CHECK(!content::browser_check(head_of(200, {{"Content-Type", "application/octet-stream"}})));
+    OA_CHECK(!content::browser_check(head_of(200, {{"x-amzn-waf-action", ""}})));
+    OA_CHECK(!content::browser_check(head_of(0, {{"x-amzn-waf-action", "captcha"}})));
+}
+
+void test_answered_text() {
+    namespace http = oa::netgame::http;
+    OA_CHECK(
+        content::address_without_query(
+            "http://downloads.example/v1/p/a.oamap?Expires=1&Signature=s&Key-Pair-Id=k"
+        ) == "http://downloads.example/v1/p/a.oamap"
+    );
+    OA_CHECK(
+        content::address_without_query("http://h/v1/p/a.oamap#part") == "http://h/v1/p/a.oamap"
+    );
+    OA_CHECK(content::address_without_query("http://h/v1/p/a.oamap") == "http://h/v1/p/a.oamap");
+
+    http::Response captcha = head_of(
+        405, {{"Content-Type", "text/html; charset=UTF-8"}, {"x-amzn-waf-action", "captcha"}}
+    );
+    captcha.content_length = 2134;
+    captcha.body_bytes = 2134;
+    const content::Answered seen =
+        content::answered("http://h/v1/p/a.oamap?Signature=secret&Key-Pair-Id=k", captcha);
+    OA_CHECK(seen.address == "http://h/v1/p/a.oamap");
+    OA_CHECK(seen.browser_check);
+    const std::string text = content::answered_text(seen);
+    const std::string wanted = "http://h/v1/p/a.oamap answered 405, text/html; charset=UTF-8, "
+                               "2134 bytes, a check meant for a web browser "
+                               "(x-amzn-waf-action: captcha)";
+    if (text != wanted)
+        std::fprintf(stderr, "answered %s\nwanted   %s\n", text.c_str(), wanted.c_str());
+    OA_CHECK(text == wanted);
+    OA_CHECK(text.find("secret") == std::string::npos);
+
+    // What Core Prime sends for a package address with no signature.
+    http::Response refused = head_of(403, {{"Content-Type", "text/xml"}});
+    refused.content_length = 146;
+    OA_CHECK(
+        content::answered_text(content::answered("http://h/v1/p/b.oamap", refused)) ==
+        "http://h/v1/p/b.oamap answered 403, text/xml, 146 bytes"
+    );
+
+    // A body cut short, with no length sent.
+    http::Response cut = head_of(200, {});
+    cut.body_bytes = 10;
+    cut.failure = http::Failure::connection_lost;
+    cut.detail = "the connection closed early";
+    OA_CHECK(
+        content::answered_text(content::answered("http://h/p", cut)) ==
+        "http://h/p answered 200, no content type, 10 bytes read; the connection closed early"
+    );
+
+    // No answer at all.
+    http::Response lost;
+    lost.failure = http::Failure::cannot_connect;
+    OA_CHECK(
+        content::answered_text(content::answered("http://h/api/v1/downloads", lost)) ==
+        "http://h/api/v1/downloads: the connection could not be opened"
+    );
+
+    // A header value fit for one log line.
+    http::Response odd =
+        head_of(200, {{"Content-Type", std::string("text/plain\x01") + std::string(300, 'x')}});
+    const content::Answered kept = content::answered("http://h/p", odd);
+    OA_CHECK(kept.content_type.size() == 120);
+    OA_CHECK(kept.content_type.find('\x01') == std::string::npos);
+}
+
+/// Shows every interface word in brackets, as a stand-in translation.
+std::string_view bracketed(std::string_view english) {
+    static std::string shown;
+    shown = "[" + std::string(english) + "]";
+    return shown;
+}
+
+void test_failure_messages() {
+    content::DownloadView view;
+    view.state = content::DownloadState::failed;
+    view.target.registry = "coreprime";
+    view.target.registry_name = "Core Prime";
+
+    view.failure = content::DownloadFailure::server_check;
+    OA_CHECK(
+        content::failure_message(view, nullptr) ==
+        "Core Prime asked for a check the game cannot do. Try again later."
+    );
+    OA_CHECK(
+        content::failure_message(view, bracketed) ==
+        "[Core Prime asked for a check the game cannot do. Try again later.]"
+    );
+    view.target.registry_name.clear();
+    OA_CHECK(
+        content::failure_message(view, nullptr) ==
+        "Coreprime asked for a check the game cannot do. Try again later."
+    );
+
+    // The installer's reason stands alone.
+    view.failure = content::DownloadFailure::install_refused;
+    view.detail = "The folder cavedog-evad-river-delta does not hold this map pack.";
+    OA_CHECK(content::failure_message(view, bracketed) == view.detail);
+    view.detail.clear();
+    OA_CHECK(content::failure_message(view, nullptr) == "The package was refused");
+    OA_CHECK(content::failure_message(view, bracketed) == "[the package was refused]");
+
+    // The registry's message follows the failure's text.
+    view.failure = content::DownloadFailure::refused;
+    view.detail = "no";
+    OA_CHECK(content::failure_message(view, nullptr) == "The registry refused the download (no)");
+
+    // Whatever the detail holds, no failure's text is named twice.
+    for (int value = 1; value <= static_cast<int>(content::DownloadFailure::server_check);
+         ++value) {
+        view.failure = static_cast<content::DownloadFailure>(value);
+        view.detail = content::failure_text(view.failure);
+        const std::string message = content::failure_message(view, nullptr);
+        const std::string reason = content::failure_text(view.failure);
+        std::string lower = message;
+        if (!lower.empty() && lower[0] >= 'A' && lower[0] <= 'Z')
+            lower[0] = static_cast<char>(lower[0] - 'A' + 'a');
+        const std::size_t first = lower.find(reason);
+        const bool once = first == std::string::npos ||
+                          lower.find(reason, first + reason.size()) == std::string::npos;
+        if (!once)
+            std::fprintf(stderr, "repeated: %s\n", message.c_str());
+        OA_CHECK(once);
+        OA_CHECK(message.find(" (") == std::string::npos);
+    }
+
+    view.failure = content::DownloadFailure::none;
+    view.detail.clear();
+    OA_CHECK(content::failure_message(view, nullptr).empty());
+}
+
 } // namespace
 
 int main() {
@@ -332,5 +497,8 @@ int main() {
     test_challenge_state();
     test_errors();
     test_results_and_names();
+    test_browser_checks();
+    test_answered_text();
+    test_failure_messages();
     return oa::test::check_exit_status();
 }

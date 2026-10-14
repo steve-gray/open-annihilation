@@ -1571,11 +1571,10 @@ library::Inputs Runtime::library_inputs() {
         item.done_bytes = queued.done;
         item.total_bytes = queued.target.size;
         if (*phase == library::QueueItem::Phase::failed) {
-            item.problem = content::failure_text(queued.failure);
-            if (!queued.detail.empty())
-                item.problem += " (" + queued.detail + ")";
-            if (!item.problem.empty() && item.problem[0] >= 'a' && item.problem[0] <= 'z')
-                item.problem[0] = static_cast<char>(item.problem[0] - 'a' + 'A');
+            // The reason once, in the player's language: a check the server
+            // asked for names the registry, and a refusal is the installer's
+            // own reason.
+            item.problem = content::failure_message(queued, &oa::data::languages::interface_text);
             item.retryable = queued.failure != content::DownloadFailure::install_id_off &&
                              queued.failure != content::DownloadFailure::not_offered;
         }

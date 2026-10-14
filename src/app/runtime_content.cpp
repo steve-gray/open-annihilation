@@ -247,7 +247,7 @@ void Runtime::tick_content() {
         }
         if (!item)
             continue;
-        content_->downloads->report_install(*item, install_outcome(outcome.result));
+        content_->downloads->report_install(*item, install_outcome(outcome.result), outcome.reason);
     }
     std::vector<uint64_t> still_offered;
     for (const content::DownloadView& item : content_->downloads->view()) {

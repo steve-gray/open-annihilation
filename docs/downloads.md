@@ -24,6 +24,8 @@ registry of your own, read the [OA Registry Specification](registries/README.md)
   - [When OA checks for content](#when-oa-checks-for-content)
   - [The install ID](#the-install-id)
   - [Downloaded files](#downloaded-files)
+- [When a download fails](#when-a-download-fails)
+  - [A check the game cannot do](#a-check-the-game-cannot-do)
 - [Privacy](#privacy)
   - [What a download sends](#what-a-download-sends)
   - [What Core Prime records](#what-core-prime-records)
@@ -264,6 +266,46 @@ how much that folder keeps, "Nothing kept" when it is empty, and **EMPTY**
 deletes those package files at once. It never touches what you installed,
 nor a file a download is using: EMPTY is greyed while a download is
 waiting, running or paused, and during a game.
+
+## When a download fails
+
+The package's line in the Library says why, naming the reason once, and
+**RETRY** tries again ([the download queue](library.md#the-download-queue)). A
+package the installer refuses says the installer's own reason, such as "The
+folder cavedog-evad-river-delta does not hold this map pack. It is left as
+it is."
+
+Every failure also writes one line to the game's log (the `logs` folder of
+the game's data folder, [below](#where-it-is-all-kept)). It names the
+package, the reason, and what the registry's server last answered for the
+key request and for the package: the address, the status, the content type
+and the length, or the network failure when nothing was answered:
+
+```text
+open-annihilation: content: download of Ridge (ridge ridge, release 28) failed: the server's file is not the size the catalogue promised; package: http://downloads.example.net/v1/p/3f2a….oamod answered 200, application/octet-stream, 60 bytes
+```
+
+The address is written without its query, which holds a signed address's
+key, and the line never holds the install ID.
+
+### A check the game cannot do
+
+A registry's server, or the network in front of it, can answer a game's
+request with a check meant for a web browser, such as a picture puzzle,
+in place of a package or a key. OA knows one by the header the server's
+firewall sends with it, or by a web page where a package was expected. It
+never answers such a check, asks again by itself, or looks for another
+address around it. The Library says:
+
+> Core Prime asked for a check the game cannot do. Try again later. · RETRY
+
+and **RETRY** asks again when you choose. The log line says `the server
+asked for a check the game cannot do`, with the status, the header and the
+page's length.
+
+This is not the check that you are a person a registry asks for itself,
+which shows a code to enter on its page
+([the check](library.md#check-that-youre-a-person)).
 
 ## Privacy
 

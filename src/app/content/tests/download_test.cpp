@@ -592,6 +592,111 @@ bool wait_state(
     );
 }
 
+/// The lines the queue wrote for failed downloads, in order.
+std::vector<std::string> failure_lines(Logs& logs) {
+    std::vector<std::string> lines;
+    const std::string text = logs_text(logs);
+    std::size_t at = 0;
+    while (at < text.size()) {
+        const std::size_t end = text.find('\n', at);
+        std::string line = text.substr(at, end == std::string::npos ? std::string::npos : end - at);
+        if (line.rfind("download of ", 0) == 0)
+            lines.push_back(std::move(line));
+        if (end == std::string::npos)
+            break;
+        at = end + 1;
+    }
+    return lines;
+}
+
+/// Waits for the failure's log line, and checks that no second one follows.
+///
+/// @return the line, or empty when none came
+std::string one_failure_line(Logs& logs) {
+    OA_CHECK(wait_until([&] { return !failure_lines(logs).empty(); }, kBusyWaitMs));
+    threads::sleep_ms(200);
+    const std::vector<std::string> lines = failure_lines(logs);
+    if (lines.size() != 1)
+        std::fprintf(stderr, "failure lines: %zu\n%s\n", lines.size(), logs_text(logs).c_str());
+    OA_CHECK(lines.size() == 1);
+    return lines.empty() ? std::string() : lines.front();
+}
+
+/// Checks that a log line holds a text, and shows the line when it does not.
+void expect_in(const std::string& line, std::string_view text) {
+    const bool found = line.find(text) != std::string::npos;
+    if (!found)
+        std::fprintf(
+            stderr,
+            "wanted \"%.*s\" in: %s\n",
+            static_cast<int>(text.size()),
+            text.data(),
+            line.c_str()
+        );
+    OA_CHECK(found);
+}
+
+/// Checks that a log line leaves a text out.
+void expect_not_in(const std::string& line, std::string_view text) {
+    const bool found = line.find(text) != std::string::npos;
+    if (found)
+        std::fprintf(
+            stderr,
+            "did not want \"%.*s\" in: %s\n",
+            static_cast<int>(text.size()),
+            text.data(),
+            line.c_str()
+        );
+    OA_CHECK(!found);
+}
+
+/// How many times a text appears in another, ignoring ASCII case.
+std::size_t count_folded(std::string_view text, std::string_view part) {
+    const auto fold = [](std::string_view in) {
+        std::string out(in);
+        for (char& character : out)
+            if (character >= 'A' && character <= 'Z')
+                character = static_cast<char>(character - 'A' + 'a');
+        return out;
+    };
+    const std::string haystack = fold(text);
+    const std::string needle = fold(part);
+    std::size_t count = 0;
+    if (needle.empty())
+        return 0;
+    for (std::size_t at = haystack.find(needle); at != std::string::npos;
+         at = haystack.find(needle, at + needle.size()))
+        ++count;
+    return count;
+}
+
+/// Checks that a failed item's detail and message name its reason once.
+void expect_reason_once(const content::DownloadView& view) {
+    const std::string reason = content::failure_text(view.failure);
+    const std::string message = content::failure_message(view, nullptr);
+    OA_CHECK(!message.empty());
+    OA_CHECK(count_folded(view.detail, reason) == 0);
+    if (count_folded(message, reason) > 1)
+        std::fprintf(stderr, "repeated reason: %s\n", message.c_str());
+    OA_CHECK(count_folded(message, reason) <= 1);
+}
+
+/// A web page a firewall sends in place of what was asked, with its header.
+///
+/// @param status 405 for a captcha, 202 for a challenge
+/// @param action the firewall's word, or empty for a page with no header
+fixture::Reply browser_page(int status, std::string_view action) {
+    fixture::Reply reply;
+    reply.status = status;
+    reply.headers.push_back({"Content-Type", "text/html; charset=UTF-8"});
+    if (!action.empty())
+        reply.headers.push_back({"x-amzn-waf-action", std::string(action)});
+    const std::string page = "<!DOCTYPE html><html><head><title>Human Verification</title></head>"
+                             "<body><div id=\"captcha-container\"></div></body></html>";
+    reply.body.assign(page.begin(), page.end());
+    return reply;
+}
+
 /// Serves the package in pieces, honouring one Range, so a test can pause it.
 void serve_paced(
     fixture::Server& server, const PackageFile& package, std::size_t piece, uint32_t delay_ms
@@ -1205,6 +1310,20 @@ void test_refusal_skips_mirror() {
     threads::sleep_ms(200);
     OA_CHECK(count_method(session.server, "POST", "/api/v1/downloads") == 1);
     OA_CHECK(session.mirror.requests().empty());
+    // The registry's message is the detail, named once, and the line says
+    // what the key request was answered.
+    const auto view = view_of(downloads, *id);
+    OA_CHECK(view.has_value());
+    if (view) {
+        OA_CHECK(view->detail == "no");
+        OA_CHECK(
+            content::failure_message(*view, nullptr) == "The registry refused the download (no)"
+        );
+        expect_reason_once(*view);
+    }
+    const std::string line = one_failure_line(session.logs);
+    expect_in(line, "failed: the registry refused the download (no); key request: ");
+    expect_in(line, "/api/v1/downloads answered 403, application/json, ");
 }
 
 void test_wrong_hash_once() {
@@ -1263,10 +1382,17 @@ void test_wrong_hash_twice() {
     OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, 20000));
     const auto view = view_of(downloads, *id);
     OA_CHECK(view.has_value());
-    if (view)
+    if (view) {
         OA_CHECK(view->failure == content::DownloadFailure::hash_mismatch);
+        expect_reason_once(*view);
+    }
     OA_CHECK(wait_until([&] { return count_results(session.server) == 1; }, kBusyWaitMs));
     OA_CHECK(result_body(session.server).find("\"result\":\"failed\"") != std::string::npos);
+    // The file whose SHA-256 is not the signed catalogue's is logged once,
+    // with what the package address answered.
+    const std::string line = one_failure_line(session.logs);
+    expect_in(line, "failed: the download was not the file the catalogue promised; ");
+    expect_in(line, "package: " + session.server.url(session.package.path) + " answered 200, ");
 }
 
 void test_wrong_size() {
@@ -1545,9 +1671,15 @@ void test_install_id_off() {
     OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
     const auto view = view_of(downloads, *id);
     OA_CHECK(view.has_value());
-    if (view)
+    if (view) {
         OA_CHECK(view->failure == content::DownloadFailure::install_id_off);
+        expect_reason_once(*view);
+    }
     OA_CHECK(server.requests().empty());
+    // A failure the main thread made is logged too, with no answer to name.
+    const std::string line = one_failure_line(logs);
+    expect_in(line, "failed: downloads are off for this registry");
+    expect_not_in(line, "answered");
 }
 
 void test_no_install_member() {
@@ -1779,6 +1911,229 @@ void test_no_space() {
 
 } // namespace
 
+/// A package address that answers with the firewall's captcha: the item
+/// fails at once with the check's message and one log line, and nothing is
+/// asked again.
+void test_check_on_package() {
+    Session session("g124-check-package", 64, 0x51);
+    session.tokens = true;
+    session.install_id = registry::InstallIdUse::required;
+    session.serve_package = false;
+    if (!session.open())
+        return;
+    // A signed address, whose query holds the key the log must leave out.
+    const std::string query = "?Expires=1767312000&Signature=secret-signature&Key-Pair-Id=K2TEST";
+    const std::string signed_url = session.server.url(session.package.path) + query;
+    session.server.handle("POST", "/api/v1/downloads", [&](const fixture::LoggedRequest&) {
+        return json_reply(
+            201,
+            "{\"download\":\"ridge-dl-1\",\"expires\":\"2026-02-01T00:00:00Z\",\"url\":\"" +
+                signed_url + "\"}"
+        );
+    });
+    session.server.handle(
+        "POST", "/api/v1/downloads/ridge-dl-1/result", [](const fixture::LoggedRequest&) {
+            return json_reply(204, "");
+        }
+    );
+    session.server.handle("GET", session.package.path, [](const fixture::LoggedRequest&) {
+        return browser_page(405, "captcha");
+    });
+    content::Downloads downloads(session.queue_options());
+    downloads.set_install_id(session.registry_id, std::string(kInstallId));
+    downloads.start(*session.service->snapshot());
+    std::string why;
+    const auto id = session.enqueue(downloads, content::DownloadReason::install, &why);
+    OA_CHECK(id.has_value());
+    if (!id)
+        return;
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
+    const auto view = view_of(downloads, *id);
+    OA_CHECK(view.has_value());
+    if (view) {
+        OA_CHECK(view->failure == content::DownloadFailure::server_check);
+        OA_CHECK(view->detail.empty());
+        const std::string message = content::failure_message(*view, nullptr);
+        if (message != "Ridge asked for a check the game cannot do. Try again later.")
+            std::fprintf(stderr, "check message: %s\n", message.c_str());
+        OA_CHECK(message == "Ridge asked for a check the game cannot do. Try again later.");
+        expect_reason_once(*view);
+    }
+    const std::string line = one_failure_line(session.logs);
+    expect_in(line, "download of Ridge (ridge ridge, release 1) failed: ");
+    expect_in(line, "the server asked for a check the game cannot do; ");
+    expect_in(line, "package: " + session.server.url(session.package.path) + " answered 405, ");
+    expect_in(line, "text/html; charset=UTF-8, ");
+    expect_in(line, "a check meant for a web browser (x-amzn-waf-action: captcha)");
+    expect_not_in(line, "Signature");
+    expect_not_in(line, "secret-signature");
+    expect_not_in(line, "Key-Pair-Id");
+    // The check is never answered, nor the package asked for again.
+    threads::sleep_ms(200);
+    OA_CHECK(count_method(session.server, "GET", session.package.path + query) == 1);
+    OA_CHECK(count_method(session.server, "POST", "/api/v1/downloads") == 1);
+}
+
+/// A key request the firewall answers with a challenge page: the item fails
+/// as a check, logged once, with no second request.
+void test_check_on_key_request() {
+    Session session("g124-check-key", 48, 0x52);
+    session.tokens = true;
+    session.serve_package = false;
+    if (!session.open())
+        return;
+    session.server.handle("POST", "/api/v1/downloads", [](const fixture::LoggedRequest&) {
+        return browser_page(202, "challenge");
+    });
+    content::Downloads downloads(session.queue_options());
+    downloads.start(*session.service->snapshot());
+    std::string why;
+    const auto id = session.enqueue(downloads, content::DownloadReason::install, &why);
+    OA_CHECK(id.has_value());
+    if (!id)
+        return;
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
+    const auto view = view_of(downloads, *id);
+    OA_CHECK(view.has_value());
+    if (view) {
+        OA_CHECK(view->failure == content::DownloadFailure::server_check);
+        expect_reason_once(*view);
+    }
+    const std::string line = one_failure_line(session.logs);
+    expect_in(line, "failed: the server asked for a check the game cannot do; key request: ");
+    expect_in(line, "/api/v1/downloads answered 202, text/html; charset=UTF-8, ");
+    expect_in(line, "(x-amzn-waf-action: challenge)");
+    expect_not_in(line, "package: ");
+    threads::sleep_ms(200);
+    OA_CHECK(count_method(session.server, "POST", "/api/v1/downloads") == 1);
+    OA_CHECK(count_method(session.server, "GET", session.package.path) == 0);
+}
+
+/// A web page where the package was expected, with no firewall header, is
+/// a check too.
+void test_page_where_package_expected() {
+    Session session("g124-check-page", 40, 0x53);
+    session.serve_package = false;
+    if (!session.open())
+        return;
+    const fixture::Reply page = browser_page(200, {});
+    session.server.serve_bytes(session.package.path, page.body, "text/html");
+    content::Downloads downloads(session.queue_options());
+    downloads.start(*session.service->snapshot());
+    std::string why;
+    const auto id = session.enqueue(downloads, content::DownloadReason::install, &why);
+    OA_CHECK(id.has_value());
+    if (!id)
+        return;
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
+    const auto view = view_of(downloads, *id);
+    OA_CHECK(view.has_value());
+    if (view)
+        OA_CHECK(view->failure == content::DownloadFailure::server_check);
+    const std::string line = one_failure_line(session.logs);
+    expect_in(line, "failed: the server asked for a check the game cannot do; package: ");
+    expect_in(line, " answered 200, text/html, ");
+    expect_in(line, "a check meant for a web browser");
+    OA_CHECK(count_method(session.server, "GET", session.package.path) == 1);
+    OA_CHECK(!fs::exists(session.final_path()));
+}
+
+/// A body shorter than the catalogue's size is logged with its status and length.
+void test_short_body() {
+    Session session("g124-short", 100, 0x54);
+    if (!session.open())
+        return;
+    const std::vector<uint8_t> shorter(
+        session.package.bytes.begin(), session.package.bytes.begin() + 60
+    );
+    session.server.serve_bytes(session.package.path, shorter);
+    content::Downloads downloads(session.queue_options());
+    downloads.start(*session.service->snapshot());
+    std::string why;
+    const auto id = session.enqueue(downloads, content::DownloadReason::install, &why);
+    OA_CHECK(id.has_value());
+    if (!id)
+        return;
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
+    const auto view = view_of(downloads, *id);
+    OA_CHECK(view.has_value());
+    if (view) {
+        OA_CHECK(view->failure == content::DownloadFailure::server_file_differs);
+        expect_reason_once(*view);
+    }
+    const std::string line = one_failure_line(session.logs);
+    expect_in(line, "failed: the server's file is not the size the catalogue promised; package: ");
+    expect_in(line, " answered 200, application/octet-stream, 60 bytes");
+}
+
+/// A server that cannot be reached is logged with the network failure.
+void test_network_error() {
+    Session session("g124-network", 50, 0x55);
+    if (!session.open())
+        return;
+    session.server.stop();
+    content::Downloads downloads(session.queue_options());
+    downloads.start(*session.service->snapshot());
+    std::string why;
+    const auto id = session.enqueue(downloads, content::DownloadReason::install, &why);
+    OA_CHECK(id.has_value());
+    if (!id)
+        return;
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
+    const auto view = view_of(downloads, *id);
+    OA_CHECK(view.has_value());
+    if (view) {
+        OA_CHECK(view->failure == content::DownloadFailure::unreachable);
+        expect_reason_once(*view);
+    }
+    const std::string line = one_failure_line(session.logs);
+    expect_in(line, "failed: the server could not be reached; package: ");
+    expect_in(line, session.package.path + ": the connection could not be opened");
+}
+
+/// The installer's reason for a refusal is the detail, the message and the
+/// log line's, each once.
+void test_install_refusal_reason() {
+    Session session("g124-refused", 30, 0x56);
+    if (!session.open())
+        return;
+    content::Downloads downloads(session.queue_options());
+    downloads.start(*session.service->snapshot());
+    std::string why;
+    const auto id = session.enqueue(downloads, content::DownloadReason::install, &why);
+    OA_CHECK(id.has_value());
+    if (!id)
+        return;
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::installing, kBusyWaitMs));
+    const std::string reason = "The folder ridge does not hold this map pack. It is left as it is.";
+    downloads.report_install(*id, content::InstallOutcome::refused, reason);
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
+    const auto view = view_of(downloads, *id);
+    OA_CHECK(view.has_value());
+    if (view) {
+        OA_CHECK(view->failure == content::DownloadFailure::install_refused);
+        OA_CHECK(view->detail == reason);
+        OA_CHECK(content::failure_message(*view, nullptr) == reason);
+        expect_reason_once(*view);
+    }
+    const std::string line = one_failure_line(session.logs);
+    expect_in(line, "failed: the package was refused (" + reason + "); package: ");
+    expect_in(line, " answered 200, ");
+    OA_CHECK(count_folded(line, reason) == 1);
+    // RETRY asks again, and a second failure is logged once more.
+    downloads.retry(*id);
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::installing, kBusyWaitMs));
+    downloads.report_install(*id, content::InstallOutcome::refused, {});
+    OA_CHECK(wait_state(downloads, *id, content::DownloadState::failed, kBusyWaitMs));
+    OA_CHECK(wait_until([&] { return failure_lines(session.logs).size() == 2; }, kBusyWaitMs));
+    const auto again = view_of(downloads, *id);
+    OA_CHECK(again.has_value());
+    if (again) {
+        OA_CHECK(again->detail.empty());
+        OA_CHECK(content::failure_message(*again, nullptr) == "The package was refused");
+    }
+}
+
 int main() {
     test_direct_large();
     test_tokens_outcome(content::InstallOutcome::installed, "installed", true);
@@ -1812,5 +2167,11 @@ int main() {
     test_cancel_registry();
     test_final_already_there();
     test_no_space();
+    test_check_on_package();
+    test_check_on_key_request();
+    test_page_where_package_expected();
+    test_short_body();
+    test_network_error();
+    test_install_refusal_reason();
     return oa::test::check_exit_status();
 }

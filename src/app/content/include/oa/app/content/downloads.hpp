@@ -73,6 +73,7 @@ enum class DownloadFailure : uint8_t {
     install_refused,     ///< the installer refused the package
     install_failed,      ///< the package could not be installed
     disk_error,          ///< the file could not be written
+    server_check,        ///< the server asked for a check meant for a web browser
 };
 
 /// The sentence a log uses for a failure.
@@ -105,9 +106,17 @@ enum class DownloadFailure : uint8_t {
         return "the package could not be installed";
     case DownloadFailure::disk_error:
         return "the download could not be written";
+    case DownloadFailure::server_check:
+        return "the server asked for a check the game cannot do";
     }
     return "";
 }
+
+/// What the player is told when a registry's server asked for a check meant
+/// for a web browser, which the game never answers. {registry} is the
+/// registry's name.
+inline constexpr std::string_view server_check_words =
+    "{registry} asked for a check the game cannot do. Try again later.";
 
 /// The word the download API uses for a reason.
 ///
@@ -194,9 +203,31 @@ struct DownloadView {
     DownloadState state = DownloadState::waiting;
     uint64_t done = 0; ///< bytes held in the part, or the whole file once it is complete
     DownloadFailure failure = DownloadFailure::none;
-    std::string detail; ///< the registry's message, or why a file could not be written
+    /// What the failure's own text does not say: the registry's message or
+    /// the installer's reason. Empty when the failure's text says it all; it
+    /// never repeats that text.
+    std::string detail;
     std::optional<ChallengeView> challenge; ///< set while a check is waiting
 };
+
+/// Looks up one of the interface's own words in the language the game shows.
+///
+/// @param english the word, in English
+/// @return the word to show
+using LookUp = std::string_view (*)(std::string_view english);
+
+/// Writes what the player is told of a failed item, naming its reason once.
+///
+/// A check the server asked for names the registry and asks the player to
+/// try again later (server_check_words). An installer's refusal or failure
+/// with a reason of its own is that reason alone. Any other failure is its
+/// text, then the detail in brackets when there is one. The first letter is
+/// a capital.
+///
+/// @param item the item
+/// @param look_up looks the words up; null keeps them in English
+/// @return the message; empty when the item has neither a failure nor a detail
+[[nodiscard]] std::string failure_message(const DownloadView& item, LookUp look_up);
 
 /// The platform this build names in a key request.
 ///
@@ -228,6 +259,14 @@ struct DownloadsOptions {
 /// reads or writes the saved queue, or hashes a file. start hands the snapshot
 /// to the worker, which reads the saved queue. The destructor stops the worker
 /// within a second and keeps the parts and the saved queue.
+///
+/// Every failure writes one log line, once, from the worker: the package, the
+/// failure's text and its detail, and what the server last sent for the key
+/// request and for the package (answered_text: the address without its
+/// query, the status, the content type and the length, or the network
+/// failure). A check meant for a web browser fails the item at once as
+/// server_check; the game never answers it, asks again by itself or tries
+/// another address around it.
 class Downloads {
   public:
 
@@ -307,9 +346,13 @@ class Downloads {
 
     /// Records what the installer did with a file the queue handed over.
     ///
+    /// A refusal's or a failure's reason becomes the item's detail and is in
+    /// the log line the failure writes.
+    ///
     /// @param item the id that was handed over
     /// @param outcome what the installer reported
-    void report_install(uint64_t item, InstallOutcome outcome);
+    /// @param reason why it refused or failed, in the player's words; empty when it gave none
+    void report_install(uint64_t item, InstallOutcome outcome, std::string reason = {});
 
     /// Returns every item, oldest first.
     ///

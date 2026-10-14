@@ -303,6 +303,7 @@ inline constexpr std::string_view interface_words[] = {
     "the package was refused",
     "the registry no longer offers this release",
     "the registry refused the download",
+    "the server asked for a check the game cannot do",
     "the server could not be reached",
     "the server's file is not the size the catalogue promised",
     "there is not enough free space",
@@ -317,6 +318,7 @@ inline constexpr std::string_view interface_words[] = {
     "{name} from {installed} is installed. Replace it with {name} from {new}? The one from "
     "{installed} is kept, and ROLL BACK brings it back.",
     "{n} UNITS",
+    "{registry} asked for a check the game cannot do. Try again later.",
     "{used} on this {device}",
     "{used} · {free} free on this {device}",
 };

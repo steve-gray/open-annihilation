@@ -39,6 +39,9 @@ constexpr uint32_t retry_after_most = 300;
 /// The most bytes of an API body this client reads.
 constexpr uint64_t api_body_most = 64 * 1024;
 
+/// The most characters of a header value a log line keeps.
+constexpr std::size_t logged_value_most = 120;
+
 /// Writes a reason into `why` when it is not null.
 ///
 /// @param why the caller's reason; may be null
@@ -218,6 +221,53 @@ http::Response fetch_api(
         request.body.assign(body.begin(), body.end());
     }
     return client.fetch(request, response_body);
+}
+
+/// Lower-cases ASCII letters and drops the space around a header value.
+///
+/// @param text the value
+/// @return the lower-case value, trimmed
+std::string folded(std::string_view text) {
+    std::size_t first = 0;
+    std::size_t last = text.size();
+    while (first < last && (text[first] == ' ' || text[first] == '\t'))
+        ++first;
+    while (last > first && (text[last - 1] == ' ' || text[last - 1] == '\t'))
+        --last;
+    std::string out(text.substr(first, last - first));
+    for (char& character : out)
+        if (character >= 'A' && character <= 'Z')
+            character = static_cast<char>(character - 'A' + 'a');
+    return out;
+}
+
+/// Keeps a header value fit for one log line: at most logged_value_most
+/// bytes, with every control character shown as `?`.
+///
+/// @param value the value as the server sent it
+/// @return the value to log
+std::string loggable(std::string_view value) {
+    std::string out(value.substr(0, logged_value_most));
+    for (char& character : out) {
+        const unsigned char byte = static_cast<unsigned char>(character);
+        if (byte < 0x20 || byte == 0x7f)
+            character = '?';
+    }
+    return out;
+}
+
+/// The firewall header that names a check meant for a web browser.
+///
+/// @param response the answer's head
+/// @return "name: value", or empty when the answer carries none
+std::string check_header_of(const http::Response& response) {
+    if (const std::string* action = response.header("x-amzn-waf-action");
+        action != nullptr && !folded(*action).empty())
+        return "x-amzn-waf-action: " + loggable(folded(*action));
+    if (const std::string* mitigated = response.header("cf-mitigated");
+        mitigated != nullptr && folded(*mitigated) == "challenge")
+        return "cf-mitigated: challenge";
+    return {};
 }
 
 /// Parses a JSON body into one value.
@@ -487,6 +537,63 @@ std::string result_body(KeyResult result, uint64_t bytes, int64_t seconds) {
     return writer.text();
 }
 
+bool browser_check(const http::Response& response) {
+    if (response.status == 0)
+        return false;
+    if (!check_header_of(response).empty())
+        return true;
+    if (response.status >= 500)
+        return false;
+    const std::string* type = response.header("content-type");
+    if (type == nullptr)
+        return false;
+    const std::string media = folded(std::string_view(*type).substr(0, type->find(';')));
+    return media == "text/html" || media == "application/xhtml+xml";
+}
+
+std::string address_without_query(std::string_view address) {
+    return std::string(address.substr(0, address.find_first_of("?#")));
+}
+
+Answered answered(std::string_view address, const http::Response& response) {
+    Answered answer;
+    answer.address = address_without_query(address);
+    answer.status = response.status;
+    if (const std::string* type = response.header("content-type"))
+        answer.content_type = loggable(*type);
+    answer.length = response.content_length;
+    answer.body_bytes = response.body_bytes;
+    answer.browser_check = browser_check(response);
+    answer.check_header = check_header_of(response);
+    // A stop the caller's sink chose says nothing of the answer, and a
+    // check's page is never read whole.
+    if (response.failure != http::Failure::none &&
+        response.failure != http::Failure::sink_stopped && !answer.browser_check)
+        answer.failure =
+            response.detail.empty() ? http::failure_text(response.failure) : response.detail;
+    return answer;
+}
+
+std::string answered_text(const Answered& answer) {
+    const std::string address = answer.address.empty() ? std::string("an address") : answer.address;
+    if (answer.status == 0)
+        return address + ": " +
+               (answer.failure.empty() ? std::string("no answer") : answer.failure);
+    std::string text = address + " answered " + std::to_string(answer.status) + ", ";
+    text += answer.content_type.empty() ? std::string("no content type") : answer.content_type;
+    text += ", ";
+    text += answer.length ? std::to_string(*answer.length) + " bytes"
+                          : std::to_string(answer.body_bytes) + " bytes read";
+    if (answer.browser_check) {
+        text += ", a check meant for a web browser";
+        if (!answer.check_header.empty())
+            text += " (" + answer.check_header + ")";
+    }
+    if (!answer.failure.empty())
+        text += "; " + answer.failure;
+    return text;
+}
+
 KeyAnswer ask_for_key(
     http::Client& client,
     const url::Url& api,
@@ -496,8 +603,17 @@ KeyAnswer ask_for_key(
     KeyAnswer answer;
     std::vector<uint8_t> body;
     const std::string payload = key_request_body(request);
+    const url::Url address = api_url(api, "/downloads");
     const http::Response response =
-        fetch_api(client, http::Method::post, api_url(api, "/downloads"), payload, cancel, 0, body);
+        fetch_api(client, http::Method::post, address, payload, cancel, 0, body);
+    answer.answered = answered(url::url_text(address), response);
+    // A check meant for a web browser is never answered or worked around:
+    // the game gives up for now, whatever the body or its size.
+    if (answer.answered.browser_check) {
+        answer.kind = KeyAnswer::Kind::browser_check;
+        answer.detail = "the server asked for a check meant for a web browser";
+        return answer;
+    }
     if (response.failure != http::Failure::none) {
         answer.kind = KeyAnswer::Kind::retry;
         answer.detail =

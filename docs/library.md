@@ -621,12 +621,17 @@ revision 4 changes the game's rules · ROLL BACK restores revision 3", or
 
 **CANCEL** in the details stops a download; what has come is kept, so a
 later GET resumes it. A download cut short by quitting resumes at the next
-start. A failure says why, as "The server could not be reached", "The
+start. A failure says why, once, as "The server could not be reached", "The
 registry no longer offers this release", "There is not enough free space"
-or "The download was not the file the catalogue promised", and **RETRY**
+or "The download was not the file the catalogue promised"; a package the
+installer refuses says the installer's own reason, and a server that asks
+for a check meant for a web browser, "Core Prime asked for a check the game
+cannot do. Try again later." **RETRY**
 tries again, except when downloads from that registry are off or the
 release is no longer offered: then GET or UPDATE comes back, and for a
-release no longer offered OA fetches that registry's list again.
+release no longer offered OA fetches that registry's list again. Every
+failure is in the log too
+([when a download fails](downloads.md#when-a-download-fails)).
 
 Nothing downloads during a game: a download that runs when a game starts
 stops at its next step, and goes on, shown as waiting, once the game ends.

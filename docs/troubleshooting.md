@@ -16,3 +16,14 @@ A run can limit the memory the units' pictures take by setting
 The `+stats` console command shows that memory on its "models" row: the
 megabytes the units' picture holds, "MB of" the most it may take, and "dots"
 when the last frame drew the units as dots.
+
+## Downloads
+
+A download that fails says why on its line in the Library, and **RETRY**
+tries it again. Each failure also writes one line to the game's log, which
+starts `open-annihilation: content: download of` and says what the
+registry's server answered: the status, the content type and the length, or
+the network failure. "Core Prime asked for a check the game cannot do. Try
+again later." means the server answered with a check meant for a web
+browser, which the game never answers: try again later
+([when a download fails](downloads.md#when-a-download-fails)).

@@ -97,6 +97,18 @@ void log_line(std::string_view line) {
     std::cerr << "open-annihilation: package install: " << line << '\n';
 }
 
+/// Writes a refusal's text for a log line, with the problem's detail in
+/// brackets only when the text does not already hold it.
+///
+/// @param text the refusal's text
+/// @param detail the problem's detail; may be empty
+/// @return the text, naming the detail once
+std::string with_detail(std::string text, std::string_view detail) {
+    if (!detail.empty() && text.find(detail) == std::string::npos)
+        text += " (" + std::string(detail) + ")";
+    return text;
+}
+
 /// Waits between tries of a rename, keeping the window answering: SDL's
 /// events are pumped every slice.
 ///
@@ -805,10 +817,12 @@ void Runtime::tell_mod_installs() {
         if (!opened.package) {
             log_line(
                 name + ": " +
-                (opened.problem.refusal == install::Refusal::unknown_kind
-                     ? std::string("it is not a kind of package this game installs")
-                     : install::refusal_text(*state.kind, opened.problem)) +
-                (opened.problem.detail.empty() ? "" : " (" + opened.problem.detail + ")")
+                with_detail(
+                    opened.problem.refusal == install::Refusal::unknown_kind
+                        ? std::string("it is not a kind of package this game installs")
+                        : install::refusal_text(*state.kind, opened.problem),
+                    opened.problem.detail
+                )
             );
             for (const auto& line : opened.problem.lines)
                 log_line(name + ": " + line);
@@ -875,8 +889,7 @@ void Runtime::tell_mod_installs() {
             );
             if (!placed) {
                 log_line(
-                    name + ": " + install::refusal_text(kind, problem) +
-                    (problem.detail.empty() ? "" : " (" + problem.detail + ")")
+                    name + ": " + with_detail(install::refusal_text(kind, problem), problem.detail)
                 );
                 for (const auto& line : problem.lines)
                     log_line(name + ": " + line);
@@ -1295,8 +1308,8 @@ void Runtime::answer_mod_install_prompt(int32_t button) {
             state.discarder.add(state.unpacking->discards());
             state.unpacking.reset();
             log_line(
-                state.package->file_name + ": " + install::refusal_text(kind, problem) +
-                (problem.detail.empty() ? "" : " (" + problem.detail + ")")
+                state.package->file_name + ": " +
+                with_detail(install::refusal_text(kind, problem), problem.detail)
             );
             state.report(
                 *this, install::OutcomeResult::refused, install::refusal_text(kind, problem)
