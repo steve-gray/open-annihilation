@@ -300,6 +300,13 @@ inline constexpr uint16_t default_unit_limit = 250;
 /// lowest an installation's totala.ini can set, below the setting's stops.
 inline constexpr uint16_t lowest_stored_unit_limit = 20;
 
+/// The fewest skirmish player rows the Engine Limits slider offers.
+inline constexpr int32_t lowest_skirmish_players = 2;
+/// The most skirmish player rows the slider offers: every stored slot but the spare.
+inline constexpr int32_t highest_skirmish_players = 10;
+/// Skirmish player rows when none are stored. The setup reads the same count.
+inline constexpr int32_t default_skirmish_players = 10;
+
 /// The lowest maximum frame rate the setting offers, in frames a second:
 /// the simulation's ticks a second, a frame for each tick.
 inline constexpr uint32_t lowest_frame_rate = 30;
@@ -1008,6 +1015,10 @@ struct EngineSettings {
     bool file_type_oamap{true};  ///< the game opens map packs (.oamap)
     bool file_type_oalang{true}; ///< the game opens language packs (.oalang)
     bool file_type_oareg{true};  ///< the game opens registry files (.oareg)
+    /// How many player rows the skirmish setup shows. The dialog's working
+    /// copy of NumSkirmishPlayers: read_settings and write_settings leave it
+    /// out, and OK stores it as that one count.
+    int32_t skirmish_players{default_skirmish_players};
 
     friend bool operator==(const EngineSettings&, const EngineSettings&) = default;
 };
@@ -1170,7 +1181,8 @@ highest_offered_unit_limit(const oa::data::limits::UnitsPerPlayer& units) noexce
 
 /// Writes the settings a player chose into the preferences.
 ///
-/// For each setting but switch_alt: after Restore defaults (`restored`), a
+/// For each setting but switch_alt and skirmish_players (the setup stores
+/// that count as NumSkirmishPlayers): after Restore defaults (`restored`), a
 /// setting at its default has its key erased; otherwise a setting that
 /// differs from `opened` has its key written, in decimal, a switch as 1 or
 /// 0, the screen size as "desktop" or "WIDTHxHEIGHT", hardware
@@ -1429,6 +1441,7 @@ struct GameState {
 struct Locks {
     Lock path_search{};           ///< Pathfinding cycles
     Lock unit_limit{};            ///< Unit limit
+    Lock skirmish_players{};      ///< Skirmish players
     Lock max_frame_rate{};        ///< Maximum frame rate
     bool shared_game{};           ///< the header says the shared game is still running
     Lock hardware_acceleration{}; ///< Hardware acceleration
@@ -1458,8 +1471,8 @@ struct Locks {
 
 /// Returns the locks a game state puts on the settings.
 ///
-/// Pathfinding cycles and Unit limit are locked during any game, as
-/// set_by_host in a shared game or a replay; the maximum frame rate is
+/// Pathfinding cycles, Unit limit and Skirmish players are locked during any
+/// game, as set_by_host in a shared game or a replay; the maximum frame rate is
 /// locked while --max-fps decides it. Hardware acceleration is locked
 /// command_line while a flag decides it, else unavailable when nothing in
 /// the game could help, and never by a game, so that it can always be set

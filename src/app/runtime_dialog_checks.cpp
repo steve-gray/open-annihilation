@@ -66,6 +66,10 @@ constexpr std::string_view kRestartLayout = "RESTART.GUI";
 constexpr uint8_t kHostRole = 0x01;
 // Frames a press on a button is held for before it is let go.
 constexpr int kHeldPressFrames = 3;
+// A control's face (a switch, a slider, a button) is this bright. The
+// turned-over menu and the map under it are darker, so a blank page has none.
+constexpr uint8_t kControlChannel = 140;
+constexpr std::size_t kOptionsControlPixels = 200;
 
 /// The BackTile frame and the pixel of it a panel's face shows.
 struct FacePixel {
@@ -124,6 +128,29 @@ uint8_t* pixel(renderer::Surface& frame, int32_t x, int32_t y) {
 
 bool same_pixel(renderer::Surface& a, renderer::Surface& b, int32_t x, int32_t y) {
     return std::equal(pixel(a, x, y), pixel(a, x, y) + 3, pixel(b, x, y));
+}
+
+// Pixels of `rect` bright enough to be a control's face.
+std::size_t bright_control_pixels(const renderer::Surface& frame, const Rect& rect) {
+    std::size_t count = 0;
+    if (frame.rgb.empty() || frame.width == 0)
+        return 0;
+    const auto width = static_cast<int32_t>(frame.width);
+    const auto height = static_cast<int32_t>(frame.height);
+    for (int32_t y = rect.y; y < rect.y + rect.height; ++y) {
+        if (y < 0 || y >= height)
+            continue;
+        for (int32_t x = rect.x; x < rect.x + rect.width; ++x) {
+            if (x < 0 || x >= width)
+                continue;
+            const auto* sample =
+                frame.rgb.data() +
+                (static_cast<std::size_t>(y) * frame.width + static_cast<std::size_t>(x)) * 3U;
+            if (std::max({sample[0], sample[1], sample[2]}) >= kControlChannel)
+                ++count;
+        }
+    }
+    return count;
 }
 
 // Pixels of `rect` that differ between the frames.
@@ -1251,14 +1278,21 @@ void Runtime::check_match_dialogs() {
         match_->state().game.options_lightbar_drawn == 1,
         "the lightbar's frames did not mark it drawn in the game"
     );
-    // Held at its end, the turned-over picture covers the battlefield beside
-    // the side column; the rest of the match shows as the menu left it.
+    // Held at its end, the sound page covers the battlefield beside the side
+    // column; the rest of the match shows as the menu left it. The sweep used
+    // to stop on the turned-over picture, which has no controls.
     const auto beside = canvas_rect(kBattlefieldLeft + 2, 150, 146, 280);
     const auto beside_area =
         static_cast<std::size_t>(beside.width) * static_cast<std::size_t>(beside.height);
     require(
         differing_pixels(in_game_menu, frames.back(), beside) > beside_area / 2,
         "the lightbar's picture does not show over the battlefield beside the side column"
+    );
+    require(
+        bright_control_pixels(frames.back(), beside) >= kOptionsControlPixels,
+        "the options menu opened on a blank panel (" +
+            std::to_string(bright_control_pixels(frames.back(), beside)) +
+            " control pixels beside the tabs)"
     );
     require(
         differing_pixels_outside(in_game_menu, frames.back(), {swept}) == 0,
@@ -1309,6 +1343,10 @@ void Runtime::check_match_dialogs() {
         "SOUNDSRT.GUI changed the match right of column 277"
     );
     write_ppm(report_directory / "native-match-preferences-sound.ppm", sound);
+    require(
+        bright_control_pixels(sound, beside) >= kOptionsControlPixels,
+        "SOUND's page is blank beside the tabs"
+    );
 
     // A slider's knob, dragged or stepped by its arrows, applies the value
     // it stands for at once; Cancel puts back what the preferences opened with.
@@ -1342,6 +1380,14 @@ void Runtime::check_match_dialogs() {
     activate_pause_gadget("PREFS");
     click_control("SPEEDS", 50);
     require(hud_gadget("GAME") != nullptr, "INTERFACE did not merge SPEEDSRT.GUI");
+    {
+        const auto interface_page = composed();
+        write_ppm(report_directory / "native-match-preferences-interface.ppm", interface_page);
+        require(
+            bright_control_pixels(interface_page, beside) >= kOptionsControlPixels,
+            "INTERFACE's page is blank beside the tabs"
+        );
+    }
     // Position 85 of GAME's 88 stands for speed 20: 85 / 87 * 21, truncated.
     drag_check_knob("GAME", 85 - check_scroll_bar("GAME").bar.knob);
     require(
@@ -1373,12 +1419,28 @@ void Runtime::check_match_dialogs() {
             hud_gadget("VIDSLDR") != nullptr,
         "VISUALS did not merge VISUALRT.GUI with the screen-size slider"
     );
+    {
+        const auto visuals = composed();
+        write_ppm(report_directory / "native-match-preferences-visuals.ppm", visuals);
+        require(
+            bright_control_pixels(visuals, beside) >= kOptionsControlPixels,
+            "VISUALS's page is blank beside the tabs"
+        );
+    }
     click_control("MUSIC", 50);
     require(
         hud_gadget("CDPLAY") != nullptr && hud_gadget("MUSICRT") != nullptr &&
             hud_gadget("GAMMA") == nullptr && match_music_panel_open(),
         "MUSIC did not merge MUSICRT.GUI"
     );
+    {
+        const auto music = composed();
+        write_ppm(report_directory / "native-match-preferences-music.ppm", music);
+        require(
+            bright_control_pixels(music, beside) >= kOptionsControlPixels,
+            "MUSIC's page is blank beside the tabs"
+        );
+    }
     // The panel brings its own GAF, so its transport buttons draw
     // MUSICRT.GAF's frames rather than the shared fallback frame.
     require(
@@ -1587,6 +1649,61 @@ void Runtime::check_match_dialogs() {
         !send(close_request(SDL_EVENT_WINDOW_CLOSE_REQUESTED)),
         "closing the window on the main menu did not end the run"
     );
+    // The same four pages, drawn, at the two sizes the blank panel was reported
+    // across: the sweep ends on sound, and each button shows its own controls.
+    exit_requested_ = false;
+    for (const auto& [width, height] :
+         {std::pair{kCanvasWidth, kCanvasHeight}, std::pair{1920, 1200}}) {
+        const auto size = std::to_string(width) + 'x' + std::to_string(height);
+        if (match_)
+            leave_match();
+        if (!SDL_SetWindowSize(sdl_.window, width, height) || !SDL_SyncWindow(sdl_.window))
+            throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError());
+        load(Screen::main_menu);
+        start_benchmark_skirmish();
+        if (match_layout_.width != width || match_layout_.height != height)
+            throw std::runtime_error("options pages: could not size the match to " + size);
+        show_match_pause_menu();
+        update_pointer(static_cast<float>(width - 1), static_cast<float>(height - 1));
+        activate_pause_gadget("PREFS");
+        // Each frame of the sweep is drawn, as the first check draws them:
+        // the step runs as the frame is rendered, and the last frame is the
+        // sound page.
+        auto opening = composed();
+        for (int frame = 1; frame < kSweepFrames; ++frame) {
+            tick_screen_packages();
+            opening = composed();
+        }
+        const auto page = canvas_rect(kBattlefieldLeft + 2, 150, 146, 280);
+        write_ppm(
+            report_directory / ("native-match-preferences-opening-" + size + ".ppm"), opening
+        );
+        require(
+            bright_control_pixels(opening, page) >= kOptionsControlPixels,
+            "the options menu opened on a blank panel at " + size
+        );
+        const auto shown = [&](const char* button, const char* gadget, const std::string& picture) {
+            click_control(button, 50);
+            require(
+                hud_gadget(gadget) != nullptr,
+                std::string(button) + " did not show its page at " + size
+            );
+            const auto frame = composed();
+            write_ppm(report_directory / picture, frame);
+            require(
+                bright_control_pixels(frame, page) >= kOptionsControlPixels,
+                std::string(button) + "'s page is blank at " + size
+            );
+        };
+        shown("SOUND", "FXVOL", "native-match-preferences-sound-" + size + ".ppm");
+        shown("MUSIC", "MUSICVOL", "native-match-preferences-music-" + size + ".ppm");
+        shown("SPEEDS", "GAME", "native-match-preferences-interface-" + size + ".ppm");
+        shown("VISUALS", "SHADING", "native-match-preferences-visuals-" + size + ".ppm");
+        click_control("CANCEL", 50);
+        std::cout << "options pages: sound, music, interface and visuals drawn at " << size << '\n';
+    }
+    if (match_)
+        leave_match();
     std::cout << "match close check: YESORNO.GUI on close, OPTIONS lightbar over " << moving
               << " frames, captioned speech, the return label\n";
 }

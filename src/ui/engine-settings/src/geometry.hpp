@@ -1095,12 +1095,12 @@ using TextWidth = std::function<int32_t(std::string_view)>;
 /// developer_row_padding.
 ///
 /// A locked row keeps its control, drawn faded. Its lock stands on the
-/// label line, left of a button or a switch that sits there, otherwise at
-/// the line's right. When the label, the lock and that control do not fit
-/// on one line, the lock moves to the start of the line under the label,
-/// before the hint, and the control stays. A row whose hint lines are its
-/// status fades that line and a lock or a control that dropped under it,
-/// and stops before the status.
+/// label line, left of a control that sits there, otherwise at the line's
+/// right. When the label and the lock do not fit on that line, on any row,
+/// the lock moves to the start of the line under the label, before the hint,
+/// and the label keeps the line, or the room beside a control that stays.
+/// A row whose hint lines are its status fades that line and a lock or a
+/// control that dropped under it, and stops before the status.
 ///
 /// @param page the section
 /// @param locks the dialog's locks

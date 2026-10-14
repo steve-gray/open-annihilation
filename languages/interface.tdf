@@ -7722,6 +7722,14 @@
 	it=Salta;
 	}
 
+[Skirmish players]
+	{
+	de=Gefechtsspieler;
+	fr=Joueurs d'escarmouche;
+	es=Jugadores de escaramuza;
+	it=Giocatori di schermaglia;
+	}
+
 [Skirmish · No Mod]
 	{
 	de=Gefecht · Kein Mod;
@@ -8848,6 +8856,14 @@
 	fr=La taille des commandes tactiles. Celles propres au jeu les écrans gardent les leurs.;
 	es=El tamaño de los controles táctiles. Los propios del juego las pantallas mantienen las suyas.;
 	it=La dimensione dei controlli tattili. Quelli propri del gioco gli schermi tengono le loro.;
+	}
+
+[The skirmish setup shows that many player rows.]
+	{
+	de=Die Gefechtseinrichtung zeigt so viele Spielerzeilen.;
+	fr=La configuration de l'escarmouche montre autant de rangées de joueurs.;
+	es=La configuración de la escaramuza muestra tantas filas de jugadores.;
+	it=La configurazione della schermaglia mostra tante righe di giocatori.;
 	}
 
 [The stick pointer settles on a lone unit near it.]
