@@ -3060,8 +3060,10 @@ widest_picture(const kit::DisplayList& list, uint8_t red, uint8_t green, uint8_t
 
 /// A one-map pack wears its minimap, fitted, on Maps and on Updates. A pack
 /// of several keeps its badge, or the first map's minimap on the Maps tab
-/// when it has none. The details show one large picture or a grid. A
-/// minimap that has not arrived yet keeps the row's letters, then the picture.
+/// when it has none. The details show one large picture or a grid: under one
+/// map's picture its players and size come first, with no name, and under
+/// each map of several its name and then those lines. A minimap that has not
+/// arrived yet keeps the row's letters, then the picture.
 void map_previews_fit_their_boxes() {
     const lib::MapPicture red = solid_minimap(255, 0, 0);
     const lib::MapPicture blue = solid_minimap(0, 0, 255);
@@ -3202,9 +3204,14 @@ void map_previews_fit_their_boxes() {
             ++header_squares;
     }
     OA_CHECK(header_squares == 1);
-    OA_CHECK(text_item(one, "Cove") != nullptr);
-    OA_CHECK(text_item(one, "3 players · 10x10") != nullptr);
-    OA_CHECK(text_item(one, "A long cove.") != nullptr);
+    OA_CHECK(text_item(one, "Shore Pack") != nullptr);
+    OA_CHECK(text_item(one, "Cove") == nullptr);
+    const kit::Item* one_meta = text_item(one, "3 players · 10x10");
+    OA_CHECK(one_meta != nullptr);
+    const kit::Item* one_description = text_item(one, "A long cove.");
+    OA_CHECK(one_description != nullptr);
+    if (one_meta != nullptr && one_description != nullptr)
+        OA_CHECK(one_meta->rect.y < one_description->rect.y);
 
     lib::select(library, {std::string(fixture::added), lib::Kind::map_pack, "desert-pack"});
     const kit::DisplayList grid = laid_out(library, {}, large);
@@ -3234,10 +3241,32 @@ void map_previews_fit_their_boxes() {
     }
     OA_CHECK(cells == 2);
     OA_CHECK(saw_blue && saw_green);
-    OA_CHECK(text_item(grid, "Dry Lake") != nullptr);
+    const kit::Item* dry_lake = text_item(grid, "Dry Lake");
+    const kit::Item* dry_lake_meta = text_item(grid, "2 players · 8x8");
+    OA_CHECK(dry_lake != nullptr);
     OA_CHECK(text_item(grid, "Mesa") != nullptr);
-    OA_CHECK(text_item(grid, "2 players · 8x8") != nullptr);
+    OA_CHECK(dry_lake_meta != nullptr);
     OA_CHECK(text_item(grid, "4 players · 16x16") != nullptr);
+    if (dry_lake != nullptr && dry_lake_meta != nullptr)
+        OA_CHECK(dry_lake->rect.y < dry_lake_meta->rect.y);
+    const kit::Item* dry_lake_cell = nullptr;
+    if (dry_lake != nullptr) {
+        for (const kit::Item& item : grid.items) {
+            if (item.role == kit::Role::picture && item.rect.width == 72 &&
+                item.rect.height == 72 && item.rect.x == dry_lake->rect.x) {
+                dry_lake_cell = &item;
+                break;
+            }
+        }
+    }
+    OA_CHECK(dry_lake_cell != nullptr);
+    // One map's players and size take the place a map's name has in a grid.
+    if (dry_lake != nullptr && dry_lake_cell != nullptr && one_meta != nullptr &&
+        one_large != nullptr)
+        OA_CHECK(
+            one_meta->rect.y - (one_large->rect.y + one_large->rect.height) ==
+            dry_lake->rect.y - (dry_lake_cell->rect.y + dry_lake_cell->rect.height)
+        );
     OA_CHECK(text_item(grid, "Dry and flat.") != nullptr);
     OA_CHECK(text_item(grid, "A table of stone.") != nullptr);
     OA_CHECK(text_item(grid, "DP") != nullptr);
