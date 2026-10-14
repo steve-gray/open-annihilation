@@ -316,10 +316,11 @@ void fit_control(kit::RowView& shown, int32_t available_width, const TextWidth& 
 
 /// Widens a switch, a row of buttons or SHOW AGAIN to the caption in the
 /// small font. A label that does not fit beside its control takes the whole
-/// line and the control drops under it. When the label, the lock and a
-/// control on that line do not fit, the lock drops under the label and the
-/// control stays. An estimated measure leaves the class's boxes, which the
-/// layout tests pin; place_rows makes the same drop from the estimate.
+/// line and the control drops under it. When the label and the lock do not
+/// fit on the label line, on any row, the lock drops under the label and the
+/// label keeps its width: the whole line, or the room beside a control that
+/// stays. An estimated measure leaves the class's boxes, which the layout
+/// tests pin; place_rows makes the same drop from the estimate.
 ///
 /// @param[in,out] shown the row
 /// @param available_width the section's width
@@ -432,9 +433,10 @@ void fit_measured(
     }
     // A label that does not fit beside its control takes the whole line and
     // the control drops. When the three do not fit but the label and the
-    // control do, the lock drops and the control stays. A slider's track and
-    // a drop-down already stand on a line of their own, so their lock stays
-    // at the label line's right.
+    // control do, the lock drops and the control stays. A slider, a drop-down,
+    // a text field and a text row keep their control off this line, so the
+    // lock drops when the label and the lock alone do not fit, and the label
+    // keeps the line.
     const int32_t on_line = [&]() {
         if (shown.kind == kit::RowKind::toggle)
             return std::max(oa::ui::kit::compact_metrics.switch_width, shown.control_width);
@@ -464,6 +466,8 @@ void fit_measured(
         } else if (!shown.lock.empty() && with_control + lock_span() > available_width) {
             shown.lock_below = true;
         }
+    } else if (!shown.lock.empty() && label_width + lock_span() > available_width) {
+        shown.lock_below = true;
     }
 }
 
