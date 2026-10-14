@@ -35,7 +35,8 @@ macOS the bundle owns a launch file's type. iOS does nothing at run time.
   `Registration`: whether this system registers at run time, whether
   anything was written, a line for the log for each thing written, skipped
   or run, and the error that stopped it. It never throws. `Places` names
-  where it writes, so that the tests write into scratch folders and keys.
+  where it writes, and on Windows where it reads the computer's classes,
+  so that the tests write into scratch folders and keys.
   On Linux the MIME package and the two desktop entries then list exactly
   `types`. A type left out loses its mimetype icon. With none of the four
   the game installs or adds, their desktop entry is removed; without a
@@ -46,7 +47,10 @@ macOS the bundle owns a launch file's type. iOS does nothing at run time.
   program-identifier key, the `OpenWithProgids` value whose name is that
   program identifier, or the extension's (Default) or `Content Type` while
   that value's data is still the game's program identifier or MIME type.
-  Another program's values, and the player's `UserChoice`, stay. On Linux
+  Another program's values, and the player's `UserChoice`, stay. A
+  withdrawal of launch files then hides the installer's association for
+  every user from this one, with an override of the user's own
+  ([below](#the-installers-association-and-launch-files-off)). On Linux
   it takes those types out of the package and the desktop entries and
   removes their mimetype icons, and removes an entry or the package once it
   lists no type. The program's icon stays. A missing value is already
@@ -121,6 +125,58 @@ for everyone who uses the computer, with the installed
 `open-annihilation.exe`, and tell the shell. Uninstalling removes the
 program identifier's key and the `OpenWithProgids` value, and the
 extension's (Default) and `Content Type` while they still name the game.
+
+### The installer's association and Launch files Off
+
+Windows opens a file through `HKEY_CLASSES_ROOT`, the user's classes laid
+over the computer's, so withdrawing the user's own registration would leave
+the installer's association opening launch files. A withdrawal of the types
+in `installer_types` (launch files alone) therefore goes on, once the
+user's own values are gone: it reads the extension's (Default) under
+`Places::machine_classes_key` (`HKEY_LOCAL_MACHINE\Software\Classes`, opened
+to read only) and the user's own, and does what `user_override_step` says.
+The override is the user's `.oalaunch` (Default) set to an empty text
+(`user_override_program_id`).
+
+| The computer's (Default) | The user's (Default) | The withdrawal |
+|---|---|---|
+| `OpenAnnihilation.Launch` | missing | writes the override |
+| `OpenAnnihilation.Launch` | empty, the override | keeps it, and writes nothing |
+| missing, or another program's | empty, the override | removes it: it would hide another program's association, or nothing |
+| anything | a program identifier, the player's or another program's | leaves it: it already decides for this user |
+| missing, or another program's | missing | nothing |
+
+Why this override, from Windows XP to Windows 11:
+
+- Since Windows 2000, a value under the user's classes takes precedence over
+  the same value under the computer's, and Explorer reads an extension's
+  program identifier from that merged view whenever the player has not
+  chosen an opener in Windows itself (Explorer's `UserChoice`, from Vista
+  on). The game's own per-user registration relies on the same rule.
+- The override is a value that is there, not one that is missing, so it
+  wins however a reader merges the two keys.
+- An empty program identifier names no program. Explorer then treats a
+  launch file as a file with no opener and asks which program to open it
+  with, as it does for a copy whose registration was withdrawn and nothing
+  else registered. Open With still lists the game.
+- It never names the game or its folder, so nothing left behind can start a
+  removed copy, and being empty tells it apart from a program's value.
+
+The other ways were not taken. Explorer's `UserChoice` exists from Vista on
+only, and Windows 8 and later reset one a program writes. A per-user key
+for `OpenAnnihilation.Launch` cannot hide the computer's
+`shell\open\command` beneath it, and that key is the user's own
+registration's. A plain-text program identifier such as `txtfile` would
+choose a program for the player, and could not be told apart from the
+player's own choice of it.
+
+A registration of launch files (the switch On) writes the user's own
+(Default), `OpenAnnihilation.Launch`, over the override, so the user's six
+values are back as before. The game never writes under
+`HKEY_LOCAL_MACHINE`. The uninstaller removes the override of the account
+that uninstalls: `.oalaunch`'s (Default) under
+`HKEY_CURRENT_USER\Software\Classes`, while it is the empty text. A
+program identifier there stays.
 
 ## Linux
 
@@ -233,6 +289,17 @@ another program's (Default), `Content Type` and `OpenWithProgids` value on
 one extension and a `UserChoice` key beside them, withdraws one type and
 checks that the other type and the other program's values are unchanged,
 withdraws the launch file alone, then removes the scratch key.
+`test_windows_shared_association` writes the installer's six values under a
+second scratch key that stands for the computer's classes: Off writes the
+override and the merged lookup finds no program, a later Off writes
+nothing, On writes the user's six values back over it; a (Default) of the
+user's own naming a program, and an association for every user naming
+another program, are left alone; once that association names another
+program, or none, an override left behind goes; another type gets no
+override; and the computer's scratch key never changes. The other Windows
+tests name an empty scratch key for the computer's classes, so a computer
+with the game installed does not change what they see.
+`test_user_override_step` checks the override's decision on every system.
 `app-bundle-file-types` (`tools/check_bundle_file_types.py`) checks the two
 `Info.plist` templates, the launch file's type and the macOS bundle's plain
 text among them.
@@ -242,10 +309,13 @@ text among them.
 - Windows XP draws no PNG-compressed icon, and every entry of the
   executable's icon is one, so on XP neither the program nor one of the
   five file types shows the game's icon.
-- The Windows installer registers launch files for everyone, under
-  `HKEY_LOCAL_MACHINE\Software\Classes`. A withdrawal acts under
-  `HKEY_CURRENT_USER` only, so with Settings' Launch files switch off a
-  copy the installer set up still opens them until it is uninstalled.
+- The override acts for the Windows account that runs the game. Another
+  account keeps the installer's association until its own switch is off.
+  The uninstaller removes the override of the account that uninstalls (an
+  administrator who uninstalls from another account removes that
+  account's); another account's override, which names no program, stays
+  until the game starts there again. Explorer's `UserChoice`, from Vista
+  on, wins over both registrations and the override.
 - A registration only follows the copy that ran last: two copies in
   different folders take the files from each other at each start.
 - Nothing is removed when the game is removed; the installation pages say

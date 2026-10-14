@@ -768,9 +768,15 @@ of the game's file types this copy opens.
   On Windows and Linux, a switch that is on makes this copy of the game
   the opener of that kind of file, and one that is off withdraws that
   registration. The file manager takes the change with no restart. On
-  Windows the installer also registers launch files for everyone who uses
-  the computer; Launch files Off withdraws only your own registration, so a
-  copy the installer set up still opens them until it is uninstalled.
+  Windows the installer also associates launch files with the game for
+  everyone who uses the computer. Launch files Off withdraws your own
+  registration and hides that association from your Windows account alone:
+  it sets the (Default) of `HKEY_CURRENT_USER\Software\Classes\.oalaunch`
+  to an empty text, which names no program, so Windows asks which program
+  to open a launch file with. The other accounts on the computer keep the
+  association. On registers this copy for you again in place of the empty
+  text. While the switch is off, a program you choose for launch files in
+  Windows stays your choice.
 
   On a Mac, a switch that is on means Open Annihilation is the program
   Finder uses to open that type. The switch shows that choice as it is

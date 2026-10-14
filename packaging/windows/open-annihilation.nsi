@@ -110,8 +110,10 @@ SetCompressor /SOLID lzma
 !define OA_DESKTOP_LNK "$DESKTOP\Open Annihilation.lnk"
 # A launch file (.oalaunch) opens the game in that launch's battle room, as
 # open-annihilation.exe -c FILE does. The installer associates it for everyone
-# who uses this computer; the game's own registration of the other four types
-# is per user, at run time. These are the names src/platform/file-types uses.
+# who uses this computer; the game's own registration of the five types is per
+# user, at run time, and a player who turns Settings' Launch files switch off
+# hides this association from themselves alone. These are the names
+# src/platform/file-types uses.
 !define OA_LAUNCH_EXTENSION_KEY "Software\Classes\.oalaunch"
 !define OA_LAUNCH_PROGRAM_ID "OpenAnnihilation.Launch"
 !define OA_LAUNCH_PROGRAM_KEY "Software\Classes\OpenAnnihilation.Launch"
@@ -343,6 +345,19 @@ Section "Uninstall"
     DeleteRegValue HKLM "${OA_LAUNCH_EXTENSION_KEY}" "Content Type"
   ${EndIf}
   DeleteRegKey /ifempty HKLM "${OA_LAUNCH_EXTENSION_KEY}"
+  ClearErrors
+
+  # The override of the user who uninstalls: while Settings' Launch files
+  # switch is off, the game sets .oalaunch's (Default) under this user's own
+  # classes to an empty text, which names no program and hides the association
+  # above from this user. With that association gone the override has nothing
+  # left to hide. It is the game's only while it is that empty text: a program
+  # identifier there, the player's or another program's, stays.
+  ReadRegStr $0 HKCU "${OA_LAUNCH_EXTENSION_KEY}" ""
+  ${IfNot} ${Errors}
+  ${AndIf} $0 == ""
+    DeleteRegValue HKCU "${OA_LAUNCH_EXTENSION_KEY}" ""
+  ${EndIf}
   ClearErrors
   System::Call 'shell32::SHChangeNotify(i ${OA_SHELL_ASSOCIATIONS_CHANGED}, i 0, i 0, i 0)'
 SectionEnd

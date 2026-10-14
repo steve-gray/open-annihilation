@@ -6,9 +6,11 @@
 // data folder, written once and only again when they differ, the database tools run once after
 // a change (recording scripts on a scratch PATH), missing tools and a tool that hangs, each run
 // again at the next start, and the starts that register nothing; on Windows the registry values
-// under a scratch key of HKEY_CURRENT_USER, written once and only again when they differ, and a
-// copy in the temporary folder that registers nothing. No test registers anything for the user
-// who runs it.
+// under a scratch key of HKEY_CURRENT_USER, written once and only again when they differ, a
+// copy in the temporary folder that registers nothing, and the override that hides the
+// installer's association for every user, with a second scratch key standing in for the
+// computer's classes. No test registers anything for the user who runs it, and none reads or
+// writes HKEY_LOCAL_MACHINE.
 
 #include "oa/platform/file_types.hpp"
 
@@ -27,6 +29,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -746,6 +749,8 @@ void test_windows_registration() {
     const std::wstring classes = scratch + L"\\Classes";
     file_types::Places places{};
     places.classes_key = fs::path(classes).string();
+    places.machine_classes_root = file_types::RegistryRoot::current_user;
+    places.machine_classes_key = fs::path(scratch + L"\\Machine").string();
     places.notify_shell = false;
     const fs::path executable(L"C:\\Games\\Open Annihilation\\open-annihilation.exe");
     const std::wstring program = executable.wstring();
@@ -883,6 +888,10 @@ void test_windows_withdrawal() {
     const std::wstring classes = scratch + L"\\Classes";
     file_types::Places places{};
     places.classes_key = fs::path(classes).string();
+    // The computer's classes stand in as an empty scratch key, as on a computer with no
+    // installed copy, whatever this one holds.
+    places.machine_classes_root = file_types::RegistryRoot::current_user;
+    places.machine_classes_key = fs::path(scratch + L"\\Machine").string();
     places.notify_shell = false;
     const fs::path executable(L"C:\\Games\\Open Annihilation\\open-annihilation.exe");
 
@@ -973,11 +982,265 @@ void test_windows_withdrawal() {
     OA_CHECK(!read_value(classes + L"\\.oalaunch", L"Content Type"));
     OA_CHECK(!read_value(classes + L"\\.oalaunch\\OpenWithProgids", L"OpenAnnihilation.Launch"));
     OA_CHECK(key_exists(classes + L"\\OpenAnnihilation.Language"));
+    // With no association for every user, a withdrawal writes no override.
+    OA_CHECK(!read_value(classes + L"\\.oalaunch", nullptr));
+    for (const std::string& line : done.lines)
+        OA_CHECK(line.rfind("removed ", 0) == 0);
+
+    OA_CHECK(SHDeleteKeyW(HKEY_CURRENT_USER, scratch.c_str()) == ERROR_SUCCESS);
+    static_cast<void>(RegDeleteKeyW(HKEY_CURRENT_USER, parent.c_str()));
+}
+
+/// Every value under a key and its subkeys, each named by its key and its name, and every key,
+/// so that a test sees anything written or removed under it.
+std::map<std::wstring, std::wstring> values_under(const std::wstring& key_name) {
+    std::map<std::wstring, std::wstring> found;
+    HKEY opened = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, key_name.c_str(), 0, KEY_READ, &opened) != ERROR_SUCCESS)
+        return found;
+    found[key_name + L"\\"] = L"key";
+    for (DWORD index = 0;; ++index) {
+        std::vector<wchar_t> value_name(256, L'\0');
+        DWORD value_name_length = static_cast<DWORD>(value_name.size());
+        std::vector<wchar_t> data(1024, L'\0');
+        DWORD data_size = static_cast<DWORD>((data.size() - 1) * sizeof(wchar_t));
+        DWORD value_type = 0;
+        if (RegEnumValueW(
+                opened,
+                index,
+                value_name.data(),
+                &value_name_length,
+                nullptr,
+                &value_type,
+                reinterpret_cast<BYTE*>(data.data()),
+                &data_size
+            ) != ERROR_SUCCESS)
+            break;
+        found[key_name + L"|" + std::wstring(value_name.data(), value_name_length)] =
+            std::to_wstring(value_type) + L":" +
+            std::wstring(data.data(), data_size / sizeof(wchar_t));
+    }
+    std::vector<std::wstring> subkeys;
+    for (DWORD index = 0;; ++index) {
+        std::vector<wchar_t> subkey(256, L'\0');
+        DWORD subkey_length = static_cast<DWORD>(subkey.size());
+        if (RegEnumKeyExW(
+                opened, index, subkey.data(), &subkey_length, nullptr, nullptr, nullptr, nullptr
+            ) != ERROR_SUCCESS)
+            break;
+        subkeys.emplace_back(subkey.data(), subkey_length);
+    }
+    RegCloseKey(opened);
+    for (const std::wstring& subkey : subkeys) {
+        const std::map<std::wstring, std::wstring> below = values_under(key_name + L"\\" + subkey);
+        found.insert(below.begin(), below.end());
+    }
+    return found;
+}
+
+/// Deletes a key's (Default) value.
+void delete_default(const std::wstring& key_name) {
+    HKEY opened = nullptr;
+    OA_CHECK(
+        RegOpenKeyExW(HKEY_CURRENT_USER, key_name.c_str(), 0, KEY_SET_VALUE, &opened) ==
+        ERROR_SUCCESS
+    );
+    OA_CHECK(RegDeleteValueW(opened, nullptr) == ERROR_SUCCESS);
+    RegCloseKey(opened);
+}
+
+/// Writes the six values the installer writes for launch files under `machine`, as it does
+/// under HKEY_LOCAL_MACHINE\Software\Classes for everyone who uses the computer.
+void write_installer_association(const std::wstring& machine, const fs::path& installed) {
+    write_sz(machine + L"\\.oalaunch", nullptr, L"OpenAnnihilation.Launch");
+    write_sz(machine + L"\\.oalaunch", L"Content Type", L"application/x-oalaunch");
+    write_sz(machine + L"\\.oalaunch\\OpenWithProgids", L"OpenAnnihilation.Launch", L"");
+    write_sz(machine + L"\\OpenAnnihilation.Launch", nullptr, L"Open Annihilation launch file");
+    write_sz(
+        machine + L"\\OpenAnnihilation.Launch\\DefaultIcon", nullptr, installed.wstring() + L",0"
+    );
+    write_sz(
+        machine + L"\\OpenAnnihilation.Launch\\shell\\open\\command",
+        nullptr,
+        L"\"" + installed.wstring() + L"\" -c \"%1\""
+    );
+}
+
+/// The program identifier Windows opens an extension with while the player has made no choice
+/// in Windows: the user's own (Default) where there is one, else the computer's. An empty one
+/// names no program.
+std::optional<std::wstring> program_id_opening(
+    const std::wstring& classes, const std::wstring& machine, const std::wstring& extension
+) {
+    if (std::optional<std::wstring> own = read_value(classes + L"\\" + extension, nullptr))
+        return own;
+    return read_value(machine + L"\\" + extension, nullptr);
+}
+
+/// The installer's association for launch files, for every user, under a scratch key standing in
+/// for the computer's classes. While it names the game, Off writes the user's override and hides
+/// it from this user, each later Off keeps it, and On puts the user's own registration back in
+/// its place. Without it, Off is the plain withdrawal. Another program's association, for every
+/// user or the user's own, is never touched. Once the association for every user no longer
+/// names the game, the override goes. Only launch files are hidden. The computer's key is never
+/// written.
+void test_windows_shared_association() {
+    const std::wstring parent = L"Software\\OpenAnnihilationFileTypesTest";
+    const std::wstring scratch = parent + L"\\" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+                                 std::to_wstring(GetTickCount()) + L"-shared";
+    const std::wstring classes = scratch + L"\\Classes";
+    const std::wstring machine = scratch + L"\\Machine";
+    file_types::Places places{};
+    places.classes_key = fs::path(classes).string();
+    places.machine_classes_root = file_types::RegistryRoot::current_user;
+    places.machine_classes_key = fs::path(machine).string();
+    places.notify_shell = false;
+    const fs::path executable(L"C:\\Games\\Open Annihilation\\open-annihilation.exe");
+    const fs::path installed(L"C:\\Program Files\\Open Annihilation\\open-annihilation.exe");
+    const file_types::TypeSet launches{false, false, false, false, true};
+    const file_types::TypeSet without_launch = launches.complement();
+    const std::wstring launch_command = L"\"" + executable.wstring() + L"\" -c \"%1\"";
+
+    write_installer_association(machine, installed);
+    const std::map<std::wstring, std::wstring> installed_values = values_under(machine);
+    // Eight keys and six values.
+    OA_CHECK(installed_values.size() == 14);
+    OA_CHECK(program_id_opening(classes, machine, L".oalaunch") == L"OpenAnnihilation.Launch");
+
+    // A start with every switch on registers the five for this user.
+    file_types::Registration done = file_types::register_windows(executable, places);
+    OA_CHECK(done.changed && done.error.empty());
+    OA_CHECK(read_value(classes + L"\\.oalaunch", nullptr) == L"OpenAnnihilation.Launch");
+
+    // Off: the user's registration is withdrawn and the override written, so the association
+    // for every user no longer opens launch files for this user.
+    done = file_types::register_windows(executable, places, without_launch);
+    OA_CHECK(!done.changed && done.error.empty());
+    done = file_types::withdraw_windows(launches, places);
+    OA_CHECK(done.supported && done.changed && done.error.empty());
+    OA_CHECK(read_value(classes + L"\\.oalaunch", nullptr) == L"");
+    OA_CHECK(program_id_opening(classes, machine, L".oalaunch") == L"");
+    OA_CHECK(!read_value(classes + L"\\.oalaunch", L"Content Type"));
+    OA_CHECK(!key_exists(classes + L"\\OpenAnnihilation.Launch"));
+    OA_CHECK(!done.lines.empty());
+    if (!done.lines.empty()) {
+        OA_CHECK(done.lines.back().rfind("wrote HKEY_CURRENT_USER\\", 0) == 0);
+        OA_CHECK(done.lines.back().find(".oalaunch (Default) empty") != std::string::npos);
+        OA_CHECK(done.lines.back().find("Machine\\.oalaunch (Default)") != std::string::npos);
+    }
+    OA_CHECK(values_under(machine) == installed_values);
+    OA_CHECK(read_value(classes + L"\\.oamod", nullptr) == L"OpenAnnihilation.Mod");
+
+    // Each later start with the switch off finds the override in place and writes nothing.
+    done = file_types::withdraw_windows(launches, places);
+    OA_CHECK(done.supported && !done.changed && done.error.empty() && done.lines.empty());
+    OA_CHECK(read_value(classes + L"\\.oalaunch", nullptr) == L"");
+
+    // On: the user's own six values come back, and its (Default) takes the override's place.
+    done = file_types::register_windows(executable, places);
+    OA_CHECK(done.changed && done.error.empty());
+    OA_CHECK(done.lines.size() == 6);
+    OA_CHECK(read_value(classes + L"\\.oalaunch", nullptr) == L"OpenAnnihilation.Launch");
+    OA_CHECK(program_id_opening(classes, machine, L".oalaunch") == L"OpenAnnihilation.Launch");
+    OA_CHECK(
+        read_value(classes + L"\\OpenAnnihilation.Launch\\shell\\open\\command", nullptr) ==
+        launch_command
+    );
+    done = file_types::withdraw_windows(file_types::TypeSet{}.complement(), places);
+    OA_CHECK(!done.changed && done.error.empty());
+    OA_CHECK(values_under(machine) == installed_values);
+
+    // The player's, or another program's, (Default) of the user's own is never written over:
+    // it already decides for this user.
+    done = file_types::withdraw_windows(launches, places);
+    OA_CHECK(done.changed && read_value(classes + L"\\.oalaunch", nullptr) == L"");
+    write_sz(classes + L"\\.oalaunch", nullptr, L"Other.Launch");
+    done = file_types::withdraw_windows(launches, places);
+    OA_CHECK(!done.changed && done.error.empty() && done.lines.empty());
+    OA_CHECK(read_value(classes + L"\\.oalaunch", nullptr) == L"Other.Launch");
+    delete_default(classes + L"\\.oalaunch");
+
+    // An association for every user that names another program is not hidden.
+    write_sz(machine + L"\\.oalaunch", nullptr, L"Other.Launch");
+    const std::map<std::wstring, std::wstring> other_values = values_under(machine);
+    done = file_types::withdraw_windows(launches, places);
+    OA_CHECK(!done.changed && done.error.empty() && done.lines.empty());
+    OA_CHECK(!read_value(classes + L"\\.oalaunch", nullptr));
+    OA_CHECK(program_id_opening(classes, machine, L".oalaunch") == L"Other.Launch");
+
+    // An override the game wrote while the association named it goes once it names another
+    // program, so that program's association opens launch files again.
+    write_sz(classes + L"\\.oalaunch", nullptr, L"");
+    done = file_types::withdraw_windows(launches, places);
+    OA_CHECK(done.changed && done.error.empty());
+    OA_CHECK(done.lines.size() == 1);
+    if (!done.lines.empty())
+        OA_CHECK(done.lines[0].find("no longer names the game") != std::string::npos);
+    OA_CHECK(!read_value(classes + L"\\.oalaunch", nullptr));
+    OA_CHECK(program_id_opening(classes, machine, L".oalaunch") == L"Other.Launch");
+    OA_CHECK(values_under(machine) == other_values);
+
+    // With no association for every user, as after the installer's uninstaller, an override left
+    // behind goes too, and Off is the plain withdrawal of the user's own registration.
+    OA_CHECK(SHDeleteKeyW(HKEY_CURRENT_USER, machine.c_str()) == ERROR_SUCCESS);
+    write_sz(classes + L"\\.oalaunch", nullptr, L"");
+    done = file_types::withdraw_windows(launches, places);
+    OA_CHECK(done.changed && done.error.empty() && done.lines.size() == 1);
+    OA_CHECK(!read_value(classes + L"\\.oalaunch", nullptr));
+    done = file_types::register_windows(executable, places);
+    OA_CHECK(done.changed && done.error.empty() && done.lines.size() == 6);
+    done = file_types::withdraw_windows(launches, places);
+    OA_CHECK(done.changed && done.error.empty());
+    for (const std::string& line : done.lines)
+        OA_CHECK(line.rfind("removed ", 0) == 0);
+    OA_CHECK(!read_value(classes + L"\\.oalaunch", nullptr));
+    OA_CHECK(!key_exists(machine));
+
+    // Only launch files are hidden: the installer associates no other type for every user.
+    write_sz(machine + L"\\.oamod", nullptr, L"OpenAnnihilation.Mod");
+    const file_types::TypeSet mods{true, false, false, false, false};
+    done = file_types::withdraw_windows(mods, places);
+    OA_CHECK(done.changed && done.error.empty());
+    OA_CHECK(!read_value(classes + L"\\.oamod", nullptr));
+    OA_CHECK(read_value(machine + L"\\.oamod", nullptr) == L"OpenAnnihilation.Mod");
 
     OA_CHECK(SHDeleteKeyW(HKEY_CURRENT_USER, scratch.c_str()) == ERROR_SUCCESS);
     static_cast<void>(RegDeleteKeyW(HKEY_CURRENT_USER, parent.c_str()));
 }
 #endif
+
+/// The user's override of the installer's association for every user: written where that
+/// association names the game and the user has no (Default) of their own, kept while it still
+/// names the game, removed once it does not, and never written over a (Default) of the user's
+/// own that names a program. Only launch files have such an association.
+void test_user_override_step() {
+    using Step = file_types::UserOverrideStep;
+    const std::string_view game = file_types::launch_program_id;
+    const std::optional<std::string_view> missing;
+    const std::optional<std::string_view> empty{std::string_view{}};
+    const std::optional<std::string_view> games{game};
+    const std::optional<std::string_view> other{std::string_view{"Other.Launch"}};
+    OA_CHECK(file_types::user_override_step(game, games, missing) == Step::write);
+    OA_CHECK(file_types::user_override_step(game, games, empty) == Step::keep);
+    OA_CHECK(file_types::user_override_step(game, games, other) == Step::none);
+    OA_CHECK(file_types::user_override_step(game, games, games) == Step::none);
+    OA_CHECK(file_types::user_override_step(game, missing, missing) == Step::none);
+    OA_CHECK(file_types::user_override_step(game, missing, empty) == Step::remove);
+    OA_CHECK(file_types::user_override_step(game, missing, other) == Step::none);
+    OA_CHECK(file_types::user_override_step(game, other, missing) == Step::none);
+    OA_CHECK(file_types::user_override_step(game, other, empty) == Step::remove);
+    OA_CHECK(file_types::user_override_step(game, other, other) == Step::none);
+    OA_CHECK(file_types::user_override_step(game, empty, missing) == Step::none);
+    OA_CHECK(file_types::user_override_step(game, empty, empty) == Step::remove);
+    // Another type's program identifier for every user is not the launch file's.
+    OA_CHECK(
+        file_types::user_override_step(
+            game, std::optional<std::string_view>(file_types::mod_program_id), missing
+        ) == Step::none
+    );
+    OA_CHECK(file_types::user_override_program_id.empty());
+    OA_CHECK(file_types::installer_types.launch && !file_types::installer_types.installs_any());
+}
 
 /// A Launch Services stand-in: each content type has one opener, and every question is recorded.
 struct FakeLaunchServices {
@@ -1197,6 +1460,7 @@ int main() {
     test_texts();
     test_running_executable();
     test_opener_changes();
+    test_user_override_step();
 #ifndef _WIN32
     test_xdg_registration();
     test_xdg_skips();
@@ -1206,6 +1470,7 @@ int main() {
 #else
     test_windows_registration();
     test_windows_withdrawal();
+    test_windows_shared_association();
 #endif
     return oa::test::check_exit_status();
 }
