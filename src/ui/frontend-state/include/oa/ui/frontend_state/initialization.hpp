@@ -377,14 +377,21 @@ void load_preferences(
 /// Device volumes are saved only with RestoreVolume set; the image directory
 /// and movie rate only after a change, whose flags it then clears. The
 /// password is skipped while the host keeps the stored one
-/// (PreferencesHost::keep_stored_password).
+/// (PreferencesHost::keep_stored_password). One row is written as Player:
+/// the last row that reads Player, the one a skirmish starts as. Each
+/// earlier Player row is written as Computer. The rows passed in are left
+/// as they are. The row count is written with those rows when the setup
+/// has rows, so the next start reads the same rows.
 ///
 /// @param state Dispatcher state; play_intro_movie is saved.
 /// @param settings Skirmish map and slots.
 /// @param[in,out] p Preferences; the change flags are cleared.
 /// @param[in,out] h Settings and device services.
 /// @throws std::invalid_argument for a slot count outside 0..11.
-/// @quirk NumSkirmishPlayers is not written, as in 3.1c.
+/// @quirk A row count of zero is not written. 3.1c's general save never
+///        writes the row count; this one writes it whenever the setup has
+///        rows, so a count left from another setup cannot uncover a row
+///        this save did not write.
 void save_preferences(
     const State& state,
     const game_entry::SkirmishSettings& settings,
