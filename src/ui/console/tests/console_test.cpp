@@ -674,7 +674,8 @@ void test_logo_and_control() {
     remote.status = OA_PLAYER_STATUS_MIRRORED;
     remote.index = 2;
     remote.info = oa::oa_ref_from_index(2);
-    for (const uint8_t state : {OA_PLAYER_STATUS_COMPUTER, OA_PLAYER_STATUS_LOCAL}) {
+    for (const uint8_t state :
+         std::initializer_list<uint8_t>{OA_PLAYER_STATUS_COMPUTER, OA_PLAYER_STATUS_LOCAL}) {
         f.world->player_info[2].state = state;
         g_rec.messages.clear();
         f.run("AI 2");
