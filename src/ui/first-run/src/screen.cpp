@@ -337,9 +337,10 @@ std::string badge_letters(std::string_view tag) {
 /// The pill's colours.
 ///
 /// @param card the card
+/// @param active the card is the chosen one, and the step speaks its language
 /// @return the availability
-kit::LanguageAvailability availability_of(const Card& card) noexcept {
-    if (card.current)
+kit::LanguageAvailability availability_of(const Card& card, bool active) noexcept {
+    if (active)
         return kit::LanguageAvailability::active;
     if (card.kind != CardKind::pack)
         return kit::LanguageAvailability::built_in;
@@ -361,10 +362,12 @@ kit::LanguageAvailability availability_of(const Card& card) noexcept {
 /// The pill's words.
 ///
 /// @param card the card
+/// @param active the card is the chosen one, and the step speaks its language
 /// @param language the language the step is speaking; null for the one in use
 /// @return the words
-std::string pill_text(const Card& card, const oa::data::languages::Language* language) {
-    if (card.current)
+std::string
+pill_text(const Card& card, bool active, const oa::data::languages::Language* language) {
+    if (active)
         return show("Active", language);
     if (card.kind == CardKind::built_in)
         return show("Built in", language);
@@ -447,6 +450,8 @@ kit::SetupChromeLook chrome_look(
     look.width = width;
     look.height = height;
     look.page = page_word(session, language);
+    // In a window the title bar already names the game.
+    look.brand = !session.model.windowed;
     const StepPlace place = step_place(session.model.step, session.model.walk);
     look.step_name = show(place.name, language);
     look.step_pattern = language != nullptr ? show(kit::step_line_pattern, language)
@@ -619,6 +624,36 @@ SampleFit fit_sample(int32_t room_width, int32_t room_height) {
     };
 }
 
+/// The card the carousel is on or turning to.
+///
+/// @param session the session
+/// @return its index; -1 when the carousel has no card
+int32_t chosen_card(const Session& session) noexcept {
+    const int32_t selected = session.carousel.selected;
+    if (selected < 0 || static_cast<std::size_t>(selected) >= session.model.cards.size())
+        return -1;
+    return selected;
+}
+
+/// Moves a focus that rests on a language card to the chosen card, so the
+/// focus ring marks the card the carousel turns to and no other. A focus on
+/// an arrow or a footer button stays where it is.
+///
+/// @param[in,out] session the session
+/// @return true when the focus moved
+bool follow_chosen(Session& session) noexcept {
+    if (session.model.step != Step::language)
+        return false;
+    const kit::ControlId focused = session.interaction.focused;
+    if (focused < card_id || focused >= source_id)
+        return false;
+    const int32_t chosen = chosen_card(session);
+    if (chosen < 0 || focused == card_id + chosen)
+        return false;
+    session.interaction.focused = card_id + chosen;
+    return true;
+}
+
 /// Moves the carousel one card, wrapping from either end when it has more than one.
 ///
 /// @param[in,out] model the carousel
@@ -726,15 +761,26 @@ void lay_language(
     carousel.centre_milli = kit::carousel_index_milli(session.carousel);
     carousel.reduced_motion = frame.reduced_motion;
     carousel.wrap = session.model.cards.size() > 1;
+    // The chosen card alone is marked: the ring once it faces the player,
+    // and the Active look while the step speaks its language, which is the
+    // language in use or a built-in or installed language in the middle.
+    // The language in use loses that look while another card is chosen.
+    const int32_t chosen_index = chosen_card(session);
+    carousel.chosen = chosen_index;
+    const bool chosen_speaks =
+        chosen_index >= 0 &&
+        (session.model.cards[static_cast<std::size_t>(chosen_index)].current || preview != nullptr);
     carousel.cards.reserve(session.model.cards.size());
-    for (const Card& card : session.model.cards) {
+    for (std::size_t at = 0; at < session.model.cards.size(); ++at) {
+        const Card& card = session.model.cards[at];
+        const bool active = chosen_speaks && static_cast<int32_t>(at) == chosen_index;
         kit::CarouselCard face;
         face.letters = badge_letters(card.tag);
         face.own_name = card.own_name;
         face.english_name = card.english_name;
         face.facts = facts_text(card, preview);
-        face.pill = pill_text(card, preview);
-        face.availability = availability_of(card);
+        face.pill = pill_text(card, active, preview);
+        face.availability = availability_of(card, active);
         face.disabled =
             busy && card.pack != PackState::downloading && card.pack != PackState::checking;
         carousel.cards.push_back(std::move(face));
@@ -1111,15 +1157,16 @@ std::string_view source_badge(SourceMark mark) noexcept {
 }
 
 /// Returns a footer button's width: button_width, or the caption with the
-/// same inset the footer's buttons keep either side of the word.
+/// same inset the footer's buttons keep either side of the word. Without
+/// the game's fonts, or with fonts that have no glyphs, the caption is
+/// estimated as the footer's own buttons estimate theirs, so the words the
+/// modern fonts draw stay inside the box.
 ///
-/// @param fonts the fonts; null uses button_width
+/// @param fonts the fonts; null estimates the caption
 /// @param caption the button's words
 /// @return the width, in points
 int32_t footer_button_width(const kit::Fonts* fonts, std::string_view caption) {
-    int32_t text = 0;
-    if (fonts != nullptr)
-        text = kit::text_width(*fonts, kit::FontRole::small, caption);
+    const int32_t text = measure_of(fonts, kit::FontRole::small)(caption);
     return std::max(
         kit::compact_metrics.button_width, text + 2 * kit::compact_metrics.choice_text_inset
     );
@@ -1173,7 +1220,7 @@ void lay_game(
         scene,
         fonts,
         band,
-        show("Where is Total Annihilation?"),
+        show("Locate Total Annihilation Game Files"),
         show("OA copies the game once. The installation is left as it is.")
     );
     row += metrics.padding;
@@ -1748,12 +1795,16 @@ Outcome activate(Session& session, const Scene& scene, kit::ControlId id) {
         outcome.ask = Ask::retry_download;
         return outcome;
     case previous_id:
-        if (step_carousel(session.carousel, false))
+        if (step_carousel(session.carousel, false)) {
+            follow_chosen(session);
             outcome.redraw = true;
+        }
         return outcome;
     case next_card_id:
-        if (step_carousel(session.carousel, true))
+        if (step_carousel(session.carousel, true)) {
+            follow_chosen(session);
             outcome.redraw = true;
+        }
         return outcome;
     default:
         break;
@@ -1775,6 +1826,7 @@ Outcome activate(Session& session, const Scene& scene, kit::ControlId id) {
             return outcome;
         if (index != session.carousel.selected) {
             kit::carousel_go(session.carousel, index);
+            follow_chosen(session);
             outcome.redraw = true;
             return outcome;
         }
@@ -1884,6 +1936,31 @@ bool copy_is_clear(const CopyView& copy) noexcept {
 
 } // namespace
 
+int32_t setup_scale_percent(
+    int32_t room_width, int32_t room_height, int32_t least_percent, bool fractional
+) noexcept {
+    constexpr int64_t kWhole = 100;
+    const int64_t across =
+        int64_t{std::max(room_width, int32_t{0})} * kWhole / int64_t{setup_room.x};
+    const int64_t down =
+        int64_t{std::max(room_height, int32_t{0})} * kWhole / int64_t{setup_room.y};
+    int64_t fitted = std::min(across, down);
+    if (!fractional)
+        fitted = fitted / kWhole * kWhole;
+    const int64_t least = std::max(int64_t{least_percent}, kWhole);
+    return static_cast<int32_t>(std::max(fitted, least));
+}
+
+kit::Frame setup_frame(
+    int32_t room_width, int32_t room_height, int32_t least_percent, bool fractional
+) noexcept {
+    kit::Viewport room;
+    room.width = std::max(room_width, int32_t{0});
+    room.height = std::max(room_height, int32_t{0});
+    room.scale_percent = setup_scale_percent(room.width, room.height, least_percent, fractional);
+    return kit::frame_of(room);
+}
+
 void tick(Session& session, uint32_t dt_ms) noexcept {
     kit::carousel_tick(session.carousel, dt_ms);
     session.pulse_ms += dt_ms;
@@ -1924,8 +2001,13 @@ void reset_copy_continue(Session& session) noexcept {
 void ensure_focus(Session& session, const kit::DisplayList& list) {
     const bool placed =
         session.focus_ready && kit::control_of(list, session.interaction.focused) != nullptr;
-    if (placed)
+    if (placed) {
+        // However the carousel moved, a focus on a card is on the chosen one.
+        const kit::ControlId was = session.interaction.focused;
+        if (follow_chosen(session) && kit::control_of(list, session.interaction.focused) == nullptr)
+            session.interaction.focused = was;
         return;
+    }
     session.focus_ready = true;
     session.interaction.focus_shown = true;
     kit::ControlId wanted = next_id;
@@ -1991,6 +2073,7 @@ Outcome pointer(
         );
         if (kind == PointerKind::up && event != kit::CarouselEvent::none) {
             std::ignore = kit::pointer_up(session.interaction, scene.list, at);
+            follow_chosen(session);
             outcome.redraw = true;
             if (event == kit::CarouselEvent::picked && !download_busy(session.model)) {
                 outcome.ask = Ask::pick;
@@ -2073,8 +2156,10 @@ Outcome key(Session& session, const Scene& scene, kit::Key pressed) {
     if (taken.result == kit::KeyResult::to_control) {
         if (pressed == kit::Key::left || pressed == kit::Key::right) {
             if (session.model.step == Step::language &&
-                step_carousel(session.carousel, pressed == kit::Key::right))
+                step_carousel(session.carousel, pressed == kit::Key::right)) {
+                follow_chosen(session);
                 outcome.redraw = true;
+            }
             return outcome;
         }
         return activate(session, scene, taken.control);
@@ -2091,8 +2176,10 @@ Outcome wheel(Session& session, const Scene& /*scene*/, float notches) {
     if (session.model.step != Step::language || session.carousel.count <= 1 || notches == 0.F)
         return outcome;
     // A turn away from the player is the previous card. One card does not move.
-    if (step_carousel(session.carousel, notches < 0.F))
+    if (step_carousel(session.carousel, notches < 0.F)) {
+        follow_chosen(session);
         outcome.redraw = true;
+    }
     return outcome;
 }
 

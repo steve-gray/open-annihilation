@@ -246,7 +246,46 @@ struct Model {
     /// Library uses: each pattern from the Library's texts, whole, then filled.
     /// Empty shows those words in English.
     library::TextHooks sample_text{};
+    /// The game runs in a window, whose own title bar names it, so the
+    /// header leaves out the mark and "Open Annihilation". Full screen
+    /// keeps them.
+    bool windowed{};
 };
+
+/// The room the setup lays out in on a large window, in points: Regular's
+/// least. A larger window draws this room larger, so the setup's words,
+/// buttons and cards grow with the window together.
+inline constexpr kit::Point setup_room = kit::regular_from;
+
+/// Returns the scale the setup is drawn at in a room of window pixels.
+///
+/// The scale is the largest at which the room still holds setup_room, so
+/// a larger window draws the same arrangement larger. It is never below
+/// `least_percent`, the display's density or the Interface size in effect,
+/// and never below 100: a room smaller than setup_room is laid out in its
+/// own points, Compact below 960 by 540. Without fractional scales the
+/// largest whole step that holds setup_room is taken.
+///
+/// @param room_width the room's width, in window pixels
+/// @param room_height the room's height, in window pixels
+/// @param least_percent the smallest scale, in percent
+/// @param fractional true when the setup can be drawn at a fraction, on the smooth form
+/// @return the scale, in percent
+[[nodiscard]] int32_t setup_scale_percent(
+    int32_t room_width, int32_t room_height, int32_t least_percent, bool fractional
+) noexcept;
+
+/// Returns the frame the setup lays out in on a room of window pixels: the
+/// room at setup_scale_percent, in whole points.
+///
+/// @param room_width the room's width, in window pixels
+/// @param room_height the room's height, in window pixels
+/// @param least_percent the smallest scale, in percent
+/// @param fractional true when the setup can be drawn at a fraction, on the smooth form
+/// @return the frame, from the room's top left
+[[nodiscard]] kit::Frame setup_frame(
+    int32_t room_width, int32_t room_height, int32_t least_percent, bool fractional
+) noexcept;
 
 /// How long a finished, matching copy shows the countdown on Continue.
 inline constexpr int32_t copy_continue_wait_ms = 3000;
@@ -383,7 +422,9 @@ bool stop_copy_continue(Session& session) noexcept;
 /// @param[in,out] session the session
 void reset_copy_continue(Session& session) noexcept;
 
-/// Places the focus on the step's first control, once per step.
+/// Places the focus on the step's first control, once per step. On the
+/// language step a focus on a card follows the card the carousel turns to,
+/// so the focus ring marks the chosen card and no other.
 ///
 /// @param[in,out] session the session
 /// @param list the scene's controls

@@ -1,0 +1,355 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// The setup's own words in Simplified Chinese, as the zh-Hans language
+// pack holds them, for the setup's size test. Keyed by the engine's English.
+
+[A random 128-bit number, made the first time you download from a registry, not when the game starts. Each registry that asks has its own. Core Prime asks for one. It is sent only when asking that registry for a download. Turning it off forgets it, and downloads from that registry stop. Built-in languages and files you open keep working.]
+	{
+	zh-Hans=一个128位的随机数，在你首次从某个内容源下载时生成，而不是在游戏启动时。每个要求它的内容源各有一个。Core Prime会要求一个。只在向该内容源请求下载时发送。关闭后即忘记它，来自该内容源的下载也会停止。内置语言和你打开的文件仍可使用。;
+	}
+
+[A random install ID, one per registry, is sent only when downloading from that registry.]
+	{
+	zh-Hans=每个内容源各有一个随机安装ID，仅在从该内容源下载时才会发送。;
+	}
+
+[Active]
+	{
+	zh-Hans=当前;
+	}
+
+[Back]
+	{
+	zh-Hans=返回;
+	}
+
+[Built in]
+	{
+	zh-Hans=内置;
+	}
+
+[Cancel download]
+	{
+	zh-Hans=取消下载;
+	}
+
+[Check for content updates is set to Never, and Core Prime's install ID is turned off.]
+	{
+	zh-Hans=检查内容更新已设为从不，并且Core Prime的安装ID已关闭。;
+	}
+
+[Check for content updates stays at Automatically, and Core Prime's install ID stays on.]
+	{
+	zh-Hans=检查内容更新保持为自动，并且Core Prime的安装ID保持打开。;
+	}
+
+[Checking…]
+	{
+	zh-Hans=正在检查……;
+	}
+
+[Choose your language.]
+	{
+	zh-Hans=选择你的语言。;
+	}
+
+[Couldn't download]
+	{
+	zh-Hans=无法下载;
+	}
+
+[Downloading]
+	{
+	zh-Hans=正在下载;
+	}
+
+[Downloads are off, so language packs stay offline.]
+	{
+	zh-Hans=下载已关闭，因此语言包保持离线。;
+	}
+
+[Downloads, updates and a number only you hold]
+	{
+	zh-Hans=下载、更新，以及一个只有你持有的数字;
+	}
+
+[Get]
+	{
+	zh-Hans=获取;
+	}
+
+[Get language packs, mods and map packs from Core Prime.]
+	{
+	zh-Hans=从Core Prime获取语言包、模组和地图包。;
+	}
+
+[Get, update and switch mods, map packs and languages. The number counts every package you have added: mods, map packs, language packs and expansions.]
+	{
+	zh-Hans=获取、更新和切换模组、地图包和语言。数字统计你添加的每个包：模组、地图包、语言包和扩展。;
+	}
+
+[Installed]
+	{
+	zh-Hans=已安装;
+	}
+
+[Library]
+	{
+	zh-Hans=资源库;
+	}
+
+[Lists of what is new are checked as the game starts and when the Library opens.]
+	{
+	zh-Hans=游戏启动时以及打开资源库时，会检查有哪些新内容。;
+	}
+
+[Next]
+	{
+	zh-Hans=下一步;
+	}
+
+[Not now]
+	{
+	zh-Hans=暂不;
+	}
+
+[ONLINE]
+	{
+	zh-Hans=在线;
+	}
+
+[ONLINE FEATURES]
+	{
+	zh-Hans=在线功能;
+	}
+
+[Offline]
+	{
+	zh-Hans=离线;
+	}
+
+[Open Annihilation]
+	{
+	zh-Hans=Open Annihilation;
+	}
+
+[Open Annihilation's own settings: controls, graphics, the interface's size, downloads and your files.]
+	{
+	zh-Hans=Open Annihilation自身的设置：操作、图形、界面尺寸、下载和你的文件。;
+	}
+
+[Other languages download from Core Prime. The first download makes a random install ID, which a later step explains.]
+	{
+	zh-Hans=其他语言从 Core Prime 下载。首次下载会生成一个随机安装 ID，后面的步骤会说明。;
+	}
+
+[Previous]
+	{
+	zh-Hans=上一个;
+	}
+
+[Retry]
+	{
+	zh-Hans=重试;
+	}
+
+[Settings]
+	{
+	zh-Hans=设置;
+	}
+
+[Skip]
+	{
+	zh-Hans=跳过;
+	}
+
+[Start playing]
+	{
+	zh-Hans=开始游戏;
+	}
+
+[THE MAIN MENU]
+	{
+	zh-Hans=主菜单;
+	}
+
+[The Library is where you get mods, map packs and languages. Settings is where you change how Open Annihilation looks and plays. Everything else on this menu is the game's own.]
+	{
+	zh-Hans=资源库用来获取模组、地图包和语言。设置用来改变Open Annihilation的外观与玩法。此菜单上的其余项都属于游戏本身。;
+	}
+
+[The catalogue could not be read, so language packs stay offline.]
+	{
+	zh-Hans=无法读取目录，因此语言包保持离线。;
+	}
+
+[Turn on online features]
+	{
+	zh-Hans=开启在线功能;
+	}
+
+[Two buttons for everything Open Annihilation adds]
+	{
+	zh-Hans=这两个按钮涵盖Open Annihilation新增的一切;
+	}
+
+[WELCOME]
+	{
+	zh-Hans=欢迎;
+	}
+
+[Welcome]
+	{
+	zh-Hans=欢迎;
+	}
+
+[A continues. B goes back.]
+	{
+	zh-Hans=A继续。B返回。;
+	}
+
+[COPYING]
+	{
+	zh-Hans=复制;
+	}
+
+[Check again]
+	{
+	zh-Hans=重新检查;
+	}
+
+[Continue]
+	{
+	zh-Hans=继续;
+	}
+
+[Copies go to Documents › Open Annihilation]
+	{
+	zh-Hans=副本放在Documents › Open Annihilation;
+	}
+
+[Copy again from…]
+	{
+	zh-Hans=从……重新复制;
+	}
+
+[Copy the game]
+	{
+	zh-Hans=复制游戏;
+	}
+
+[Copying Total Annihilation]
+	{
+	zh-Hans=正在复制Total Annihilation;
+	}
+
+[From {place}…]
+	{
+	zh-Hans=来自{place}……;
+	}
+
+[GAME CONTENT]
+	{
+	zh-Hans=游戏内容;
+	}
+
+[Game Content]
+	{
+	zh-Hans=游戏内容;
+	}
+
+[If OA stops, the copy carries on from here next time.]
+	{
+	zh-Hans=如果OA中途停止，下次会从这里继续复制。;
+	}
+
+[Locate Total Annihilation Game Files]
+	{
+	zh-Hans=定位 Total Annihilation 游戏文件;
+	}
+
+[Locate another…]
+	{
+	zh-Hans=另找一个……;
+	}
+
+[Nothing is installed and your files are not changed.]
+	{
+	zh-Hans=不会安装任何内容，你的文件也不会更改。;
+	}
+
+[OA copies the game once. The installation is left as it is.]
+	{
+	zh-Hans=OA只复制一次游戏。原有安装保持不变。;
+	}
+
+[OA plays from its own copy in Documents › Open Annihilation. The installation is not used or changed.]
+	{
+	zh-Hans=OA 从它在文稿 › Open Annihilation 中的副本运行。安装不会被使用或更改。;
+	}
+
+[Open folder]
+	{
+	zh-Hans=打开文件夹;
+	}
+
+[Pause]
+	{
+	zh-Hans=暂停;
+	}
+
+[Quit]
+	{
+	zh-Hans=退出;
+	}
+
+[Setup]
+	{
+	zh-Hans=设置;
+	}
+
+[THE GAME]
+	{
+	zh-Hans=游戏;
+	}
+
+[To Documents › Open Annihilation › Games and Expansions]
+	{
+	zh-Hans=到Documents › Open Annihilation › Games and Expansions;
+	}
+
+[Welcome to Open Annihilation]
+	{
+	zh-Hans=欢迎来到Open Annihilation;
+	}
+
+[Your install ID]
+	{
+	zh-Hans=你的安装ID;
+	}
+
+[about {seconds} seconds left]
+	{
+	zh-Hans=大约还剩{seconds}秒;
+	}
+
+[not added]
+	{
+	zh-Hans=未添加;
+	}
+
+[of]
+	{
+	zh-Hans=/;
+	}
+
+[{done} of {total} · {percent}%]
+	{
+	zh-Hans={done}/{total} · {percent}%;
+	}
+
+[{step} · {index} OF {count}]
+	{
+	zh-Hans={step} · 第{index}步，共{count}步;
+	}

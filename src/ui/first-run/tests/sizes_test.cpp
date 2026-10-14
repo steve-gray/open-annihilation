@@ -1,0 +1,753 @@
+// SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
+// SPDX-License-Identifier: GPL-3.0-only
+
+// The setup's sizes on windows of 640 by 480, 1280 by 720, 1920 by 1080 and
+// 1920 by 1117 at twice the density, laid out as the pre-game window lays it
+// out and drawn in the bundled fonts: the footer's buttons and the body text
+// at least the sizes stated below, and nothing overlapping in English,
+// German and Chinese. The header leaves out the mark and the name in a
+// window and keeps them full screen. The game step's title reads the new
+// words, and Locate another… holds its words with room on every side in
+// every language.
+//
+// Usage: oa-ui-first-run-sizes-test INTERFACE_TDF CHINESE_TDF, the engine's
+// languages/interface.tdf and this folder's zh-Hans-setup.tdf.
+
+#include "oa/ui/first_run/first_run.hpp"
+
+#include "oa/data/languages.hpp"
+#include "oa/data/languages/interface_text.hpp"
+#include "oa/platform/text_font.hpp"
+#include "oa/test/check.hpp"
+#include "oa/ui/kit/canvas.hpp"
+#include "oa/ui/kit/looks.hpp"
+#include "oa/ui/paint/painter.hpp"
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <fstream>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <variant>
+#include <vector>
+
+namespace {
+
+namespace first_run = oa::ui::first_run;
+namespace kit = oa::ui::kit;
+namespace languages = oa::data::languages;
+namespace paint = oa::ui::paint;
+namespace text_font = oa::platform::text_font;
+
+/// A window the sizes are stated for, and the least sizes there, in the
+/// window's own points. Each is the 640 by 480 floor scaled by how far the
+/// window holds the setup's 960 by 540 room: four thirds at 1280 by 720,
+/// twice at 1920 wide.
+struct Window {
+    int32_t width{};         ///< the window's width, in its points
+    int32_t height{};        ///< the window's height, in its points
+    int32_t density{};       ///< its pixels a point
+    const char* name{};      ///< for the log
+    int32_t button_width{};  ///< a footer button's least width
+    int32_t button_height{}; ///< a footer button's least height
+    int32_t text_points{};   ///< the body text's least size
+};
+
+constexpr Window kWindows[] = {
+    {640, 480, 1, "640x480", 52, 17, 10},
+    {1280, 720, 1, "1280x720", 69, 22, 13},
+    {1920, 1080, 1, "1920x1080", 104, 34, 20},
+    {1920, 1117, 2, "1920x1117 at 2x", 104, 34, 20},
+};
+
+/// The room kept clear inside a button, on its left and its right, in points.
+constexpr int32_t kButtonSidePadding = 4;
+/// The room kept clear inside a button, above and below its words, in points.
+constexpr int32_t kButtonEndPadding = 2;
+
+/// Copies a UTF-8 literal into a string.
+///
+/// @param text the literal
+/// @return its bytes
+std::string utf8(const char8_t* text) {
+    return std::string(reinterpret_cast<const char*>(text));
+}
+
+/// Reads a file whole.
+///
+/// @param path the file
+/// @return its bytes; empty when it cannot be read
+std::string read_file(const char* path) {
+    std::ifstream input(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+/// A smooth canvas of a window's pixels, drawn at the setup's scale, as the
+/// pre-game window draws: the bundled fonts and no game fonts.
+struct Drawing {
+    paint::Canvas pixels;
+    paint::Painter painter;
+    kit::Canvas canvas{};
+
+    Drawing(text_font::FontStack* fonts, const Window& window, const kit::Frame& frame)
+        : pixels(paint::make_canvas(window.width * window.density, window.height * window.density)),
+          painter(pixels) {
+        canvas.smooth.painter = &painter;
+        canvas.smooth.fonts = fonts;
+        canvas.smooth.scale_percent = frame.scale_percent;
+    }
+};
+
+/// Tells whether a character stands a whole em wide: the ideographs, kana,
+/// Hangul and the full-width forms.
+///
+/// @param code the character
+/// @return true when it is wide
+bool wide(char32_t code) noexcept {
+    return (code >= 0x1100 && code <= 0x115F) || (code >= 0x2E80 && code <= 0xA4CF) ||
+           (code >= 0xAC00 && code <= 0xD7A3) || (code >= 0xF900 && code <= 0xFAFF) ||
+           (code >= 0xFE30 && code <= 0xFE4F) || (code >= 0xFF00 && code <= 0xFF60) ||
+           (code >= 0xFFE0 && code <= 0xFFE6);
+}
+
+/// A line's width as it is drawn, in points. A wide character takes one em
+/// of the font, as the Simplified Chinese pack's face draws it; the bundled
+/// faces measure the rest.
+///
+/// @param canvas the canvas, at its scale
+/// @param role which font
+/// @param text the line, in UTF-8
+/// @return the width, in points
+int32_t drawn_width(const kit::Canvas& canvas, kit::FontRole role, std::string_view text) {
+    const std::vector<char32_t> characters =
+        text_font::decode_utf8(text).value_or(std::vector<char32_t>{});
+    int32_t width = 0;
+    std::string narrow;
+    std::size_t at = 0;
+    for (const char32_t code : characters) {
+        std::size_t bytes = 1;
+        const auto lead = static_cast<unsigned char>(text[at]);
+        if (lead >= 0xF0)
+            bytes = 4;
+        else if (lead >= 0xE0)
+            bytes = 3;
+        else if (lead >= 0xC0)
+            bytes = 2;
+        if (wide(code)) {
+            width += kit::measure_text(canvas, role, narrow);
+            narrow.clear();
+            width += kit::smooth_text_points(role);
+        } else {
+            narrow.append(text.substr(at, bytes));
+        }
+        at += bytes;
+    }
+    return width + kit::measure_text(canvas, role, narrow);
+}
+
+/// How many characters a line holds.
+///
+/// @param text the line, in UTF-8
+/// @return the characters
+int32_t characters_of(std::string_view text) {
+    int32_t count = 0;
+    for (const char byte : text)
+        if ((static_cast<unsigned char>(byte) & 0xC0U) != 0x80U)
+            ++count;
+    return count;
+}
+
+/// Tells whether two rectangles share any area.
+///
+/// @param left a rectangle
+/// @param right another
+/// @return true when they share area
+bool meets(const kit::Rect& left, const kit::Rect& right) {
+    const kit::Rect shared = kit::intersect(left, right);
+    return shared.width > 0 && shared.height > 0;
+}
+
+/// One thing on a step that must not run into another.
+struct Box {
+    kit::Rect rect{};
+    std::string what{};
+    enum class Kind : uint8_t { text, control, card, arrow, pill } kind{Kind::text};
+};
+
+/// The cards of the language step, with the language shown chosen.
+///
+/// @param tag the language shown
+/// @return the session
+first_run::Session language_session(std::string_view tag) {
+    first_run::Session session;
+    session.model.walk = first_run::Walk::setup;
+    session.model.leave = first_run::Leave::quit;
+
+    const struct {
+        const char* tag;
+        const char* own;
+        const char* english;
+    } built_in[] = {
+        {"en", "English", "English"},
+        {"de", "Deutsch", "German"},
+        {"es", "Espa\xc3\xb1ol", "Spanish"},
+        {"fr",
+         "Fran\xc3\xa7"
+         "ais",
+         "French"},
+        {"it", "Italiano", "Italian"},
+    };
+
+    for (const auto& entry : built_in) {
+        first_run::Card card;
+        card.tag = entry.tag;
+        card.own_name = entry.own;
+        card.english_name = entry.english;
+        card.current = tag == entry.tag;
+        session.model.cards.push_back(std::move(card));
+    }
+    first_run::Card chinese;
+    chinese.tag = "zh-Hans";
+    chinese.own_name = utf8(u8"\u7b80\u4f53\u4e2d\u6587");
+    chinese.english_name = "Chinese (Simplified)";
+    chinese.kind = tag == "zh-Hans" ? first_run::CardKind::installed : first_run::CardKind::pack;
+    chinese.current = tag == "zh-Hans";
+    chinese.size_text = "3.4 MB";
+    session.model.cards.push_back(std::move(chinese));
+    session.carousel.selected = 0;
+    for (std::size_t at = 0; at < session.model.cards.size(); ++at)
+        if (session.model.cards[at].current)
+            session.carousel.selected = static_cast<int32_t>(at);
+    first_run::bind(session);
+    kit::carousel_settle(session.carousel);
+    return session;
+}
+
+/// The game step, two installers, the fuller chosen.
+///
+/// @return the session
+first_run::Session game_session() {
+    first_run::Session session = language_session("en");
+    session.model.step = first_run::Step::game;
+    first_run::GameSource fuller;
+    fuller.title = "setup_total_annihilation.exe";
+    fuller.detail = "~/Downloads";
+    fuller.mark = first_run::SourceMark::gog;
+    fuller.footnote = "1.0 GB";
+    fuller.chips = {
+        {"Total Annihilation 3.1c", true},
+        {"Campaign", true},
+        {"Core Contingency", true},
+        {"Battle Tactics", true},
+        {"Music", true},
+    };
+    first_run::GameSource thinner = fuller;
+    thinner.title = "setup_total_annihilation_2.exe";
+    thinner.chips = {{"Total Annihilation 3.1c", true}, {"Music", true}};
+    session.model.sources = {fuller, thinner};
+    session.model.source = 0;
+    return session;
+}
+
+/// The copying step, part way through.
+///
+/// @return the session
+first_run::Session copying_session() {
+    first_run::Session session = game_session();
+    session.model.step = first_run::Step::copying;
+    first_run::CopyView& copy = session.model.copy;
+    copy.from = "setup_total_annihilation.exe";
+    copy.overall = "12 of 38 · 31%";
+    copy.remaining = "about 40 seconds left";
+    copy.done = 310;
+    copy.whole = 1000;
+    copy.running = true;
+    first_run::CopyBundle bundle;
+    bundle.name = "Total Annihilation";
+    bundle.file = "totala1.hpi";
+    bundle.amount = "31%";
+    bundle.done = 310;
+    bundle.whole = 1000;
+    bundle.phase = first_run::CopyPhase::copying;
+    first_run::CopyBundle music;
+    music.name = "Music";
+    music.amount = "17 of 18 tracks";
+    music.done = 1000;
+    music.whole = 1000;
+    music.phase = first_run::CopyPhase::done;
+    music.note = true;
+    copy.bundles = {bundle, music};
+    return session;
+}
+
+/// Checks a button holds its words with room on every side.
+///
+/// @param canvas the canvas the words are measured on
+/// @param rect the button, in points
+/// @param caption its words
+/// @param where what is being checked, for the log
+void expect_words_inside(
+    const kit::Canvas& canvas, const kit::Rect& rect, std::string_view caption, const char* where
+) {
+    const int32_t words = drawn_width(canvas, kit::FontRole::small, caption);
+    const bool across = words + 2 * kButtonSidePadding <= rect.width;
+    const bool down = kit::compact_metrics.small_line + 2 * kButtonEndPadding <= rect.height;
+    if (!across || !down)
+        std::fprintf(
+            stderr,
+            "%s: \"%.*s\" is %d points in a button %d by %d\n",
+            where,
+            static_cast<int>(caption.size()),
+            caption.data(),
+            words,
+            rect.width,
+            rect.height
+        );
+    OA_CHECK(across);
+    OA_CHECK(down);
+}
+
+/// The width the header's left words take, from the window's left, in points.
+///
+/// @param canvas the canvas the words are measured on
+/// @param look the header's look
+/// @return where the left words end
+int32_t header_left_end(const kit::Canvas& canvas, const kit::SetupChromeLook& look) {
+    const auto tracked = [&](std::string_view words) {
+        return drawn_width(canvas, kit::FontRole::regular, words) +
+               kit::compact_metrics.heading_tracking * std::max(characters_of(words) - 1, 0);
+    };
+    int32_t right = kit::compact_metrics.padding;
+    if (look.brand)
+        right += kit::compact_metrics.mark_side + kit::compact_metrics.header_gap +
+                 tracked("Open Annihilation") + kit::compact_metrics.header_gap;
+    return right + tracked(look.page);
+}
+
+/// Where the step indicator starts, from the window's left, in points.
+///
+/// @param canvas the canvas the words are measured on
+/// @param look the header's look
+/// @return its left edge
+int32_t step_left(const kit::Canvas& canvas, const kit::SetupChromeLook& look) {
+    kit::StepLook step;
+    step.name = look.step_name;
+    step.pattern = look.step_pattern;
+    step.index = look.step_index;
+    step.count = look.step_count;
+    const std::string line = kit::step_line(step);
+    const int32_t words =
+        drawn_width(canvas, kit::FontRole::small, line) +
+        kit::compact_metrics.heading_tracking * std::max(characters_of(line) - 1, 0);
+    const int32_t segments = look.step_count * 14 + (look.step_count - 1) * 3;
+    return look.width - kit::compact_metrics.edge - kit::compact_metrics.padding -
+           std::max(words, segments);
+}
+
+/// Lays a step out on a window, draws it, and checks its sizes and that
+/// nothing on it runs into anything else.
+///
+/// @param fonts the bundled fonts
+/// @param window the window
+/// @param session the step
+/// @param language the language, for the log
+void check_step(
+    text_font::FontStack* fonts,
+    const Window& window,
+    const first_run::Session& session,
+    const char* language
+) {
+    const kit::Frame frame = first_run::setup_frame(
+        window.width * window.density, window.height * window.density, window.density * 100, true
+    );
+    const first_run::Scene scene = first_run::lay_out(session, frame, nullptr);
+    Drawing drawing(fonts, window, frame);
+    first_run::draw(drawing.canvas, scene, session);
+    const std::string where = std::string(window.name) + " " + language + " " +
+                              std::string(first_run::step_token(session.model.step)) +
+                              (session.model.windowed ? " window" : " full screen");
+    // A point of the frame in the window's own points, in hundredths.
+    const int32_t window_percent = frame.scale_percent / window.density;
+
+    // The footer's buttons at least the stated size, and their words inside them.
+    const kit::SetupChromeLook* chrome = nullptr;
+    for (const kit::Item& item : scene.list.items)
+        if (const auto* look = std::get_if<kit::SetupChromeLook>(&item.look))
+            chrome = look;
+    OA_CHECK(chrome != nullptr);
+    if (chrome == nullptr)
+        return;
+
+    const struct {
+        kit::ControlId id;
+        const std::string* caption;
+    } footer[] = {
+        {first_run::skip_id, &chrome->skip},
+        {first_run::back_id, &chrome->back},
+        {first_run::next_id, &chrome->next},
+    };
+
+    for (const auto& button : footer) {
+        const kit::Control* control = kit::control_of(scene.list, button.id);
+        OA_CHECK(control != nullptr);
+        if (control == nullptr)
+            continue;
+        const int32_t wide_points = control->rect.width * window_percent / 100;
+        const int32_t tall_points = control->rect.height * window_percent / 100;
+        if (wide_points < window.button_width || tall_points < window.button_height)
+            std::fprintf(
+                stderr,
+                "%s: %s is %d by %d points\n",
+                where.c_str(),
+                control->name.c_str(),
+                wide_points,
+                tall_points
+            );
+        OA_CHECK(wide_points >= window.button_width);
+        OA_CHECK(tall_points >= window.button_height);
+        expect_words_inside(drawing.canvas, control->rect, *button.caption, where.c_str());
+    }
+    // The body text's size, in the window's points.
+    const int32_t text_points =
+        kit::smooth_text_points(kit::FontRole::small) * window_percent / 100;
+    if (text_points < window.text_points)
+        std::fprintf(stderr, "%s: body text is %d points\n", where.c_str(), text_points);
+    OA_CHECK(text_points >= window.text_points);
+
+    // The header's words do not reach the step indicator.
+    const int32_t left_end = header_left_end(drawing.canvas, *chrome);
+    const int32_t indicator = step_left(drawing.canvas, *chrome);
+    if (left_end + kit::compact_metrics.header_gap > indicator)
+        std::fprintf(
+            stderr,
+            "%s: the header's words reach %d, the step %d\n",
+            where.c_str(),
+            left_end,
+            indicator
+        );
+    OA_CHECK(left_end + kit::compact_metrics.header_gap <= indicator);
+
+    // What is on the step, and where each thing's words are drawn.
+    std::vector<Box> boxes;
+    const kit::Rect room{0, 0, frame.area.width, frame.area.height};
+    const kit::Rect body{
+        0,
+        kit::compact_metrics.edge + kit::compact_metrics.header_height + 1,
+        frame.area.width,
+        frame.area.height - 2 * kit::compact_metrics.edge - kit::compact_metrics.header_height -
+            kit::compact_metrics.footer_height - 2
+    };
+    for (const kit::Item& item : scene.list.items) {
+        if (item.role == kit::Role::text && !item.text.empty()) {
+            const int32_t words = drawn_width(drawing.canvas, item.font, item.text);
+            if (words > item.rect.width + 1)
+                std::fprintf(
+                    stderr,
+                    "%s: \"%s\" is %d points on a line of %d\n",
+                    where.c_str(),
+                    item.text.c_str(),
+                    words,
+                    item.rect.width
+                );
+            OA_CHECK(words <= item.rect.width + 1);
+            int32_t left = item.rect.x;
+            if (item.align == kit::Align::centre)
+                left = item.rect.x + (item.rect.width - words) / 2;
+            else if (item.align == kit::Align::right)
+                left = item.rect.x + item.rect.width - words;
+            boxes.push_back(
+                {{left, item.rect.y, words, item.rect.height}, item.text, Box::Kind::text}
+            );
+        } else if (item.role == kit::Role::pill) {
+            boxes.push_back({item.rect, item.text, Box::Kind::pill});
+        }
+    }
+    if (!scene.title_text.empty())
+        boxes.push_back({scene.title, scene.title_text, Box::Kind::text});
+    for (const kit::Control& control : scene.list.controls) {
+        Box::Kind kind = Box::Kind::control;
+        if (control.name.find(".card.") != std::string::npos)
+            kind = Box::Kind::card;
+        else if (
+            control.name.find(".previous") != std::string::npos ||
+            control.name.find(".next-card") != std::string::npos
+        )
+            kind = Box::Kind::arrow;
+        boxes.push_back({control.rect, control.name, kind});
+    }
+    for (const Box& box : boxes) {
+        const bool inside = kit::wholly_in(box.rect, room);
+        if (!inside)
+            std::fprintf(stderr, "%s: %s leaves the window\n", where.c_str(), box.what.c_str());
+        OA_CHECK(inside);
+        // Only the footer's buttons sit in the footer, and nothing in the header.
+        const bool footer_button = box.what.find(".skip") != std::string::npos ||
+                                   box.what.find(".back") != std::string::npos ||
+                                   box.what.find(".next") != std::string::npos;
+        if (!footer_button || box.what.find("next-card") != std::string::npos) {
+            const bool in_body = kit::wholly_in(box.rect, body);
+            if (!in_body)
+                std::fprintf(
+                    stderr, "%s: %s leaves the page's body\n", where.c_str(), box.what.c_str()
+                );
+            OA_CHECK(in_body);
+        }
+    }
+    for (std::size_t one = 0; one < boxes.size(); ++one) {
+        for (std::size_t other = one + 1; other < boxes.size(); ++other) {
+            const Box& a = boxes[one];
+            const Box& b = boxes[other];
+            if (!meets(a.rect, b.rect))
+                continue;
+            // The cards of the carousel stand behind one another and behind
+            // its arrows; a card's words are its own.
+            const bool carousel = (a.kind == Box::Kind::card || a.kind == Box::Kind::arrow) &&
+                                  (b.kind == Box::Kind::card || b.kind == Box::Kind::arrow);
+            if (carousel)
+                continue;
+            const bool both_text = a.kind == Box::Kind::text && b.kind == Box::Kind::text;
+            // A row's words and pills sit inside its card; text never meets text.
+            const bool held =
+                !both_text && (kit::wholly_in(a.rect, b.rect) || kit::wholly_in(b.rect, a.rect));
+            if (held)
+                continue;
+            std::fprintf(
+                stderr,
+                "%s: \"%s\" runs into \"%s\"\n",
+                where.c_str(),
+                a.what.c_str(),
+                b.what.c_str()
+            );
+            OA_CHECK(false);
+        }
+    }
+}
+
+/// Counts the pixels of a colour family in a part of the header.
+///
+/// @param drawing the drawn step
+/// @param frame its frame
+/// @param points the part, in points
+/// @param test which pixels count
+/// @return how many do
+template <typename Test>
+int32_t
+count_pixels(const Drawing& drawing, const kit::Frame& frame, const kit::Rect& points, Test test) {
+    const kit::Rect pixels = kit::to_canvas(points, frame.scale_percent);
+    int32_t count = 0;
+    for (int32_t y = pixels.y; y < pixels.y + pixels.height; ++y)
+        for (int32_t x = pixels.x; x < pixels.x + pixels.width; ++x)
+            if (test(paint::pixel_at(drawing.pixels, x, y)))
+                ++count;
+    return count;
+}
+
+/// The header full screen draws the mark and "Open Annihilation"; in a
+/// window it draws neither, and the page word and the step indicator stay.
+///
+/// @param fonts the bundled fonts
+void check_header(text_font::FontStack* fonts) {
+    for (const Window& window : kWindows) {
+        const kit::Frame frame = first_run::setup_frame(
+            window.width * window.density,
+            window.height * window.density,
+            window.density * 100,
+            true
+        );
+        int32_t accent[2]{};
+        int32_t bright[2]{};
+        int32_t ink[2]{};
+        for (const bool windowed : {false, true}) {
+            first_run::Session session = language_session("en");
+            session.model.windowed = windowed;
+            const first_run::Scene scene = first_run::lay_out(session, frame, nullptr);
+            Drawing drawing(fonts, window, frame);
+            first_run::draw(drawing.canvas, scene, session);
+            const kit::Rect left_half{
+                0,
+                kit::compact_metrics.edge,
+                frame.area.width / 2,
+                kit::compact_metrics.header_height
+            };
+            const kit::Rect right_part{
+                frame.area.width * 3 / 4,
+                kit::compact_metrics.edge,
+                frame.area.width / 4 - kit::compact_metrics.edge,
+                kit::compact_metrics.header_height
+            };
+            const auto is_accent = [](paint::Rgba pixel) {
+                return pixel.g >= 0xa8 && pixel.r >= 0x70 && pixel.r <= 0xc0 && pixel.b <= 0x70;
+            };
+            const auto is_bright = [](paint::Rgba pixel) {
+                return pixel.r >= 0xc8 && pixel.g >= 0xc8 && pixel.b >= 0xc0;
+            };
+            const auto is_ink = [](paint::Rgba pixel) {
+                return pixel.r >= 0x48 || pixel.g >= 0x48 || pixel.b >= 0x48;
+            };
+            const std::size_t at = windowed ? 1U : 0U;
+            accent[at] = count_pixels(drawing, frame, left_half, is_accent);
+            bright[at] = count_pixels(drawing, frame, left_half, is_bright);
+            ink[at] = count_pixels(drawing, frame, right_part, is_ink);
+            // The page word is drawn, at the left in a window.
+            const int32_t page_ink = count_pixels(
+                drawing,
+                frame,
+                {kit::compact_metrics.padding,
+                 kit::compact_metrics.edge,
+                 kit::compact_metrics.mark_side,
+                 kit::compact_metrics.header_height},
+                is_ink
+            );
+            OA_CHECK(page_ink > 0);
+        }
+        if (accent[0] == 0 || bright[0] == 0 || accent[1] != 0 || bright[1] != 0)
+            std::fprintf(
+                stderr,
+                "%s header: full screen %d mark and %d name pixels, window %d and %d\n",
+                window.name,
+                accent[0],
+                bright[0],
+                accent[1],
+                bright[1]
+            );
+        OA_CHECK(accent[0] > 0);
+        OA_CHECK(bright[0] > 0);
+        OA_CHECK(accent[1] == 0);
+        OA_CHECK(bright[1] == 0);
+        // The step indicator stays, the same in both.
+        OA_CHECK(ink[0] > 0);
+        OA_CHECK(ink[0] == ink[1]);
+    }
+}
+
+/// The game step's title, and Locate another… with its words inside it, in
+/// every language, on every window.
+///
+/// @param fonts the bundled fonts
+/// @param catalogue the built-in languages' words
+/// @param chinese the Simplified Chinese words
+void check_locate(
+    text_font::FontStack* fonts,
+    const languages::InterfaceText& catalogue,
+    const languages::InterfaceText& chinese
+) {
+    const std::string chinese_title =
+        utf8(u8"\u5b9a\u4f4d Total Annihilation \u6e38\u620f\u6587\u4ef6");
+
+    const struct {
+        const char* tag;
+        const char* title;
+        const languages::InterfaceText* words;
+    } spoken[] = {
+        {"en", "Locate Total Annihilation Game Files", nullptr},
+        {"de", "Spieldateien von Total Annihilation suchen", &catalogue},
+        {"fr", nullptr, &catalogue},
+        {"es", nullptr, &catalogue},
+        {"it", nullptr, &catalogue},
+        {"zh-Hans", chinese_title.c_str(), &chinese},
+    };
+
+    for (const auto& language : spoken) {
+        const languages::Language* found = languages::find_by_tag(language.tag);
+        OA_CHECK(found != nullptr);
+        if (found == nullptr)
+            continue;
+        languages::set_interface_language(language.words, *found);
+        for (const Window& window : kWindows) {
+            const kit::Frame frame = first_run::setup_frame(
+                window.width * window.density,
+                window.height * window.density,
+                window.density * 100,
+                true
+            );
+            const first_run::Session session = game_session();
+            const first_run::Scene scene = first_run::lay_out(session, frame, nullptr);
+            if (language.title != nullptr) {
+                if (scene.title_text != language.title)
+                    std::fprintf(
+                        stderr, "%s: the title is \"%s\"\n", language.tag, scene.title_text.c_str()
+                    );
+                OA_CHECK(scene.title_text == language.title);
+            } else {
+                OA_CHECK(!scene.title_text.empty());
+                OA_CHECK(scene.title_text != "Locate Total Annihilation Game Files");
+            }
+            const kit::Control* locate = kit::control_of(scene.list, first_run::locate_id);
+            const kit::Control* back = kit::control_of(scene.list, first_run::back_id);
+            OA_CHECK(locate != nullptr && back != nullptr);
+            if (locate == nullptr || back == nullptr)
+                continue;
+            // Sized like the footer's buttons, and its words inside it.
+            OA_CHECK(locate->rect.height == back->rect.height);
+            Drawing drawing(fonts, window, frame);
+            const std::string where = std::string(language.tag) + " " + window.name + " Locate";
+            expect_words_inside(drawing.canvas, locate->rect, locate->text, where.c_str());
+            OA_CHECK(locate->text != "Locate another\xe2\x80\xa6" || language.words == nullptr);
+        }
+    }
+    languages::set_interface_language(nullptr, languages::english());
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    if (argc < 3) {
+        std::fprintf(stderr, "usage: oa-ui-first-run-sizes-test INTERFACE_TDF CHINESE_TDF\n");
+        return 2;
+    }
+    languages::InterfaceText catalogue;
+    std::string error;
+    const bool read = catalogue.add(read_file(argv[1]), &error);
+    if (!read)
+        std::fprintf(stderr, "%s: %s\n", argv[1], error.c_str());
+    OA_CHECK(read);
+    languages::InterfaceText chinese;
+    const bool read_chinese = chinese.add(read_file(argv[2]), &error);
+    if (!read_chinese)
+        std::fprintf(stderr, "%s: %s\n", argv[2], error.c_str());
+    OA_CHECK(read_chinese);
+    auto fonts = text_font::FontStack::open(text_font::bundled_font_directory());
+    OA_CHECK(fonts != nullptr);
+    if (fonts == nullptr)
+        return oa::test::check_exit_status();
+
+    const struct {
+        const char* tag;
+        const languages::InterfaceText* words;
+    } spoken[] = {
+        {"en", nullptr},
+        {"de", &catalogue},
+        {"zh-Hans", &chinese},
+    };
+
+    for (const auto& language : spoken) {
+        const languages::Language* found = languages::find_by_tag(language.tag);
+        OA_CHECK(found != nullptr);
+        if (found == nullptr)
+            continue;
+        languages::set_interface_language(language.words, *found);
+        for (const Window& window : kWindows) {
+            for (const bool windowed : {true, false}) {
+                first_run::Session steps[] = {
+                    language_session(language.tag),
+                    game_session(),
+                    copying_session(),
+                    language_session(language.tag),
+                };
+                steps[3].model.step = first_run::Step::online;
+                for (first_run::Session& session : steps) {
+                    session.model.windowed = windowed;
+                    check_step(fonts.get(), window, session, language.tag);
+                }
+            }
+        }
+    }
+    languages::set_interface_language(nullptr, languages::english());
+    check_header(fonts.get());
+    check_locate(fonts.get(), catalogue, chinese);
+    return oa::test::check_exit_status();
+}

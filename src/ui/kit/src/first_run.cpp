@@ -1226,10 +1226,11 @@ void draw_carousel(const Canvas& canvas, const Rect& rect, const CarouselLook& l
         perspective_blit(canvas, drawn, slot.face, how, [&](const Canvas& offscreen) {
             draw_language_card(offscreen, drawn, card);
         });
-        // The centre card's accent border and the one-point ring outside it.
-        // A side card keeps the border it was drawn with; its turn and its
-        // opacity come from the slot.
-        if (slot.centre && slot.degrees == 0 && !source.disabled) {
+        // The chosen card's accent border and the one-point ring outside it,
+        // once it faces the player. A side card keeps the border it was drawn
+        // with; its turn and its opacity come from the slot.
+        const bool marked = look.chosen >= 0 ? slot.index == look.chosen : slot.centre;
+        if (marked && slot.degrees == 0 && !source.disabled) {
             outline_rect(canvas, slot.face, colour::accent);
             outline_rect(canvas, grown(slot.face, 1), colour::accent);
         }
@@ -1376,7 +1377,9 @@ void draw_setup_chrome(const Canvas& canvas, const SetupChromeLook& look) {
         );
     HeaderLook header;
     header.width = look.width;
-    header.title = "Open Annihilation";
+    header.mark = look.brand;
+    if (look.brand)
+        header.title = "Open Annihilation";
     header.tracking = compact_metrics.heading_tracking;
     header.second = look.page;
     header.right_inset = step_w + compact_metrics.padding;

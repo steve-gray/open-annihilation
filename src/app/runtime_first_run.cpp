@@ -550,8 +550,13 @@ class FirstRunScreen final : public LayerScreen {
         const kit::Frame given = frame_for(seen);
         if (given.area.width <= 0 || given.area.height <= 0)
             return {};
-        if (!seen.match)
-            return centred_placement(seen, given.area.width, given.area.height);
+        if (!seen.match) {
+            // At the setup's own scale, which the layer draws it at and maps
+            // input back by.
+            LayerView scaled = seen;
+            scaled.scale_percent = given.scale_percent;
+            return centred_placement(scaled, given.area.width, given.area.height);
+        }
         const layout::Rect safe = OaLayer::match_safe_area(*seen.match_layout);
         const kit::Rect drawn = kit::to_canvas(given.area, given.scale_percent);
         return {
@@ -835,11 +840,37 @@ class FirstRunScreen final : public LayerScreen {
                 return given;
             given = OaLayer::match_gallery(*seen.match_layout, seen.interface_percent);
         } else {
-            given = seen.frame;
-            given.scale_percent = seen.scale_percent;
+            given = front_frame(seen);
         }
         given.area.x = 0;
         given.area.y = 0;
+        return given;
+    }
+
+    /// The frame the setup lays out in over the front end: the layer's room,
+    /// at the setup's own scale.
+    ///
+    /// With the Interface size at Auto that scale is first_run::setup_frame's:
+    /// the room holding first_run::setup_room, never below the layer's scale,
+    /// with fractions while the layer offers them (the modern fonts are on
+    /// and open). A size the player chose is kept as it is.
+    ///
+    /// @param seen what the screen is placed on
+    /// @return the frame
+    [[nodiscard]] static kit::Frame front_frame(const LayerView& seen) noexcept {
+        const int32_t layer = std::max(seen.scale_percent, int32_t{100});
+        kit::Frame given{};
+        if (seen.interface_percent > 0) {
+            kit::Viewport room;
+            room.width = std::max(seen.room.width, int32_t{0});
+            room.height = std::max(seen.room.height, int32_t{0});
+            room.scale_percent = layer;
+            given = kit::frame_of(room);
+        } else {
+            const bool fractional = seen.interface_percent == kit::auto_with_fraction_percent;
+            given = first_run::setup_frame(seen.room.width, seen.room.height, layer, fractional);
+        }
+        given.reduced_motion = seen.frame.reduced_motion;
         return given;
     }
 
@@ -955,7 +986,11 @@ class FirstRunScreen final : public LayerScreen {
 
         const std::string sample_own(shown.endonym);
         const std::string sample_english(shown.english_name);
-        bool changed = note != session_.model.catalogue ||
+        // The window's own title bar names the game; full screen has none.
+        const bool windowed =
+            runtime_.sdl_.window != nullptr &&
+            (SDL_GetWindowFlags(runtime_.sdl_.window) & SDL_WINDOW_FULLSCREEN) == 0;
+        bool changed = windowed != session_.model.windowed || note != session_.model.catalogue ||
                        library_count != session_.model.library_count ||
                        sample_own != session_.model.sample_own ||
                        sample_english != session_.model.sample_english ||
@@ -966,6 +1001,7 @@ class FirstRunScreen final : public LayerScreen {
             changed = !same_card(cards[at], session_.model.cards[at]);
 
         session_.model.cards = std::move(cards);
+        session_.model.windowed = windowed;
         session_.model.catalogue = note;
         session_.model.library_button = library_button;
         session_.model.settings_button = settings_button;

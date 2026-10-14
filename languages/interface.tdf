@@ -12618,12 +12618,12 @@
 	it=Cerca altrove…;
 	}
 
-[Where is Total Annihilation?]
+[Locate Total Annihilation Game Files]
 	{
-	de=Wo ist Total Annihilation?;
-	fr=Où est Total Annihilation ?;
-	es=¿Dónde está Total Annihilation?;
-	it=Dov'è Total Annihilation?;
+	de=Spieldateien von Total Annihilation suchen;
+	fr=Localiser les fichiers du jeu Total Annihilation;
+	es=Localizar los archivos del juego Total Annihilation;
+	it=Individua i file di gioco di Total Annihilation;
 	}
 
 [OA copies the game once. The installation is left as it is.]
