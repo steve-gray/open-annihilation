@@ -64,7 +64,12 @@ see [Playing the demo](../../README.md#playing-the-demo).
 
 On a Retina display the setup, Settings and the menus are laid out from
 the window's size in points and drawn at the display's pixel density. The
-same window is the same arrangement, with sharper edges.
+same window is the same arrangement, with sharper edges. The setup also
+grows with the window: past 960 by 540 points it draws the same
+arrangement larger, so a 1920 point wide window shows its words and
+buttons twice their size. In a window, the setup's top bar leaves out the
+Open Annihilation icon and name, which the window's title bar already
+shows. Full screen keeps them.
 
 The next time you open it, it comes back as you left it: full screen, or
 the window at the same size and place, on the same display when that

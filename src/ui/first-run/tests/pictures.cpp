@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Writes the manual's pictures of the first-run setup. Not a test.
+// Writes the manual's pictures of the first-run setup. Not a test. Each is
+// a window of a size, laid out as the setup lays itself out there
+// (first_run::setup_frame) and drawn at that scale.
 // Usage: oa-ui-first-run-pictures DIRECTORY
 
 #include "oa/ui/first_run/first_run.hpp"
@@ -56,6 +58,29 @@ struct Picture {
         canvas.smooth.fonts = modern;
         canvas.smooth.scale_percent = std::max(scale, int32_t{100});
         canvas.fonts = &fonts;
+    }
+
+    /// A window's whole canvas, with the setup's frame drawn from its top left.
+    ///
+    /// @param modern the bundled fonts
+    /// @param frame the setup's frame on the window
+    /// @param pixel_width the window's width, in pixels
+    /// @param pixel_height the window's height, in pixels
+    Picture(
+        text_font::FontStack* modern,
+        const oa::ui::kit::Frame& frame,
+        int32_t pixel_width,
+        int32_t pixel_height
+    )
+        : width(std::max(pixel_width, int32_t{1})), height(std::max(pixel_height, int32_t{1})),
+          points_width(frame.area.width), points_height(frame.area.height),
+          pixels(paint::make_canvas(width, height)), painter(pixels) {
+        canvas.smooth.painter = &painter;
+        canvas.smooth.fonts = modern;
+        canvas.smooth.scale_percent = std::max(frame.scale_percent, int32_t{100});
+        canvas.fonts = &fonts;
+        // The pixels the frame leaves at the right and bottom are the window's face.
+        painter.fill_rect({0, 0, width, height}, paint::Rgba{0x1b, 0x1e, 0x19, 255});
     }
 };
 
@@ -376,12 +401,30 @@ MenuButtons menu_buttons_for(int32_t width, int32_t height) {
     return buttons;
 }
 
-oa::ui::kit::Frame large_frame() {
-    oa::ui::kit::Frame frame;
-    frame.area = {0, 0, kWidth, kHeight};
-    frame.size_class = oa::ui::kit::SizeClass::large;
-    frame.scale_percent = 100;
-    return frame;
+/// The frame the setup lays out in on a window, as the pre-game window lays
+/// it out: on the smooth form, never below the density.
+///
+/// @param width the window's width, in its points
+/// @param height the window's height, in its points
+/// @param density the window's pixels a point
+/// @return the frame
+oa::ui::kit::Frame window_frame(int32_t width, int32_t height, int32_t density) {
+    return oa::ui::first_run::setup_frame(width * density, height * density, density * 100, true);
+}
+
+/// A rectangle of window pixels in a frame's points.
+///
+/// @param pixels the rectangle, in window pixels
+/// @param frame the frame
+/// @return the rectangle, in the frame's points
+oa::ui::kit::Rect in_points(const oa::ui::kit::Rect& pixels, const oa::ui::kit::Frame& frame) {
+    const int32_t percent = std::max(frame.scale_percent, int32_t{1});
+    return {
+        pixels.x * 100 / percent,
+        pixels.y * 100 / percent,
+        pixels.width * 100 / percent,
+        pixels.height * 100 / percent,
+    };
 }
 
 oa::ui::first_run::Card
@@ -495,6 +538,7 @@ void draw_step(
     const renderer::RgbaPicture& icon
 ) {
     picture.canvas.icon = icon;
+    picture.canvas.smooth.scale_percent = std::max(frame.scale_percent, int32_t{100});
     const auto scene = oa::ui::first_run::lay_out(session, frame, &picture.fonts);
     oa::ui::first_run::draw(picture.canvas, scene, session);
 }
@@ -571,66 +615,80 @@ int main(int argc, char** argv) {
     Icon app_icon = have_icon ? visible_icon(loaded_icon) : Icon{};
     app_icon.picture.pixels = app_icon.pixels;
     const renderer::RgbaPicture icon = app_icon.picture;
-    const oa::ui::kit::Frame manual = large_frame();
+    // The manual's pictures are a 1280 by 720 window, whose title bar names
+    // the game, so the header has no mark and no name.
+    const oa::ui::kit::Frame manual = window_frame(kWidth, kHeight, 1);
+    const auto in_window = [](oa::ui::first_run::Session session) {
+        session.model.windowed = true;
+        return session;
+    };
 
     {
         // The pre-game window has no game fonts yet. These three are that
-        // window's language step, with a fixture pack on the carousel.
+        // window's language step, with a fixture pack on the carousel: two
+        // windows, and full screen at 1920 by 1080, with the mark and the name.
         const struct Size {
             const char* name;
             int32_t width;
             int32_t height;
+            bool windowed;
         } sizes[] = {
-            {"language-compact.png", 640, 480},
-            {"language-regular.png", 960, 540},
-            {"language-large.png", 1280, 720},
+            {"language-640x480.png", 640, 480, true},
+            {"language-1280x720.png", 1280, 720, true},
+            {"language-1920x1080.png", 1920, 1080, false},
         };
 
         for (const Size& size : sizes) {
-            Picture picture(fonts.get(), size.width, size.height, 100);
+            const oa::ui::kit::Frame frame = window_frame(size.width, size.height, 1);
+            Picture picture(fonts.get(), frame, size.width, size.height);
             picture.canvas.fonts = nullptr;
             oa::ui::first_run::Session session = language_session(false);
             session.model.walk = oa::ui::first_run::Walk::setup;
             session.model.leave = oa::ui::first_run::Leave::quit;
-            oa::ui::kit::Frame frame;
-            frame.area = {0, 0, size.width, size.height};
-            frame.size_class = oa::ui::kit::size_class_of(size.width, size.height);
-            frame.scale_percent = 100;
+            session.model.windowed = size.windowed;
             draw_step(picture, session, frame, icon);
             if (!write_png(picture, directory / size.name))
                 return 1;
         }
     }
+    const auto manual_picture = [&] { return Picture(fonts.get(), manual, kWidth, kHeight); };
     {
-        Picture picture(fonts.get(), kWidth, kHeight, 100);
-        draw_step(picture, language_session(false), manual, icon);
+        Picture picture = manual_picture();
+        draw_step(picture, in_window(language_session(false)), manual, icon);
         if (!write_png(picture, directory / "welcome.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get(), kWidth, kHeight, 100);
-        draw_step(picture, language_session(true), manual, icon);
+        Picture picture = manual_picture();
+        draw_step(picture, in_window(language_session(true)), manual, icon);
         if (!write_png(picture, directory / "welcome-offline.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get(), kWidth, kHeight, 100);
-        auto session = language_session(false);
+        Picture picture = manual_picture();
+        auto session = in_window(language_session(false));
         session.model.step = oa::ui::first_run::Step::online;
         draw_step(picture, session, manual, icon);
         if (!write_png(picture, directory / "online.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get(), kWidth, kHeight, 100);
+        Picture picture = manual_picture();
         // Letterbox bars are black. A captured menu smaller than the window
         // is centred on them; without one, the fallback covers this fill.
-        oa::ui::kit::fill_rect(picture.canvas, {0, 0, kWidth, kHeight}, {0, 0, 0});
+        oa::ui::kit::fill_rect(
+            picture.canvas, {0, 0, manual.area.width, manual.area.height}, {0, 0, 0}
+        );
         const bool backing = paint_backing(picture, directory / "menu-backing.png");
+        // The buttons in the window's pixels, and in the setup's points.
         const MenuButtons buttons = menu_buttons();
+        const oa::ui::kit::Rect library = in_points(buttons.library, manual);
+        const oa::ui::kit::Rect settings = in_points(buttons.settings, manual);
         if (!backing) {
             oa::ui::kit::fill_rect(
-                picture.canvas, {0, 0, kWidth, kHeight}, oa::ui::kit::colour::panel
+                picture.canvas,
+                {0, 0, manual.area.width, manual.area.height},
+                oa::ui::kit::colour::panel
             );
             Icon library_icon;
             Icon settings_icon;
@@ -646,8 +704,8 @@ int main(int argc, char** argv) {
             library_mark.corner = oa::ui::kit::OaButtonCorner::count;
             library_mark.count = 2;
             oa::ui::kit::draw_menu_icon_button(
-                oa::ui::kit::placed_at(picture.canvas, {buttons.library.x, buttons.library.y}),
-                buttons.library.width,
+                oa::ui::kit::placed_at(picture.canvas, {library.x, library.y}),
+                library.width,
                 oa::ui::kit::OaButtonState::idle,
                 false,
                 library_mark
@@ -656,8 +714,8 @@ int main(int argc, char** argv) {
             if (have_settings)
                 picture.canvas.icon = settings_icon.picture;
             oa::ui::kit::draw_menu_icon_button(
-                oa::ui::kit::placed_at(picture.canvas, {buttons.settings.x, buttons.settings.y}),
-                buttons.settings.width,
+                oa::ui::kit::placed_at(picture.canvas, {settings.x, settings.y}),
+                settings.width,
                 oa::ui::kit::OaButtonState::idle,
                 false,
                 {}
@@ -666,8 +724,8 @@ int main(int argc, char** argv) {
         }
         oa::ui::first_run::Session session;
         session.model.step = oa::ui::first_run::Step::buttons;
-        session.model.library_button = buttons.library;
-        session.model.settings_button = buttons.settings;
+        session.model.library_button = library;
+        session.model.settings_button = settings;
         session.model.library_count = 2;
         session.pulse_ms = 400;
         draw_step(picture, session, manual, icon);
@@ -675,38 +733,39 @@ int main(int argc, char** argv) {
             return 1;
     }
     {
-        Picture picture(fonts.get(), kWidth, kHeight, 100);
-        draw_step(picture, game_session(), manual, icon);
+        Picture picture = manual_picture();
+        draw_step(picture, in_window(game_session()), manual, icon);
         if (!write_png(picture, directory / "game.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get(), kWidth, kHeight, 100);
-        draw_step(picture, copying_session(false), manual, icon);
+        Picture picture = manual_picture();
+        draw_step(picture, in_window(copying_session(false)), manual, icon);
         if (!write_png(picture, directory / "copying.png"))
             return 1;
     }
     {
-        Picture picture(fonts.get(), kWidth, kHeight, 100);
-        draw_step(picture, copying_session(true), manual, icon);
+        Picture picture = manual_picture();
+        draw_step(picture, in_window(copying_session(true)), manual, icon);
         if (!write_png(picture, directory / "check.png"))
             return 1;
     }
 
-    // Every step at the sizes a window is checked at, and at twice the density.
-    // Quit is a first start. Skip is a re-run.
+    // Every step in windows of the sizes a window is checked at, and at twice
+    // the density. Quit is a first start. Skip is a re-run.
     const struct Size {
         int32_t width;
         int32_t height;
-        int32_t scale;
+        int32_t density;
         const char* folder;
     } sizes[] = {
-        {640, 480, 100, "640x480"},
-        {1280, 720, 100, "1280x720"},
-        {1344, 838, 100, "1344x838"},
-        {640, 480, 200, "640x480-2x"},
-        {1280, 720, 200, "1280x720-2x"},
-        {1344, 838, 200, "1344x838-2x"},
+        {640, 480, 1, "640x480"},
+        {1280, 720, 1, "1280x720"},
+        {1344, 838, 1, "1344x838"},
+        {1920, 1080, 1, "1920x1080"},
+        {640, 480, 2, "640x480-2x"},
+        {1280, 720, 2, "1280x720-2x"},
+        {1344, 838, 2, "1344x838-2x"},
     };
 
     for (const Size& size : sizes) {
@@ -714,12 +773,12 @@ int main(int argc, char** argv) {
         std::filesystem::create_directories(folder, error);
         if (error)
             return 1;
-        oa::ui::kit::Frame frame;
-        frame.area = {0, 0, size.width, size.height};
-        frame.size_class = oa::ui::kit::size_class_of(size.width, size.height);
-        frame.scale_percent = size.scale;
-        const auto save = [&](const oa::ui::first_run::Session& session, const char* name) {
-            Picture picture(fonts.get(), size.width, size.height, size.scale);
+        const oa::ui::kit::Frame frame = window_frame(size.width, size.height, size.density);
+        const auto save = [&](oa::ui::first_run::Session session, const char* name) {
+            session.model.windowed = true;
+            Picture picture(
+                fonts.get(), frame, size.width * size.density, size.height * size.density
+            );
             draw_step(picture, session, frame, icon);
             return write_png(picture, folder / name);
         };
@@ -741,7 +800,7 @@ int main(int argc, char** argv) {
         oa::ui::first_run::Session quit_online = skip_online;
         quit_online.model.walk = oa::ui::first_run::Walk::setup;
         quit_online.model.leave = oa::ui::first_run::Leave::quit;
-        const MenuButtons placed = menu_buttons_for(size.width, size.height);
+        const MenuButtons placed = menu_buttons_for(frame.area.width, frame.area.height);
         oa::ui::first_run::Session buttons;
         buttons.model.step = oa::ui::first_run::Step::buttons;
         buttons.model.library_button = placed.library;
