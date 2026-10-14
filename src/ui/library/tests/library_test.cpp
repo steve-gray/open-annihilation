@@ -3575,6 +3575,374 @@ void test_base_game_after_required_off() {
     OA_CHECK(library.content.unload_mod);
 }
 
+/// What closing the Library stores, read from the draft as the host's close
+/// reads it. An edited draft that is not yet applied stores its base game and
+/// expansions, and clears the mod while it unloads one, unless the command
+/// line chose the mod. Any other draft stores nothing, so the stored choice
+/// and the mod played stay.
+struct Closing {
+    bool stores{};
+    std::string base_game{};
+    std::vector<std::string> expansions{};
+    bool clears_mod{};
+};
+
+/// Returns what closing the Library stores.
+///
+/// @param library the Library
+/// @return what the close stores
+Closing closing(const lib::Library& library) {
+    const lib::ContentDraft& draft = library.content;
+    Closing stored_on_close;
+    stored_on_close.stores = draft.edited && !draft.applied;
+    if (!stored_on_close.stores)
+        return stored_on_close;
+    stored_on_close.base_game = draft.base_game.empty() ? draft.seed_base : draft.base_game;
+    stored_on_close.expansions = draft.expansions;
+    stored_on_close.clears_mod =
+        draft.clear_reason != lib::PendingClear::none && !library.inputs.mod_from_command_line;
+    return stored_on_close;
+}
+
+/// Writes a base game's version, its expansions that are on and the mod line
+/// as one text, for a message.
+///
+/// @param version the version line
+/// @param on the expansions that are on
+/// @param mod the mod line
+/// @return the text, such as "3.1c with campaign music, Ridge"
+std::string
+described(std::string_view version, const std::vector<std::string>& on, std::string_view mod) {
+    std::string text{version};
+    for (std::size_t place = 0; place < on.size(); ++place)
+        text += (place == 0 ? " with " : " ") + on[place];
+    text += ", ";
+    text += mod;
+    return text;
+}
+
+/// Compares the Active tab with what the game plays once the Library closes:
+/// the base game, every expansion pill and the mod.
+///
+/// @param library the Library
+/// @param mod the mod line while the mod played stays
+/// @return empty when the tile agrees; otherwise what each says
+std::string tile_difference(const lib::Library& library, std::string_view mod) {
+    const Closing stored_on_close = closing(library);
+    const lib::ContentSnapshot& stored = library.inputs.content;
+    std::string base = stored_on_close.stores ? stored_on_close.base_game : stored.base_id;
+    if (base.empty())
+        base = "totala";
+    const std::vector<std::string>& on =
+        stored_on_close.stores ? stored_on_close.expansions : stored.enabled;
+    const std::string_view mod_after =
+        stored_on_close.clears_mod ? std::string_view{"No Mod"} : mod;
+
+    const lib::ActiveContent face = lib::active_content(library);
+    const std::string_view version = base == "totala-demo" ? "Demo" : "3.1c";
+    bool agrees = face.version_line == version;
+    std::vector<std::string> shown_on;
+    for (const lib::ExpansionPill& pill : face.pills) {
+        const bool pill_on = pill.face == lib::ExpansionFace::on;
+        if (pill_on)
+            shown_on.push_back(pill.id);
+        if (pill_on != holds_id(on, pill.id))
+            agrees = false;
+    }
+    if (shown_on.size() != on.size())
+        agrees = false;
+    const std::string mod_line = lib::active_setup(library).mod_line;
+    if (mod_line != mod_after)
+        agrees = false;
+    if (agrees)
+        return {};
+    return "the Active tab shows \"" + described(face.version_line, shown_on, mod_line) +
+           "\", closing the Library leaves \"" + described(version, on, mod_after) + "\"";
+}
+
+/// Checks that the Active tab shows what the game plays once the Library
+/// closes, printing the difference when it does not.
+///
+/// @param library the Library
+/// @param mod the mod line while the mod played stays
+/// @param steps what the player did, for the message
+/// @return true when the tile agrees
+bool tile_applies(const lib::Library& library, std::string_view mod, std::string_view steps) {
+    const std::string difference = tile_difference(library, mod);
+    if (difference.empty())
+        return true;
+    std::fprintf(
+        stderr, "after %.*s: %s\n", static_cast<int>(steps.size()), steps.data(), difference.c_str()
+    );
+    return false;
+}
+
+/// Opens the base game chooser, marks a game and presses USE THIS GAME.
+///
+/// @param[in,out] library the Library
+/// @param id the base game
+/// @return what USE THIS GAME did; none when the chooser did not open
+lib::BaseUseKind use_base_game(lib::Library& library, std::string_view id) {
+    if (!lib::open_base_chooser(library).opened)
+        return lib::BaseUseKind::none;
+    lib::mark_base_game(library, id);
+    const lib::BaseUse used = lib::use_marked_base_game(library);
+    lib::close_base_chooser(library);
+    return used.kind;
+}
+
+/// The inputs of a Library playing Ridge on 3.1c with the demo copied.
+///
+/// @param enabled the expansions stored as on
+/// @param required the expansions Ridge needs
+/// @return the inputs
+lib::Inputs ridge_on_retail(std::vector<std::string> enabled, std::vector<std::string> required) {
+    lib::Inputs inputs;
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"totala", "totala-demo", "campaign", "core-contingency", "music"};
+    inputs.content.enabled = std::move(enabled);
+    inputs.content.mod_required = std::move(required);
+    lib::Installed ridge;
+    ridge.kind = Kind::mod;
+    ridge.key = "ridge";
+    ridge.folder = "ridge";
+    ridge.name = "Ridge";
+    ridge.playing = true;
+    inputs.installed.push_back(ridge);
+    return inputs;
+}
+
+/// The same inputs once the catalogue and the base game's picture arrive.
+///
+/// @param inputs the inputs
+/// @return them, with a listing and a picture
+lib::Inputs arrived_over(const lib::Inputs& inputs) {
+    lib::Inputs arrived = inputs;
+    arrived.registries = fixture_registries();
+    arrived.listings.push_back(listing(core, Kind::mod, "basalt", "Basalt"));
+    arrived.base_game_badge = lib::Badge{std::vector<uint8_t>(1 * 1 * 4, 9), 1, 1};
+    return arrived;
+}
+
+/// Choosing another base game and then the stored one again leaves the
+/// Active tab on what closing the Library applies. Back on the stored base
+/// game the mod plays again, and a refresh leaves the tile as it is.
+void test_base_game_round_trip() {
+    // Every copied expansion is on, so the round trip ends on the stored
+    // choice: closing stores nothing, and Ridge stays.
+    {
+        const lib::Inputs inputs =
+            ridge_on_retail({"campaign", "core-contingency", "music"}, {"campaign"});
+        lib::Library library;
+        lib::refresh(library, inputs);
+        const std::string opened_hint = lib::active_content(library).hint;
+        OA_CHECK(use_base_game(library, "totala-demo") == lib::BaseUseKind::applied);
+        OA_CHECK(library.content.unload_mod && library.content.edited);
+        OA_CHECK_TEXT(lib::active_setup(library).mod_line, "No Mod");
+        OA_CHECK(tile_applies(library, "Ridge", "the demo"));
+
+        OA_CHECK(use_base_game(library, "totala") == lib::BaseUseKind::applied);
+        OA_CHECK(!library.content.pending_base);
+        OA_CHECK(!library.content.unload_mod);
+        OA_CHECK(!library.content.edited);
+        OA_CHECK(library.content.clear_reason == lib::PendingClear::none);
+        OA_CHECK_TEXT(lib::active_setup(library).mod_line, "Ridge");
+        OA_CHECK_TEXT(lib::active_content(library).hint, opened_hint);
+        OA_CHECK(tile_applies(library, "Ridge", "the demo, then 3.1c"));
+
+        lib::refresh(library, arrived_over(inputs));
+        OA_CHECK_TEXT(lib::active_setup(library).mod_line, "Ridge");
+        OA_CHECK(tile_applies(library, "Ridge", "the demo, 3.1c and a refresh"));
+    }
+
+    // Core Contingency is stored off. 3.1c again turns on all of its
+    // expansions, and Ridge stays.
+    {
+        const lib::Inputs inputs = ridge_on_retail({"campaign"}, {"campaign"});
+        lib::Library library;
+        lib::refresh(library, inputs);
+        OA_CHECK(use_base_game(library, "totala-demo") == lib::BaseUseKind::applied);
+        OA_CHECK(use_base_game(library, "totala") == lib::BaseUseKind::applied);
+        OA_CHECK(library.content.edited);
+        OA_CHECK(!library.content.unload_mod);
+        OA_CHECK(holds_id(library.content.expansions, "core-contingency"));
+        OA_CHECK_TEXT(lib::active_setup(library).mod_line, "Ridge");
+        OA_CHECK(!closing(library).clears_mod);
+        OA_CHECK(tile_applies(library, "Ridge", "the demo, then 3.1c"));
+        lib::refresh(library, arrived_over(inputs));
+        OA_CHECK(tile_applies(library, "Ridge", "the demo, 3.1c and a refresh"));
+    }
+
+    // TURN OFF unloads Ridge for Campaign. The demo keeps it unloaded, and
+    // 3.1c again turns Campaign back on, so Ridge plays again.
+    {
+        const lib::Inputs inputs =
+            ridge_on_retail({"campaign", "core-contingency", "music"}, {"campaign"});
+        lib::Library library;
+        lib::refresh(library, inputs);
+        OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::ask);
+        lib::accept_expansion_off(library);
+        OA_CHECK(tile_applies(library, "Ridge", "TURN OFF"));
+        OA_CHECK(use_base_game(library, "totala-demo") == lib::BaseUseKind::applied);
+        OA_CHECK_TEXT(lib::active_setup(library).mod_line, "No Mod");
+        OA_CHECK(tile_applies(library, "Ridge", "TURN OFF, then the demo"));
+        OA_CHECK(use_base_game(library, "totala") == lib::BaseUseKind::applied);
+        OA_CHECK(holds_id(library.content.expansions, "campaign"));
+        OA_CHECK(!library.content.unload_mod && !library.content.edited);
+        OA_CHECK_TEXT(lib::active_setup(library).mod_line, "Ridge");
+        OA_CHECK(tile_applies(library, "Ridge", "TURN OFF, the demo, then 3.1c"));
+        lib::refresh(library, arrived_over(inputs));
+        OA_CHECK(tile_applies(library, "Ridge", "TURN OFF, the demo, 3.1c and a refresh"));
+    }
+
+    // Ridge needs Campaign, which is stored off. Turning Campaign on and then
+    // off again with TURN OFF ends on the stored expansions, but Ridge is
+    // unloaded, so closing still has that to apply, through a refresh too.
+    {
+        const lib::Inputs inputs = ridge_on_retail({"music"}, {"campaign"});
+        lib::Library library;
+        lib::refresh(library, inputs);
+        OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::redraw);
+        OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::ask);
+        lib::accept_expansion_off(library);
+        OA_CHECK(library.content.unload_mod);
+        OA_CHECK(library.content.edited);
+        OA_CHECK(closing(library).clears_mod);
+        OA_CHECK_TEXT(lib::active_setup(library).mod_line, "No Mod");
+        OA_CHECK(tile_applies(library, "Ridge", "Campaign on, then TURN OFF"));
+        lib::refresh(library, arrived_over(inputs));
+        OA_CHECK_TEXT(lib::active_setup(library).mod_line, "No Mod");
+        OA_CHECK(tile_applies(library, "Ridge", "Campaign on, TURN OFF and a refresh"));
+    }
+}
+
+/// One thing the player does on the Active tab, for the walk below.
+enum class ActiveStep : uint8_t {
+    campaign,         ///< presses the Campaign pill
+    core_contingency, ///< presses the Core Contingency pill
+    turn_off,         ///< TURN OFF on the expansion-off question
+    cancel,           ///< CANCEL on that question
+    demo,             ///< uses the demo in the base game chooser
+    retail,           ///< uses 3.1c in the base game chooser
+    refresh,          ///< the catalogue and a picture arrive
+};
+
+/// How many kinds of step the walk takes.
+constexpr std::size_t active_step_count = 7;
+
+/// Takes one step on the Active tab.
+///
+/// @param[in,out] library the Library
+/// @param step the step
+/// @param arrived the inputs a refresh brings
+/// @return the step's words, for a message
+std::string_view take_step(lib::Library& library, ActiveStep step, const lib::Inputs& arrived) {
+    switch (step) {
+    case ActiveStep::campaign:
+        static_cast<void>(lib::press_expansion(library, "campaign"));
+        return "Campaign";
+    case ActiveStep::core_contingency:
+        static_cast<void>(lib::press_expansion(library, "core-contingency"));
+        return "Core Contingency";
+    case ActiveStep::turn_off:
+        lib::accept_expansion_off(library);
+        return "TURN OFF";
+    case ActiveStep::cancel:
+        lib::cancel_expansion_off(library);
+        return "CANCEL";
+    case ActiveStep::demo:
+        static_cast<void>(use_base_game(library, "totala-demo"));
+        return "the demo";
+    case ActiveStep::retail:
+        static_cast<void>(use_base_game(library, "totala"));
+        return "3.1c";
+    case ActiveStep::refresh:
+        lib::refresh(library, arrived);
+        return "a refresh";
+    }
+    return {};
+}
+
+/// Every sequence of five steps over pills, the expansion-off question, the
+/// base game chooser and refreshes leaves the Active tab on what closing the
+/// Library applies, after each step. Ridge is played over stored choices
+/// that do and do not hold what it needs, and once as the command line's
+/// mod, and one Library plays no mod.
+void test_tile_applies_after_any_choices() {
+    struct Start {
+        lib::Inputs inputs{};
+        std::string mod{};
+    };
+
+    std::vector<Start> starts;
+    starts.push_back(
+        {ridge_on_retail({"campaign", "core-contingency", "music"}, {"campaign"}), "Ridge"}
+    );
+    starts.push_back({ridge_on_retail({"campaign"}, {"campaign"}), "Ridge"});
+    starts.push_back({ridge_on_retail({"campaign", "core-contingency"}, {}), "Ridge"});
+    starts.push_back({ridge_on_retail({}, {"campaign"}), "Ridge"});
+    lib::Inputs no_mod = ridge_on_retail({"campaign"}, {});
+    no_mod.installed.clear();
+    starts.push_back({std::move(no_mod), "No Mod"});
+    lib::Inputs named = ridge_on_retail({"campaign", "core-contingency"}, {"campaign"});
+    named.mod_from_command_line = true;
+    starts.push_back({named, "Ridge"});
+
+    // Closing the Library keeps the mod the command line chose, so Campaign,
+    // which Ridge needs, stays on without asking. Other pills still turn.
+    {
+        lib::Library library;
+        lib::refresh(library, named);
+        OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::none);
+        OA_CHECK(!library.content.asking && !library.content.edited);
+        const lib::ActiveContent face = lib::active_content(library);
+        const lib::ExpansionPill* campaign = pill_of(face, "campaign");
+        OA_CHECK(campaign != nullptr && campaign->face == lib::ExpansionFace::on);
+        OA_CHECK(
+            lib::press_expansion(library, "core-contingency").kind == lib::ContentPressKind::redraw
+        );
+        OA_CHECK(tile_applies(library, "Ridge", "Campaign, then Core Contingency"));
+    }
+
+    constexpr std::size_t depth = 5;
+    std::size_t sequences = 1;
+    for (std::size_t place = 0; place < depth; ++place)
+        sequences *= active_step_count;
+    int32_t disagreements = 0;
+    std::vector<std::string> printed;
+    constexpr std::size_t most_printed = 5;
+    for (const Start& start : starts) {
+        const lib::Inputs arrived = arrived_over(start.inputs);
+        for (std::size_t sequence = 0; sequence < sequences; ++sequence) {
+            lib::Library library;
+            lib::refresh(library, start.inputs);
+            std::string steps;
+            std::size_t rest = sequence;
+            for (std::size_t place = 0; place < depth; ++place) {
+                const auto step = static_cast<ActiveStep>(rest % active_step_count);
+                rest /= active_step_count;
+                if (!steps.empty())
+                    steps += ", ";
+                steps += take_step(library, step, arrived);
+                const std::string difference = tile_difference(library, start.mod);
+                if (difference.empty())
+                    continue;
+                // Sequences that share a first part fail on it alike, so
+                // each part is printed once.
+                if (printed.size() < most_printed && !holds_id(printed, steps)) {
+                    std::fprintf(stderr, "after %s: %s\n", steps.c_str(), difference.c_str());
+                    printed.push_back(steps);
+                }
+                ++disagreements;
+                break;
+            }
+        }
+    }
+    if (disagreements > 0)
+        std::fprintf(stderr, "%d sequences disagree\n", static_cast<int>(disagreements));
+    OA_CHECK(disagreements == 0);
+}
+
 void test_lookup() {
     lib::TextHooks hooks;
     hooks.shown = reversed_words;
@@ -3616,6 +3984,8 @@ int main() {
     test_base_chooser_through_refresh();
     test_expansion_off_question_through_refresh();
     test_base_game_after_required_off();
+    test_base_game_round_trip();
+    test_tile_applies_after_any_choices();
     test_check_now();
     test_built_in_languages();
     test_tab_counts();

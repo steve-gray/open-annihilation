@@ -2132,9 +2132,10 @@ struct Runtime::LibraryScreen final : LayerScreen {
     [[nodiscard]] uint64_t revision() const override { return revision_; }
 
     /// Forgets the pictures the Library waits for and any drag or open menu.
-    /// A pending base game or expansion choice is stored now, and the files
-    /// are mounted again on the next start. A match, and a choice the command
-    /// line named, leave the draft where it is.
+    /// A pending base game or expansion choice, and a mod the Active tab
+    /// unloads, are stored now, and the files are mounted again on the next
+    /// start. A match, and a choice the command line named, leave the draft
+    /// where it is.
     void close(bool /*by_key*/) override {
         apply_pending_content();
         if (!runtime_.library_)
@@ -2148,8 +2149,11 @@ struct Runtime::LibraryScreen final : LayerScreen {
 
   private:
 
-    /// Stores a pending base game or expansion choice and asks for one soft
-    /// restart. A second close finds the draft already applied. A match, and
+    /// Stores a pending base game or expansion choice, clears the mod the
+    /// Active tab unloads, and asks for one soft restart. The draft is edited
+    /// whenever the tile shows anything other than the stored choice and the
+    /// mod played, an unload alone included, so this applies what the tile
+    /// shows. A second close finds the draft already applied. A match, and
     /// `--content`, leave the draft edited and mount nothing.
     void apply_pending_content() {
         if (runtime_.library_ == nullptr)

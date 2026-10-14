@@ -180,6 +180,41 @@ std::vector<std::string> dependents_off(
     return gone;
 }
 
+/// Drops an unload whose reason no longer holds.
+///
+/// While another base game is pending, the unload stays. Otherwise a
+/// required-expansion unload clears only when that expansion is on again, and
+/// any other unload clears: back on the stored base game, the mod played with
+/// it plays again.
+///
+/// @param[in,out] draft the draft
+void settle_unload(ContentDraft& draft) {
+    if (draft.pending_base)
+        return;
+    const bool required_back = draft.clear_reason == PendingClear::required_expansion_off &&
+                               !draft.unloaded_for.empty() &&
+                               holds(draft.expansions, draft.unloaded_for);
+    const bool other = draft.clear_reason != PendingClear::required_expansion_off;
+    if (required_back || other) {
+        draft.unload_mod = false;
+        draft.clear_reason = PendingClear::none;
+        draft.unloaded_mod.clear();
+        draft.unloaded_for.clear();
+    }
+}
+
+/// Marks the draft edited when closing the Library has something to apply:
+/// another base game, other expansions, or a mod to unload.
+///
+/// The host stores only an edited draft, and a draft that is not edited shows
+/// the stored choice and the mod played, so an unload alone edits it too.
+///
+/// @param[in,out] draft the draft
+void mark_edited(ContentDraft& draft) {
+    draft.edited = draft.unload_mod || draft.base_game != draft.seed_base ||
+                   !same_ids(draft.expansions, draft.seed_enabled);
+}
+
 /// Writes a choice onto the draft and records the pill that made it.
 ///
 /// A note that a mod was unloaded is dropped once that expansion is on again.
@@ -194,29 +229,15 @@ void keep_choice(
     ContentDraft& draft = library.content;
     draft.base_game = choice.base_game;
     draft.expansions = choice.expansions;
-    draft.edited =
-        !same_ids(draft.expansions, draft.seed_enabled) || draft.base_game != draft.seed_base;
     draft.last_id = std::string(id);
     draft.last_on = on;
     draft.asking = false;
     draft.ask_id.clear();
     draft.proposed.clear();
     draft.turned_off.clear();
-    // A pill does not choose a base game. While another base game is pending,
-    // the unload stays. Otherwise a required-expansion unload clears only
-    // when that expansion is on again, and any other unload clears.
-    if (!draft.pending_base) {
-        const bool required_back = draft.clear_reason == PendingClear::required_expansion_off &&
-                                   !draft.unloaded_for.empty() &&
-                                   holds(draft.expansions, draft.unloaded_for);
-        const bool other = draft.clear_reason != PendingClear::required_expansion_off;
-        if (required_back || other) {
-            draft.unload_mod = false;
-            draft.clear_reason = PendingClear::none;
-            draft.unloaded_mod.clear();
-            draft.unloaded_for.clear();
-        }
-    }
+    // A pill leaves the base game as it is, so a pending one keeps its unload.
+    settle_unload(draft);
+    mark_edited(draft);
 }
 
 /// Returns the name a base game or an expansion shows.
@@ -832,6 +853,10 @@ ContentPress press_expansion(Library& library, std::string_view id) {
         return result;
 
     if (turned.mod_cleared == bundles::ModClearReason::required_expansion_off) {
+        // Closing the Library does not unload the mod the command line chose,
+        // so an expansion it needs stays on, as CHANGE… stays off.
+        if (library.inputs.mod_from_command_line)
+            return result;
         ContentDraft& draft = library.content;
         draft.asking = true;
         draft.ask_id = std::string(id);
@@ -887,8 +912,6 @@ void accept_expansion_off(Library& library) {
     draft.expansions = draft.proposed;
     draft.last_id = draft.ask_id;
     draft.last_on = false;
-    draft.edited =
-        !same_ids(draft.expansions, draft.seed_enabled) || draft.base_game != draft.seed_base;
     draft.asking = false;
     draft.ask_id.clear();
     draft.proposed.clear();
@@ -900,6 +923,9 @@ void accept_expansion_off(Library& library) {
         draft.unloaded_mod = unloaded;
         draft.unloaded_for = because;
     }
+    // The expansions can end where they were stored, when the one turned off
+    // was turned on first. The unload still edits the draft.
+    mark_edited(draft);
 }
 
 void cancel_expansion_off(Library& library) {
@@ -1114,8 +1140,6 @@ BaseUse use_marked_base_game(Library& library) {
     const PendingClear owed = draft.clear_reason;
     draft.base_game = turned.choice.base_game;
     draft.expansions = turned.choice.expansions;
-    draft.edited =
-        !same_ids(draft.expansions, draft.seed_enabled) || draft.base_game != draft.seed_base;
     draft.last_id.clear();
     draft.last_on = false;
     draft.asking = false;
@@ -1134,6 +1158,11 @@ BaseUse use_marked_base_game(Library& library) {
             draft.unloaded_for.clear();
         }
     }
+    // Back on the stored base game, the mod unloaded for another game plays
+    // again, and so does one unloaded for an expansion this choice turns back
+    // on. Closing then stores no unload, so the tile shows the mod.
+    settle_unload(draft);
+    mark_edited(draft);
     close_base_chooser(library);
     used.kind = BaseUseKind::applied;
     return used;

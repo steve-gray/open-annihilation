@@ -568,6 +568,13 @@ stay valid until the model's next refresh.
 - The layout decides no rule of the model: which entries show, in which
   order, their states, what blocks them, their actions, the filters'
   counts and what the Active tab says are the model's.
+- The Active tab shows what closing the Library applies: the pending base
+  game, its expansions, and No Mod only while closing unloads the mod. A
+  draft is edited exactly when closing has something to store, an unload
+  alone included, and the host stores only an edited draft. Choosing the
+  stored base game again, after another, plays the mod again, and an
+  expansion the command line's mod needs stays on, since closing never
+  unloads that mod.
 - On the Active tab UNLOAD MOD takes a press, a key or Tab only while a
   mod is played and SWITCH OFF would act, and each map's link to its pack
   does while its line shows. The labels do not.
@@ -613,7 +620,12 @@ the order with
 no search; the update count; the selection across refreshes and browsing;
 the base game chooser, the expansion-off question and its answer, and TURN
 ON kept through a refresh that brings the same stored choice, and the
-chooser and the question dropped by another; the buttons of every state,
+chooser and the question dropped by another; another base game and then
+the stored one again, the mod played again after it; every sequence of
+five pill presses, answers to the expansion-off question, base game
+choices and refreshes, each leaving the Active tab on what closing the
+Library applies, with the mod needing what is stored and not, chosen by
+the command line, and no mod; the buttons of every state,
 SWITCH OFF on the mod played and PLAY NOW and
 SWITCH OFF off while the command line chose the mod, its note, and when
 the refresh icon can be pressed; the summary, the manifest's description standing
