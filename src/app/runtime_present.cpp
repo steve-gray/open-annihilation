@@ -5,6 +5,7 @@
 #include "mod_install_watch.hpp"
 #include "window_live_size.hpp"
 #include "oa/app/frame_coordinates.hpp"
+#include "oa/app/window_surface.hpp"
 #include "oa/app/runtime.hpp"
 #include "oa/app/game_directory.hpp"
 #include "graphics_report.hpp"
@@ -377,6 +378,8 @@ void Runtime::initialize_sdl() {
         sdl_.renderer = SDL_CreateRenderer(sdl_.window, nullptr);
         if (sdl_.renderer == nullptr)
             throw std::runtime_error(std::string("SDL_CreateRenderer: ") + SDL_GetError());
+        // A window this runtime made itself still takes a check's pixel density.
+        apply_asked_pixel_density(sdl_.window);
         const auto facts = report_game_renderer(sdl_.renderer);
         take_renderer_names(facts.renderer, stats_adapter_name(facts));
         oa::base::float_precision::restore_program_float_control();
@@ -1258,9 +1261,45 @@ void Runtime::present_front_end() {
     } else {
         upload_rgb24_tiles(frontend_texture_, surface_, gamma ? &gamma_table_ : nullptr);
     }
+    // Place the picture from the drawing surface this frame, before the scale
+    // mode is read from that place. A drawable that grew after the window
+    // opened, as a 2× display whose first size was in points, would otherwise
+    // keep the picture in the corner.
+    const int frame_w = output_texture_w_ > 0 ? output_texture_w_ : kCanvasWidth;
+    const int frame_h = output_texture_h_ > 0 ? output_texture_h_ : kCanvasHeight;
+    if (!set_frame_presentation(sdl_.renderer, menu_scaling(), frame_w, frame_h))
+        throw_present_error("SDL logical presentation");
+    int output_w = 0;
+    int output_h = 0;
+    SDL_RendererLogicalPresentation presented_mode = SDL_LOGICAL_PRESENTATION_DISABLED;
+    const bool have_output = SDL_GetRenderOutputSize(sdl_.renderer, &output_w, &output_h) &&
+                             output_w > 0 && output_h > 0;
+    std::ignore =
+        SDL_GetRenderLogicalPresentation(sdl_.renderer, nullptr, nullptr, &presented_mode);
+    const bool whole_steps = presented_mode == SDL_LOGICAL_PRESENTATION_INTEGER_SCALE;
+    const SDL_FRect wanted =
+        have_output ? frame_letterbox(output_w, output_h, frame_w, frame_h, whole_steps)
+                    : SDL_FRect{};
+    SDL_FRect reckoned{};
+    const bool have_rect = SDL_GetRenderLogicalPresentationRect(sdl_.renderer, &reckoned);
+    const bool sdl_places =
+        !have_output ||
+        (have_rect && std::fabs(reckoned.x - wanted.x) <= 0.05F &&
+         std::fabs(reckoned.y - wanted.y) <= 0.05F && std::fabs(reckoned.w - wanted.w) <= 0.05F &&
+         std::fabs(reckoned.h - wanted.h) <= 0.05F);
     // The standard tier's scale mode is found before the frame begins: the
     // first look at the pixel-art mode draws into a target of its own.
     const SDL_ScaleMode standard_mode = standard_frame_scale_mode(output_texture_w_);
+    // The logical presentation does not match the drawing surface. Draw the
+    // frame into the letterbox ourselves, in the window's own pixels.
+    if (!sdl_places) {
+        std::ignore = SDL_SetRenderLogicalPresentation(
+            sdl_.renderer, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED
+        );
+        std::ignore = SDL_SetRenderScale(sdl_.renderer, 1.0F, 1.0F);
+        std::ignore = SDL_SetRenderViewport(sdl_.renderer, nullptr);
+        std::ignore = SDL_SetRenderClipRect(sdl_.renderer, nullptr);
+    }
     // The bars beside the picture are black, whatever colour the renderer
     // last drew with (the launch's quiet frame leaves its backdrop colour).
     if (!SDL_SetRenderDrawColor(sdl_.renderer, 0, 0, 0, 255) || !SDL_RenderClear(sdl_.renderer))
@@ -1268,7 +1307,10 @@ void Runtime::present_front_end() {
     // The front end's picture goes through the card's filter where it is one
     // texture; tiles beyond the renderer's limit are drawn as before.
     bool drawn = false;
-    if (accelerated_presentation() && frontend_texture_.single() != nullptr) {
+    if (!sdl_places) {
+        draw_frame(sdl_.renderer, frontend_texture_, standard_mode, &wanted);
+        drawn = true;
+    } else if (accelerated_presentation() && frontend_texture_.single() != nullptr) {
         try {
             draw_accelerated_screen(
                 frontend_texture_.single(),
@@ -1295,9 +1337,15 @@ void Runtime::present_front_end() {
     // pixels, and the software cursor over them (tick_and_draw_cursor left it
     // out of the frame).
     if (oa_layer().shows(false)) {
-        SDL_FRect picture_area{};
-        if (SDL_GetRenderLogicalPresentationRect(sdl_.renderer, &picture_area))
-            oa_layer().present(&picture_area);
+        // The picture's place. When the logical presentation was set aside,
+        // SDL's rectangle is the whole output; the frame was drawn at wanted.
+        if (!sdl_places) {
+            oa_layer().present(&wanted);
+        } else {
+            SDL_FRect picture_area{};
+            if (SDL_GetRenderLogicalPresentationRect(sdl_.renderer, &picture_area))
+                oa_layer().present(&picture_area);
+        }
         present_software_cursor(false);
     }
     capture_render_target();

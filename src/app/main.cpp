@@ -40,6 +40,7 @@
 #include "oa/app/user_folder.hpp"
 #include "oa/app/video_capture.hpp"
 #include "oa/app/window_icon.hpp"
+#include "oa/app/window_surface.hpp"
 #include "oa/base/float_precision.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/data/defs/layout.hpp"
@@ -404,6 +405,10 @@ struct HostDisplay {
         report_window_size(window, desktop, steam_game_mode);
         set_window_icon(window);
         renderer_host.create(window, start_faults(options));
+        // A check's OA_PIXEL_DENSITY grows the drawing surface now, after the
+        // size is chosen and before the first frame, so the setup and the
+        // menu lay out from the points the window opened at.
+        apply_asked_pixel_density(window);
         TierRequest request;
         request.flag = options.hardware_acceleration;
         request.force_capable = options.force_capable;

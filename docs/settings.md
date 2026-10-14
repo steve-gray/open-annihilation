@@ -403,7 +403,10 @@ the game draws its text and how the modern fonts draw it.
   use every pixel of a high-density display. It needs at least 2 GB of
   memory, and a run started with `--no-hardware-acceleration` keeps it off.
   Turn it on for a sharper picture on such a display, if the frame rate
-  holds. It is always on on an iPhone and an iPad.
+  holds. It is always on on an iPhone and an iPad. The setup, this dialog
+  and the menus around the game's picture already lay out in points and
+  draw at the display's density, whether or not this switch is on. The
+  switch is the match and the game's own picture.
 - **Explosion flash**, Off, Reduced or Full, Full by default. Every
   explosion lights up the ground around it for under a second, brightest at
   its centre and nearly white where flashes overlap, as the game always
