@@ -370,7 +370,11 @@ void test_several_computers(const oa::ui::gui_layout::Layout& lounge) {
         // A blocked slot clicked again seats a computer player.
         for (const char* slot : {"PLAYER1", "PLAYER1", "PLAYER2", "PLAYER2"})
             f.press(slot);
-        expect(f.computers() == (on ? 2 : 1), on ? "a second computer player" : "3.1c seats one");
+        expect(
+            f.computers() == 2,
+            on ? "the hack still seats two computer players"
+               : "each human seats more than one computer player"
+        );
     }
 }
 

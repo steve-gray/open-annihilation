@@ -216,6 +216,16 @@ if(BUILD_TESTING AND TARGET oa-game AND IS_DIRECTORY "${OA_GAME_DIR}")
     --net-loopback-watcher
     --preferences-file "${oa_netgame_checks}/net-loopback-computer-watcher.conf")
   set_tests_properties(native-net-loopback-computer-watcher PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
+  # Each machine seats one computer player. They build for 6000 ticks in
+  # step, the host's strikes the joiner's commander, and the host's recording
+  # plays back.
+  add_test(NAME native-net-loopback-each-ai COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+    --skip-intro --mute --headless-check --net-loopback-check 6000 --net-loopback-each-ai
+    --net-record "${oa_netgame_checks}/each-ai.tad"
+    --preferences-file "${oa_netgame_checks}/net-loopback-each-ai.conf")
+  set_tests_properties(native-net-loopback-each-ai PROPERTIES
+    TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+    PASS_REGULAR_EXPRESSION "recording played back")
   # The engine's recording hook (open_recording) declines bytes that are no
   # recording and refuses a recording's truncated header; with --play-demo
   # the check would also replay that recording through the replay hooks.

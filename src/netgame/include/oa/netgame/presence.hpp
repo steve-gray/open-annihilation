@@ -56,6 +56,12 @@
 //        for 0x11), text string 0 to 64 the pack's name, text string 0 to
 //        32 its version (both shown only; empty when the sender cannot
 //        give them within those sizes).
+//   0x41 computers: the computer players this machine runs, five bytes each,
+//        a little-endian player id and a difficulty (0 easy, 1 medium,
+//        2 hard). Absent: this machine names none.
+//   0x42 computer edit: a little-endian player id, a kind (1 side, 2 colour,
+//        3 team, 4 difficulty) and the new value. The host asks the machine
+//        that runs that computer player to change it. Absent: no request.
 
 #include "oa/netgame/wire.hpp"
 
@@ -94,17 +100,19 @@ static_assert(
 /// Tags of the fields a presence record carries. A tag this engine does not
 /// know is skipped.
 enum class PresenceTag : uint8_t {
-    engine = 0x01,     ///< OA version, platform and architecture
-    mod = 0x10,        ///< the mod's id, name, version and packaging revision
-    mod_origin = 0x11, ///< the registry, release and SHA-256 the mod came from
-    sim_hash = 0x20,   ///< the sim hash the machine plays
-    game_hacks = 0x21, ///< game hacks that are on
-    view_hacks = 0x22, ///< view hacks that are on
-    developer = 0x23,  ///< Developer Mode and its overrides
-    content = 0x30,    ///< whether the machine can fetch content
-    bundles = 0x31,    ///< the base game and the rule-changing expansions
-    language = 0x32,   ///< the language's name in English
-    map_pack = 0x40,   ///< the map pack the host is playing
+    engine = 0x01,        ///< OA version, platform and architecture
+    mod = 0x10,           ///< the mod's id, name, version and packaging revision
+    mod_origin = 0x11,    ///< the registry, release and SHA-256 the mod came from
+    sim_hash = 0x20,      ///< the sim hash the machine plays
+    game_hacks = 0x21,    ///< game hacks that are on
+    view_hacks = 0x22,    ///< view hacks that are on
+    developer = 0x23,     ///< Developer Mode and its overrides
+    content = 0x30,       ///< whether the machine can fetch content
+    bundles = 0x31,       ///< the base game and the rule-changing expansions
+    language = 0x32,      ///< the language's name in English
+    map_pack = 0x40,      ///< the map pack the host is playing
+    computers = 0x41,     ///< computer players this machine runs, and their difficulty
+    computer_edit = 0x42, ///< a host's change to another machine's computer player
 };
 
 /// 32 bytes: a SHA-256, or the sim hash.

@@ -278,17 +278,21 @@ void scan_metal_spots(const ComputerHost& host, ComputerKnowledge& k) noexcept {
 /// @param text script text
 /// @param length bytes of `text`
 /// @param[in,out] plan_matches whether the last plan line matched
+/// @param only_player a player index, or -1 for every controller
+/// @param difficulty a difficulty to match plan lines against, or -1 for the game's
 /// @quirk "any" is only recognised as the first word after "plan", tested once per word.
 void apply_script(
     ComputerPlayers* state,
     const ComputerHost& host,
     const char* text,
     std::size_t length,
-    bool& plan_matches
+    bool& plan_matches,
+    int32_t only_player = -1,
+    int32_t difficulty = -1
 ) noexcept {
     // The keyword the difficulty carries (ai.difficulty-names).
     const auto named = data::match_rules::difficulty_name_index(
-        state->rules.rules().ai.difficulty_names, host.difficulty
+        state->rules.rules().ai.difficulty_names, difficulty >= 0 ? difficulty : host.difficulty
     );
     const char* cursor = text;
     const char* const end = text + length;
@@ -319,14 +323,19 @@ void apply_script(
             if (!plan_matches)
                 continue;
             const auto percent = static_cast<float>(std::strtod(token(line, 2), nullptr));
-            for (uint8_t p = 0; p < OA_PLAYER_COUNT; ++p)
+            for (uint8_t p = 0; p < OA_PLAYER_COUNT; ++p) {
+                if (only_player >= 0 && static_cast<int32_t>(p) != only_player)
+                    continue;
                 if (state->players[p].present)
                     computer_apply_weight(state, p, token(line, 1), percent);
+            }
         } else if (equal_nocase(command, "limit")) {
             if (!plan_matches)
                 continue;
             const auto limit = static_cast<int32_t>(std::strtol(token(line, 2), nullptr, 10));
             for (uint8_t p = 0; p < OA_PLAYER_COUNT; ++p) {
+                if (only_player >= 0 && static_cast<int32_t>(p) != only_player)
+                    continue;
                 const auto& player = host.world->game.players[p];
                 if (state->players[p].present && player.in_use != 0 &&
                     player.status == OA_PLAYER_STATUS_COMPUTER)
@@ -579,17 +588,26 @@ bool place_on_grid(
 /// @param state computer players and their type table
 /// @param host difficulty and players
 /// @param locks the player's weight or limit lock table
+/// @param plan_slot plan flag to use; null uses and sets the shared one
+/// @param only_player a player index, or -1 for every controller
+/// @param difficulty a difficulty to match, or -1 for the game's
 void apply_downloadable_directives(
-    ComputerPlayers* state, const ComputerHost& host, const uint32_t* locks
+    ComputerPlayers* state,
+    const ComputerHost& host,
+    const uint32_t* locks,
+    bool* plan_slot = nullptr,
+    int32_t only_player = -1,
+    int32_t difficulty = -1
 ) noexcept {
-    state->plan_matches = true;
+    bool& plan = plan_slot != nullptr ? *plan_slot : state->plan_matches;
+    plan = true;
     for (uint32_t t = 1; t < state->type_count; ++t) {
         const auto& type = state->types[t];
         if ((type.flags & OA_UNIT_DEF_FLAG_DOWNLOADABLE) == 0 || locks[t] == 1)
             continue;
         const auto length = std::strlen(type.ai_directives);
         if (length != 0)
-            apply_script(state, host, type.ai_directives, length, state->plan_matches);
+            apply_script(state, host, type.ai_directives, length, plan, only_player, difficulty);
     }
 }
 
@@ -615,11 +633,76 @@ void apply_downloadable_limits(
     apply_downloadable_directives(state, host, state->players[player].knowledge.limit_locked);
 }
 
+/// Re-applies the profile to a computer player whose chosen difficulty is not the game's.
+///
+/// A player with none chosen, or the same as the game, is left as the pass just
+/// applied it. One that differs has its tables reset and the profile and the
+/// downloadable directives applied again, for that player only, at that
+/// difficulty. The downloadable passes repeat once per computer player, as the
+/// shared pass compounds them, and use their own plan flag.
+///
+/// @param state computer players and their type table
+/// @param host difficulty and players
+void reapply_noted_difficulties(ComputerPlayers* state, const ComputerHost& host) noexcept {
+    if (state == nullptr || host.world == nullptr)
+        return;
+    int32_t present_count = 0;
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index) {
+        const auto& player = host.world->game.players[index];
+        if (state->players[index].present && player.in_use != 0 &&
+            player.status == OA_PLAYER_STATUS_COMPUTER)
+            ++present_count;
+    }
+    const auto saved_plan = state->plan_matches;
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index) {
+        if (!state->difficulty_set[index] || !state->players[index].present)
+            continue;
+        const auto noted = static_cast<int32_t>(state->difficulty[index]);
+        if (noted == host.difficulty)
+            continue;
+        reset_tables(state, state->players[index].knowledge);
+        ComputerHost noted_host = host;
+        noted_host.difficulty = noted;
+        bool plan = false;
+        if (state->profile_text != nullptr)
+            apply_script(
+                state,
+                noted_host,
+                state->profile_text,
+                state->profile_length,
+                plan,
+                static_cast<int32_t>(index),
+                noted
+            );
+        for (int32_t pass = 0; pass < present_count; ++pass) {
+            bool weight_plan = false;
+            apply_downloadable_directives(
+                state,
+                noted_host,
+                state->players[index].knowledge.weight_locked,
+                &weight_plan,
+                static_cast<int32_t>(index),
+                noted
+            );
+            bool limit_plan = false;
+            apply_downloadable_directives(
+                state,
+                noted_host,
+                state->players[index].knowledge.limit_locked,
+                &limit_plan,
+                static_cast<int32_t>(index),
+                noted
+            );
+        }
+    }
+    state->plan_matches = saved_plan;
+}
+
 /// Applies the stored profile, then each computer player's passes over the downloadable types' directives.
 ///
 /// All passes share the plan flag. Each computer player re-applies the directives
 /// twice, once per lock table, to every controller, so weights compound per computer
-/// player.
+/// player. A computer player with its own difficulty then has that pass again.
 ///
 /// @param state computer players and their type table
 /// @param host difficulty and players
@@ -635,6 +718,7 @@ void apply_profile(ComputerPlayers* state, const ComputerHost& host) noexcept {
         apply_downloadable_weights(state, host, index);
         apply_downloadable_limits(state, host, index);
     }
+    reapply_noted_difficulties(state, host);
 }
 
 } // namespace
@@ -690,6 +774,28 @@ void computer_players_release(ComputerPlayers* state) noexcept {
     std::free(state->profile_text);
     std::free(state->build_list_runs);
     *state = {};
+}
+
+void computer_players_set_difficulty(
+    ComputerPlayers* state, uint8_t player, int32_t difficulty
+) noexcept {
+    if (state == nullptr || player >= OA_PLAYER_COUNT)
+        return;
+    if (difficulty < OA_DIFFICULTY_EASY || difficulty > OA_DIFFICULTY_HARD)
+        return;
+    state->difficulty_set[player] = true;
+    state->difficulty[player] = static_cast<uint8_t>(difficulty);
+}
+
+int32_t computer_player_difficulty(
+    const ComputerPlayers* state, uint8_t player, int32_t fallback
+) noexcept {
+    if (state == nullptr || player >= OA_PLAYER_COUNT || !state->difficulty_set[player])
+        return fallback;
+    const auto noted = static_cast<int32_t>(state->difficulty[player]);
+    if (noted < OA_DIFFICULTY_EASY || noted > OA_DIFFICULTY_HARD)
+        return fallback;
+    return noted;
 }
 
 bool computer_players_initialize(ComputerPlayers* state, const ComputerHost& host) noexcept {
