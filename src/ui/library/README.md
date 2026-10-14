@@ -51,7 +51,11 @@ translator finds them together. Every word passes through `Library::text`
     the registry's name, and, on a GET entry, the name of another registry
     the same kind and key is installed from (`replaces_registry_name`).
 
-  It keeps the tab, each tab's filter, the tag, search and selection. When
+  It keeps the tab, each tab's filter, the tag, search and selection. An
+  open base game chooser stays open on the game it marks while the stored
+  base game and expansions are the same, its rows read again from the new
+  inputs, so a catalogue or a picture that arrives while the player
+  chooses does not close it; a different stored choice closes it. When
   the selected entry no longer shows, the first visible entry is selected
   and the details close. An update the installed copy has already reached,
   or a finished queue item whose catalogue release is above 0 and at least

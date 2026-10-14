@@ -1039,7 +1039,8 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/runtime_win
   src/app/runtime_console_units.cpp
   src/app/runtime_console_cheats.cpp src/app/runtime_poster.cpp
   src/app/runtime_order_overlays.cpp
-  src/app/runtime_events.cpp src/app/runtime_frontend_host.cpp src/app/runtime_gaf.cpp
+  src/app/runtime_events.cpp src/app/runtime_menu_audio.cpp src/app/runtime_frontend_host.cpp
+  src/app/runtime_gaf.cpp
   src/app/runtime_hotkeys.cpp src/app/runtime_hud.cpp src/app/runtime_loading.cpp
   src/app/runtime_match_hud.cpp src/app/runtime_match_menus.cpp src/app/runtime_load_game.cpp
   src/app/runtime_order_panel.cpp
@@ -1859,6 +1860,74 @@ if(OA_BUILD_PLATFORM)
         WORKING_DIRECTORY "${oa_setup_window_dir}"
         ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
         FIXTURES_REQUIRED setup-window-clean)
+      # When the main menu's hum starts, read from the log's order: never
+      # while the setup shows or a start movie plays, and always with the
+      # main menu once they are over. A start without the setup plays the
+      # movies (one frame each), then the menu starts the hum; with
+      # --skip-intro the menu starts it at once.
+      set(oa_menu_hum_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/menu-hum")
+      file(MAKE_DIRECTORY "${oa_menu_hum_dir}")
+      add_test(NAME native-menu-hum-start COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --mute --headless-check --frames 1
+        --preferences-file "${oa_menu_hum_dir}/start.conf")
+      set_tests_properties(native-menu-hum-start PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        WORKING_DIRECTORY "${oa_menu_hum_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy"
+        PASS_REGULAR_EXPRESSION "intro 1\\.[Zz][Rr][Bb]: decoded 1 frame.*intro 2\\.[Zz][Rr][Bb]: decoded 1 frame.*menu hum: starts.*native check: the game offers"
+        FAIL_REGULAR_EXPRESSION "menu hum: waits|menu hum: starts.*[Zz][Rr][Bb]: decoded")
+      add_test(NAME native-menu-hum-start-skip-intro COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --headless-check --frames 1
+        --preferences-file "${oa_menu_hum_dir}/start-skip-intro.conf")
+      set_tests_properties(native-menu-hum-start-skip-intro PROPERTIES
+        TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT} WORKING_DIRECTORY "${oa_menu_hum_dir}"
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy"
+        PASS_REGULAR_EXPRESSION "menu hum: starts.*native check: the game offers"
+        FAIL_REGULAR_EXPRESSION "menu hum: waits|[Zz][Rr][Bb]: decoded")
+      # A first start: the setup window copies the game and the archives are
+      # mounted, and the hum still waits while the setup's online step shows
+      # over the menu. Then the whole walk over the menu to Start playing,
+      # after which the movies play and only then the hum starts; with
+      # --skip-intro the hum starts as the walk ends. Each run starts from a
+      # clean folder.
+      set(oa_menu_hum_cases setup first-run first-run-skip-intro)
+      set(oa_menu_hum_scratch)
+      foreach(oa_menu_hum_case ${oa_menu_hum_cases})
+        set(oa_menu_hum_case_dir "${oa_menu_hum_dir}/${oa_menu_hum_case}")
+        file(MAKE_DIRECTORY "${oa_menu_hum_case_dir}")
+        list(APPEND oa_menu_hum_scratch "${oa_menu_hum_case_dir}/Open Annihilation"
+          "${oa_menu_hum_case_dir}/data" "${oa_menu_hum_case_dir}/menu-hum.conf")
+      endforeach()
+      add_test(NAME menu-hum-clean COMMAND ${CMAKE_COMMAND} -E rm -rf ${oa_menu_hum_scratch})
+      set_tests_properties(menu-hum-clean PROPERTIES FIXTURES_SETUP menu-hum-clean)
+      foreach(oa_menu_hum_case ${oa_menu_hum_cases})
+        set(oa_menu_hum_case_dir "${oa_menu_hum_dir}/${oa_menu_hum_case}")
+        if(oa_menu_hum_case STREQUAL "setup")
+          set(oa_menu_hum_switches --check-setup-window)
+          set(oa_menu_hum_pass
+            "setup window check: the game was copied.*menu hum: waits.*setup window check: passed")
+          set(oa_menu_hum_fail "menu hum: starts|[Zz][Rr][Bb]: decoded")
+        elseif(oa_menu_hum_case STREQUAL "first-run")
+          set(oa_menu_hum_switches --check-first-run)
+          set(oa_menu_hum_pass
+            "menu hum: waits.*first-run: done.*intro 1\\.[Zz][Rr][Bb]: decoded 1 frame.*intro 2\\.[Zz][Rr][Bb]: decoded 1 frame.*menu hum: starts.*first-run check: passed")
+          set(oa_menu_hum_fail "menu hum: starts.*(first-run: done|[Zz][Rr][Bb]: decoded)")
+        else()
+          set(oa_menu_hum_switches --check-first-run --skip-intro)
+          set(oa_menu_hum_pass "menu hum: waits.*first-run: done.*menu hum: starts.*first-run check: passed")
+          set(oa_menu_hum_fail "menu hum: starts.*first-run: done|[Zz][Rr][Bb]: decoded")
+        endif()
+        add_test(NAME native-menu-hum-${oa_menu_hum_case} COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+          --mute --frames 1 --first-run ${oa_menu_hum_switches}
+          --preferences-file "${oa_menu_hum_case_dir}/menu-hum.conf"
+          --user-folder "${oa_menu_hum_case_dir}/Open Annihilation"
+          --data-dir "${oa_menu_hum_case_dir}/data")
+        set_tests_properties(native-menu-hum-${oa_menu_hum_case} PROPERTIES
+          TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT} WORKING_DIRECTORY "${oa_menu_hum_case_dir}"
+          ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software"
+          PASS_REGULAR_EXPRESSION "${oa_menu_hum_pass}"
+          FAIL_REGULAR_EXPRESSION "${oa_menu_hum_fail}"
+          FIXTURES_REQUIRED menu-hum-clean)
+      endforeach()
       # The locator, driven with Tab onto the fixture install and then the
       # choose key. It leaves before a match. Each run starts from a clean
       # folder.

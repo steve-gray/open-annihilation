@@ -10058,6 +10058,54 @@
 	it=Bordo della finestra;
 	}
 
+[Capture]
+	{
+	de=Fangen;
+	fr=Capture;
+	es=Captura;
+	it=Cattura;
+	}
+
+[Edge stickiness]
+	{
+	de=Randhaftung;
+	fr=Adhérence du bord;
+	es=Adherencia del borde;
+	it=Aderenza del bordo;
+	}
+
+[At 0.0 the edge never holds.]
+	{
+	de=Bei 0.0 hält der Rand nie.;
+	fr=À 0.0, le bord ne retient jamais.;
+	es=Con 0.0 el borde nunca retiene.;
+	it=A 0.0 il bordo non trattiene mai.;
+	}
+
+[How firmly Sticky holds the pointer at the edge.]
+	{
+	de=Wie fest Haftend den Zeiger am Rand hält.;
+	fr=La fermeté avec laquelle Fixe retient le pointeur au bord.;
+	es=Con qué firmeza Fijo retiene el puntero en el borde.;
+	it=Quanto saldamente Fisso trattiene il puntatore sul bordo.;
+	}
+
+[Needs Sticky]
+	{
+	de=Braucht Haftend;
+	fr=Requiert Fixe;
+	es=Necesita Fijo;
+	it=Richiede Fisso;
+	}
+
+[The pointer stays in the window while you play.]
+	{
+	de=Der Zeiger bleibt im Fenster, während du spielst.;
+	fr=Le pointeur reste dans la fenêtre pendant que tu joues.;
+	es=El puntero se queda en la ventana mientras juegas.;
+	it=Il puntatore resta nella finestra mentre giochi.;
+	}
+
 [Window frame]
 	{
 	de=Fensterrahmen;

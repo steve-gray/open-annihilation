@@ -181,8 +181,11 @@ enum class Setting : uint8_t {
     middle_click_pan,  ///< Middle-click pans: a switch
     escape_opens_menu, ///< Escape opens the game menu: a switch
     switch_alt,        ///< Select groups without Alt: a switch
-    /// Window edge: a strip of Sticky and Free
+    /// Window edge: a strip of Capture, Sticky and Free
     window_edge,
+    /// Edge stickiness: a slider from 0.0 to 5.0, locked unless Window edge
+    /// is Sticky
+    window_edge_stickiness,
     unit_limit,     ///< Unit limit: a slider
     max_frame_rate, ///< Maximum frame rate: a slider
     anti_aliasing,  ///< Enhanced anti-aliasing: a strip of levels

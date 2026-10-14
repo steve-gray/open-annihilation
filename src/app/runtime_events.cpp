@@ -4,7 +4,6 @@
 // SDL event dispatch, menu audio and movie playback.
 #include "oa/app/runtime.hpp"
 #include "oa/app/hook_call.hpp"
-#include "oa/ui/frontend/main_menu.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/media/intro_player.hpp"
 #include "oa/present/typed_text.hpp"
@@ -633,8 +632,9 @@ void Runtime::show_unsupported(std::string_view message) {
     std::cerr << "unsupported operation: " << message << '\n';
     if (sdl_.window != nullptr) {
         // The box needs the pointer; full screen holds it again once the
-        // box has closed and the window has the focus back. The sticky
-        // edge is forgotten so the pointer is held again only from inside.
+        // box has closed and the window has the focus back. Window edge
+        // forgets its hold, so a sticky edge holds again only from inside
+        // and Capture asks for the grab again.
         forget_sticky_edge();
         release_pointer(sdl_.window);
         SDL_ShowSimpleMessageBox(
@@ -642,18 +642,6 @@ void Runtime::show_unsupported(std::string_view message) {
         );
         keep_pointer_on_screen(sdl_.window);
     }
-}
-
-void Runtime::start_menu_music() {
-    music_main_menu();
-    play_menu_voice(oa::ui::frontend::kMainMenuMusic);
-}
-
-void Runtime::play_menu_voice(std::string_view sound) {
-    if (menu_music_playing_)
-        return;
-    // A voice that does not start is reported by play_alternate_sound.
-    std::ignore = play_alternate_sound(sound);
 }
 
 bool Runtime::play_alternate_sound(std::string_view sound) {
@@ -671,12 +659,6 @@ bool Runtime::play_alternate_sound(std::string_view sound) {
     if (!menu_music_playing_)
         std::cerr << "menu BGM unavailable: " << error << '\n';
     return menu_music_playing_;
-}
-
-void Runtime::stop_menu_music() {
-    audio_player_.stop_loop();
-    menu_music_playing_ = false;
-    music_begin_match();
 }
 
 void Runtime::play_menu_sound(menu::Sound sound) {
