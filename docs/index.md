@@ -88,14 +88,15 @@ Every document in the repository, by what you want to do.
   joining one with `--join ADDRESS`, with `--player-name`, `--game-name`
   and `--game-password`, and what the game prints as it goes.
   [command-line.md](command-line.md) is `--dplay-guid`, the application
-  GUID a game is hosted under and looked for, and `-c`, `--launch` and
-  `--list-content --json`.
+  GUID a game is hosted under and looked for, `-c` and `--launch`, the
+  option for every launch setting, a launch piped in on standard input,
+  and `--list-content --json`.
 - [multiplayer/application-guid.md](multiplayer/application-guid.md):
   which games a search lists, and a launcher's per-mod GUID.
 - [multiplayer/launch-file.md](multiplayer/launch-file.md): starting a
-  network game from a launch file, TA Forever's `-c` file or Open
-  Annihilation's `--launch` file, and listing installed maps, mods and
-  expansions with `--list-content --json`.
+  network game from a launch file, Open Annihilation's `.oalaunch` file or
+  TA Forever's, read with `-c` or `--launch`, and listing installed maps,
+  mods and expansions with `--list-content --json`.
 - [multiplayer/status.md](multiplayer/status.md): what a game reports on
   its standard output for a launcher, with `--status-stdout`,
   `--status-file` and `--quit-after-game`.

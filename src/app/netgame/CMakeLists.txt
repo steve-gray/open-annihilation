@@ -116,6 +116,14 @@ if(BUILD_TESTING)
   target_link_libraries(oa-netgame-launch-file-test PRIVATE oa-app-netgame-options oa-app-game-options
     oa-netgame oa-options)
   add_test(NAME netgame-launch-file COMMAND oa-netgame-launch-file-test)
+  # The table of launch settings is what --help, docs/command-line.md and
+  # docs/multiplayer/launch-file.md say. The status stream's options join
+  # network play's in --help, as in the game.
+  add_executable(oa-netgame-launch-help-test tests/launch_help_test.cpp)
+  target_link_libraries(oa-netgame-launch-help-test PRIVATE oa-app-netgame-options oa-app-game-options
+    oa-app-automation-options oa-netgame oa-options)
+  add_test(NAME netgame-launch-help COMMAND oa-netgame-launch-help-test
+    "${PROJECT_SOURCE_DIR}/docs/command-line.md" "${PROJECT_SOURCE_DIR}/docs/multiplayer/launch-file.md")
   add_executable(oa-netgame-close-handlers-test tests/close_handlers_test.cpp)
   target_link_libraries(oa-netgame-close-handlers-test PRIVATE oa-app-netgame-launch-binding oa-ui-frontend-state)
   add_test(NAME netgame-close-handlers COMMAND oa-netgame-close-handlers-test)

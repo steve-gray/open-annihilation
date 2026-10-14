@@ -16,7 +16,9 @@ target_link_libraries(oa-app-automation-protocol PUBLIC oa-formats-json
   PRIVATE ZLIB::ZLIB oa-options)
 
 # The endpoint's options and their checks, and its token, which their
-# check runs without a running game.
+# check runs without a running game. A launch's status block turns the status
+# stream on: network play reads the launch and keeps the block, and its
+# options do not link back.
 add_library(oa-app-automation-options STATIC options.cpp token.cpp)
 add_library(oa::app::automation_options ALIAS oa-app-automation-options)
 target_include_directories(oa-app-automation-options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -24,7 +26,7 @@ target_include_directories(oa-app-automation-options PUBLIC "${CMAKE_CURRENT_SOU
 # libraries it uses.
 target_link_libraries(oa-app-automation-options PUBLIC oa-app-headers oa-app-command-line
   oa-ui-frontend-renderer oa-ui-frontend-state oa-sim-scenario oa-ui-screen-registry
-  PRIVATE oa-options oa-platform-random oa-formats-oamod)
+  PRIVATE oa-options oa-platform-random oa-app-netgame-options)
 
 # The device events of an input request, read from its JSON, which their
 # check reads without a running game.
@@ -98,7 +100,7 @@ if(BUILD_TESTING)
   # options a run with the endpoint refuses, and its token.
   add_executable(oa-app-automation-options-test tests/options_test.cpp)
   target_link_libraries(oa-app-automation-options-test PRIVATE oa-app-automation-options
-    oa-app-game-options oa-test-support oa-options)
+    oa-app-netgame-options oa-app-game-options oa-test-support oa-options)
   add_test(NAME automation-options COMMAND oa-app-automation-options-test)
   # The device events of input requests, and those that cannot be read.
   add_executable(oa-app-automation-input-test tests/input_test.cpp)

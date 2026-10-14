@@ -93,8 +93,6 @@ constexpr int32_t kLaunchCheatsAllowed = 2;
 constexpr int32_t kLaunchLocationFixed = 1;
 constexpr int32_t kLaunchMappingUnmapped = 1;
 constexpr int32_t kLaunchWatchingAllowed = 2;
-constexpr int32_t kLaunchTeamFirst = 1; // teams 1..5 are Player.team 0..4
-constexpr int32_t kLaunchTeamLast = 5;
 constexpr int32_t kResourceSliderMaximum = 0x2711;
 constexpr int32_t kDefaultResource = 1000;
 constexpr uint32_t kComputerRejectTicks = 0x1f;
@@ -432,14 +430,43 @@ void set_option_bit(uint16_t& options, uint16_t bit, bool on) noexcept {
     options = static_cast<uint16_t>(on ? options | bit : options & ~bit);
 }
 
+/// Seats the local player as an active launch says: side or watching, team and colour.
+///
+/// A faction becomes the player's side and a watcher watches instead; a team
+/// 1 to 5 becomes the player's team, which is sent with the alliances
+/// refreshed; a colour 1 to 10 is asked for as a click on the player's logo
+/// asks, and a colour another player has gives the next free one. A field
+/// that is 0 leaves its setting alone.
+///
+/// @param[in,out] lobby Lobby state; its launch must be active.
+/// @param[in,out] me the local player
+/// @param[in,out] info the local player's lobby block
+void apply_launch_seat(Lobby& lobby, Player& me, PlayerSetupInfo& info) noexcept {
+    namespace nl = oa::ui::frontend_multiplayer::launch;
+    const nl::LaunchBlock& block = *lobby.launch_link.block;
+    if (block.watcher != 0) {
+        info.side = 0;
+        info.options |= option::watcher;
+    } else if (block.faction != nl::faction::none) {
+        info.side = block.faction != nl::faction::arm ? 1 : 0;
+        info.options &= static_cast<uint16_t>(~option::watcher);
+    }
+    if (block.team >= nl::kLaunchTeamFirst && block.team <= nl::kLaunchTeamLast) {
+        lobby_player_team(me) = static_cast<uint8_t>(block.team - nl::kLaunchTeamFirst);
+        lobby_send_team(lobby, me);
+        lobby_update_ally_matrix(lobby);
+    }
+    if (block.color >= nl::kLaunchColourFirst && block.color <= nl::kLaunchColourLast)
+        lobby_request_color(lobby, static_cast<uint32_t>(block.color - nl::kLaunchColourFirst));
+}
+
 /// Applies an active launch's options to the local player as the battle room opens.
 ///
 /// The host takes the unit limit, the lock, the commander rule, the resources,
 /// line of sight, cheats, start positions, mapping and watching. A joiner
-/// takes only the side and the team; the host's rules stay the host's. A
-/// faction becomes the player's side; a team 1 to 5 the player's team, which
-/// is sent with the alliances refreshed. Energy and metal become the sliders'
-/// first values. A field that is 0 leaves its setting alone.
+/// takes none of them; the host's rules stay the host's. Both then take the
+/// seat (apply_launch_seat). Energy and metal become the sliders' first
+/// values. A field that is 0 leaves its setting alone.
 ///
 /// @param[in,out] lobby Lobby state; its launch must be active.
 /// @param[in,out] me the local player
@@ -450,16 +477,9 @@ void set_option_bit(uint16_t& options, uint16_t bit, bool on) noexcept {
 void apply_launch_options(
     Lobby& lobby, Player& me, PlayerSetupInfo& info, int32_t& energy, int32_t& metal, bool host
 ) noexcept {
-    namespace nl = oa::ui::frontend_multiplayer::launch;
-    const nl::LaunchBlock& block = *lobby.launch_link.block;
+    const auto& block = *lobby.launch_link.block;
     if (!host) {
-        if (block.faction != nl::faction::none)
-            info.side = block.faction != nl::faction::arm ? 1 : 0;
-        if (block.team >= kLaunchTeamFirst && block.team <= kLaunchTeamLast) {
-            lobby_player_team(me) = static_cast<uint8_t>(block.team - kLaunchTeamFirst);
-            lobby_send_team(lobby, me);
-            lobby_update_ally_matrix(lobby);
-        }
+        apply_launch_seat(lobby, me, info);
         return;
     }
     auto& game = *lobby.game;
@@ -480,13 +500,6 @@ void apply_launch_options(
     }
     if (block.energy != 0)
         energy = block.energy;
-    if (block.faction != nl::faction::none)
-        info.side = block.faction != nl::faction::arm ? 1 : 0;
-    if (block.team >= kLaunchTeamFirst && block.team <= kLaunchTeamLast) {
-        lobby_player_team(me) = static_cast<uint8_t>(block.team - kLaunchTeamFirst);
-        lobby_send_team(lobby, me);
-        lobby_update_ally_matrix(lobby);
-    }
     if (block.metal != 0)
         metal = block.metal;
     uint16_t options = info.options;
@@ -506,6 +519,7 @@ void apply_launch_options(
     if (block.watching != 0)
         set_option_bit(options, option::watching_allowed, block.watching == kLaunchWatchingAllowed);
     info.options = options;
+    apply_launch_seat(lobby, me, info);
 }
 
 void set_host_options(Game& game, uint16_t options) noexcept {
@@ -2528,6 +2542,97 @@ bool lobby_ready_to_start(Lobby& lobby) noexcept {
     return false;
 }
 
+namespace {
+
+/// Seats the computer players an active launch names, as clicks on open slots seat them.
+///
+/// Each takes the next open slot, then the launch's side, team, colour
+/// (or the next free one) and difficulty. Nothing is seated in a deathmatch
+/// or a tournament game, which seat no computer players, nor in a room where
+/// this machine already runs one, so a launch seats them once.
+///
+/// @param[in,out] lobby Lobby state; its launch must be active.
+/// @return true when a computer player was seated
+bool seat_launch_computers(Lobby& lobby) noexcept {
+    namespace nl = oa::ui::frontend_multiplayer::launch;
+    const nl::LaunchBlock& block = *lobby.launch_link.block;
+    if (block.computer_count <= 0)
+        return false;
+    const auto host = lobby_host_slot(lobby);
+    const auto host_options =
+        host == kNoSlot ? 0 : info_of(lobby, slot_player(lobby, host)).options;
+    if ((host_options & option::commander_mask) == option::commander_deathmatch || lobby.option_4)
+        return false;
+    // A computer player counts from the click that seats it, before the
+    // session announces it.
+    for (int32_t slot = 0; slot < kSlotCount; ++slot)
+        if (slot_player(lobby, slot).status == kSlotComputer)
+            return false;
+    const auto local = static_cast<int32_t>(lobby.game->local_player_index);
+    const int32_t wanted = std::min(block.computer_count, nl::kLaunchComputerLimit);
+    int32_t seated = 0;
+    for (int32_t slot = 0; slot < kSlotCount && seated < wanted; ++slot) {
+        auto& player = slot_player(lobby, slot);
+        if (slot == local || player.status != kSlotOpen)
+            continue;
+        const nl::LaunchComputer& computer = block.computers[seated];
+        lobby_add_computer(lobby, slot);
+        if (player.status != kSlotComputer)
+            break; // the session took no more players
+        ++seated;
+        auto& info = info_of(lobby, player);
+        const int32_t colour = computer.color - nl::kLaunchColourFirst;
+        info.color = computer.color >= nl::kLaunchColourFirst &&
+                             computer.color <= nl::kLaunchColourLast &&
+                             lobby_color_available(lobby, player.player_id, colour)
+                         ? static_cast<uint8_t>(colour)
+                         : static_cast<uint8_t>(lobby_next_free_color(lobby));
+        if (computer.faction != nl::faction::none)
+            info.side = computer.faction != nl::faction::arm ? 1 : 0;
+        if (computer.team >= nl::kLaunchTeamFirst && computer.team <= nl::kLaunchTeamLast)
+            lobby_player_team(player) = static_cast<uint8_t>(computer.team - nl::kLaunchTeamFirst);
+        if (computer.difficulty >= nl::difficulty::easy &&
+            computer.difficulty <= nl::difficulty::hard)
+            note_computer_difficulty(
+                lobby, slot, static_cast<uint8_t>(computer.difficulty - nl::difficulty::easy)
+            );
+        notify(lobby, 2);
+    }
+    if (seated == 0)
+        return false;
+    lobby_update_ally_matrix(lobby);
+    lobby_publish_session(lobby);
+    return true;
+}
+
+/// Sets the unit restrictions an active launch names, as the host's Restrictions sets them.
+///
+/// Each names a unit by its FBI UnitName, in any case; a unit this game's
+/// content does not have is left out. A limit of 0 disables the unit.
+///
+/// @param[in,out] lobby Lobby state; its launch must be active and its unit sync made.
+void apply_launch_restrictions(Lobby& lobby) noexcept {
+    namespace nl = oa::ui::frontend_multiplayer::launch;
+    const nl::LaunchBlock& block = *lobby.launch_link.block;
+    const int32_t count = std::min(block.restriction_count, nl::kLaunchRestrictionLimit);
+    for (int32_t at = 0; at < count; ++at) {
+        const nl::LaunchRestriction& restriction = block.restrictions[at];
+        const std::string_view unit = text_view(restriction.unit, sizeof restriction.unit);
+        for (int32_t type = 1; type < lobby.unit_count; ++type) {
+            const LobbyUnit& candidate = lobby.units[type];
+            if (candidate.unit_name == nullptr ||
+                std::string_view(candidate.unit_name).size() != unit.size() ||
+                !starts_nocase(candidate.unit_name, unit))
+                continue;
+            unit_sync_set_limit(lobby, candidate.fbi_hash, restriction.limit);
+            (void)unit_sync_set_enabled(lobby, candidate.fbi_hash, restriction.limit != 0);
+            break;
+        }
+    }
+}
+
+} // namespace
+
 void lobby_enter_battleroom(Lobby& lobby, Panel& panel) noexcept {
     auto& game = *lobby.game;
     lobby.last_player_count = 0xffffffffU;
@@ -2577,6 +2682,8 @@ void lobby_enter_battleroom(Lobby& lobby, Panel& panel) noexcept {
     if (auto* mem = panel_control(panel, "MEMx"))
         mem->color = info.memory_mb < map_memory(lobby) ? kWarningColor : 0;
     unit_sync_create(lobby, host);
+    if (host && launch_applied)
+        apply_launch_restrictions(lobby);
     const bool synced = unit_sync_complete(lobby);
     panel_set_active(panel, "START", synced);
     panel_set_grayed(
@@ -2627,6 +2734,12 @@ void lobby_enter_battleroom(Lobby& lobby, Panel& panel) noexcept {
     }
     info.map_hash =
         lobby.maps.content_hash != nullptr ? lobby.maps.content_hash(lobby.maps.context) : 0;
+    if (launch_applied)
+        (void)seat_launch_computers(lobby);
+    // A launch that closes the game closes it once its own computer players
+    // are seated, as the host's GAMEOPEN does.
+    if (host && launch_applied && lobby.launch_link.block->closed != 0)
+        info.options |= option::game_closed;
     presence_refresh(lobby);
     lobby_send_player_info(lobby);
     panel.focus = panel_find(panel, "MESSAGE");

@@ -151,6 +151,7 @@ struct DirectGameReport {
     bool shown{};
     uint32_t frames{}; // frames run before a multiplayer screen first showed
     std::string players;
+    std::string seats; // under a launch: each seat's side, team and colour as last listed
 };
 
 // The most frames that ask for a frontend pass while no multiplayer screen
@@ -180,7 +181,45 @@ std::string battle_room_players(mp::Lobby& lobby) {
     return names;
 }
 
-/// Writes the battle room's map and rules when a launch file opened it.
+/// Describes each player the battle room seats: side, team, colour, and a computer player's difficulty.
+///
+/// @param lobby the multiplayer screens' lobby
+/// @return the seats in slot order, such as "Commander arm team 1 colour 1"; empty without a game
+std::string battle_room_seats(mp::Lobby& lobby) {
+    std::string seats;
+    if (lobby.game == nullptr)
+        return seats;
+    for (int32_t slot = 0; slot < mp::kSlotCount; ++slot) {
+        auto& player = mp::slot_player(lobby, slot);
+        const std::string name(player.name, ::strnlen(player.name, sizeof player.name));
+        const auto* info = mp::slot_info(lobby, slot);
+        if (player.in_use == 0 || name.empty() || info == nullptr)
+            continue;
+        std::string seat = name + " ";
+        if ((info->options & mp::option::watcher) != 0)
+            seat += "watcher";
+        else if (info->side <= 1)
+            seat += info->side == 0 ? "arm" : "core";
+        else
+            seat += "side " + std::to_string(info->side + 1);
+        const uint8_t team = mp::lobby_player_team(player);
+        seat += team == mp::kNoTeam ? " no team" : " team " + std::to_string(team + 1);
+        seat += info->color == mp::kNoColor ? " no colour"
+                                            : " colour " + std::to_string(info->color + 1);
+        if (player.status == mp::kSlotComputer) {
+            static constexpr const char* difficulties[] = {"easy", "medium", "hard"};
+            const uint8_t difficulty =
+                lobby.computer_difficulty_set[slot] ? lobby.computer_difficulty[slot] : 2;
+            seat += std::string(" ") + difficulties[difficulty < 3 ? difficulty : 2];
+        }
+        if (!seats.empty())
+            seats += ", ";
+        seats += seat;
+    }
+    return seats;
+}
+
+/// Writes the battle room's map and rules when a launch opened it.
 ///
 /// The password is not written. Each line is flushed.
 ///
@@ -225,8 +264,9 @@ void report_launch_battle_room(mp::Lobby& lobby) {
 /// frames at most. Each of these is reported once, as its own flushed line,
 /// through the log so it is not mixed into a launcher's status stream: the
 /// battle room opening, with the game's name and the local player's; when a
-/// launch file opened the room, the map and the rules; the players the battle
-/// room lists, whenever they change while it shows; and a join or a game the
+/// launch opened the room, the map and the rules; the players the battle
+/// room lists, whenever they change while it shows, and under a launch each
+/// seat's side, team and colour as they change; and a join or a game the
 /// screens refused, with the notice they showed. The password is not written.
 void direct_game_frame() {
     const auto& game = net_options().direct_game;
@@ -248,7 +288,7 @@ void direct_game_frame() {
                 "multiplayer: in the battle room of \"" + progress.game_name + "\" as " +
                 progress.player_name
             );
-            if (net_options().launch_from_file)
+            if (net_options().launch_planned)
                 report_launch_battle_room(mp::multiplayer_lobby());
         } else if (
             progress.reached == mp::DirectGameStep::failed &&
@@ -268,10 +308,17 @@ void direct_game_frame() {
         lobby.game == nullptr || mp::local_player(lobby).reject_reason != 0)
         return;
     auto players = battle_room_players(lobby);
-    if (players.empty() || players == report.players)
+    if (!players.empty() && players != report.players) {
+        report.players = std::move(players);
+        oa::platform::log_files::write_line("multiplayer: battle room players: " + report.players);
+    }
+    if (!net_options().launch_planned)
         return;
-    report.players = std::move(players);
-    oa::platform::log_files::write_line("multiplayer: battle room players: " + report.players);
+    auto seats = battle_room_seats(lobby);
+    if (seats.empty() || seats == report.seats)
+        return;
+    report.seats = std::move(seats);
+    oa::platform::log_files::write_line("multiplayer: battle room seats: " + report.seats);
 }
 
 /// Keeps the screen host and services an overlay's create is given.
@@ -359,7 +406,7 @@ void register_screens(void* /*context*/, ScreenRegistry* registry) {
     (void)overlay_register(registry, &services);
     auto& netgame = netgame_context();
     bind_launch(netgame_launch_binding());
-    if (net_options().check_host_not_found || net_options().launch_from_file)
+    if (net_options().check_host_not_found || net_options().launch_planned)
         set_launch_active(true);
     mp::multiplayer_bind_launch_link(launch_link());
     mp::multiplayer_bind_direct_game(net_options().direct_game);

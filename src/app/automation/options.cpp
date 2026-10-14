@@ -6,15 +6,14 @@
 #include "options.hpp"
 
 #include "oa/app/app.hpp"
-#include "oa/formats/oamod.hpp"
+#include "oa/app/netgame/launch_file.hpp"
 
 #include <charconv>
 #include <cstdint>
-#include <fstream>
-#include <iterator>
-#include <span>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace oa::app::automation {
 
@@ -80,15 +79,6 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
         options.quit_after_on_command = true;
     } else if (option.starts_with("--quit-after-game=")) {
         throw std::runtime_error("--quit-after-game takes after-score");
-    } else if (option == "--launch") {
-        // Network play takes the option. The path is remembered here so the
-        // status block can be read once the command line is complete.
-        // Standard input ("-") is left for network play.
-        if (values.following != nullptr) {
-            if (const char* path = values.following(values.arguments))
-                options.launch_file = std::string(path);
-        }
-        return false;
     } else {
         return false;
     }
@@ -97,96 +87,41 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
 
 /// A path as a filesystem path, from its UTF-8 bytes.
 ///
-/// @param text the path as the command line gave it
+/// @param text the path as the launch gave it
 /// @return the path
 std::filesystem::path path_from_utf8(std::string_view text) {
     return std::filesystem::path(std::u8string(text.begin(), text.end()));
 }
 
-/// One launch file's status block, when every key and value can be used.
-struct LaunchStatus {
-    bool standard_output{};                      ///< status.stdout
-    bool standard_output_named{};                ///< status.stdout was written
-    std::optional<std::filesystem::path> file{}; ///< status.file
-    std::optional<QuitAfter> quit_after{};       ///< status.quit-after-game
-};
-
-/// Reads the status block. A file network play would refuse is left unread
-/// here: this returns nothing and reports no error of its own.
-///
-/// @param path the file --launch names; "-" is not a file
-/// @return the block, or nothing when the file or the block cannot be used
-std::optional<LaunchStatus> launch_status(const std::string& path) {
-    namespace oamod = oa::formats::oamod;
-    if (path.empty() || path == "-")
-        return std::nullopt;
-    std::ifstream input(path_from_utf8(path), std::ios::in | std::ios::binary);
-    if (!input)
-        return std::nullopt;
-    std::string bytes;
-    bytes.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
-    oamod::Node root;
-    oamod::ReadError error;
-    const auto* raw = reinterpret_cast<const uint8_t*>(bytes.data());
-    if (!oamod::read_document(std::span<const uint8_t>(raw, bytes.size()), root, error))
-        return std::nullopt;
-    const oamod::Node* status = oamod::find_entry(root, "status");
-    if (status == nullptr)
-        return std::nullopt;
-    if (status->kind != oamod::NodeKind::mapping)
-        return std::nullopt;
-    LaunchStatus read;
-    for (const oamod::Node& entry : status->children) {
-        if (entry.key.kind != oamod::KeyKind::string)
-            return std::nullopt;
-        const std::string_view key = entry.key.text;
-        if (key == "stdout") {
-            if (entry.kind != oamod::NodeKind::boolean)
-                return std::nullopt;
-            read.standard_output = entry.boolean;
-            read.standard_output_named = true;
-        } else if (key == "file") {
-            if (entry.kind != oamod::NodeKind::string || entry.text.empty())
-                return std::nullopt;
-            read.file = path_from_utf8(entry.text);
-        } else if (key == "quit-after-game") {
-            if (entry.kind == oamod::NodeKind::boolean)
-                read.quit_after = entry.boolean ? QuitAfter::game : QuitAfter::none;
-            else if (entry.kind == oamod::NodeKind::string && entry.text == "after-score")
-                read.quit_after = QuitAfter::score;
-            else
-                return std::nullopt;
-        } else {
-            return std::nullopt;
-        }
-    }
-    return read;
-}
-
-/// Turns on what a launch file's status block asked, where the command line
+/// Turns on what the launch's status block asked, where the command line
 /// did not name that field itself.
+///
+/// Network play reads the launch, from a file, -c, --launch or standard
+/// input, and keeps its status block before this check runs.
 ///
 /// @param[in,out] options the options the command line set
 void apply_launch_status(EndpointOptions& options) {
-    if (!options.launch_file)
-        return;
-    const std::optional<LaunchStatus> status = launch_status(*options.launch_file);
-    if (!status)
-        return;
-    if (!options.status_stdout_on_command && status->standard_output_named)
-        options.status_stdout = status->standard_output;
-    if (!options.status_file_on_command && status->file)
-        options.status_file = status->file;
-    if (!options.quit_after_on_command && status->quit_after)
-        options.quit_after = *status->quit_after;
+    namespace netgame = oa::app::netgame;
+    const netgame::LaunchStatusChoice& status = netgame::kept_launch_status();
+    if (!options.status_stdout_on_command && status.standard_output_named)
+        options.status_stdout = status.standard_output;
+    if (!options.status_file_on_command && !status.file.empty())
+        options.status_file = path_from_utf8(status.file);
+    if (!options.quit_after_on_command) {
+        if (status.quit_after == netgame::QuitAfter::game)
+            options.quit_after = QuitAfter::game;
+        else if (status.quit_after == netgame::QuitAfter::after_score)
+            options.quit_after = QuitAfter::score;
+        else if (status.quit_after == netgame::QuitAfter::off)
+            options.quit_after = QuitAfter::none;
+    }
 }
 
 /// Checks the endpoint's options as a whole (Extension::check_options).
 ///
 /// --fark-address and --fark-file need --fark, and the address must be
 /// this machine's loopback address; a refusal throws std::runtime_error.
-/// A launch file's status block is applied first, and a file that cannot
-/// be used is left to network play.
+/// The launch's status block, which network play kept, is applied first.
 ///
 /// @param context the EndpointOptions checked; their listen address is read
 void check_options(void* context) {

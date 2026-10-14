@@ -13,6 +13,7 @@
 
 #include <array>
 #include <charconv>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -25,7 +26,6 @@ namespace {
 using netgame::LaunchPlan;
 using netgame::LaunchRefusal;
 using netgame::LaunchRole;
-using netgame::read_launch_file;
 
 /// The refusal the last check_options kept.
 ///
@@ -84,10 +84,11 @@ NetgameContext& context_of(void* context) {
 /// runs only in a headless run; without it the run would sit in the menus),
 /// --check-host-not-found an unattended run that skips the intro,
 /// --check-recording-hook an unattended headless run that skips the intro,
-/// --host, --join and --launch a run that skips the intro, and
-/// --list-content the same for a content list. --json is taken only beside
-/// --list-content. A missing or malformed value throws
-/// std::runtime_error.
+/// --host, --join, --launch and the launch settings' options a run that skips
+/// the intro, and --list-content the same for a content list. --json is
+/// taken only beside --list-content. A launch setting's option is kept with
+/// its value and checked with the launch. A missing or malformed value
+/// throws std::runtime_error.
 ///
 /// @param context The NetgameContext whose options receive the value.
 /// @param name Option name with its dashes.
@@ -117,7 +118,7 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
         result.dplay_guid = parse_guid(value());
         result.cli_dplay_guid = true;
     } else if (argument == "--launch") {
-        result.launch_yaml = std::string(value());
+        result.launch_path = std::string(value());
         effects |= option_effect::skip_intro;
     } else if (argument == "--list-content") {
         result.list_content = true;
@@ -158,48 +159,49 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
         if (mode != "strict" && mode != "ignore")
             throw std::runtime_error("--demo-unit-table expects strict or ignore");
         result.demo_ignore_unit_table = mode == "ignore";
+    } else if (netgame::find_launch_option(argument) != nullptr) {
+        std::string given;
+        if (netgame::launch_option_takes_value(argument))
+            given = std::string(value());
+        result.launch_options.emplace_back(std::string(argument), std::move(given));
+        effects |= option_effect::skip_intro;
     } else
         return false;
     return true;
 }
 
-/// Copies text into a launch field, or refuses when it does not fit.
+/// Copies an option's text into a launch field, or refuses when it does not fit.
 ///
-/// The message names the field and the limit. It does not repeat the text,
+/// The message names the option and the limit. It does not repeat the text,
 /// so a password is never written out.
 ///
 /// @param field the field, including room for a terminating NUL
 /// @param text the text
-/// @param source the launch file's name
-/// @param name the setting's name
-void store_launch_text(
-    std::span<char> field, std::string_view text, std::string_view source, std::string_view name
-) {
+/// @param option the option that gave it
+void store_launch_text(std::span<char> field, std::string_view text, std::string_view option) {
     if (field.empty() || text.size() >= field.size()) {
         const auto limit = field.empty() ? std::size_t{0} : field.size() - 1;
         throw LaunchRefusal(
-            std::string(source) + ": " + std::string(name) + ": is longer than " +
-            std::to_string(limit) + " characters"
+            std::string(option) + ": is longer than " + std::to_string(limit) + " characters"
         );
     }
     oa::base::text::copy_terminated(field, text);
 }
 
-/// Reads a launch file into the context, then puts the command line's own fields back.
+/// Puts a launch plan into the context, then puts the command line's own fields back.
 ///
 /// --host, --join, --player-name, --game-name, --game-password, --dplay-guid,
-/// --dplay-port, "-h" and "-n" each keep the field they named. The password
-/// is stored and not written out.
+/// --dplay-port, "-h" and "-n" each keep the field they named. The plan is
+/// then checked as a whole with the role the run takes. The password is
+/// stored and not written out.
 ///
-/// @param[in,out] netgame the context the file and the command line share
-void apply_launch_file(NetgameContext& netgame) {
+/// @param[in,out] netgame the context the plan and the command line share
+/// @param plan the launch, from a file, standard input or the launch settings' options
+void apply_launch_plan(NetgameContext& netgame, LaunchPlan plan) {
     namespace nl = oa::app::netgame::launch;
     using Kind = oa::ui::frontend_multiplayer::DirectGame::Kind;
     auto& options = netgame.options;
     auto& switches = netgame.launch;
-    const bool yaml = !options.launch_yaml.empty();
-    const std::string path = yaml ? options.launch_yaml : switches.ini_path;
-    const LaunchPlan plan = read_launch_file(path, yaml);
 
     const Kind cli_kind = options.direct_game.kind;
     const std::string cli_address = options.direct_game.address;
@@ -220,10 +222,10 @@ void apply_launch_file(NetgameContext& netgame) {
 
     switches.block = plan.block;
     if (from_session)
-        store_launch_text(switches.block.session_name, saved_session, plan.source, "session");
+        store_launch_text(switches.block.session_name, saved_session, "-h");
     if (from_connection) {
         switches.block.connection_type = saved_type;
-        store_launch_text(switches.block.address, saved_address, plan.source, "address");
+        store_launch_text(switches.block.address, saved_address, "-n");
     }
 
     if (cli_kind == Kind::host) {
@@ -235,7 +237,7 @@ void apply_launch_file(NetgameContext& netgame) {
         options.direct_game.address = cli_address;
         switches.block.hosting = 0;
         if (!from_connection)
-            store_launch_text(switches.block.address, cli_address, plan.source, "game.address");
+            store_launch_text(switches.block.address, cli_address, "--join");
     } else if (from_session) {
         options.direct_game.kind = Kind::host;
         options.direct_game.address.clear();
@@ -250,17 +252,21 @@ void apply_launch_file(NetgameContext& netgame) {
         options.direct_game.kind = Kind::join;
         options.direct_game.address = plan.address;
         switches.block.hosting = 0;
-        if (!from_connection) {
+        if (!from_connection)
             switches.block.connection_type = nl::connection_type::tcpip;
-            store_launch_text(switches.block.address, plan.address, plan.source, "game.address");
-        }
+    } else if (!plan.source.empty()) {
+        throw LaunchRefusal(
+            plan.source + ": game.role: expected host or join, or --host or --join beside the file"
+        );
     } else {
-        throw LaunchRefusal(plan.source + ": game.role: expected host or join");
+        throw LaunchRefusal(options.launch_options.front().first + " needs --host or --join");
     }
+    plan.role = options.direct_game.kind == Kind::host ? LaunchRole::host : LaunchRole::join;
+    plan.address = options.direct_game.address;
 
     if (cli_game_set) {
         options.direct_game.game_name = cli_game;
-        store_launch_text(switches.block.session_name, cli_game, plan.source, "game.name");
+        store_launch_text(switches.block.session_name, cli_game, "--game-name");
     } else if (from_session) {
         options.direct_game.game_name = saved_session;
     } else {
@@ -269,14 +275,14 @@ void apply_launch_file(NetgameContext& netgame) {
 
     if (cli_player_set) {
         options.direct_game.player_name = cli_player;
-        store_launch_text(switches.block.user_name, cli_player, plan.source, "game.player");
+        store_launch_text(switches.block.user_name, cli_player, "--player-name");
     } else {
         options.direct_game.player_name = plan.player_name;
     }
 
     if (cli_password_set) {
         options.direct_game.password = cli_password;
-        store_launch_text(switches.block.password, cli_password, plan.source, "game.password");
+        store_launch_text(switches.block.password, cli_password, "--game-password");
     } else {
         options.direct_game.password = plan.password;
     }
@@ -290,22 +296,59 @@ void apply_launch_file(NetgameContext& netgame) {
     else
         options.dplay_guid = plan.dplay_guid;
 
+    netgame::check_launch_plan(plan);
     options.launch_content = plan.content;
     options.launch_status = plan.status;
-    options.launch_from_file = true;
+    options.launch_planned = true;
     options.launch_source = plan.source;
+    options.launch_replaced = plan.replaced;
+    netgame::keep_launch_status(plan.status);
+}
+
+/// Reads the launch the command line names: a file, standard input, and the launch settings' options.
+///
+/// "-c FILE" and --launch FILE name one file of either kind, and cannot both
+/// be given. Without one, a launch piped in on standard input is read when
+/// the program allows it. Each launch setting's option then replaces its
+/// field, in command-line order; options alone make a plan of their own.
+///
+/// @param netgame the context the command line filled
+/// @return the plan, or nothing when the command line names no launch
+std::optional<LaunchPlan> read_named_launch(const NetgameContext& netgame) {
+    const auto& options = netgame.options;
+    const auto& switches = netgame.launch;
+    if (switches.launch_seen && !options.launch_path.empty())
+        throw LaunchRefusal("-c and --launch cannot both be given");
+    if (switches.launch_seen && switches.launch_path.empty())
+        throw LaunchRefusal("-c: the file: -c needs a file");
+    const std::string& path = switches.launch_seen ? switches.launch_path : options.launch_path;
+    std::optional<LaunchPlan> plan;
+    if (!path.empty()) {
+        plan = netgame::read_launch_file(path);
+    } else if (options.piped_launch_allowed) {
+        const auto piped = netgame::read_piped_launch(
+            netgame::standard_input(), netgame::kPipedLaunchWait, netgame::kPipedLaunchRest
+        );
+        if (piped.found)
+            plan = netgame::read_launch_text("standard input", piped.text);
+    }
+    if (!options.launch_options.empty() && !plan)
+        plan.emplace();
+    for (const auto& [option, given] : options.launch_options)
+        netgame::replace_launch_field(*plan, *netgame::find_launch_option(option), option, given);
+    return plan;
 }
 
 /// Checks the network game options as a whole (Extension::check_options).
 ///
-/// A launch file is read here, after the long options and the game switches,
-/// and each field the command line named is put back. --player-name,
-/// --game-name and --game-password need --host or --join, or a launch file
-/// that hosts or joins. A game to host or join has the frontend open
+/// A launch is read here, after the long options and the game switches, and
+/// each field the command line named is put back. --player-name,
+/// --game-name and --game-password need --host or --join, or a launch that
+/// hosts or joins. A game to host or join has the frontend open
 /// multiplayer over TCP/IP at once, whatever connection "-n" named.
 /// --list-content needs --json, and --json needs --list-content. A refused
-/// combination throws std::runtime_error. A launch file that cannot be used
-/// is kept, and raise_launch_refusal raises it after the hook returns.
+/// combination throws std::runtime_error. A launch that cannot be used is
+/// kept, and raise_launch_refusal raises it after the hook returns.
 ///
 /// @param context The NetgameContext whose options are checked.
 void check_options(void* context) {
@@ -313,19 +356,14 @@ void check_options(void* context) {
     auto& options = netgame.options;
     options.launch_refusal.clear();
     held_launch_refusal().clear();
+    netgame::keep_launch_status({});
     try {
         if (options.list_content && !options.json_requested)
             throw std::runtime_error("--list-content needs --json");
         if (options.json_requested && !options.list_content)
             throw std::runtime_error("--json needs --list-content");
-        if (netgame.launch.ini_seen && !options.launch_yaml.empty())
-            throw LaunchRefusal(
-                options.launch_yaml + ": the file: a launch file and -c cannot both be given"
-            );
-        if (netgame.launch.ini_seen && netgame.launch.ini_path.empty())
-            throw LaunchRefusal("-c: the file: -c needs a file");
-        if (netgame.launch.ini_seen || !options.launch_yaml.empty())
-            apply_launch_file(netgame);
+        if (std::optional<LaunchPlan> plan = read_named_launch(netgame))
+            apply_launch_plan(netgame, std::move(*plan));
         const auto& game = options.direct_game;
         if (game.kind == oa::ui::frontend_multiplayer::DirectGame::Kind::none) {
             if (!game.player_name.empty())
@@ -353,6 +391,34 @@ const oa::app::command_line::SwitchHandler* switch_handler(void* context) {
     return &context_of(context).switches;
 }
 
+/// Returns network play's options for the run options' line of the usage.
+///
+/// The launch settings network play reads come from the table of launch
+/// settings, in its order, so --help names each with the value it takes.
+///
+/// @return the text, made once
+const std::string& usage_runs() {
+    static const std::string runs = [] {
+        std::string listed = "[--launch FILE|-] ";
+        for (const netgame::LaunchField& field : netgame::launch_fields()) {
+            if (field.reader != netgame::LaunchOptionReader::network_play &&
+                field.reader != netgame::LaunchOptionReader::direct_game)
+                continue;
+            // --join ADDRESS, the address's option, is already part of the role's.
+            if (listed.find(field.option) != std::string::npos)
+                continue;
+            listed += "[" + std::string(field.option) + "] ";
+        }
+        listed += "[--list-content --json] "
+                  "[--net-loopback-check TICKS] [--net-loopback-watcher] "
+                  "[--net-loopback-computer] [--net-loopback-each-ai] [--check-host-not-found] "
+                  "[--play-demo FILE.tad] "
+                  "[--demo-unit-table strict|ignore] [--net-record FILE] [--replay-viewer] ";
+        return listed;
+    }();
+    return runs;
+}
+
 /// Returns network play's wording of the usage text and of the -r refusal (Extension::text).
 ///
 /// @param context Extension context (unused).
@@ -363,15 +429,9 @@ const char* text(void* /*context*/, ExtensionText which) {
     case ExtensionText::usage_checks:
         return "[--check-recording-hook] ";
     case ExtensionText::usage_runs:
-        return "[--host | --join ADDRESS] [--player-name NAME] [--game-name NAME] "
-               "[--game-password PASSWORD] [--launch FILE] [--list-content --json] "
-               "[--net-loopback-check TICKS] [--net-loopback-watcher] [--net-loopback-computer] "
-               "[--net-loopback-each-ai] "
-               "[--check-host-not-found] [--dplay-port PORT] [--dplay-guid GUID] "
-               "[--play-demo FILE.tad] "
-               "[--demo-unit-table strict|ignore] [--net-record FILE] [--replay-viewer] ";
+        return usage_runs().c_str();
     case ExtensionText::usage_switches:
-        return "-c FILE -t SECONDS -n TYPE[:ADDRESS] -hNAME ";
+        return "-c FILE|- -t SECONDS -n TYPE[:ADDRESS] -hNAME ";
     case ExtensionText::usage_note:
         return "";
     case ExtensionText::register_switch:
@@ -446,6 +506,20 @@ void match_game(void* context, oa::Game& game) {
 
 } // namespace
 
+void allow_piped_launch() noexcept {
+    netgame_context().options.piped_launch_allowed = true;
+}
+
+std::string launch_place(std::string_view field) {
+    const auto& net = netgame_context().options;
+    for (const auto& [replaced, option] : net.launch_replaced)
+        if (replaced == field)
+            return option;
+    if (net.launch_source.empty())
+        return std::string(field);
+    return net.launch_source + ": " + std::string(field);
+}
+
 void raise_launch_refusal() {
     if (held_launch_refusal().empty())
         return;
@@ -467,7 +541,7 @@ void register_frontend_state_queries(ScreenRegistry* registry) noexcept {
 
 void adopt_launch_run(Options& options) {
     auto& net = netgame_context().options;
-    if (!net.launch_from_file)
+    if (!net.launch_planned)
         return;
     if (net.launch_content.named && options.content.empty()) {
         std::string text = net.launch_content.base_game;

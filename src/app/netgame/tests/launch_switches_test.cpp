@@ -94,20 +94,27 @@ void intro_and_connection() {
         dash.launch.block.connection_type == 0 && dash.engine.skip_intro == 1,
         "dash argument still skips"
     );
-    // "-c" names TA Forever's launch file and skips the intro. "-y" asks for
-    // the setup (enable_netsetup) and is not network play's switch.
+    // "-c" names a launch file of either kind and skips the intro; "-c -"
+    // names standard input. "-y" asks for the setup (enable_netsetup) and is
+    // not network play's switch.
     const auto module = parsed("-c module.cfg");
     require(
-        module.launch.ini_seen && module.launch.ini_path == "module.cfg" &&
+        module.launch.launch_seen && module.launch.launch_path == "module.cfg" &&
             module.engine.skip_intro == 1,
         "-c takes a file and skips the intro"
     );
     const auto attached_file = parsed("-cmodule.cfg");
-    require(attached_file.launch.ini_path == "module.cfg", "an attached -c file");
-    const auto empty = parsed("-c -");
+    require(attached_file.launch.launch_path == "module.cfg", "an attached -c file");
+    const auto piped = parsed("-c -");
     require(
-        empty.launch.ini_seen && empty.launch.ini_path.empty() && empty.engine.skip_intro == 1,
-        "-c with a dash stores no file"
+        piped.launch.launch_seen && piped.launch.launch_path == "-" && piped.engine.skip_intro == 1,
+        "-c - names standard input"
+    );
+    const auto empty = parsed("-c -t60");
+    require(
+        empty.launch.launch_seen && empty.launch.launch_path.empty() &&
+            empty.engine.skip_intro == 1,
+        "-c before another switch stores no file"
     );
     const auto setup = parsed("-y", cl::Status::unavailable_switch);
     require(setup.engine.skip_intro == 0 && setup.launch.netsetup == 0, "-y is not taken");

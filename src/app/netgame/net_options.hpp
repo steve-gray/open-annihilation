@@ -21,6 +21,8 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace oa::app {
@@ -77,17 +79,30 @@ struct NetOptions {
     // as soon as the game starts, as the player would through them. The
     // preferences keep what they hold.
     oa::ui::frontend_multiplayer::DirectGame direct_game{};
-    // --launch FILE, or "-" for standard input. Read once the other options
-    // are known, so an option beside the file overrides one field.
-    std::string launch_yaml{};
+    // --launch FILE, or "-" for standard input: a launch file, an .oalaunch
+    // or TA Forever's INI, as -c names one. Read once the other options are
+    // known, so an option beside the file replaces one field.
+    std::string launch_path{};
+    // The launch settings' options, such as --metal 2000, in command-line
+    // order: the option as written and its value (empty for one that takes
+    // none). Each replaces its field of the file's plan, or makes a plan of
+    // its own with --host or --join.
+    std::vector<std::pair<std::string, std::string>> launch_options{};
+    // The program, not a test, may read a launch piped in on standard input
+    // when no launch file is named (allow_piped_launch).
+    bool piped_launch_allowed = false;
     // --list-content with --json: print the installed maps, mods and
     // expansions and leave before a window opens.
     bool list_content = false;
     bool json_requested = false;
-    // A launch file was read. The battle room applies it, and standard
-    // output names the map and the rules.
-    bool launch_from_file = false;
+    // A launch was planned, from a file, from standard input or from the
+    // launch settings' options. The battle room applies it, and the log names
+    // the map, the rules and the seats.
+    bool launch_planned = false;
     std::string launch_source{};
+    // The fields an option replaced, each with that option, so a later
+    // refusal names the option (launch_place).
+    std::vector<std::pair<std::string, std::string>> launch_replaced{};
     // Which of the direct-game options the command line itself named, so a
     // launch file does not replace them.
     bool cli_player_name = false;
@@ -165,6 +180,22 @@ struct NetgameContext {
 void fill_option_hooks(Extension& table, NetgameContext& context);
 
 struct Options;
+
+/// Lets this run read a launch piped in on standard input.
+///
+/// The program calls it before it parses the command line; a test that
+/// parses one does not, so it never waits on its own standard input. When
+/// no launch file is named, check_options then reads a launch from standard
+/// input if it is a pipe or a file whose first bytes are `oalaunch:`,
+/// waiting at most oa::app::netgame::kPipedLaunchWait for the first byte.
+void allow_piped_launch() noexcept;
+
+/// Returns where a refusal of one of the launch's fields points.
+///
+/// @param field the dotted field, such as map
+/// @return the option that replaced it, such as --map, or the launch's
+///         source and the field, such as "host.oalaunch: map"
+[[nodiscard]] std::string launch_place(std::string_view field);
 
 /// Raises a launch-file refusal that check_options kept.
 ///
