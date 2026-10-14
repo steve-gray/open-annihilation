@@ -138,7 +138,9 @@ under them, so the maps pane keeps a row.
   Library closes, and says that the mod is unloaded and the game plays
   with **No Mod**. The hint then names the mod and the expansion: "Ridge
   was unloaded because Campaign is off. The game plays with No Mod."
-  Turning that expansion back on clears the sentence. When a stored note
+  Turning that expansion back on clears the sentence. While the command
+  line chose the mod, the Library cannot unload it, so a press that would
+  turn off an expansion it needs does nothing. When a stored note
   says a mod was cleared for the same reason, and this tab has not edited
   the choice, the hint is "The mod was unloaded because an expansion it
   needs is off. The game plays with No Mod." The pills are greyed during
@@ -149,9 +151,11 @@ under them, so the maps pane keeps a row.
   open, nor during a game. Choosing another base game turns on every
   expansion of it that is copied and unloads the mod you are playing.
   The chooser says so, and the change applies when the Library closes.
-  A base game that is not copied asks for its source and copies it before
-  that choice is kept. The demo asks for its installer. **USE THIS GAME**
-  keeps the marked game. **CANCEL** leaves the choice as it was.
+  Choosing the base game you started with again, before the Library
+  closes, plays that mod again. A base game that is not copied asks for
+  its source and copies it before that choice is kept. The demo asks for
+  its installer. **USE THIS GAME** keeps the marked game. **CANCEL**
+  leaves the choice as it was.
 - **MOD**: a tile for the mod you are playing. Its badge is large, and the
   tile names the mod, its version and revision ("4.8 (rev 3)") and who made
   it ("by the Ridge team"). **Playing** is a rounded pill at the top right,
