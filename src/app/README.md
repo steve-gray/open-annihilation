@@ -4074,6 +4074,11 @@ host or join a
 TCP/IP game at once, each screen doing what a player would
 (`multiplayer_bind_direct_game`), and print the battle room's progress;
 `--check-multiplayer-menu` runs its check of the multiplayer screens.
+A transport named with no game to host or join (`-n`, or the `-c` file's
+`connect`) takes the main menu to the multiplayer screens at once, as in
+3.1c: each frame asks for a frontend pass until a multiplayer screen shows
+(`transport_frame`), and the screens take the transport, so `-n1:ADDRESS`
+alone lists the games at that address for the player to choose.
 A launch file the system opens in the game (`opened_launch.hpp`) is read
 as it arrives and waits for the game to take it. One that arrives before
 the runtime starts is the start's launch, exactly as `-c FILE` makes it:

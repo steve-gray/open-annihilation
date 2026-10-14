@@ -454,7 +454,9 @@ ways to say what the game is:
 
 3.1c's `-h`, `-n` and `-b` switches work beside `-c` as they do in 3.1c
 ([The 3.1c command line](#the-31c-command-line)). On their own they start no
-game: with `-n1:192.0.2.10` alone the game opens on its main menu.
+game: `-n1:192.0.2.10` alone opens the multiplayer screens over TCP/IP at
+that address, as in 3.1c, and the game list shows the games there for the
+player to choose.
 
 `-c FILE` and `--launch FILE` are one option. Each names a launch file, which
 is either Open Annihilation's own `.oalaunch` file or the settings file TA
@@ -1046,7 +1048,7 @@ switches, a `-b` that does nothing, a `-c` with no file, and `-h`, `-n` and
 | `-f` | Nothing. |
 | `-h NAME` | Marks this machine as the host and names the game; 63 characters are kept. A next word that begins with `-` is used up and sets nothing. |
 | `-l` | Nothing, as in 3.1c. |
-| `-n TYPE[:ADDRESS]` | Skips the intro and names the transport the multiplayer screens open on: `1` TCP/IP, with the address to connect to after a colon (`-n1:192.0.2.10`); `2` IPX, `3` a modem and `4` a serial cable, which this game does not have, so the screens open on the provider list. Another number only skips the intro. |
+| `-n TYPE[:ADDRESS]` | Skips the intro, and the main menu goes straight to the multiplayer screens on the transport it names: `1` TCP/IP, with the address to connect to after a colon (`-n1:192.0.2.10`), whose games the game list then shows for the player to choose, or, with no address, the screens ask for one; `2` IPX, `3` a modem and `4` a serial cable, which this game does not have, so the screens open on the provider list. Another number only skips the intro. |
 | `-p RATE` | The network send rate in packets per second: 1 counts as 2 and above 30 as 30, 0 is 5 a second, and below 0, or a value that begins with `-`, turns paced sending off. A launch file's `pfs` replaces it. |
 | `-r TEXT` | Says, on standard output, that this game needs no DirectPlay registration, and ends with status 0 without opening a window. TEXT is the rest of the line. |
 | `-s` | No sound. |

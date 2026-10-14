@@ -30,7 +30,10 @@ check runs beside anything else on this machine:
   output, as its only line, and the log does not hold it;
 - a launch whose map or mod is not installed, with the status lines on
   standard output, ends with status 2 before a window opens, and its status
-  lines are hello and an exit line with reason refused and code 2.
+  lines are hello and an exit line with reason refused and code 2;
+- -n1:127.0.0.1 alone, with no launch, goes from the main menu through the
+  provider list and the TCP/IP address to the game list of that address,
+  as 3.1c does, and stays there for the player to choose a game.
 
 The battle room's lines are read from the game's log (--log-dir), which is
 where those lines are kept. The password in the file is never printed.
@@ -544,6 +547,30 @@ def check_refused_launch(native, game_dir, workdir, name, text, field):
     print(f"{name}: {refusal[refusal.rfind('/') + 1:]}")
 
 
+def check_transport(native, game_dir, workdir):
+    """-n1:127.0.0.1 alone goes from the main menu to the game list of that address.
+
+    The game asks for games at a port the check holds and never answers, and
+    runs a fixed number of frames, which the screens take far fewer of.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as silent:
+        silent.bind((ADDRESS, 0))
+        port = silent.getsockname()[1]
+        status, lines, _ = run_apart(native, game_dir, workdir, "transport", [
+            "--status-stdout", "--frames", "300", "--dplay-port", str(port), f"-n1:{ADDRESS}",
+        ])
+    if status != 0:
+        raise LaunchFileFailure(f"transport exited with {status}, expected 0")
+    objects = status_objects("transport", lines)
+    screens = [item.get("name") for item in objects if item.get("event") == "screen"]
+    expected = ["main_menu", "mp_providers", "mp_tcp", "mp_game_list"]
+    if screens != expected:
+        raise LaunchFileFailure(f"-n1 alone showed the screens {screens}, not {expected}")
+    if not objects or objects[-1].get("event") != "exit":
+        raise LaunchFileFailure("transport did not end its status lines with exit")
+    print("transport: -n1:127.0.0.1 alone showed " + ", ".join(screens))
+
+
 def check(native, game_dir, workdir):
     """Runs each launch-file case; raises LaunchFileFailure when one differs."""
     launch_path = workdir / "host.oalaunch"
@@ -582,6 +609,7 @@ def check(native, game_dir, workdir):
     check_list_with_log(native, game_dir, workdir)
     check_refused_launch(native, game_dir, workdir, "missing-map", MISSING_MAP_YAML, "map")
     check_refused_launch(native, game_dir, workdir, "missing-mod", MISSING_MOD_YAML, "content.mod")
+    check_transport(native, game_dir, workdir)
 
 
 def main():
@@ -603,8 +631,8 @@ def main():
           "file of 3.1c's keys as 3.1c reads them, -c and -C read both from a folder whose "
           "name has a space, a bad file and a bad option exited 2, -r "
           "exited 0, --list-content --json parsed beside an idle pipe and alone on standard "
-          "output beside --log-dir with no window, and a missing map and a missing mod exited 2 "
-          "with no window and an exit line")
+          "output beside --log-dir with no window, a missing map and a missing mod exited 2 "
+          "with no window and an exit line, and -n1 alone opened the game list")
     return 0
 
 

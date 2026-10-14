@@ -274,8 +274,9 @@ if(BUILD_TESTING AND TARGET oa-game AND IS_DIRECTORY "${OA_GAME_DIR}")
     # A launch file, TA Forever's or this game's, opens the battle room on
     # the file's map and rules. A file the game cannot use, or a map or mod
     # it names that is not installed, ends before a window with the status
-    # stream's exit line, and --list-content --json prints the installed
-    # content on standard output with no window, also beside --log-dir.
+    # stream's exit line, --list-content --json prints the installed content
+    # on standard output with no window, also beside --log-dir, and -n1
+    # alone opens the game list of its address.
     add_test(NAME native-launch-file COMMAND ${Python3_EXECUTABLE}
       "${PROJECT_SOURCE_DIR}/tools/check_native_launch_file.py"
       --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"

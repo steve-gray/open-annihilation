@@ -169,6 +169,14 @@ constexpr uint32_t kDirectGameOpeningFrames = 300;
 
 DirectGameReport g_direct_report;
 
+/// How far the transport a launch names has taken the main menu to multiplayer (transport_frame).
+struct TransportOpening {
+    bool settled{};    ///< the screens showed, or there was nothing to open
+    uint32_t frames{}; ///< frames that asked for a frontend pass
+};
+
+TransportOpening g_transport_opening;
+
 /// Names the players seated in the battle room, in slot order.
 ///
 /// @param lobby the multiplayer screens' lobby
@@ -263,6 +271,36 @@ void report_launch_battle_room(mp::Lobby& lobby) {
              ", cheats " + cheats + ", watchers " + watchers + ", player limit " +
              std::to_string(players);
     oa::platform::log_files::write_line(rules);
+}
+
+/// Takes the main menu to the multiplayer screens without input when the start names a transport and no game.
+///
+/// "-n", or the connect key of TA Forever's file, names the transport. The
+/// main menu then goes to multiplayer at once, as in 3.1c, whose frontend
+/// runs every frame; this game's frontend runs a pass when asked, so until a
+/// multiplayer screen first shows, each frame asks for one, for
+/// kDirectGameOpeningFrames frames at most. The screens then take the
+/// transport as 3.1c's do: with TCP/IP and an address the address step
+/// completes by itself and the game list shows the games there for the
+/// player to choose; without an address it waits for one; a transport this
+/// game does not have leaves the provider list up. A game to host or join
+/// is direct_game_frame's, and --check-host-not-found asks for its own
+/// passes.
+void transport_frame() {
+    auto& opening = g_transport_opening;
+    if (opening.settled)
+        return;
+    const NetOptions& options = net_options();
+    if (options.direct_game.kind != mp::DirectGame::Kind::none || options.check_host_not_found ||
+        mp::multiplayer_showing() || opening.frames >= kDirectGameOpeningFrames ||
+        (opening.frames == 0 && launch_connection_type(nullptr) == 0)) {
+        opening.settled = true;
+        return;
+    }
+    if (g_services.services == nullptr || g_services.services->run_frontend == nullptr)
+        return;
+    ++opening.frames;
+    g_services.services->run_frontend(g_services.host);
 }
 
 /// Runs the part of a frame that follows the game --host or --join asked for.
@@ -1275,7 +1313,8 @@ struct RuntimeExtension {
     /// @param runtime The running app.
     /// @param stage pump follows the game into its close handler (and runs
     ///              --check-host-not-found's part of the frame, takes or
-    ///              refuses a launch file the system opened, and runs the part
+    ///              refuses a launch file the system opened, takes the main
+    ///              menu to the transport "-n" names, and runs the part
     ///              that follows --host's and --join's game), binds the
     ///              profile's rules again once Developer Mode changes them
     ///              and Unicode chat as it is now, then runs the network
@@ -1287,6 +1326,7 @@ struct RuntimeExtension {
             if (net_options().check_host_not_found)
                 host_not_found_frame();
             follow_opened_launches(runtime, NetworkPlay::of(runtime));
+            transport_frame();
             direct_game_frame();
             // The rules Developer Mode lays over the profile reach the
             // multiplayer screens and the session.
