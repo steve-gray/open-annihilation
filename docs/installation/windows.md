@@ -273,12 +273,32 @@ command, still takes the screenshots and films.
   not remove the Open Annihilation folder in Documents, so saved games,
   screenshots, films, recordings and mods stay. It does not remove a copy
   of the game you unzipped somewhere else.
+- The uninstaller also removes the launch file association the installer
+  made for everyone. For the Windows account that runs it, it removes the
+  game's registration as the opener of `.oamod`, `.oalang`, `.oamap`,
+  `.oareg` and `.oalaunch` files while that registration opens them with
+  the installed `open-annihilation.exe`, and the empty (Default) of
+  `HKEY_CURRENT_USER\Software\Classes\.oalaunch` that hid the association
+  while Launch files was off. A type that a copy you unzipped elsewhere
+  registered last opens with that copy, and stays registered. Another
+  program's choices for these files stay too.
+- **Other accounts:** the uninstaller cannot reach the other Windows
+  accounts on the computer, nor yours when Windows asked for another
+  administrator's password to remove the game: then the account that ran
+  it is that administrator's. Each account that started the installed game
+  keeps its registration, which still names the removed program, so
+  double-clicking one of those files there tries to start it and Windows
+  says it cannot find it. The registration stays until that account starts
+  Open Annihilation from another copy, one unzipped or installed again:
+  that start registers the copy that runs in its place, withdraws the types
+  turned off in its settings, and removes the empty (Default) of
+  `.oalaunch`. Or delete the ten keys below in that account.
 - **To remove a zip copy:** delete that folder. The Open Annihilation
   folder in Documents is separate and stays until you delete it yourself.
 - **To remove your settings and logs too,** delete the Local AppData folder
-  above. To make Windows forget the game as the opener of `.oamod`,
-  `.oalang`, `.oamap`, `.oareg` and `.oalaunch` files, delete these ten
-  keys with the Registry Editor:
+  above. To make Windows forget a copy you unzipped as the opener of
+  `.oamod`, `.oalang`, `.oamap`, `.oareg` and `.oalaunch` files, delete
+  these ten keys with the Registry Editor:
   `HKEY_CURRENT_USER\Software\Classes\.oamod`,
   `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Mod`,
   `HKEY_CURRENT_USER\Software\Classes\.oalang`,
@@ -288,9 +308,4 @@ command, still takes the screenshots and films.
   `HKEY_CURRENT_USER\Software\Classes\.oareg`,
   `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Registry`,
   `HKEY_CURRENT_USER\Software\Classes\.oalaunch` and
-  `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Launch`. The
-  uninstaller removes the launch file association the installer made and,
-  for the account that uninstalls, the empty (Default) of
-  `HKEY_CURRENT_USER\Software\Classes\.oalaunch` that hid it while Launch
-  files was off. Another account's empty (Default) names no program and
-  stays until the game starts there again.
+  `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Launch`.

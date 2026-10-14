@@ -126,6 +126,33 @@ for everyone who uses the computer, with the installed
 program identifier's key and the `OpenWithProgids` value, and the
 extension's (Default) and `Content Type` while they still name the game.
 
+Before it removes the program's files, the uninstaller also withdraws, for
+the account that runs it, the game's own registration of the five types
+under `HKEY_CURRENT_USER\Software\Classes` while it names the installed
+program, `<install folder>\open-annihilation.exe`, and leaves every value
+a withdrawal would leave. For each type:
+
+- the program identifier's open command goes while the program it names,
+  between its first two quotes, is the installed one, and its
+  `DefaultIcon` while it is that program followed by `,0`. A path matches
+  without regard to letter case, and also in its short form, so either
+  spelling of the same file does;
+- when one of them named the installed program and neither names another,
+  the rest of the type's six values goes too: the program identifier's
+  name, its keys leaf first (each only once nothing is left in it), the
+  `OpenWithProgids` value named for it, and the extension's (Default) and
+  `Content Type` while they are still the game's program identifier and
+  MIME type;
+- otherwise the type stays as it is. A copy unzipped elsewhere that
+  registered a type last names its own path there, so its registration of
+  that type keeps working, and a command or icon in a form the game does
+  not write counts as another program's.
+
+The override below is then removed as well. The uninstaller cannot reach
+another account's registration: that one still names the removed program
+until the account starts another copy of the game, whose start registers
+that copy in its place and withdraws the types that are off.
+
 ### The installer's association and Launch files Off
 
 Windows opens a file through `HKEY_CLASSES_ROOT`, the user's classes laid
@@ -318,8 +345,12 @@ text among them.
   on, wins over both registrations and the override.
 - A registration only follows the copy that ran last: two copies in
   different folders take the files from each other at each start.
-- Nothing is removed when the game is removed; the installation pages say
-  which keys and files to remove.
+- The Windows uninstaller withdraws the registration of the account that
+  runs it alone (an administrator's, when Windows asked for another
+  administrator's password). Another account's registration still names the
+  removed program until that account starts another copy of the game.
+  Removing a copy the player unzipped, or the game on Linux, removes
+  nothing; the installation pages say which keys and files to remove.
 - On macOS the declaration stays in the bundle after the game is removed,
   until the bundle itself is removed. Off does not restore an opener that
   was neither this copy nor the default opener of a zip or of plain text:
