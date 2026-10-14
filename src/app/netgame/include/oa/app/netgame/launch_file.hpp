@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -80,11 +81,20 @@ struct LaunchPlan {
     std::optional<uint16_t> dplay_port{};
     LaunchContentChoice content{};
     LaunchStatusChoice status{};
-    bool ini = false;     ///< read from TA Forever's INI
+    bool ini = false; ///< read from TA Forever's INI
+    /// The INI names connect, creator or address, which then decide the
+    /// transport, hosting or joining and the address, as in 3.1c.
+    bool connection_named = false;
     std::string source{}; ///< the file's name as it was given, "standard input", or empty
     /// The fields an option replaced, each with the option that did, so a
     /// later refusal of that field names the option.
     std::vector<std::pair<std::string, std::string>> replaced{};
+    /// The fields keys of the INI filled, each with the key as the file
+    /// wrote it, so a later refusal of that field names the key.
+    std::vector<std::pair<std::string, std::string>> ini_keys{};
+    /// Lines for the game's log: keys the INI holds that are not read, and
+    /// where a file named without a folder was found.
+    std::vector<std::string> notes{};
 };
 
 /// Which part of the game reads a launch setting's option from the command line.
@@ -149,17 +159,32 @@ struct LaunchField {
 /// @return true when the next argument is its value
 [[nodiscard]] bool launch_option_takes_value(std::string_view option) noexcept;
 
-/// One key of TA Forever's INI and the launch field it fills.
+/// One key of the INI 3.1c's -c reads, which TA Forever writes, and the launch field it fills.
 struct LaunchIniKey {
-    std::string_view key{};     ///< the key, as TA Forever writes it; read in any case
+    std::string_view key{};     ///< the key, as 3.1c names it; read in any case
     std::string_view field{};   ///< the launch field it fills; empty when none
-    std::string_view meaning{}; ///< what the battle room does with the value
+    std::string_view meaning{}; ///< what the game does with the value
+    bool read = true;           ///< false for a key 3.1c never reads, which is logged
 };
 
-/// Returns every key of TA Forever's INI and the launch field each fills.
+/// Returns every key of the INI and the launch field each fills.
+///
+/// The 22 keys 3.1c reads come first, in the order it reads them, then the
+/// two TA Forever writes that 3.1c never reads.
 ///
 /// @return the table, in the order the manual lists it
 [[nodiscard]] std::span<const LaunchIniKey> launch_ini_keys() noexcept;
+
+/// Decides hosting or joining from a launch block, as 3.1c's screens do.
+///
+/// With the TCP/IP transport and an address, the host flag hosts and its
+/// absence joins the game at the address. Anything else leaves the choice
+/// to the multiplayer screens.
+///
+/// @param block the block
+/// @return host, join, or unset for the screens
+[[nodiscard]] LaunchRole
+role_from_record(const oa::ui::frontend_multiplayer::launch::LaunchBlock& block) noexcept;
 
 /// The two kinds of launch file, told apart by what they hold.
 enum class LaunchFileKind : uint8_t {
@@ -181,23 +206,46 @@ enum class LaunchFileKind : uint8_t {
 
 /// Reads a launch file's text into one plan, by what it holds.
 ///
-/// An INI is a `[totala]` group of `key=value` lines, keys in any case. An
-/// .oalaunch file is YAML that begins with `oalaunch: 1`. A value the battle
-/// room cannot use throws LaunchRefusal. The password is not copied into
-/// that message.
+/// An INI is read as 3.1c reads it: the first `[TotalA]` section, in any
+/// case, its keys in any case, the first copy of each key, a value's quotes
+/// dropped, a text cut to its field, and a number the whole number its value
+/// begins with. A key it does not read is noted, never refused, and no INI
+/// value is refused. An INI that names none of connect, creator and address
+/// hosts over TCP/IP, where 3.1c leaves the choice to its menus, so that TA
+/// Forever's file starts a game. An .oalaunch file is YAML that begins with
+/// `oalaunch: 1`, and a value the battle room cannot use throws
+/// LaunchRefusal. The password is not copied into that message.
 ///
-/// @param source the file's name, used in a refusal
+/// @param source the file's name, used in a refusal and a note
 /// @param text the file's bytes
 /// @return the plan
-/// @throws LaunchRefusal the text is not a launch file, or a field cannot be used
+/// @throws LaunchRefusal the text is not a launch file, or an .oalaunch field cannot be used
 [[nodiscard]] LaunchPlan read_launch_text(std::string_view source, std::string_view text);
+
+/// Where a launch file named without a folder is looked for after the current folder.
+struct LaunchFolders {
+    /// Finds the game folder; null, or a call that finds none, leaves the
+    /// current folder alone.
+    std::optional<std::filesystem::path> (*game_folder)(const void* context){};
+    const void* context{}; ///< handed back to game_folder
+};
+
+/// Tells whether a launch file's name names no folder: it holds no `\`, `/` or `:`.
+///
+/// @param path the name
+/// @return true for a bare name
+[[nodiscard]] bool names_bare_file(std::string_view path) noexcept;
 
 /// Reads a launch file from a path, or from standard input when `path` is "-".
 ///
+/// A bare name (names_bare_file) not in the current folder is looked for in
+/// the game folder `folders` finds.
+///
 /// @param path the file, or "-" for standard input
+/// @param folders where a bare name is looked for after the current folder
 /// @return the plan; its source is the path, or "standard input"
 /// @throws LaunchRefusal the file cannot be read, or read_launch_text refuses it
-[[nodiscard]] LaunchPlan read_launch_file(std::string_view path);
+[[nodiscard]] LaunchPlan read_launch_file(std::string_view path, const LaunchFolders& folders = {});
 
 /// Replaces one field of a plan with an option's value, checked as the file's value is.
 ///
@@ -222,9 +270,11 @@ void check_launch_plan(const LaunchPlan& plan);
 
 /// Returns where a refusal of a field points: the option that replaced it, or the file and the field.
 ///
+/// A field a key of the INI filled is named by that key.
+///
 /// @param plan the plan
 /// @param field the dotted field
-/// @return "--map", or "launch.oalaunch: map"
+/// @return "--map", "launch.oalaunch: map" or "taforever.ini: mission"
 [[nodiscard]] std::string launch_place(const LaunchPlan& plan, std::string_view field);
 
 /// The text standard input is read from on this system: a file descriptor, or a Windows handle.

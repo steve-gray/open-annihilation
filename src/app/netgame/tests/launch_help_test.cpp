@@ -3,10 +3,10 @@
 
 // The table of launch settings is what --help and the manual say. Every
 // option the table names is in --help, and network play's with the value it
-// takes; docs/command-line.md's table of launch settings and
-// docs/multiplayer/launch-file.md's table of TA Forever's keys are the
-// table's rows, word for word. With --print the test prints both tables as
-// the manual should hold them.
+// takes; docs/command-line.md's table of launch settings and its table of the
+// keys of the -c file are the tables' rows, word for word, and
+// docs/multiplayer/launch-file.md's example is a launch the game takes. With
+// --print the test prints both tables as the manual should hold them.
 #include "net_options.hpp"
 #include "oa/app/app.hpp"
 #include "oa/app/netgame/launch_file.hpp"
@@ -62,11 +62,11 @@ std::string settings_table() {
     return table;
 }
 
-/// Returns the manual's table of TA Forever's keys, made from the table.
+/// Returns the manual's table of the keys of the -c file, made from the table.
 ///
 /// @return the Markdown table
 std::string ini_table() {
-    std::string table = "| Key | Field | What the battle room uses |\n|---|---|---|\n";
+    std::string table = "| Key | Field | What the game does with it |\n|---|---|---|\n";
     for (const auto& key : launch_file::launch_ini_keys())
         table += "| `" + std::string(key.key) + "` | " +
                  (key.field.empty() ? std::string("none") : "`" + std::string(key.field) + "`") +
@@ -153,7 +153,18 @@ void check_help_at_exit() {
             );
     }
     expect(text.find("[--launch FILE|-]") != std::string::npos, "--help shows --launch FILE|-");
-    expect(text.find("-c FILE|-") != std::string::npos, "--help shows -c FILE|-");
+    for (const char* game_switch :
+         {"-b WORD",
+          "-c FILE|-",
+          "-e PERCENT",
+          "-h NAME",
+          "-n TYPE[:ADDRESS]",
+          "-p RATE",
+          "-t SECONDS",
+          "-y"})
+        expect(
+            text.find(game_switch) != std::string::npos, std::string("--help shows ") + game_switch
+        );
     std::cout.rdbuf(nullptr);
     if (failures != 0)
         std::fprintf(stderr, "%d launch help checks failed\n", failures);
@@ -226,7 +237,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     check_page(argv[1], settings_table(), "table of launch settings");
-    check_page(argv[2], ini_table(), "table of TA Forever's keys");
+    check_page(argv[1], ini_table(), "table of the keys of the -c file");
     // The manual's example is a launch the game takes.
     const std::string page = read_text(argv[2]);
     const auto start = page.find("```yaml\n");
