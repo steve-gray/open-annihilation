@@ -291,7 +291,17 @@ app removes the folder (`Runtime::library_uninstall`,
     each expansion of that game. One that is not copied and that a registry
     offers keeps the name and carries the download arrow at the right,
     inside the pill. The whole pill is the press: the same control asks
-    for the download, cancels it, or tries again. The mod tile has a large badge, the name,
+    for the download, cancels it, or tries again. While the command line
+    chose the mod played, a pill that is on and whose press would unload
+    that mod (it needs the expansion, or one that goes off with it) is
+    locked (`ExpansionPill::locked`), by the rule `press_expansion`
+    refuses that press by: the pill keeps its face under the kit's locked
+    fade, its item is marked locked, and it takes no press, key or Tab.
+    Under the pills the padlock and `ActiveContent::lock` ("The command
+    line chose this run's mod, which needs Campaign.", naming every locked
+    pill) stand in the lock colour, wrapped beside the padlock, above the
+    hint. No pill is locked during a game, while `--content` named the
+    choice or while the mod is chosen in the game. The mod tile has a large badge, the name,
     the version and revision and the author, with Playing as a pill on the
     title's line at the top right, or No Mod with an em dash and "Total
     Annihilation as it was made" and no pill.
@@ -525,9 +535,10 @@ app removes the folder (`Runtime::library_uninstall`,
     ("Polski 1.0") and `library.active.map.<n>`, from 1 in the order shown
     ("Ridgeline · 4 players · 16x16"), the link `library.active.from.<n>`
     ("From Core Map Pack", or the map's title when its pack holds that map
-    alone) for the same map, and while a mod is played the
-    button `library.active.unload` ("UNLOAD MOD"), disabled during a game
-    and while the command line chose the mod. The mod label is the part of
+    alone) for the same map, while a pill is locked the label
+    `library.active.lock` (the lock's words whole), and while a mod is
+    played the button `library.active.unload` ("UNLOAD MOD"), disabled
+    during a game and while the command line chose the mod. The mod label is the part of
     the tile above that button, the language label the part of its tile that
     shows, and a map's the part of its title line that shows, or the
     players-and-size line when the title is the link, empty while
@@ -574,7 +585,8 @@ stay valid until the model's next refresh.
   alone included, and the host stores only an edited draft. Choosing the
   stored base game again, after another, plays the mod again, and an
   expansion the command line's mod needs stays on, since closing never
-  unloads that mod.
+  unloads that mod. Its pill is locked exactly while that is why its
+  press is refused, and only then.
 - On the Active tab UNLOAD MOD takes a press, a key or Tab only while a
   mod is played and SWITCH OFF would act, and each map's link to its pack
   does while its line shows. The labels do not.
@@ -625,7 +637,13 @@ the stored one again, the mod played again after it; every sequence of
 five pill presses, answers to the expansion-off question, base game
 choices and refreshes, each leaving the Active tab on what closing the
 Library applies, with the mod needing what is stored and not, chosen by
-the command line, and no mod; the buttons of every state,
+the command line, and no mod; a pill locked, with the lock's words naming
+it, exactly while the command line is what refuses its press (refused as
+it stands, asked about with the mod chosen in the game), by hand for a
+need stored on, one through Core Contingency that locks Campaign too, one
+stored off that locks once turned on, a game, a choice `--content` named
+and no mod, and after every step of every sequence of four from six
+starting states; the buttons of every state,
 SWITCH OFF on the mod played and PLAY NOW and
 SWITCH OFF off while the command line chose the mod, its note, and when
 the refresh icon can be pressed; the summary, the manifest's description standing
@@ -719,7 +737,12 @@ labels, and on Compact the page scrolls as one by the wheel, a finger, its
 scroll bar, the page keys, Home, End and the right stick until four map
 rows are in view, and focusing a partly shown map link scrolls it wholly
 into view. On Regular the maps pane scrolls on its own and the tiles stay
-put. CHANGE… and the expansion pills take a press,
+put. CHANGE… and the expansion pills take a press, a pill the command
+line's mod needs drawn locked at every size (its face kept under the
+locked fade, out of Tab's order, its press doing nothing, the padlock and
+the lock's words under the pills, which `library.active.lock` reads whole)
+while the pills the player can turn keep their look, and nothing locked
+with the mod chosen in the game,
 UNLOAD MOD asking what SWITCH OFF asks and greyed during a
 game, and the maps search filtering
 by map name and by pack name, counting the tiles that match and saying
@@ -729,8 +752,9 @@ when nothing matches.
 and the modern fonts beside the test, Compact in the 640x480 window,
 Regular in 1920x1080 and Large in 2560x1440 at 2x, Compact's details
 page, the Active tab at Compact, Regular and Large, Compact scrolled to
-its maps, and with many maps at
-Regular, the Updates tab at Compact and Large, the Registries tab at
+its maps, with many maps at
+Regular, and at Compact while the command line chose a mod that needs
+Campaign, whose pill is locked, the Updates tab at Compact and Large, the Registries tab at
 Compact, Regular and Large,
 Languages at Compact, and the Maps tab at Large for one map and for
 several: each twice, byte for byte the same, with nothing
@@ -756,7 +780,7 @@ Built in. `library-languages-zh-compact.png` is the same window with
 `library-compact.png`, `library-regular.png`, `library-large.png`,
 `library-details-compact.png`, `library-active-compact.png`, `library-active-compact-maps.png`,
 `library-active-regular.png`, `library-active-large.png`,
-`library-active-many-regular.png`,
+`library-active-many-regular.png`, `library-active-locked-compact.png`,
 `library-updates-compact.png`, `library-updates-large.png`,
 `library-registries-compact.png`, `library-registries-regular.png`,
 `library-registries-large.png`, `library-languages-compact.png`, `library-languages-zh-compact.png`,

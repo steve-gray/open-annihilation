@@ -10,8 +10,10 @@
 // text fits and every part lies in the window. The same holds for the
 // Active tab at Compact, Regular and Large, the Updates tab at Compact and
 // Large, the Registries tab at Compact, Regular and Large, and Languages at
-// Compact. The Registries pictures dress the fixture's built-in registry as
-// Core Prime on that copy only. The Languages picture gives the fixture's
+// Compact, and the Active tab at Compact while the command line chose a mod
+// that needs Campaign, whose pill is locked. The Registries pictures dress
+// the fixture's built-in registry as Core Prime on that copy only. The
+// Languages picture gives the fixture's
 // Portugues (Brasil) pack the author "OA team" and an installed copy, on
 // that drawing only, so the row shows the OA mark under its check. The
 // characters the game's fonts lack are drawn in the modern fonts beside the
@@ -21,6 +23,7 @@
 // from the game. Given --frames DIR, it writes
 // library-<class>.png, library-details-compact.png, library-active-<class>.png,
 // library-active-compact-maps.png, library-active-many-regular.png,
+// library-active-locked-compact.png,
 // library-updates-<class>.png, library-registries-<class>.png,
 // library-languages-compact.png, library-languages-zh-compact.png,
 // library-maps-one-large.png and library-maps-several-large.png there.
@@ -141,6 +144,9 @@ struct Scene {
     /// How far the Active page is scrolled before it is drawn. The layout
     /// clamps this to the page's limit, so a large value shows the maps.
     int32_t maps_scroll{};
+    /// On Active, the command line chose the mod played, which needs
+    /// Campaign, so that pill is drawn locked with the reason under the pills.
+    bool command_line_mod{};
 };
 
 /// A drawing of a scene: the picture with its margin, and its scale.
@@ -500,6 +506,31 @@ void dress_active_choice(lib::Library& library) {
     library.content.edited = true;
 }
 
+/// Dresses the Active picture of a mod the command line chose: Highland,
+/// played, needs Campaign, every expansion is copied and all but Battle
+/// Tactics are on. Campaign's pill is locked, and the others still turn.
+///
+/// @param[in,out] library the scene's library
+void dress_command_line_mod(lib::Library& library) {
+    library.inputs.mod_from_command_line = true;
+    library.inputs.content.base_id = "totala";
+    library.inputs.content.copied = {
+        "totala",
+        "campaign",
+        "core-contingency",
+        "battle-tactics",
+        "music",
+        "cavedog-units",
+        "cavedog-tilesets",
+    };
+    library.inputs.content.enabled = {
+        "campaign", "core-contingency", "music", "cavedog-units", "cavedog-tilesets"
+    };
+    library.inputs.content.mod_required = {"campaign"};
+    library.inputs.base_game_badge = lib::bundled_game_icon();
+    lib::refresh(library, std::move(library.inputs));
+}
+
 /// Lays a scene out and draws it.
 ///
 /// @param scene the scene
@@ -517,7 +548,9 @@ Drawing draw_scene(const Scene& scene, const kit::Fonts& fonts) {
         dress_map_previews(library);
     if (scene.many)
         add_many_maps(library);
-    if (scene.tab == lib::Tab::active && !scene.many)
+    if (scene.command_line_mod)
+        dress_command_line_mod(library);
+    else if (scene.tab == lib::Tab::active && !scene.many)
         dress_active_choice(library);
     lib::select(library, fixture::ridge_id());
     lib::set_tab(library, scene.tab);
@@ -717,6 +750,17 @@ int main(int argc, char** argv) {
          100000},
         {"active-regular", window_of(1920, 1080, 200), false, lib::Tab::active, true},
         {"active-large", window_of(2560, 1440, 200), false, lib::Tab::active, true},
+        {"active-locked-compact",
+         window_of(640, 480, 100),
+         false,
+         lib::Tab::active,
+         true,
+         {},
+         {},
+         false,
+         {},
+         0,
+         true},
         {"active-many-regular",
          window_of(1920, 1080, 200),
          false,

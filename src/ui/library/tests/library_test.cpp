@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -3943,6 +3944,239 @@ void test_tile_applies_after_any_choices() {
     OA_CHECK(disagreements == 0);
 }
 
+/// Tells whether the command line is what refuses a pill's press: the press
+/// does nothing as the Library stands, and the same press, with the mod
+/// chosen in the game instead, asks before unloading it. Neither press is
+/// kept.
+///
+/// @param library the Library
+/// @param id the expansion
+/// @return true when the command line refuses it
+bool command_line_refuses(const lib::Library& library, std::string_view id) {
+    lib::Library pressed = library;
+    if (lib::press_expansion(pressed, id).kind != lib::ContentPressKind::none)
+        return false;
+    lib::Library chosen_in_game = library;
+    chosen_in_game.inputs.mod_from_command_line = false;
+    return lib::press_expansion(chosen_in_game, id).kind == lib::ContentPressKind::ask;
+}
+
+/// Returns the name an expansion of 3.1c shows.
+///
+/// @param id the expansion
+/// @return its name; the id itself for one the walk does not use
+std::string expansion_name(std::string_view id) {
+    if (id == "campaign")
+        return "Campaign";
+    if (id == "core-contingency")
+        return "Core Contingency";
+    if (id == "battle-tactics")
+        return "Battle Tactics";
+    if (id == "music")
+        return "Music";
+    return std::string(id);
+}
+
+/// Compares every pill's lock with whether the command line refuses its
+/// press, and the words under the pills with the locked pills.
+///
+/// @param library the Library
+/// @return empty when they agree; otherwise what differs
+std::string lock_difference(const lib::Library& library) {
+    const lib::ActiveContent face = lib::active_content(library);
+    std::vector<std::string> locked_names;
+    for (const lib::ExpansionPill& pill : face.pills) {
+        const bool refused = command_line_refuses(library, pill.id);
+        if (pill.locked != refused)
+            return pill.id + (pill.locked ? " is locked, and its press is not refused"
+                                          : " is not locked, and its press is refused");
+        if (!pill.locked)
+            continue;
+        if (pill.enabled || pill.face != lib::ExpansionFace::on)
+            return pill.id + " is locked, and takes a press or is off";
+        locked_names.push_back(expansion_name(pill.id));
+    }
+    std::string expected;
+    if (!locked_names.empty()) {
+        std::string names = locked_names.front();
+        for (std::size_t place = 1; place < locked_names.size(); ++place)
+            names += (place + 1 == locked_names.size() ? " and " : ", ") + locked_names[place];
+        expected = "The command line chose this run's mod, which needs " + names + ".";
+    }
+    if (face.lock != expected)
+        return "the lock reads \"" + face.lock + "\", not \"" + expected + "\"";
+    return {};
+}
+
+/// A pill whose expansion the command line's mod needs is locked, with the
+/// reason under the pills, exactly while the command line is what refuses
+/// its press. Its press stays refused and changes nothing.
+void test_command_line_lock() {
+    // Ridge needs Campaign. Turning off Core Contingency or turning on
+    // Music still works.
+    lib::Inputs named = ridge_on_retail({"campaign", "core-contingency"}, {"campaign"});
+    named.mod_from_command_line = true;
+    {
+        lib::Library library;
+        lib::refresh(library, named);
+        const lib::ActiveContent face = lib::active_content(library);
+        const lib::ExpansionPill* campaign = pill_of(face, "campaign");
+        const lib::ExpansionPill* contingency = pill_of(face, "core-contingency");
+        const lib::ExpansionPill* music = pill_of(face, "music");
+        OA_CHECK(campaign != nullptr && campaign->locked && !campaign->enabled);
+        OA_CHECK(campaign != nullptr && campaign->face == lib::ExpansionFace::on);
+        OA_CHECK(contingency != nullptr && !contingency->locked && contingency->enabled);
+        OA_CHECK(music != nullptr && !music->locked && music->enabled);
+        OA_CHECK_TEXT(face.lock, "The command line chose this run's mod, which needs Campaign.");
+        OA_CHECK(face.change_enabled == false);
+        OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::none);
+        OA_CHECK(!library.content.edited && !library.content.asking);
+        OA_CHECK(!library.content.unload_mod);
+        const lib::ActiveContent refused = lib::active_content(library);
+        const lib::ExpansionPill* still = pill_of(refused, "campaign");
+        OA_CHECK(still != nullptr && still->locked && still->face == lib::ExpansionFace::on);
+        OA_CHECK(lock_difference(library).empty());
+        OA_CHECK(lib::press_expansion(library, "music").kind == lib::ContentPressKind::redraw);
+        OA_CHECK(lock_difference(library).empty());
+        OA_CHECK_TEXT(
+            lib::active_content(library).lock,
+            "The command line chose this run's mod, which needs Campaign."
+        );
+    }
+
+    // Ridge chosen in the game: no pill is locked, and Campaign asks first.
+    {
+        lib::Inputs in_game = named;
+        in_game.mod_from_command_line = false;
+        lib::Library library;
+        lib::refresh(library, in_game);
+        const lib::ActiveContent face = lib::active_content(library);
+        for (const lib::ExpansionPill& pill : face.pills)
+            OA_CHECK(!pill.locked && pill.enabled);
+        OA_CHECK(face.lock.empty());
+        OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::ask);
+    }
+
+    // Ridge needs Core Contingency, which needs Campaign: turning Campaign
+    // off would turn Core Contingency off too, so both are locked.
+    {
+        lib::Inputs needs_both = named;
+        needs_both.content.mod_required = {"core-contingency"};
+        lib::Library library;
+        lib::refresh(library, needs_both);
+        const lib::ActiveContent face = lib::active_content(library);
+        const lib::ExpansionPill* campaign = pill_of(face, "campaign");
+        const lib::ExpansionPill* contingency = pill_of(face, "core-contingency");
+        OA_CHECK(campaign != nullptr && campaign->locked);
+        OA_CHECK(contingency != nullptr && contingency->locked);
+        OA_CHECK_TEXT(
+            face.lock,
+            "The command line chose this run's mod, which needs Campaign and Core Contingency."
+        );
+        OA_CHECK(lock_difference(library).empty());
+    }
+
+    // Campaign is stored off: the player can turn it on, so it is not
+    // locked. Once it is on in the pending choice, it is.
+    {
+        lib::Inputs stored_off = named;
+        stored_off.content.enabled = {"music"};
+        lib::Library library;
+        lib::refresh(library, stored_off);
+        const lib::ActiveContent stored = lib::active_content(library);
+        const lib::ExpansionPill* before = pill_of(stored, "campaign");
+        OA_CHECK(before != nullptr && !before->locked && before->enabled);
+        OA_CHECK(stored.lock.empty());
+        OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::redraw);
+        const lib::ActiveContent after = lib::active_content(library);
+        const lib::ExpansionPill* turned_on = pill_of(after, "campaign");
+        OA_CHECK(turned_on != nullptr && turned_on->locked && !turned_on->enabled);
+        OA_CHECK_TEXT(after.lock, "The command line chose this run's mod, which needs Campaign.");
+        OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::none);
+        OA_CHECK(holds_id(library.content.expansions, "campaign"));
+        OA_CHECK(lock_difference(library).empty());
+    }
+
+    // During a game and while --content named the choice every pill is
+    // greyed, and none is locked. With no mod played (--base-game), nothing
+    // is needed.
+    {
+        lib::Inputs in_match = named;
+        in_match.in_match = true;
+        lib::Inputs content_named = named;
+        content_named.content.locked = true;
+        lib::Inputs no_mod = named;
+        no_mod.installed.clear();
+        for (const lib::Inputs& inputs : {in_match, content_named, no_mod}) {
+            lib::Library library;
+            lib::refresh(library, inputs);
+            const lib::ActiveContent face = lib::active_content(library);
+            for (const lib::ExpansionPill& pill : face.pills)
+                OA_CHECK(!pill.locked);
+            OA_CHECK(face.lock.empty());
+            OA_CHECK(lock_difference(library).empty());
+        }
+    }
+
+    // Every sequence of four steps, from Ridge chosen by the command line and
+    // in the game, needing what is stored on, off and nothing, and from no mod.
+    std::vector<lib::Inputs> starts;
+    starts.push_back(named);
+    lib::Inputs both = named;
+    both.content.mod_required = {"core-contingency"};
+    starts.push_back(both);
+    lib::Inputs off = named;
+    off.content.enabled = {"music"};
+    starts.push_back(off);
+    lib::Inputs nothing_needed = named;
+    nothing_needed.content.mod_required.clear();
+    starts.push_back(nothing_needed);
+    lib::Inputs no_mod = named;
+    no_mod.installed.clear();
+    starts.push_back(no_mod);
+    lib::Inputs in_game = named;
+    in_game.mod_from_command_line = false;
+    starts.push_back(in_game);
+
+    constexpr std::size_t depth = 4;
+    std::size_t sequences = 1;
+    for (std::size_t place = 0; place < depth; ++place)
+        sequences *= active_step_count;
+    int32_t disagreements = 0;
+    int32_t locked_states = 0;
+    for (const lib::Inputs& start : starts) {
+        const lib::Inputs arrived = arrived_over(start);
+        for (std::size_t sequence = 0; sequence < sequences; ++sequence) {
+            lib::Library library;
+            lib::refresh(library, start);
+            std::string steps;
+            std::size_t rest = sequence;
+            for (std::size_t place = 0; place < depth; ++place) {
+                const auto step = static_cast<ActiveStep>(rest % active_step_count);
+                rest /= active_step_count;
+                if (!steps.empty())
+                    steps += ", ";
+                steps += take_step(library, step, arrived);
+                const std::string difference = lock_difference(library);
+                if (!lib::active_content(library).lock.empty())
+                    ++locked_states;
+                if (difference.empty())
+                    continue;
+                if (disagreements < 5)
+                    std::fprintf(stderr, "after %s: %s\n", steps.c_str(), difference.c_str());
+                ++disagreements;
+                break;
+            }
+        }
+    }
+    if (disagreements > 0)
+        std::fprintf(
+            stderr, "%d sequences disagree on the lock\n", static_cast<int>(disagreements)
+        );
+    OA_CHECK(disagreements == 0);
+    OA_CHECK(locked_states > 0);
+}
+
 void test_lookup() {
     lib::TextHooks hooks;
     hooks.shown = reversed_words;
@@ -3986,6 +4220,7 @@ int main() {
     test_base_game_after_required_off();
     test_base_game_round_trip();
     test_tile_applies_after_any_choices();
+    test_command_line_lock();
     test_check_now();
     test_built_in_languages();
     test_tab_counts();

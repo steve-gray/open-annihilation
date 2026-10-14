@@ -544,6 +544,10 @@ inline constexpr std::string_view mod_unloaded_because =
     "{mod} was unloaded because {name} is off. The game plays with No Mod.";
 inline constexpr std::string_view mod_unloaded_note =
     "The mod was unloaded because an expansion it needs is off. The game plays with No Mod.";
+/// Under the expansion pills, after the padlock, while the command line chose
+/// the mod being played: the expansions it needs, whose pills are locked.
+inline constexpr std::string_view active_command_line_needs =
+    "The command line chose this run's mod, which needs {names}.";
 
 } // namespace words
 
