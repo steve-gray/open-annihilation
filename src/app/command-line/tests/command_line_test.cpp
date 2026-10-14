@@ -79,8 +79,9 @@ struct Offered {
     int calls = 0;
 };
 
-// Takes x (reading one more token), q (asking for the intro skip), and y
-// only when it is attached to "es"; declines everything else.
+// Takes x (reading one more token), q (asking for the intro skip), y only
+// when it is attached to "es", and b only when it is attached to "deathends";
+// declines everything else.
 int take_probe(
     void* context, char letter, const cl::SwitchArguments* arguments, uint32_t* effects
 ) {
@@ -99,6 +100,8 @@ int take_probe(
         return 1;
     case 'y':
         return std::strcmp(arguments->attached, "es") == 0 ? 1 : 0;
+    case 'b':
+        return std::strcmp(arguments->attached, "deathends") == 0 ? 1 : 0;
     default:
         return 0;
     }
@@ -162,6 +165,20 @@ void switch_handler() {
     );
     require(offered.resets == 0, "a line too long is not parsed");
 
+    // -b is offered first; one the handler declines is compared whole, as
+    // without a handler.
+    offered = Offered{};
+    cl::Switches battle;
+    require(
+        cl::parse("-bdeathends -block /b lock", battle, &handler) == cl::Status::run,
+        "-b with a handler"
+    );
+    require(offered.letters == "bbb", "every -b is offered to the handler");
+    require(
+        battle.game_options == 0 && std::strcmp(battle.language, "lock") == 0,
+        "a declined -b is the whole token's and sets nothing; the word after it is a language"
+    );
+
     const cl::SwitchHandler no_take{&offered, nullptr, reset_probe};
     offered = Offered{};
     require(
@@ -188,11 +205,16 @@ void flags() {
 void words_and_debug_switches() {
     require(parsed("-b lock").game_options == 0, "the -b token itself is compared, not lock");
     require(parsed("-block").game_options == 0, "-block is not lock");
-    const auto debug = parsed("-saveresources -dprinton -fpufussy -performancestatus");
+    const auto debug = parsed("-saveresources -dprinton -FPUFUSSY -performancestatus");
     require(
         debug.playback_suppressed == 0 && debug.display_option == 0 && debug.forced_disc_drive == 0,
         "debug heap switches are skipped whole"
     );
+    require(
+        debug.developer_switches == 4 && std::strcmp(debug.developer_switch, "-saveresources") == 0,
+        "developer switches are counted, and the first is kept as written"
+    );
+    require(parsed("-memfussyplus").developer_switches == 1, "a developer switch is a prefix");
     require(
         parsed("/saveresources").playback_suppressed == 1,
         "the debug prefixes are only the dash forms"
@@ -215,8 +237,15 @@ void registration_and_limits() {
     );
     std::string too_long(cl::kMaximumLineBytes, 'a');
     parsed(too_long.c_str(), cl::Status::line_too_long);
-    std::string long_language(cl::kTextBytes, 'l');
-    parsed(long_language.c_str(), cl::Status::argument_too_long);
+    // A language word longer than the field is not refused: its first 63
+    // characters are kept, and the switches after it still apply.
+    std::string long_language(cl::kTextBytes + 10, 'l');
+    long_language += " -s";
+    const auto language = parsed(long_language.c_str());
+    require(
+        std::strlen(language.language) == cl::kTextBytes - 1 && language.playback_suppressed == 1,
+        "a long language word keeps 63 characters"
+    );
 }
 } // namespace
 
