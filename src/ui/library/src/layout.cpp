@@ -2145,7 +2145,9 @@ int32_t add_lines(
 );
 
 /// Appends a map pack's previews: one large picture for one map, a grid for
-/// several, each with its name, players, size and description.
+/// several, each with its players, size and description. Each map of several
+/// has its name over those lines; one map leaves its name out, as the pack's
+/// title already heads the details.
 ///
 /// @param[in,out] building the layout
 /// @param entry the entry
@@ -2184,7 +2186,7 @@ int32_t add_map_previews(
         std::vector<std::vector<std::string>> descriptions(row_count);
         for (std::size_t place = 0; place < row_count; ++place) {
             const ShownMap& map = maps[index + place];
-            int32_t lines = metrics.small_line;
+            int32_t lines = one ? int32_t{0} : metrics.small_line;
             if (!map.size.empty() || map.players > 0)
                 lines += metrics.small_line;
             if (!map.description.empty()) {
@@ -2204,19 +2206,21 @@ int32_t add_map_previews(
             const int32_t column = left + static_cast<int32_t>(place) * (across + gap);
             add_fitted_preview(building, map.preview, {column, row_top, across, across}, clip);
             int32_t text_top = row_top + across + metrics.hint_gap;
-            const std::string title = cut(building, kit::FontRole::small, map.name, across);
-            if (!title.empty() && width_of(building, kit::FontRole::small, title) <= across) {
-                add_text(
-                    building,
-                    kit::FontRole::small,
-                    title,
-                    {column, text_top, across, metrics.small_line},
-                    kit::Align::left,
-                    kit::colour::text,
-                    clip
-                );
+            if (!one) {
+                const std::string title = cut(building, kit::FontRole::small, map.name, across);
+                if (!title.empty() && width_of(building, kit::FontRole::small, title) <= across) {
+                    add_text(
+                        building,
+                        kit::FontRole::small,
+                        title,
+                        {column, text_top, across, metrics.small_line},
+                        kit::Align::left,
+                        kit::colour::text,
+                        clip
+                    );
+                }
+                text_top += metrics.small_line;
             }
-            text_top += metrics.small_line;
             if (!map.size.empty() || map.players > 0) {
                 const std::string meta = players_and_size(building, map.players, map.size);
                 const std::string meta_drawn = cut(building, kit::FontRole::small, meta, across);
