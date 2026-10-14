@@ -64,7 +64,7 @@ from your copy of Total Annihilation and starting the game:
   <tbody>
     <tr><th colspan="3" align="left">Desktop platforms</th></tr>
     <tr><td align="center"><img alt="macOS" src="docs/images/platforms/macos.svg"></td><td>macOS 11 or later, Intel and Apple silicon</td><td><a href="docs/installation/macos.md">Installing on macOS</a></td></tr>
-    <tr><td align="center"><img alt="Windows" src="docs/images/platforms/windows.svg"></td><td>Windows XP SP3 to Windows 11: 64-bit, 32-bit and ARM</td><td><a href="docs/installation/windows.md">Installing on Windows</a></td></tr>
+    <tr><td align="center"><img alt="Windows" src="docs/images/platforms/windows.svg"></td><td>Windows 95 to Windows 11: 64-bit, 32-bit and ARM</td><td><a href="docs/installation/windows.md">Installing on Windows</a></td></tr>
     <tr><td align="center"><img alt="Linux" src="docs/images/platforms/linux.svg"></td><td>Linux: 64-bit PC, 64-bit ARM and 32-bit ARM</td><td><a href="docs/installation/linux.md">Installing on Linux</a></td></tr>
   </tbody>
   <tbody>

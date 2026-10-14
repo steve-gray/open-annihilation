@@ -996,6 +996,14 @@ the engine, with their size class and scale.
   it there, as for XP: 95 refuses to start a program that imports what it has
   not got, with a loader dialogue rather than a message.
 
+  The release package is the flake's `win95` output. `nix build .#win95`
+  installs the game, `oa-intro.exe`, `oa-tool.exe`, the notices,
+  `licenses/`, `fonts/`, `languages/interface.tdf` and `registries/` into
+  `$out/bin`, the package root. `oa-intro.exe` is the intro player the game
+  links, built with that toolchain. The four Windows installers are built
+  from packages in that shape; see
+  [The Windows installers](releasing.md#the-windows-installers).
+
   Windows 95 cannot execute SSE at all, so a build for it wants
   `-DOA_X86_FLOAT=fpu`, and `SDL_CPU_FEATURE_MASK` in the environment hides
   the features its CPUID advertises from SDL, which would otherwise choose a

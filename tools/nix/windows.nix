@@ -16,12 +16,20 @@
 # Takes the text fonts, because the engine reads them beside the executable the
 # same way it does everywhere else.
 #
+# fullPackage is the Windows 95 release package. The other Windows packages
+# are laid out by the suite; this output is what the suite copies for Windows
+# 95, from $out/bin, so the files there are the package root. It adds the
+# notices, the interface catalogue and the intro player to the executables,
+# fonts and registries every Windows build here installs. oa-intro is the
+# player the game already links, built with the same toolchain.
+#
 # @param toolchain the file in cmake/toolchains that names the target
 # @param definitions the -D flags that pick the platform and the float mode
 # @param pname the derivation's name, which says which Windows it is for
 # @param description the same, in words
+# @param fullPackage install the release package, not only the executables
 { lib, stdenv, cmake, ninja, zlib, freetype, sdl3, src, textFonts, version
-, toolchain, definitions, pname, description }:
+, toolchain, definitions, pname, description, fullPackage ? false }:
 {
   game = stdenv.mkDerivation {
     inherit pname version src;
@@ -49,6 +57,8 @@
     buildFlags = [
       "oa-game"
       "oa-tool"
+    ] ++ lib.optionals fullPackage [
+      "oa-intro"
     ];
 
     # There is no CMake install configured for this target either.
@@ -63,7 +73,12 @@
       install -Dm644 -t $out/bin/fonts ${textFonts}/*.ttf ${textFonts}/*.otf
       # The registries the game ships with, read from the executable's folder.
       install -Dm644 -t $out/bin/registries ${src}/registries/*.yaml
-
+    '' + lib.optionalString fullPackage ''
+      install -Dm755 oa-intro.exe $out/bin/oa-intro.exe
+      install -Dm644 -t $out/bin ${src}/LICENSE ${src}/ATTRIBUTIONS.md
+      install -Dm644 -t $out/bin/licenses ${src}/licenses/*
+      install -Dm644 ${src}/languages/interface.tdf $out/bin/languages/interface.tdf
+    '' + ''
       runHook postInstall
     '';
 
