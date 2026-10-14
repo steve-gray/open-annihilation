@@ -748,10 +748,19 @@ void adopt_handed_player(
             state->players[index].present = 0;
     }
     const bool saved_plan = state->plan_matches;
+    // The profile and the downloadable directives name this player only, so a
+    // computer seated beside them keeps the weights the start gave it.
+    const auto only = static_cast<int32_t>(player);
     if (state->profile_text != nullptr)
-        apply_script(state, host, state->profile_text, state->profile_length, state->plan_matches);
-    apply_downloadable_weights(state, host, player);
-    apply_downloadable_limits(state, host, player);
+        apply_script(
+            state, host, state->profile_text, state->profile_length, state->plan_matches, only
+        );
+    apply_downloadable_directives(
+        state, host, state->players[player].knowledge.weight_locked, nullptr, only
+    );
+    apply_downloadable_directives(
+        state, host, state->players[player].knowledge.limit_locked, nullptr, only
+    );
     for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index)
         if (index != player)
             state->players[index].present = saved_present[index];

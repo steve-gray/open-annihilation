@@ -259,17 +259,39 @@ void Runtime::check_console_takeover_and_spawn(const std::function<void(const ch
         "+control did not hand the player back"
     );
 
-    const auto status = game.players[other].status;
-    auto* info = oa::world_player_info(&world, &game.players[other]);
-    const auto info_state = info != nullptr ? info->state : status;
-    const uint8_t handed =
-        status == OA_PLAYER_STATUS_LOCAL ? OA_PLAYER_STATUS_COMPUTER : OA_PLAYER_STATUS_LOCAL;
-    line("+ai " + std::to_string(other));
-    require(game.players[other].status == handed, "+ai did not take over the other player");
+    // A computer seated in the game is already a computer. +AI says so and
+    // leaves them, including when a human beside them is handed back.
+    const auto computer_status = game.players[other].status;
+    auto* computer_info = oa::world_player_info(&world, &game.players[other]);
+    const auto computer_state =
+        computer_info != nullptr ? computer_info->state : static_cast<uint8_t>(0);
+    const auto noticed = match_message_lines().size();
     line("+ai " + std::to_string(other));
     require(
-        game.players[other].status == status && (info == nullptr || info->state == info_state),
-        "+ai did not hand the player back"
+        game.players[other].status == computer_status &&
+            (computer_info == nullptr || computer_info->state == computer_state),
+        "+ai changed a computer player"
+    );
+    require(
+        lines_contain(match_message_lines(), noticed, "Already a computer player"),
+        "+ai on a computer player said nothing"
+    );
+
+    const auto mine_status = game.players[local].status;
+    auto* mine_info = oa::world_player_info(&world, &game.players[local]);
+    const auto mine_state = mine_info != nullptr ? mine_info->state : mine_status;
+    line("+ai " + std::to_string(local));
+    require(game.players[local].status != mine_status, "+ai did not take the local player");
+    line("+ai " + std::to_string(local));
+    require(
+        game.players[local].status == mine_status &&
+            (mine_info == nullptr || mine_info->state == mine_state),
+        "+ai did not hand the local player back"
+    );
+    require(
+        game.players[other].status == computer_status &&
+            (computer_info == nullptr || computer_info->state == computer_state),
+        "+ai's hand-back changed the computer player"
     );
 
     const char* found = spawn_unit_name(world);
@@ -344,10 +366,45 @@ void Runtime::check_console_network_takeover(
 
     const uint8_t mine = game.local_player_index;
     const auto mine_status = game.players[mine].status;
+    const uint32_t mine_id = game.players[mine].player_id;
+    // The same person is a different slot on each machine: each human is
+    // seated at slot 0 on their own. Follow the player id.
+    const auto slot_for_id = [](const oa::Game& players, uint32_t id) -> int {
+        for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index)
+            if (players.players[index].in_use != 0 && players.players[index].player_id == id)
+                return static_cast<int>(index);
+        return -1;
+    };
+    uint8_t other_status[OA_PLAYER_COUNT];
+    uint8_t other_state[OA_PLAYER_COUNT];
+    uint8_t other_known[OA_PLAYER_COUNT];
+    uint8_t peer_other_status[OA_PLAYER_COUNT];
+    uint8_t peer_other_state[OA_PLAYER_COUNT];
+    uint8_t peer_other_known[OA_PLAYER_COUNT];
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index) {
+        other_status[index] = game.players[index].status;
+        const auto* info = oa::world_player_info(&world, &game.players[index]);
+        other_known[index] = info != nullptr ? 1 : 0;
+        other_state[index] = info != nullptr ? info->state : static_cast<uint8_t>(0);
+        peer_other_status[index] = peer.match_->state().game.players[index].status;
+        const auto* remote_info =
+            oa::world_player_info(&peer.match_->state(), &peer.match_->state().game.players[index]);
+        peer_other_known[index] = remote_info != nullptr ? 1 : 0;
+        peer_other_state[index] =
+            remote_info != nullptr ? remote_info->state : static_cast<uint8_t>(0);
+    }
     oa::Game& remote_game = peer.match_->state().game;
-    const auto peer_status = remote_game.players[mine].status;
-    auto* peer_info = oa::world_player_info(&peer.match_->state(), &remote_game.players[mine]);
-    const auto peer_state = peer_info != nullptr ? peer_info->state : static_cast<uint8_t>(0);
+    const int peer_found = slot_for_id(remote_game, mine_id);
+    require(peer_found >= 0, "the peer has no copy of this player");
+    const auto peer_slot = static_cast<uint8_t>(peer_found);
+    const auto peer_status = remote_game.players[peer_slot].status;
+    const auto peer_state_of = [&] {
+        const auto* info = oa::world_player_info(
+            &peer.match_->state(), &peer.match_->state().game.players[peer_slot]
+        );
+        return info != nullptr ? info->state : static_cast<uint8_t>(0);
+    };
+    const auto peer_state = peer_state_of();
     const std::string ai = "+ai " + std::to_string(static_cast<unsigned>(mine));
     const std::string ai_line = prefix + ai;
     const int ai_seen = count_line(peer, ai_line);
@@ -356,14 +413,12 @@ void Runtime::check_console_network_takeover(
         require(game.players[mine].status != mine_status, "+ai did not take the local player");
         enter_console_check_line(ai.c_str());
         require(game.players[mine].status == mine_status, "+ai did not hand the local player back");
-        wait(
-            [&] {
-                return count_line(peer, ai_line) >= ai_seen + 2 &&
-                       peer.match_->state().game.players[mine].status == peer_status &&
-                       (peer_info == nullptr || peer_info->state == peer_state);
-            },
-            "+ai did not reach the peer and hand the player back"
-        );
+        const auto arrived = [&] {
+            const auto& copy = peer.match_->state().game.players[peer_slot];
+            return count_line(peer, ai_line) >= ai_seen + 2 && copy.status == peer_status &&
+                   peer_state_of() == peer_state;
+        };
+        wait(arrived, "+ai did not reach the peer and hand the player back");
     } else {
         enter_console_check_line(ai.c_str());
         require(game.players[mine].status == mine_status, "+ai ran with cheats disallowed");
@@ -371,13 +426,44 @@ void Runtime::check_console_network_takeover(
              ++waited)
             advance(true);
         require(
-            peer.match_->state().game.players[mine].status == peer_status &&
-                (peer_info == nullptr || peer_info->state == peer_state),
+            peer.match_->state().game.players[peer_slot].status == peer_status &&
+                peer_state_of() == peer_state,
             "+ai changed the peer with cheats disallowed"
         );
     }
+    // A computer seated beside this player, and every other person, stays as
+    // they were. Handing this player back does not take their controller.
+    // The same slot number is a different person on the peer.
+    for (uint8_t slot = 0; slot < OA_PLAYER_COUNT; ++slot) {
+        if (game.players[slot].in_use != 0 && game.players[slot].player_id == mine_id)
+            continue;
+        require(game.players[slot].status == other_status[slot], "+ai changed another player");
+        if (other_known[slot] != 0) {
+            const auto* kept = oa::world_player_info(&world, &game.players[slot]);
+            require(
+                kept != nullptr && kept->state == other_state[slot],
+                "+ai changed another player's record"
+            );
+        }
+    }
+    for (uint8_t slot = 0; slot < OA_PLAYER_COUNT; ++slot) {
+        const auto& remote_player = peer.match_->state().game.players[slot];
+        if (remote_player.in_use != 0 && remote_player.player_id == mine_id)
+            continue;
+        require(
+            remote_player.status == peer_other_status[slot],
+            "+ai changed another player on the peer"
+        );
+        if (peer_other_known[slot] != 0) {
+            const auto* kept = oa::world_player_info(&peer.match_->state(), &remote_player);
+            require(
+                kept != nullptr && kept->state == peer_other_state[slot],
+                "+ai changed another player's record on the peer"
+            );
+        }
+    }
     require(
-        peer.match_->state().game.players[mine].status == OA_PLAYER_STATUS_MIRRORED,
+        peer.match_->state().game.players[peer_slot].status == OA_PLAYER_STATUS_MIRRORED,
         "the peer's copy of this player is not mirrored"
     );
 

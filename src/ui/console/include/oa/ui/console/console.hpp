@@ -162,6 +162,10 @@ struct Console {
     /// teams.alliance-menu-all-game-types: Tab opens the team menu in every
     /// game type, not the options panel outside multiplayer (hotkey_dispatch).
     bool team_menu_every_game{};
+    /// Bit per player that +AI handed from human to computer. A computer
+    /// seated at the start has no bit, so +AI on them says so and leaves
+    /// them. Handing that human back clears only their bit.
+    uint16_t handed_to_computer{};
 };
 
 /// Clears `console`, registers every command list and the spawn fallback, then lets the host's extend add its commands.
@@ -243,7 +247,8 @@ uint8_t console_submit_chat_line(
 /// a unit name when cheats are allowed and this machine simulates that
 /// player. A bare +AI, +NoMetal or +NoEnergy names `sender`, not this
 /// machine's local player. +ATM, +Give, +Control and the view commands are
-/// not run again.
+/// not run again. +AI's player number is the sender's slot, and this
+/// machine follows that person.
 ///
 /// @param[in,out] console Console of this machine; null does nothing.
 /// @param text The line as chat shows it, "<Name> +command" or "+command".

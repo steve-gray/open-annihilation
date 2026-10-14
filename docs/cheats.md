@@ -92,7 +92,7 @@ every player. What then runs on the other machines is in the table.
 | `+doubleshot` | Every shot deals double damage, or ordinary damage again. |
 | `+halfshot` | Every shot deals half damage, or ordinary damage again. |
 | `+meteor` | A meteor falls on the next tick. `+meteor 1` turns storms on and `+meteor 0` turns them off. |
-| `+ai [player]` | That player swaps between you controlling them and the computer controlling them. With no player, it is you. Every machine applies it: the machine that plays that player changes who gives the orders, and the others record the same choice. Handing a human to the computer starts the computer on the next orders tick. |
+| `+ai [player]` | A human is handed to the computer on the machine that plays them, or handed back. A player who is already a computer is announced, "Already a computer player", and left as they are; handing someone else back does not change a computer seated beside them. With no player, it is you. The player number is the slot on the machine that typed it. Every machine applies it to that same person: the machine that plays them changes who gives the orders, and the others record the same choice. Handing a human to the computer starts the computer on the next orders tick. |
 | `+control <player>` | That player becomes the one you play and the one you view, on your machine only. The line is shown in that player's name, because the change happens before the line is posted. The other machines keep their own player. A player that is not in the game is ignored. |
 
 `+doubleshot`, `+halfshot`, `+radar`, `+view`, `+los`, `+mapping` and
@@ -106,10 +106,11 @@ the line arrives elsewhere.
 matches any run, so `+arm*` creates every unit whose name starts with
 `arm`. Each one is placed in a row from the pointer.
 
-A player that is not in the game is announced, "No such player", and no
-unit is created. In a network game the unit is created on the machine
-that plays that player, at that machine's pointer. The other machines do
-not create a second one.
+A player number that is not a slot is announced, "No such player", and no
+unit is created. A slot nobody is using still gets the unit on this
+machine. In a network game a seated player's unit is created on the
+machine that plays that player, at that machine's pointer. The other
+machines do not create a second one.
 
 This is a cheat: a skirmish and a campaign always, a multiplayer game
 only while Cheats is allowed. A unit whose name is itself a command, such

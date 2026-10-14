@@ -12582,8 +12582,9 @@ class Runtime final : public menu::Host,
     /// and its echo goes to everyone; a word no list registers goes out as plain
     /// chat. Every cheat then takes effect (check_console_cheat_effects). The
     /// Game Settings sheet MISSION opens shows the difficulty and no Cheat Codes
-    /// row, and its OK returns to the options panel. "+control" and "+ai" then
-    /// take another player and hand it back, and a unit name refuses a missing
+    /// row, and its OK returns to the options panel. "+control" takes another
+    /// player and hands it back. "+ai" leaves a computer player, hands the
+    /// local player to the computer and back, and a unit name refuses a missing
     /// player (check_console_takeover_and_spawn). Throws std::runtime_error on
     /// a failure.
     ///
@@ -12597,19 +12598,21 @@ class Runtime final : public menu::Host,
     /// and its echo goes to everyone, option commands such as "+clock" run,
     /// every cheat takes effect (check_console_cheat_effects) and "+sing"
     /// works (check_console_sing_command), all typed through the chat line
-    /// without the developer passphrase. "+control" and "+ai" take another
-    /// player and hand it back, and a unit name refuses a missing player.
+    /// without the developer passphrase. "+control" takes another player and
+    /// hands it back. "+ai" leaves a computer player and hands the local player
+    /// to the computer and back, and a unit name refuses a missing player.
     /// Throws std::runtime_error on a failure.
     void check_console_campaign_cheats();
 
     /// Checks "+control", "+ai" and a unit name on the running match.
     ///
     /// "+control" makes another player the local and viewed player, then hands
-    /// the original player back. "+ai" swaps that other player between local
-    /// and computer control and swaps them back. "+NAME 99" posts "No such
-    /// player" and creates nothing. "+NAME" then creates a unit beside a live
-    /// unit of the local player, or posts why the ground refused it. Throws
-    /// std::runtime_error on a failure.
+    /// the original player back. "+ai" on a player who is already a computer
+    /// says so and leaves them. "+ai" hands the local player to the computer
+    /// and back, and that hand-back does not change the computer beside them.
+    /// "+NAME 99" posts "No such player" and creates nothing. "+NAME" then
+    /// creates a unit beside a live unit of the local player, or posts why the
+    /// ground refused it. Throws std::runtime_error on a failure.
     ///
     /// @param enter_line runs one console line
     void check_console_takeover_and_spawn(const std::function<void(const char*)>& enter_line);
@@ -12813,7 +12816,9 @@ class Runtime final : public menu::Host,
     ///
     /// "+shootall" runs on both machines and is turned back off. "+ai" takes
     /// this machine's player only when cheats are allowed, and is handed back
-    /// before the wait; the peer's copy of that player stays mirrored.
+    /// before the wait. The peer's copy of that same person, found by player
+    /// id rather than by slot, stays mirrored. A computer player seated
+    /// beside them is unchanged on both machines.
     /// "+control" of another player changes only this machine, and is handed
     /// back at once. The line is shown in the player just taken. A failure
     /// throws std::runtime_error.

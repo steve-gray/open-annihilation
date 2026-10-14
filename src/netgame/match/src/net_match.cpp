@@ -3592,10 +3592,31 @@ void net_match_set_speed(NetMatch* m, int32_t speed, bool broadcast) noexcept {
     send_record(m, primary_id(m->world), broadcast_destination_id, r);
 }
 
+/// The player a chat line is sent as.
+///
+/// The first human. +AI hands that human to the computer before the line is
+/// posted, and the line is still theirs: a computer player seated beside
+/// them is not the speaker.
+///
+/// @param game The match's players.
+/// @return That player's id, or no_player_id when this machine has none.
+static uint32_t chat_sender_id(const Game& game) noexcept {
+    const auto human = first_local_player_id(game);
+    if (human != no_player_id)
+        return human;
+    if (game.local_player_index >= OA_PLAYER_COUNT)
+        return no_player_id;
+    const Player& speaker = game.players[game.local_player_index];
+    if (speaker.in_use != 0 && speaker.status == OA_PLAYER_STATUS_COMPUTER &&
+        speaker.player_id != no_player_id)
+        return speaker.player_id;
+    return no_player_id;
+}
+
 void net_match_say(NetMatch* m, const char* text) noexcept {
     m->said_parts.clear();
     auto& game = m->world->game;
-    const auto from = first_local_player_id(game);
+    const auto from = chat_sender_id(game);
     const uint8_t mode = game.chat_mode;
     // Where the chat mode sends the line.
     uint32_t to[OA_PLAYER_COUNT];
