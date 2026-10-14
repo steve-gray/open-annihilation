@@ -696,8 +696,9 @@ order while disabled); that a one-map pack's row and details wear that
 map's minimap, fitted to the square with the well colour in the
 letterbox, that a several-map pack keeps its badge, that a several-map
 pack with no badge shows the first map's minimap on the Maps tab and its
-letters on Updates, that the details show one large picture or a grid
-with each map's name, players, size and description, that a minimap not
+letters on Updates, that the details show one large picture with its
+map's players, size and description and no name, or a grid with each
+map's name, players, size and description, that a minimap not
 yet decoded is a placeholder and then the picture, and that a one-map pack's title is the link to its pack with no From line while a pack of several keeps its From line, and that the link
 opens Maps with that pack selected and its row in view; that the Registries tab lists each registry on a card, its heading the
 title, its switch, key icon and REFRESH, its address, refresh time and
