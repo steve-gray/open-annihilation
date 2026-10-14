@@ -745,15 +745,11 @@ void Runtime::refresh_listed_pack_maps() {
             highlighted = bound_map_names_[static_cast<std::size_t>(modal_map_index_)];
         std::vector<std::string> names = copy_map_names();
         try {
-            map_modal::sort_map_names(names);
+            order_map_names(names);
         } catch (const std::exception& error) {
             std::cerr << "open-annihilation: map list: " << error.what() << '\n';
             names = copy_map_names();
         }
-        std::ignore =
-            std::stable_partition(names.begin(), names.end(), [](const std::string& name) {
-                return !pack::split_pack_map_name(name);
-            });
         map_modal_.names = names;
         bind_map_names(names);
         if (!highlighted.empty()) {
@@ -769,6 +765,58 @@ void Runtime::refresh_listed_pack_maps() {
     }
 
     oa::ui::frontend_multiplayer::multiplayer_reload_maps();
+}
+
+void Runtime::order_map_names(std::vector<std::string>& names) {
+    namespace mp = oa::ui::frontend_multiplayer;
+
+    // Copy each title before the next find. The first find may refresh the
+    // index, which frees the list a pointer into it would still name.
+    struct Held {
+        std::string key;
+        std::string title;
+        std::string pack_name;
+        std::string reason;
+        bool pack = false;
+    };
+
+    std::vector<Held> held;
+    held.reserve(names.size());
+    for (const std::string& name : names) {
+        Held row;
+        row.key = name;
+        if (pack::split_pack_map_name(name)) {
+            row.pack = true;
+            if (const PackMap* map = map_packs().find(name)) {
+                row.title = map->title;
+                row.pack_name = map->pack_name;
+            }
+            if (pack_map_state_) {
+                const auto blocked = pack_map_state_->blocks.find(name);
+                if (blocked != pack_map_state_->blocks.end())
+                    row.reason = blocked->second.row;
+            }
+        }
+        held.push_back(std::move(row));
+    }
+    std::vector<mp::MapListFact> facts;
+    facts.reserve(held.size());
+    for (const Held& row : held)
+        facts.push_back(
+            mp::MapListFact{row.key, row.title, {}, row.pack_name, row.pack, row.reason}
+        );
+    const std::vector<std::size_t> order = mp::map_list_order(facts);
+    if (order.size() != held.size())
+        return;
+    for (const std::size_t index : order) {
+        if (index >= held.size())
+            return;
+    }
+    std::vector<std::string> ordered;
+    ordered.reserve(held.size());
+    for (const std::size_t index : order)
+        ordered.push_back(std::move(held[index].key));
+    names = std::move(ordered);
 }
 
 void Runtime::label_bound_maps() {

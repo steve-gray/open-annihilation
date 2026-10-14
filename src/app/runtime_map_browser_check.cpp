@@ -419,6 +419,21 @@ void Runtime::check_map_browser() {
                 shared.width <= 0 || shared.height <= 0,
                 "MORE MAPS… overlaps SELMAP's " + std::string(common.name) + on
             );
+            if (!tdf_names_equal(common.name, "MAPNAMES"))
+                continue;
+            // The list draws its frame three frame pixels outside the gadget.
+            const kit::Rect frame = frame_to_window(
+                seen,
+                {left + common.x - 3,
+                 top + common.y - 3,
+                 static_cast<int32_t>(common.width) + 6,
+                 static_cast<int32_t>(common.height) + 6}
+            );
+            const kit::Rect on_frame = kit::intersect(button_rect, frame);
+            require(
+                on_frame.width <= 0 || on_frame.height <= 0,
+                "MORE MAPS… overlaps the map list's frame" + on
+            );
         }
 
         // The browser: its class's window, every card and control inside it,

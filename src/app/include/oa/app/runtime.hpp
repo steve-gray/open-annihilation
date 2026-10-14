@@ -4341,8 +4341,9 @@ class Runtime final : public menu::Host,
     /// greyed by that check until the table arrives, and a miss then is not
     /// logged. A map that cannot be played for good writes one log line for
     /// its pack and the game, the first time that pair is greyed. An open
-    /// skirmish map list is filled again, and so is an open battle-room map
-    /// list. The default stays a map that can be played.
+    /// skirmish map list is filled again, in one order by the name each row
+    /// shows, and so is an open battle-room map list. The default stays a
+    /// map that can be played.
     void refresh_listed_pack_maps();
 
     /// Rebuilds the pack-map lists when the catalogue snapshot has moved on.
@@ -14304,6 +14305,15 @@ class Runtime final : public menu::Host,
     ///
     /// @return the names, in find order
     std::vector<std::string> copy_map_names() override;
+
+    /// Orders the skirmish map list by the name each row shows.
+    ///
+    /// The game's own maps, installed pack maps and maps offered for download
+    /// are one list. A grey reason is not part of the name, so a map that
+    /// cannot be played keeps its place.
+    ///
+    /// @param[in,out] names the map names
+    void order_map_names(std::vector<std::string>& names) override;
 
     /// Loads SELMAP.GUI as the map selection screen over the skirmish screen's frame.
     ///

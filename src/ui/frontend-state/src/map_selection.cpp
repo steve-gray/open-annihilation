@@ -3,14 +3,10 @@
 
 #include "oa/ui/frontend_state/map_selection.hpp"
 #include "oa/data/campaign/directory_list.hpp"
-#include "oa/data/map_pack/map_name.hpp"
-#include <algorithm>
 #include <bit>
 #include <cstdint>
-#include <optional>
 #include <stdexcept>
 #include <string>
-#include <tuple>
 
 namespace oa::ui::frontend_state::map_selection {
 namespace {
@@ -61,6 +57,10 @@ void sort_map_names(std::vector<std::string>& names) {
     }
 }
 
+void Host::order_map_names(std::vector<std::string>& names) {
+    sort_map_names(names);
+}
+
 bool open(ModalState& modal, const game_entry::SkirmishSettings& settings, Host& h) {
     const auto count = h.map_count();
     if (count == 0) {
@@ -79,13 +79,7 @@ bool open(ModalState& modal, const game_entry::SkirmishSettings& settings, Host&
     if (modal.names.size() < static_cast<std::size_t>(count))
         throw std::invalid_argument("map enumeration changed while opening modal");
     modal.names.resize(static_cast<std::size_t>(count));
-    sort_map_names(modal.names);
-    // The installed pack maps follow every base map, each part in the sorted
-    // order, so the base maps keep their rows.
-    std::ignore =
-        std::stable_partition(modal.names.begin(), modal.names.end(), [](const std::string& name) {
-            return !oa::data::map_pack::split_pack_map_name(name);
-        });
+    h.order_map_names(modal.names);
     h.bind_map_names(modal.names);
     h.install_map_selection_callback();
     for (std::size_t i = 0; i < modal.names.size(); ++i)

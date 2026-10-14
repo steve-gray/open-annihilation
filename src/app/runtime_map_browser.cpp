@@ -115,8 +115,8 @@ constexpr std::size_t kept_previews = 256;
 constexpr int32_t decodes_a_frame = 4;
 /// The largest pack preview read, in bytes.
 constexpr uintmax_t most_preview_bytes = uintmax_t{4} << 20U;
-/// The gap between the map list and MORE MAPS…, in points.
-constexpr int32_t button_gap = kit::compact_metrics.hint_gap;
+/// The list's frame is drawn this many frame pixels outside the list gadget.
+constexpr int32_t list_frame_outset = 3;
 
 /// Returns one of the browser's words in the language shown.
 ///
@@ -1044,8 +1044,8 @@ struct Runtime::MapBrowserScreen final : LayerScreen {
         Runtime& game = runtime_;
         if (std::find(game.bound_map_names_.begin(), game.bound_map_names_.end(), map_name) ==
             game.bound_map_names_.end()) {
-            // A pack installed since the list was made joins it when the map
-            // fits the mod being played, after the base maps.
+            // A pack installed since the list was made joins the list in the
+            // name order when the map fits the mod being played.
             game.refresh_listed_pack_maps();
         }
         const auto row =
@@ -1457,9 +1457,10 @@ struct Runtime::MoreMapsScreen final : LayerScreen {
         return found;
     }
 
-    /// Returns where the button lies, in the layer's points: directly under
-    /// the map list, its right edge on the list's, or above the list when
-    /// that place meets another gadget of the picker.
+    /// Returns where the button lies, in the layer's points: under the map
+    /// list's frame, its right edge on the list's, or above the frame when
+    /// the place under it meets another gadget of the picker. The button
+    /// keeps its size.
     ///
     /// @param placed_on what the screen is placed on
     /// @return the place; none while it does not show
@@ -1478,9 +1479,15 @@ struct Runtime::MoreMapsScreen final : LayerScreen {
                 metrics.prompt_button_padding
         );
         const kit::Rect list_points = frame_to_points(placed_on, list_rect);
+        kit::Rect framed = list_rect;
+        framed.x -= list_frame_outset;
+        framed.y -= list_frame_outset;
+        framed.width += list_frame_outset * 2;
+        framed.height += list_frame_outset * 2;
+        const kit::Rect frame_points = frame_to_points(placed_on, framed);
         kit::Rect place{
             list_points.x + list_points.width - width,
-            list_points.y + list_points.height + button_gap,
+            frame_points.y + frame_points.height,
             width,
             metrics.button_height
         };
@@ -1488,7 +1495,7 @@ struct Runtime::MoreMapsScreen final : LayerScreen {
             return meet(place, frame_to_points(placed_on, other));
         });
         if (blocked)
-            place.y = list_points.y - button_gap - metrics.button_height;
+            place.y = frame_points.y - metrics.button_height;
         return place;
     }
 
