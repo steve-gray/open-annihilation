@@ -3153,11 +3153,25 @@ class Runtime final : public menu::Host,
     ///         match's other keys
     bool press_match_panel_key(const SDL_KeyboardEvent& key);
 
+    /// Steps the lightbar sweep of the preferences a match opens, before the frame's HUD is drawn.
+    ///
+    /// Once a frame, while the sweep is due. The step that reaches the end plays "Options"
+    /// and opens the sound page, the first of the four, in place of the turned-over picture.
+    void advance_options_lightbar();
+
     /// Steps and draws the lightbar sweep of the preferences a match opens while it runs.
     ///
-    /// Called as the match frame draws its menus; the sweep steps once a frame
-    /// and is drawn over the side column and the battlefield beside it.
+    /// Called as the match frame draws its menus. The sweep is drawn over the side column
+    /// and the battlefield beside it until advance_options_lightbar opens the sound page.
     void draw_options_lightbar();
+
+    /// Loads one in-match options page beside the tabs.
+    ///
+    /// PREFS.GUI is widened and the page's GUI is merged into it. A page that cannot be
+    /// loaded is left unshown and the reason is written to the log.
+    ///
+    /// @param which sound, music, interface (speeds) or visuals
+    void open_match_options_page(ui::frontend::OptionsPanel which);
 
     /// Binds the running match's speech with its own captions to the offline services.
     void bind_match_speech();
