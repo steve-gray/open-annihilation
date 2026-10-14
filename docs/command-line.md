@@ -939,8 +939,10 @@ double-click, from Open With, or dropped on the game's window:
 Settings › System › **Launch files (.oalaunch)** chooses whether this copy
 opens them, On at first: Off withdraws the registration the game made for
 you on Windows and Linux, and on macOS hands them to the program that opens
-plain text ([Settings](settings.md#system)). The installer's registration
-for everyone on Windows stays until the game is uninstalled.
+plain text ([Settings](settings.md#system)). On Windows, Off also hides the
+installer's association for everyone from your account alone, so a copy the
+installer set up no longer opens them for you either; the other accounts on
+the computer keep it.
 
 What an opened launch file does depends on when it arrives:
 

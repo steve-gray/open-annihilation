@@ -9,7 +9,10 @@
 // room (-c FILE). macOS and iOS declare the types in the bundle's Info.plist. On macOS a
 // switch chooses whether this copy is the default opener of each of the five, and only a
 // switch that changed is asked; a start never replaces a choice made in Finder. iOS does
-// nothing at run time. Each registration writes only what differs from what is there.
+// nothing at run time. Each registration writes only what differs from what is there. On
+// Windows the installer also associates launch files for every user of the computer; a
+// withdrawal of launch files hides that association from the user who runs it, under
+// HKEY_CURRENT_USER, and never writes the computer's own key.
 #pragma once
 
 #include <stdint.h>
@@ -186,6 +189,53 @@ struct TypeSet {
     }
 };
 
+/// The file types the Windows installer associates with the game for everyone who uses the
+/// computer: launch files alone. A withdrawal hides that association from the user who runs it
+/// (user_override_step).
+inline constexpr TypeSet installer_types{false, false, false, false, true};
+
+/// The (Default) of an extension's key that hides the association every user shares from one
+/// user: an empty program identifier, which names no program. Windows reads the user's own
+/// classes over the computer's, so the type then has no opener for that user.
+inline constexpr std::string_view user_override_program_id = "";
+
+/// What a withdrawal of one of installer_types does about the association every user of the
+/// computer shares.
+enum class UserOverrideStep : uint8_t {
+    /// nothing: that association is not the game's, and the user has no override
+    none,
+    /// write the override: that association is the game's and the user has no (Default) of
+    /// their own
+    write,
+    /// leave the override: it is there and that association is still the game's
+    keep,
+    /// remove the override: that association is no longer the game's, so the override would
+    /// hide another program's or nothing
+    remove,
+};
+
+/// Decides what a withdrawal of one of installer_types does about the association every user of
+/// the computer shares, from the extension's (Default) under the computer's classes and under
+/// the user's own, read after the user's registration was withdrawn. The override is the user's
+/// (Default) holding user_override_program_id. A (Default) of the user's own that names a
+/// program, the player's choice or another program's, is never written over or removed.
+///
+/// @param program_id the type's program identifier, as the installer writes it
+/// @param machine_default the computer's (Default) for the extension; nullopt when missing
+/// @param user_default the user's (Default) for the extension; nullopt when missing
+/// @return what to do
+[[nodiscard]] UserOverrideStep user_override_step(
+    std::string_view program_id,
+    std::optional<std::string_view> machine_default,
+    std::optional<std::string_view> user_default
+) noexcept;
+
+/// A root of the Windows registry.
+enum class RegistryRoot : uint8_t {
+    current_user,  ///< HKEY_CURRENT_USER
+    local_machine, ///< HKEY_LOCAL_MACHINE
+};
+
 /// Where a registration writes, and what it runs after a change; tests name scratch ones.
 struct Places {
     /// The XDG data folder; empty for $XDG_DATA_HOME when it is absolute, else
@@ -193,6 +243,12 @@ struct Places {
     std::filesystem::path data_home{};
     /// Windows: the key under HKEY_CURRENT_USER that holds the file types.
     std::string classes_key{"Software\\Classes"};
+    /// Windows: the root of machine_classes_key. The game only reads there; a test names
+    /// HKEY_CURRENT_USER and a scratch key.
+    RegistryRoot machine_classes_root{RegistryRoot::local_machine};
+    /// Windows: the key that holds the file types every user of the computer shares, which the
+    /// installer writes and the game only reads.
+    std::string machine_classes_key{"Software\\Classes"};
     /// XDG: run the database tools (update-mime-database, update-desktop-database and, where
     /// the user's icon cache exists, gtk-update-icon-cache) whose run is due: after a change,
     /// and until a run succeeds.
@@ -246,7 +302,9 @@ struct Registration {
 /// Windows it removes each type's program-identifier key and that program identifier's value
 /// under OpenWithProgids, and the extension's (Default) and Content Type values only while
 /// they still name this game's program identifier and MIME type. Another program's values,
-/// and the player's own choice of opener, stay. On Linux it takes those types out of the MIME
+/// and the player's own choice of opener, stay. While the installer's association for every
+/// user names the game, a launch file's withdrawal also writes the user's override, which hides
+/// that association from this user alone (withdraw_windows). On Linux it takes those types out of the MIME
 /// package and the desktop entries' MimeType lists, removes their mimetype icons, and removes
 /// a desktop entry or the MIME package once it lists no type. The program's own icon
 /// stays. A missing value is already withdrawn. The same skips as a registration apply on
@@ -307,8 +365,9 @@ struct Registration {
 /// its open command (open_command, with --open, or -c for a launch file). Each value is
 /// written only when it is missing or differs,
 /// and the shell is told once after any write. A type left out is not written and not removed;
-/// withdraw_windows removes one. A choice of opener the player made in Windows is never
-/// touched. Uses only calls Windows XP has. Never throws.
+/// withdraw_windows removes one. The extension's (Default) written over the user's override
+/// (user_override_program_id) takes the place of that override. A choice of opener the player
+/// made in Windows is never touched. Uses only calls Windows XP has. Never throws.
 ///
 /// @param executable the program, absolute
 /// @param places where it writes, and whether it tells the shell
@@ -323,8 +382,12 @@ register_windows(const std::filesystem::path& executable, const Places& places, 
 /// The extension's (Default) value is deleted only while its text is this game's program
 /// identifier, and its Content Type value only while its text is this game's MIME type. Any
 /// other value, including another program's OpenWithProgids value and the player's UserChoice,
-/// is left as it is. A missing value is already withdrawn. The shell is told once after any
-/// removal, as a write tells it. Uses only calls Windows XP has. Never throws.
+/// is left as it is. A missing value is already withdrawn. For a type of installer_types it
+/// then reads the extension's (Default) under places.machine_classes_key, and writes or removes
+/// the user's override as user_override_step says, so that an association the installer made
+/// for every user no longer opens the type for this one. Nothing under the machine's key is
+/// ever written. The shell is told once after any removal or write, as a registration tells
+/// it. Uses only calls Windows XP has. Never throws.
 ///
 /// @param types the file types to withdraw
 /// @param places where it writes, and whether it tells the shell

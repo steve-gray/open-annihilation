@@ -161,8 +161,15 @@ sync, such as OneDrive's of Documents, or a virus scanner can hold a new
 mod's files for a few seconds, and the install waits for them. A
 `.oalaunch` file starts the network game it describes
 ([opening a launch file](../command-line.md#opening-a-launch-file)). The
-installer registers launch files for everyone who uses the computer too,
-and that stays until the game is uninstalled, whatever the switch says.
+installer associates launch files with the game for everyone who uses the
+computer too. With Launch files off, the game also hides that association
+from your Windows account alone: it sets the (Default) of
+`HKEY_CURRENT_USER\Software\Classes\.oalaunch` to an empty text, which
+names no program, so Windows asks which program to open a launch file with,
+as it does for a copy you unzipped. The other accounts on the computer keep
+the association, and turning the switch on again registers this copy for
+you in place of the empty text. While the switch is off, a program you
+choose for launch files in Windows stays your choice.
 
 The first time you host or join a multiplayer game, Windows Defender
 Firewall may ask whether Open Annihilation may communicate on networks:
@@ -282,4 +289,8 @@ command, still takes the screenshots and films.
   `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Registry`,
   `HKEY_CURRENT_USER\Software\Classes\.oalaunch` and
   `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Launch`. The
-  uninstaller removes the launch file association the installer made.
+  uninstaller removes the launch file association the installer made and,
+  for the account that uninstalls, the empty (Default) of
+  `HKEY_CURRENT_USER\Software\Classes\.oalaunch` that hid it while Launch
+  files was off. Another account's empty (Default) names no program and
+  stays until the game starts there again.

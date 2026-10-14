@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The texts a registration writes, the running program's path, and the choice of how this
-// system registers.
+// The texts a registration writes, the running program's path, the choice of how this system
+// registers, and what a withdrawal does about the installer's association for every user.
 
 #include "oa/platform/file_types.hpp"
 
@@ -179,6 +179,20 @@ std::string open_command(const fs::path& executable, const Opening opening) {
 
 std::string default_icon(const fs::path& executable) {
     return detail::utf8_of(executable) + ",0";
+}
+
+UserOverrideStep user_override_step(
+    const std::string_view program_id,
+    const std::optional<std::string_view> machine_default,
+    const std::optional<std::string_view> user_default
+) noexcept {
+    const bool shared_is_the_games = machine_default && *machine_default == program_id;
+    if (!user_default)
+        return shared_is_the_games ? UserOverrideStep::write : UserOverrideStep::none;
+    if (*user_default == user_override_program_id)
+        return shared_is_the_games ? UserOverrideStep::keep : UserOverrideStep::remove;
+    // The user's own (Default) names a program: it already decides for this user.
+    return UserOverrideStep::none;
 }
 
 std::optional<fs::path> running_executable() {
