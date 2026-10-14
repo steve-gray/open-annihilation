@@ -174,6 +174,10 @@ libraries, SD cards included, a Heroic install, a Lutris or Wine prefix in
   `--choose-game-dir` as the launch option makes it ask at every start
   until you remove it again; the two cannot be given together.
 
+Every launch option the game takes, among them `-c` for a launch file that
+opens a network game's battle room, is in
+[Command Line and Game Launching](../command-line.md).
+
 ## Controls
 
 ### Steam Input on, with Open Annihilation's layout (start here)

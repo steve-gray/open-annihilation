@@ -16,9 +16,15 @@ Every document in the repository, by what you want to do.
     non-Steam game, the Steam Input layouts and artwork installed by hand,
     the controls, the first start, the Deck's settings and the logs
   - [iPhone and iPad](installation/ios.md), built on your own Mac
-- [command-line.md](command-line.md): `--version`, which prints one line and
-  exits before the game starts, and `--print-profile`, which ends with that
-  same line.
+- [Command Line and Game Launching](command-line.md): every option the
+  game takes, by group (information; game data, folders and files; mods;
+  display and sound; network play; launch; status; recordings and video;
+  checks; tools), and every way to start a network game, with examples to
+  copy: a `.oalaunch` launch file with `-c` or `--launch`, the option for
+  every launch setting, TA Forever's settings file, a launch piped in on
+  standard input (Linux, macOS with `open -f -a`, Windows), opening a
+  launch file from the desktop, 3.1c's switches and the `-c` file,
+  `--list-content --json`, and the exit statuses and refusals.
 - [troubleshooting.md](troubleshooting.md): zooming out when memory is
   short, and the message the game shows when it runs out of memory.
 - [settings.md](settings.md): Open Annihilation's own settings, with a
@@ -87,16 +93,14 @@ Every document in the repository, by what you want to do.
   presence record behind them, hosting a TCP/IP game with `--host` or
   joining one with `--join ADDRESS`, with `--player-name`, `--game-name`
   and `--game-password`, and what the game prints as it goes.
-  [command-line.md](command-line.md) is `--dplay-guid`, the application
-  GUID a game is hosted under and looked for, `-c` and `--launch`, the
-  option for every launch setting, a launch piped in on standard input,
-  and `--list-content --json`.
+  [Command Line and Game Launching](command-line.md) has `--dplay-guid`,
+  the application GUID a game is hosted under and looked for, and every
+  other way to start a network game.
 - [multiplayer/application-guid.md](multiplayer/application-guid.md):
   which games a search lists, and a launcher's per-mod GUID.
-- [multiplayer/launch-file.md](multiplayer/launch-file.md): starting a
-  network game from a launch file, Open Annihilation's `.oalaunch` file or
-  TA Forever's, read with `-c` or `--launch`, and listing installed maps,
-  mods and expansions with `--list-content --json`.
+- [multiplayer/launch-file.md](multiplayer/launch-file.md): where launch
+  files, Open Annihilation's `.oalaunch` file and TA Forever's, are
+  described: in [Command Line and Game Launching](command-line.md#launch-files).
 - [multiplayer/status.md](multiplayer/status.md): what a game reports on
   its standard output for a launcher, with `--status-stdout`,
   `--status-file` and `--quit-after-game`.

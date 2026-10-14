@@ -118,14 +118,15 @@ if(BUILD_TESTING)
   target_link_libraries(oa-netgame-launch-file-test PRIVATE oa-app-netgame-options oa-app-game-options
     oa-netgame oa-options)
   add_test(NAME netgame-launch-file COMMAND oa-netgame-launch-file-test)
-  # The table of launch settings is what --help, docs/command-line.md and
-  # docs/multiplayer/launch-file.md say. The status stream's options join
-  # network play's in --help, as in the game.
+  # The table of launch settings is what --help and docs/command-line.md say;
+  # that page's launch files are launches the game takes, and it names every
+  # option --help lists. The status stream's options join network play's in
+  # --help, as in the game.
   add_executable(oa-netgame-launch-help-test tests/launch_help_test.cpp)
   target_link_libraries(oa-netgame-launch-help-test PRIVATE oa-app-netgame-options oa-app-game-options
     oa-app-automation-options oa-netgame oa-options)
   add_test(NAME netgame-launch-help COMMAND oa-netgame-launch-help-test
-    "${PROJECT_SOURCE_DIR}/docs/command-line.md" "${PROJECT_SOURCE_DIR}/docs/multiplayer/launch-file.md")
+    "${PROJECT_SOURCE_DIR}/docs/command-line.md")
   # A launch file the system opens: told by its name or its first bytes, read as it
   # arrives, the start's own launch as -c makes it, its content compared with what
   # runs, and where the running game takes one, refuses one or keeps it waiting.

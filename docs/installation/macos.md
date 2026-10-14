@@ -83,6 +83,10 @@ To choose a different folder later, start it once from Terminal with
 open -a "Open Annihilation" --args --choose-game-dir
 ```
 
+Every option the game takes, and every way to start a network game from
+Terminal or a launcher, is in
+[Command Line and Game Launching](../command-line.md).
+
 Open Annihilation's own settings open with **Cmd+,**, or from
 **SETTINGS…** at the foot of the Library, which the **OA** button at the
 bottom right of the main menu opens. See [Settings](../settings.md), and
