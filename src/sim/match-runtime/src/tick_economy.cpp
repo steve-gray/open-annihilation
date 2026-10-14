@@ -3,6 +3,10 @@
 
 #include "tick_internal.hpp"
 
+#include "oa/sim/ai.hpp"
+
+#include <memory>
+
 namespace oa::sim::match_runtime {
 
 namespace {
@@ -11,6 +15,26 @@ struct CreditOwner {
     bool present{};
     uint8_t status{};
 };
+
+// Difficulty a computer player's income uses. A mirrored owner keeps the
+// game's difficulty: only the machine that runs the computer player scales
+// its income, and the others copy the units.
+int32_t income_difficulty(
+    const oa::World& world, const std::shared_ptr<void>& computers, const oa::Player* owner
+) {
+    const auto fallback = world.game.difficulty;
+    if (owner == nullptr || owner->in_use == 0 || owner->status != OA_PLAYER_STATUS_COMPUTER)
+        return fallback;
+    const auto* begin = world.game.players;
+    const auto* end = begin + OA_PLAYER_COUNT;
+    if (owner < begin || owner >= end || !computers)
+        return fallback;
+    return oa::sim::ai::computer_player_difficulty(
+        static_cast<const oa::sim::ai::ComputerPlayers*>(computers.get()),
+        static_cast<uint8_t>(owner - begin),
+        fallback
+    );
+}
 
 CreditOwner credit_owner(const oa::World& world, const oa::UnitEconomy& block) {
     const auto* owner = oa::world_player_ref(&world, block.player);
@@ -39,7 +63,9 @@ void Match::credit_metal(
 ) {
     const auto owner = credit_owner(state(), target.economy);
     auto& produced = target.economy.metal.produced;
-    const auto difficulty = state().game.difficulty;
+    const auto difficulty = income_difficulty(
+        state(), computer_player_state(), oa::world_player_ref(&state(), target.economy.player)
+    );
     if (scales != nullptr)
         (void)sim::unit_health::credit_metal(
             produced, amount, owner.present, owner.status, difficulty, *scales
@@ -55,7 +81,9 @@ void Match::credit_energy(
 ) {
     const auto owner = credit_owner(state(), target.economy);
     auto& produced = target.economy.energy.produced;
-    const auto difficulty = state().game.difficulty;
+    const auto difficulty = income_difficulty(
+        state(), computer_player_state(), oa::world_player_ref(&state(), target.economy.player)
+    );
     if (scales != nullptr)
         (void)sim::unit_health::credit_energy(
             produced, amount, owner.present, owner.status, difficulty, *scales
@@ -71,7 +99,7 @@ void Match::update_player_economy(size_t player_index) {
     auto& player = match_player(*this, player_index);
     const bool owner_present = player.in_use != 0;
     const auto owner_status = player.status;
-    const auto difficulty = world.game.difficulty;
+    const auto difficulty = income_difficulty(world, computer_player_state(), &player);
     // Every production credit below scales a computer player's income alike,
     // energy or metal; a mod's income multipliers replace the scaling.
     const auto& income = rules().ai.income_multipliers;
