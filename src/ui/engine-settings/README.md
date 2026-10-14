@@ -1400,3 +1400,21 @@ language is only available as a download. The screen is named
 dialog as `oa.language-notice`. Use English, when the operating system
 asked for the language, writes that language's tag into
 `open-annihilation.language-notice-dismissed`.
+
+## The manual's pictures
+
+`oa-ui-engine-settings-pictures DIRECTORY` draws each section the engine's
+dialog lists when Touch, Controller and Game files are on: the dialog
+alone, unlocked, at Compact and 2× (960 by 648), in the installed game's
+fonts (`OA_GAME_DIR`). It writes one PNG a section, under the names
+`docs/images/settings/` uses (`controls-1.png`, `language-1.png`,
+`graphics-1.png`, `downloads-1.png`, and `page_word` plus `.png` for the
+others), and `downloads-2.png` with Downloads scrolled to its end. The
+rows a host fills (Your files, Game files, Downloads' install ID, Game
+Content) are the defaults the manual describes. The data test
+`ui-engine-settings-pictures` runs the same program into a scratch folder
+under the build. To refresh the manual, build the tests and run:
+
+```sh
+oa-ui-engine-settings-pictures docs/images/settings
+```
