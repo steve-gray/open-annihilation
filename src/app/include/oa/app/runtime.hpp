@@ -4031,7 +4031,8 @@ class Runtime final : public menu::Host,
 
     /// Plays the intro that waited for the setup, once the setup will not
     /// show again, and writes "first-run: done" before it. A start that did
-    /// not wait returns without playing.
+    /// not wait returns without playing. The main menu's hum waited with the
+    /// intro, and starts after it (start_waiting_menu_hum).
     void play_intro_after_setup();
 
     /// Writes "first-run: not showing" once when the setup stays hidden, and
@@ -13614,16 +13615,37 @@ class Runtime final : public menu::Host,
             report_unplayed_sound(selection.sound->resource, error);
     }
 
-    /// Starts the main menu's music: the CD music's menu mode and the menu voice loop.
+    /// Starts the main menu's music: the CD music's menu mode and the menu
+    /// voice loop, the hum (runtime_menu_audio.cpp).
     void start_menu_music();
 
-    /// Loops an ALLSOUND alternate voice as the menu music (the menu's BGM entry is drone2).
+    /// Loops an ALLSOUND alternate voice as the menu music (the menu's BGM entry
+    /// is drone2), the main menu's hum.
     ///
-    /// Nothing plays when muted, headless or already playing; a failure is
-    /// reported on stderr.
+    /// While the setup is still to finish and the movies to play after it
+    /// (menu_hum_waits), the hum waits: nothing plays, and
+    /// start_waiting_menu_hum starts it once they are over. Otherwise
+    /// "menu hum: starts" is written as the hum starts, muted and headless
+    /// runs included. Nothing plays when muted, headless or already playing;
+    /// a failure is reported on stderr.
     ///
     /// @param sound ALLSOUND name
     void play_menu_voice(std::string_view sound);
+
+    /// Tells whether the main menu's hum waits: while the setup is still to
+    /// finish and the movies to play after it (Options::intro_after_setup).
+    /// A --first-run start, whose setup shows again and whose movies wait
+    /// for a walk that will not, waits only until the walk is first finished.
+    ///
+    /// @return true while the hum waits
+    [[nodiscard]] bool menu_hum_waits() const;
+
+    /// Starts the main menu's hum that waited for the setup and the movies
+    /// after it, once they are over: the frame after the movies played, or
+    /// after the setup ended where a switch skips them. Called every frame;
+    /// does nothing while they are still to come or when no menu asked for
+    /// the hum.
+    void start_waiting_menu_hum();
 
     /// Plays an ALLSOUND sound on the alternate route, looping it as the menu
     /// music plays, in place of whatever that route plays.
@@ -13636,7 +13658,8 @@ class Runtime final : public menu::Host,
     /// @return true when the sound started
     bool play_alternate_sound(std::string_view sound);
 
-    /// Stops the menu music loop and puts the CD music into its match mode.
+    /// Stops the menu music loop and puts the CD music into its match mode. A
+    /// hum that waited is forgotten: the menu asks for it again.
     void stop_menu_music();
 
     // CD music (runtime_music.cpp): music files play as the disc.
@@ -16140,6 +16163,15 @@ class Runtime final : public menu::Host,
     uint8_t cursor_index_ = 0xff;
     bool cursors_loaded_ = false;
     bool menu_music_playing_ = false;
+    /// The main menu asked for its hum while it waited for the setup and the
+    /// movies after it (play_menu_voice, start_waiting_menu_hum).
+    bool menu_hum_waiting_ = false;
+    /// The hum has started and no match has stopped it, muted and headless
+    /// runs included; "menu hum: starts" is written as this turns true.
+    bool menu_hum_on_ = false;
+    /// The setup's walk was finished in this run, by Start playing or Skip
+    /// setup (menu_hum_waits).
+    bool setup_finished_ = false;
     // The settings the profile's display rules let the player change.
     view_rules::ViewSettings view_settings_{};
 

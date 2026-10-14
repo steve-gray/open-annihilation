@@ -136,6 +136,45 @@ names the same renderer. `app-graphics-report` checks the limit and the
 line, and `native-renderer-report` that a start on the dummy video driver
 logs it.
 
+## The start's movies and the menu hum
+
+The game starts with two movies, the logo movie and the intro (the mod
+profile's `media.movies`, `1.zrb` and `2.zrb` for 3.1c), unless
+`--skip-intro` or the game's `-c`, `-n` or `-y` skips them, or a key ends
+them. The main menu's hum, the BGM loop on the alternate route
+(`Runtime::play_menu_voice`, `runtime_menu_audio.cpp`), starts with the
+main menu once the movies are over, never while one plays:
+
+- A start that does not show the setup plays the movies in `run_once`
+  (`main.cpp`) before the archives are mounted. The runtime then opens the
+  main menu, which starts the hum.
+- A start that shows the setup, the first start and a `--first-run` start,
+  keeps the movies until the setup will not show again
+  (`Options::intro_after_setup`, `Runtime::play_intro_after_setup`), and
+  the hum waits with them (`Runtime::menu_hum_waits`): it does not play
+  through the setup window, the copy, the mounting of the archives or the
+  setup's steps over the main menu. When the walk ends, the movies play,
+  and the frame after them the hum starts
+  (`Runtime::start_waiting_menu_hum`); with the movies skipped it starts
+  as the walk ends. A `--first-run` start shows the setup again each time
+  the menu settles, so its movies never come: its hum starts once the walk
+  is first finished.
+
+The hum stops as a match starts (`Runtime::stop_menu_music`) and starts
+again as the game returns to the menus; a movie the menus play holds it
+while it plays (`Runtime::play_movie_resource`). `--mute` and headless runs
+play none of it, but the log says what it does in every run: `menu hum:
+waits for the setup and the movies after it` when it waits, and `menu hum:
+starts`, with `(muted)` or `(headless)`, each time it starts, after the
+movies' `intro 1.ZRB: decoded …` lines. `native-menu-hum-start` and
+`native-menu-hum-start-skip-intro` check that order on a start without the
+setup, with the movies and with `--skip-intro`; `native-menu-hum-setup`
+that the hum still waits once the setup window has copied the game and the
+archives are mounted; and `native-menu-hum-first-run` and
+`native-menu-hum-first-run-skip-intro` that, when the setup's walk over the
+menu ends, the movies play first and the hum starts after them, or at once
+when they are skipped.
+
 ## Adding a screen or overlay
 
 1. In your package, write `void oa::app::register_<pkg>_screens(ScreenRegistry*)`
@@ -825,6 +864,8 @@ hosts them on the OA layer.
   `runtime_builtin_screens.cpp`, `screen_registry.*`: the screen registry,
   screen loading and the host of the frontend dispatcher. Lines are only
   ever added to `screens.inc`.
+- `runtime_menu_audio.cpp`: the main menu's hum, and when it starts and
+  stops (The start's movies and the menu hum, above).
 - `runtime_world_draw.cpp`, `runtime_camera.cpp`: world rendering and the
   camera. The map the game shows (`shown_map_size`) is the tile mosaic less
   its last 32 columns and 128 rows of map pixels, the hidden edges the

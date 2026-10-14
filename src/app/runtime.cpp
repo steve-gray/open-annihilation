@@ -497,6 +497,8 @@ Runtime::Runtime(
     state_.skip_intro = options_.launch.skip_intro;
     call_hook_or_raise<&Extension::frontend_states>(extension_, frontend_states_);
     step(frontend::Step::reload_unit_overrides, state_);
+    // The dispatcher opens the main menu, which starts its hum unless the
+    // setup and the movies after it are still to come (play_menu_voice).
     frontend::dispatch(state_, *this, frontend_states_);
 }
 
@@ -1164,6 +1166,9 @@ void Runtime::idle_tick() {
     // After the catalogue, so a size that arrived this frame is on the cards,
     // and before the language notice, which stays closed while this shows.
     tell_first_run();
+    // Once the setup is over and the movies after it have played, or a
+    // switch skipped them, the main menu's hum that waited starts.
+    start_waiting_menu_hum();
     // Content that differs is told with the language notice, and queues first.
     tell_content_difference();
     tell_missing_language();
