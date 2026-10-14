@@ -66,6 +66,11 @@ On a Retina display the setup, Settings and the menus are laid out from
 the window's size in points and drawn at the display's pixel density. The
 same window is the same arrangement, with sharper edges.
 
+The next time you open it, it comes back as you left it: full screen, or
+the window at the same size and place, on the same display when that
+display is still connected. A window is kept on the screen. The first
+start opens a window.
+
 To choose a different folder later, start it once from Terminal with
 `--choose-game-dir`:
 

@@ -500,6 +500,9 @@ struct Options {
     // continues at online features over the main menu. The named --game-dir
     // is what the menu plays; the window copies the check's install.
     bool check_setup_window = false;
+    // Opens a window at a size, saves that place and checks the next start
+    // opens at the same size, wholly on a connected display.
+    bool check_window_place = false;
     // Shows the progress dialog for a slow fixture, checks it animates and
     // closes with no input, writes pictures, and checks the four languages.
     bool check_progress = false;

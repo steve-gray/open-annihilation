@@ -10,8 +10,15 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cstdint>
 #include <iostream>
+#include <limits>
+#include <map>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
 #include <tuple>
 
 namespace oa::app {
@@ -53,6 +60,36 @@ Span span_on_display(Span window, Span usable, bool resizable) {
 /// @return true for the SDL_EVENT_WINDOW_ events
 bool is_window_event(const SDL_Event& event) {
     return event.type >= SDL_EVENT_WINDOW_FIRST && event.type <= SDL_EVENT_WINDOW_LAST;
+}
+
+/// The function told when the window's place may have changed; null until one is set.
+WindowPlaceWatcher place_watcher = nullptr;
+
+/// Tells the watcher the window's place may have changed.
+///
+/// @param window the game's window; null or no watcher does nothing
+void note_window_place(SDL_Window* window) {
+    if (place_watcher != nullptr && window != nullptr)
+        place_watcher(window);
+}
+
+/// Tells whether an event can move, resize or change the mode of the window.
+///
+/// @param event any SDL event
+/// @return true for a move, a resize, full screen, a display change, or a maximise or restore
+bool changes_saved_place(const SDL_Event& event) {
+    switch (event.type) {
+    case SDL_EVENT_WINDOW_RESIZED:
+    case SDL_EVENT_WINDOW_MOVED:
+    case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+    case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+    case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+    case SDL_EVENT_WINDOW_MAXIMIZED:
+    case SDL_EVENT_WINDOW_RESTORED:
+        return true;
+    default:
+        return false;
+    }
 }
 
 /// Notes the display a full-screen window is on, and brings a window that has
@@ -301,6 +338,8 @@ bool take_full_screen_event(
     if (is_window_event(event)) {
         if (window != nullptr)
             follow_window_place(window, full_screen);
+        if (changes_saved_place(event))
+            note_window_place(window);
         return false;
     }
     switch (full_screen.take_key(event)) {
@@ -313,17 +352,359 @@ bool take_full_screen_event(
         // window system that switches at once has placed the window as a
         // window when the switch returns.
         follow_window_place(window, full_screen);
-        if (switch_full_screen(window, full_screen))
+        if (switch_full_screen(window, full_screen)) {
             follow_window_place(window, full_screen);
-        else
+            note_window_place(window);
+        } else {
             std::cerr << "open-annihilation: switching full screen failed: " << SDL_GetError()
                       << '\n';
+        }
         return true;
     case FullScreenKey::repeat:
     case FullScreenKey::release:
         return true;
     }
     return false;
+}
+
+namespace {
+
+/// The largest width or height a remembered place accepts.
+constexpr int32_t kLargestPlaceSize = 16384;
+
+/// The furthest coordinate, either way, a remembered place accepts.
+constexpr int32_t kFurthestPlaceCoordinate = 100000;
+
+/// One preference value being read.
+class PlaceText {
+  public:
+
+    /// Reads `text` from its start.
+    ///
+    /// @param text the value
+    explicit PlaceText(std::string_view text) : rest_(text) {}
+
+    /// Takes a literal prefix.
+    ///
+    /// @param word the characters to take
+    /// @return true when they were next
+    bool take(std::string_view word) {
+        if (!rest_.starts_with(word))
+            return false;
+        rest_.remove_prefix(word.size());
+        return true;
+    }
+
+    /// Reads one integer.
+    ///
+    /// @return the integer, or nothing when the next characters are not one
+    std::optional<int32_t> integer() {
+        if (rest_.empty())
+            return std::nullopt;
+        const char* const begin = rest_.data();
+        const char* const end = begin + rest_.size();
+        int32_t number = 0;
+        const auto parsed = std::from_chars(begin, end, number);
+        if (parsed.ec != std::errc{} || parsed.ptr == begin)
+            return std::nullopt;
+        rest_.remove_prefix(static_cast<std::size_t>(parsed.ptr - begin));
+        return number;
+    }
+
+    /// Tells whether the value has been read to its end.
+    ///
+    /// @return true when nothing remains
+    [[nodiscard]] bool empty() const { return rest_.empty(); }
+
+  private:
+
+    std::string_view rest_;
+};
+
+/// Tells whether a size is one a remembered place accepts.
+///
+/// @param size a width or a height
+/// @return true for 1 through kLargestPlaceSize
+bool allowed_size(int32_t size) {
+    return size >= 1 && size <= kLargestPlaceSize;
+}
+
+/// Tells whether a coordinate is one a remembered place accepts.
+///
+/// @param coordinate a position
+/// @return true for -kFurthestPlaceCoordinate through kFurthestPlaceCoordinate
+bool allowed_coordinate(int32_t coordinate) {
+    return coordinate >= -kFurthestPlaceCoordinate && coordinate <= kFurthestPlaceCoordinate;
+}
+
+/// Reads `WIDTHxHEIGHT at X,Y`.
+///
+/// @param[in,out] cursor the value, at the width
+/// @param[out] geometry the contents
+/// @return false when the text is not that shape or a number is out of range
+bool read_geometry(PlaceText& cursor, WindowGeometry& geometry) {
+    const auto width = cursor.integer();
+    if (!width || !cursor.take("x"))
+        return false;
+    const auto height = cursor.integer();
+    if (!height || !cursor.take(" at "))
+        return false;
+    const auto x = cursor.integer();
+    if (!x || !cursor.take(","))
+        return false;
+    const auto y = cursor.integer();
+    if (!y || !allowed_size(*width) || !allowed_size(*height) || !allowed_coordinate(*x) ||
+        !allowed_coordinate(*y))
+        return false;
+    geometry.width = *width;
+    geometry.height = *height;
+    geometry.x = *x;
+    geometry.y = *y;
+    return true;
+}
+
+/// Reads ` on DX,DY,DW,DH`.
+///
+/// @param[in,out] cursor the value, at the space before on
+/// @param[out] place the display
+/// @return false when the text is not that shape or a number is out of range
+bool read_display(PlaceText& cursor, SavedWindow& place) {
+    if (!cursor.take(" on "))
+        return false;
+    const auto x = cursor.integer();
+    if (!x || !cursor.take(","))
+        return false;
+    const auto y = cursor.integer();
+    if (!y || !cursor.take(","))
+        return false;
+    const auto width = cursor.integer();
+    if (!width || !cursor.take(","))
+        return false;
+    const auto height = cursor.integer();
+    if (!height || !allowed_coordinate(*x) || !allowed_coordinate(*y) || !allowed_size(*width) ||
+        !allowed_size(*height))
+        return false;
+    place.display_x = *x;
+    place.display_y = *y;
+    place.display_width = *width;
+    place.display_height = *height;
+    return true;
+}
+
+/// Writes one integer into a place's text.
+///
+/// @param[in,out] text the value being written
+/// @param number the integer
+void append_number(std::string& text, int32_t number) {
+    text += std::to_string(number);
+}
+
+/// Writes a window's contents into a place's text.
+///
+/// @param[in,out] text the value being written
+/// @param geometry the contents
+void append_geometry(std::string& text, const WindowGeometry& geometry) {
+    append_number(text, geometry.width);
+    text += 'x';
+    append_number(text, geometry.height);
+    text += " at ";
+    append_number(text, geometry.x);
+    text += ',';
+    append_number(text, geometry.y);
+}
+
+/// Writes a display's bounds into a place's text.
+///
+/// @param[in,out] text the value being written
+/// @param place the place whose display is written
+void append_display(std::string& text, const SavedWindow& place) {
+    text += " on ";
+    append_number(text, place.display_x);
+    text += ',';
+    append_number(text, place.display_y);
+    text += ',';
+    append_number(text, place.display_width);
+    text += ',';
+    append_number(text, place.display_height);
+}
+
+/// Moves one axis of a window so the window lies wholly in a usable area.
+///
+/// A length longer than the area shrinks to the area. A length that fits
+/// keeps its size and moves the least that puts it inside.
+///
+/// @param[in,out] start the window's start on the axis
+/// @param[in,out] length the window's length on the axis
+/// @param area_start the usable area's start
+/// @param area_length the usable area's length
+void fit_axis(int32_t& start, int32_t& length, int32_t area_start, int32_t area_length) {
+    if (area_length < 1)
+        area_length = 1;
+    if (length > area_length)
+        length = area_length;
+    if (length < 1)
+        length = 1;
+    const int64_t latest =
+        static_cast<int64_t>(area_start) + static_cast<int64_t>(area_length) - length;
+    int64_t placed = start;
+    if (placed < area_start)
+        placed = area_start;
+    if (placed > latest)
+        placed = latest;
+    if (placed > std::numeric_limits<int32_t>::max())
+        placed = std::numeric_limits<int32_t>::max();
+    if (placed < std::numeric_limits<int32_t>::min())
+        placed = std::numeric_limits<int32_t>::min();
+    start = static_cast<int32_t>(placed);
+}
+
+/// Finds the display a remembered place opens on.
+///
+/// The display whose bounds equal the remembered ones wins, the main one
+/// when more than one does. Otherwise the main display, or the first.
+///
+/// @param saved the remembered place; null when there is none
+/// @param displays the displays connected now
+/// @return the display, or null when none is connected
+const DisplayArea* chosen_display(const SavedWindow* saved, std::span<const DisplayArea> displays) {
+    if (displays.empty())
+        return nullptr;
+    const DisplayArea* main = nullptr;
+    const DisplayArea* matched = nullptr;
+    for (const DisplayArea& area : displays) {
+        if (area.main)
+            main = &area;
+        if (saved == nullptr || area.x != saved->display_x || area.y != saved->display_y ||
+            area.width != saved->display_width || area.height != saved->display_height)
+            continue;
+        if (matched == nullptr || area.main)
+            matched = &area;
+    }
+    if (matched != nullptr)
+        return matched;
+    if (main != nullptr)
+        return main;
+    return &displays.front();
+}
+
+} // namespace
+
+std::string encode_window_place(const SavedWindow& place) {
+    std::string text;
+    if (place.full_screen) {
+        text = "full-screen";
+        append_display(text, place);
+        if (place.has_window) {
+            text += " window ";
+            append_geometry(text, place.window);
+        }
+        return text;
+    }
+    text = "window ";
+    append_geometry(text, place.window);
+    append_display(text, place);
+    return text;
+}
+
+std::optional<SavedWindow> decode_window_place(std::string_view text) {
+    PlaceText cursor(text);
+    SavedWindow place;
+    if (cursor.take("full-screen")) {
+        place.full_screen = true;
+        if (!read_display(cursor, place))
+            return std::nullopt;
+        if (cursor.empty())
+            return place;
+        if (!cursor.take(" window ") || !read_geometry(cursor, place.window) || !cursor.empty())
+            return std::nullopt;
+        place.has_window = true;
+        return place;
+    }
+    if (!cursor.take("window ") || !read_geometry(cursor, place.window) ||
+        !read_display(cursor, place) || !cursor.empty())
+        return std::nullopt;
+    place.full_screen = false;
+    place.has_window = true;
+    return place;
+}
+
+std::optional<SavedWindow> window_place_in(const std::map<std::string, std::string>& values) {
+    const auto found = values.find(std::string(window_place_key));
+    if (found == values.end())
+        return std::nullopt;
+    return decode_window_place(found->second);
+}
+
+void put_window_place(std::map<std::string, std::string>& values, const SavedWindow& place) {
+    values.insert_or_assign(std::string(window_place_key), encode_window_place(place));
+}
+
+bool store_window_place_unless(
+    std::map<std::string, std::string>& values, const SavedWindow& place, bool write
+) {
+    if (!write)
+        return false;
+    put_window_place(values, place);
+    return true;
+}
+
+void set_window_place_watcher(WindowPlaceWatcher watcher) {
+    place_watcher = watcher;
+}
+
+RestoredPlace restore_window_place(
+    const SavedWindow* saved,
+    PlaceOverride command_line,
+    bool platform_full_screen,
+    std::span<const DisplayArea> displays
+) {
+    RestoredPlace restored;
+    if (command_line == PlaceOverride::full_screen)
+        restored.full_screen = true;
+    else if (command_line == PlaceOverride::window)
+        restored.full_screen = false;
+    else if (saved != nullptr)
+        restored.full_screen = saved->full_screen;
+    else
+        restored.full_screen = platform_full_screen;
+
+    const DisplayArea* const display = chosen_display(saved, displays);
+    if (restored.full_screen) {
+        // A first start is left where the window system opens full screen.
+        // A remembered full screen, or one asked for this run, opens on its display.
+        const bool place_on_display =
+            saved != nullptr || command_line == PlaceOverride::full_screen;
+        if (place_on_display && display != nullptr) {
+            restored.positioned = true;
+            restored.x = display->x;
+            restored.y = display->y;
+        }
+        return restored;
+    }
+    if (saved == nullptr || !saved->has_window) {
+        return restored;
+    }
+    WindowGeometry fitted = saved->window;
+    if (display == nullptr) {
+        restored.sized = true;
+        restored.width = fitted.width;
+        restored.height = fitted.height;
+        return restored;
+    }
+    const bool usable = display->usable_width > 0 && display->usable_height > 0;
+    const int32_t area_x = usable ? display->usable_x : display->x;
+    const int32_t area_y = usable ? display->usable_y : display->y;
+    const int32_t area_width = usable ? display->usable_width : display->width;
+    const int32_t area_height = usable ? display->usable_height : display->height;
+    fit_axis(fitted.x, fitted.width, area_x, area_width);
+    fit_axis(fitted.y, fitted.height, area_y, area_height);
+    restored.sized = true;
+    restored.positioned = true;
+    restored.x = fitted.x;
+    restored.y = fitted.y;
+    restored.width = fitted.width;
+    restored.height = fitted.height;
+    return restored;
 }
 
 } // namespace oa::app

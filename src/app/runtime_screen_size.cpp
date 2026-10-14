@@ -61,6 +61,8 @@ void Runtime::apply_screen_size(settings::ScreenSize size) {
     apply_output_mode();
     if (screen_ == Screen::match && match_ && selected_tnt_)
         render_match_surface();
+    // A crash before the next window event still keeps the size just applied.
+    remember_open_window(sdl_.window);
 }
 
 void Runtime::apply_window_frame() {
