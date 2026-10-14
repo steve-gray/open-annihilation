@@ -113,7 +113,10 @@ SetCompressor /SOLID lzma
 # who uses this computer; the game's own registration of the five types is per
 # user, at run time, and a player who turns Settings' Launch files switch off
 # hides this association from themselves alone. These are the names
-# src/platform/file-types uses.
+# src/platform/file-types uses. The uninstaller removes both: the association
+# for everyone, and the registration of the account that uninstalls while it
+# names this install's program (un.OA_WithdrawUserType).
+!define OA_USER_CLASSES_KEY "Software\Classes"
 !define OA_LAUNCH_EXTENSION_KEY "Software\Classes\.oalaunch"
 !define OA_LAUNCH_PROGRAM_ID "OpenAnnihilation.Launch"
 !define OA_LAUNCH_PROGRAM_KEY "Software\Classes\OpenAnnihilation.Launch"
@@ -298,7 +301,179 @@ Function un.onInit
   !endif
 FunctionEnd
 
+# This install's program, as the uninstaller names it and in its short form.
+Var ThisProgram
+Var ThisProgramShort
+# The file type un.OA_WithdrawUserType withdraws.
+Var UserExtension
+Var UserProgramId
+Var UserMimeType
+
+# Takes a path from the stack and leaves 1 there when it is this install's
+# program, else 0. Letter case never matters, and an absolute path is also
+# compared in its short form, so either spelling of the same file matches.
+Function un.OA_IsThisProgram
+  Exch $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  StrCpy $R1 0
+  StrCpy $R2 $R0 2 1
+  StrCpy $R3 $R0 2
+  ${If} $R0 == $ThisProgram
+    StrCpy $R1 1
+  ${ElseIf} $R2 == ":\"
+  ${OrIf} $R3 == "\\"
+    ClearErrors
+    GetFullPathName /SHORT $R2 $R0
+    ${IfNot} ${Errors}
+    ${AndIf} $R2 == $ThisProgramShort
+      StrCpy $R1 1
+    ${EndIf}
+  ${EndIf}
+  ClearErrors
+  StrCpy $R0 $R1
+  Pop $R3
+  Pop $R2
+  Pop $R1
+  Exch $R0
+FunctionEnd
+
+# Takes an open command from the stack and leaves there the program it
+# names: the text between its first two quotes, as the game writes it
+# ("<exe>" --open "%1"). Empty when the command does not start with a quote.
+Function un.OA_ProgramOfCommand
+  Exch $R0
+  Push $R1
+  Push $R2
+  StrCpy $R1 $R0 1
+  ${If} $R1 != '"'
+    StrCpy $R0 ""
+  ${Else}
+    StrCpy $R2 1
+    ${Do}
+      StrCpy $R1 $R0 1 $R2
+      ${If} $R1 == '"'
+      ${OrIf} $R1 == ""
+        ${ExitDo}
+      ${EndIf}
+      IntOp $R2 $R2 + 1
+    ${Loop}
+    ${If} $R1 == '"'
+      IntOp $R2 $R2 - 1
+      StrCpy $R0 $R0 $R2 1
+    ${Else}
+      StrCpy $R0 ""
+    ${EndIf}
+  ${EndIf}
+  Pop $R2
+  Pop $R1
+  Exch $R0
+FunctionEnd
+
+# Withdraws one file type of the game's own registration
+# (src/platform/file-types) for the account that uninstalls: the six values
+# a withdrawal in the game removes, under HKEY_CURRENT_USER\Software\Classes,
+# while they still belong to this install. The program identifier's open
+# command and icon go while they name this install's program. Its name, its
+# keys (leaf first, and each only once empty) and the extension's three
+# values (the OpenWithProgids value named for it, and the (Default) and
+# Content Type while they are still the game's program identifier and MIME
+# type) go only when the command or the icon named this install's program
+# and neither names another: a copy of the game unzipped elsewhere, or
+# another program, keeps its registration.
+Function un.OA_WithdrawUserType
+  StrCpy $5 "${OA_USER_CLASSES_KEY}\$UserProgramId"
+  StrCpy $6 "${OA_USER_CLASSES_KEY}\$UserExtension"
+  # What the open command ($7) and the icon ($8) name: 0 nothing, 1 this
+  # install's program, 2 another.
+  StrCpy $7 0
+  ClearErrors
+  ReadRegStr $0 HKCU "$5\shell\open\command" ""
+  ${IfNot} ${Errors}
+    Push $0
+    Call un.OA_ProgramOfCommand
+    Call un.OA_IsThisProgram
+    Pop $1
+    IntOp $7 2 - $1
+  ${EndIf}
+  StrCpy $8 0
+  ClearErrors
+  ReadRegStr $0 HKCU "$5\DefaultIcon" ""
+  ${IfNot} ${Errors}
+    # The game's icon is "<exe>,0".
+    StrCpy $1 $0 "" -2
+    StrCpy $2 ""
+    ${If} $1 == ",0"
+      StrCpy $2 $0 -2
+    ${EndIf}
+    Push $2
+    Call un.OA_IsThisProgram
+    Pop $1
+    IntOp $8 2 - $1
+  ${EndIf}
+  ClearErrors
+  ${If} $7 == 1
+    DeleteRegValue HKCU "$5\shell\open\command" ""
+  ${EndIf}
+  ${If} $8 == 1
+    DeleteRegValue HKCU "$5\DefaultIcon" ""
+  ${EndIf}
+  ${If} $7 == 1
+  ${OrIf} $8 == 1
+    ${If} $7 != 2
+    ${AndIf} $8 != 2
+      DeleteRegValue HKCU "$5" ""
+      DeleteRegKey /ifempty HKCU "$5\shell\open\command"
+      DeleteRegKey /ifempty HKCU "$5\shell\open"
+      DeleteRegKey /ifempty HKCU "$5\shell"
+      DeleteRegKey /ifempty HKCU "$5\DefaultIcon"
+      DeleteRegKey /ifempty HKCU "$5"
+      DeleteRegValue HKCU "$6\OpenWithProgids" "$UserProgramId"
+      ClearErrors
+      ReadRegStr $0 HKCU "$6" ""
+      ${IfNot} ${Errors}
+      ${AndIf} $0 S== $UserProgramId
+        DeleteRegValue HKCU "$6" ""
+      ${EndIf}
+      ClearErrors
+      ReadRegStr $0 HKCU "$6" "Content Type"
+      ${IfNot} ${Errors}
+      ${AndIf} $0 S== $UserMimeType
+        DeleteRegValue HKCU "$6" "Content Type"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  ClearErrors
+FunctionEnd
+
+!macro OA_WithdrawUserType _EXTENSION _PROGRAM_ID _MIME_TYPE
+  StrCpy $UserExtension "${_EXTENSION}"
+  StrCpy $UserProgramId "${_PROGRAM_ID}"
+  StrCpy $UserMimeType "${_MIME_TYPE}"
+  Call un.OA_WithdrawUserType
+!macroend
+!define OA_WithdrawUserType "!insertmacro OA_WithdrawUserType"
+
 Section "Uninstall"
+  # The game's own registration of the five file types, for the account that
+  # uninstalls, while it names this install's program: first, while the
+  # program is still there to be named in its short form too. The extensions
+  # and program identifiers are those of src/platform/file-types.
+  StrCpy $ThisProgram "$INSTDIR\open-annihilation.exe"
+  ClearErrors
+  GetFullPathName /SHORT $ThisProgramShort $ThisProgram
+  ${If} ${Errors}
+  ${OrIf} $ThisProgramShort == ""
+    StrCpy $ThisProgramShort $ThisProgram
+  ${EndIf}
+  ClearErrors
+  ${OA_WithdrawUserType} ".oamod" "OpenAnnihilation.Mod" "application/x-oamod"
+  ${OA_WithdrawUserType} ".oalang" "OpenAnnihilation.Language" "application/x-oalang"
+  ${OA_WithdrawUserType} ".oamap" "OpenAnnihilation.MapPack" "application/x-oamap"
+  ${OA_WithdrawUserType} ".oareg" "OpenAnnihilation.Registry" "application/x-oareg"
+  ${OA_WithdrawUserType} ".oalaunch" "${OA_LAUNCH_PROGRAM_ID}" "${OA_LAUNCH_MIME_TYPE}"
+
   # Removes the install folder's own files, the Start Menu folder and the
   # desktop shortcut this installer added. Never Documents, and never a game
   # copy, save or mod outside the install folder.
