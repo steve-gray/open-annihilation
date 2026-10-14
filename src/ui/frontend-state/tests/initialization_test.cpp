@@ -183,6 +183,64 @@ void player_slots() {
     require(storage.chat_head == 0 && storage.chat_tail == 0, "ordinary reset fields");
 }
 
+void a_stored_skirmish_count_is_kept() {
+    State state;
+    game_entry::SkirmishSettings settings;
+    init::Preferences p;
+    SettingsHost host;
+    host.number("NumSkirmishPlayers", 4);
+    host.strings[SettingsHost::key(init::general_section, "SkirmishMap")] = "Kept";
+    init::load_preferences(state, settings, p, host);
+    require(settings.slot_count == 4, "a stored count of four stays four");
+    require(settings.slots[3].metal == 1000 && settings.slots[3].energy == 1000, "the fourth row");
+    require(settings.slots[4].metal == 0, "a row past the stored count stays empty");
+}
+
+void set_skirmish_player_count_writes_the_one_key() {
+    game_entry::SkirmishSettings settings;
+    for (int32_t index = 0; index < 4; ++index) {
+        auto& slot = settings.slots[static_cast<std::size_t>(index)];
+        slot.controller = 2;
+        slot.side = 1;
+        slot.color = 7;
+        slot.alliance = 2;
+        slot.metal = 1000;
+        slot.energy = 1500;
+    }
+    SettingsHost host;
+    init::set_skirmish_player_count(settings, 9, host);
+    require(settings.slot_count == 9, "the count is the one asked for");
+    require(
+        host.written.size() == 1 &&
+            host.written.at(SettingsHost::key(init::general_section, "NumSkirmishPlayers")) == 9,
+        "only NumSkirmishPlayers is stored"
+    );
+    require(
+        settings.slots[0].controller == 2 && settings.slots[0].side == 1 &&
+            settings.slots[0].color == 7 && settings.slots[0].alliance == 2 &&
+            settings.slots[0].energy == 1500,
+        "a row the setup already filled is kept"
+    );
+    require(
+        settings.slots[8].controller == 0 && settings.slots[8].side == 0 &&
+            settings.slots[8].color == 8 &&
+            settings.slots[8].alliance == game_entry::unassigned_alliance &&
+            settings.slots[8].metal == 1000 && settings.slots[8].energy == 1000,
+        "a newly shown row is open"
+    );
+    require(settings.slots[9].metal == 0, "a row past the count stays empty");
+    SettingsHost quiet;
+    init::set_skirmish_player_count(settings, 0, quiet);
+    require(settings.slot_count == 0 && quiet.written.empty(), "zero is not stored");
+    bool refused = false;
+    try {
+        init::set_skirmish_player_count(settings, 12, quiet);
+    } catch (const std::invalid_argument&) {
+        refused = true;
+    }
+    require(refused && settings.slot_count == 0, "a count past the slots is refused");
+}
+
 void preferences() {
     State state;
     game_entry::SkirmishSettings settings;
@@ -223,11 +281,12 @@ void preferences() {
         "string defaults"
     );
     require(
-        settings.slot_count == 4 && settings.map_name == "First Map" &&
-            state.play_intro_movie == 1 && p.skirmish_difficulty == 1 && p.skirmish_location == 1,
+        settings.slot_count == init::default_skirmish_player_count &&
+            settings.map_name == "First Map" && state.play_intro_movie == 1 &&
+            p.skirmish_difficulty == 1 && p.skirmish_location == 1,
         "skirmish defaults"
     );
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < init::default_skirmish_player_count; ++i) {
         const auto& s = settings.slots[static_cast<std::size_t>(i)];
         require(
             s.controller == 0 && s.side == i % 2 && s.color == i && s.alliance == 5 &&
@@ -291,7 +350,7 @@ void preferences() {
     );
     require(
         settings.map_name == "Saved Map" && settings.slots[0].controller == 2 &&
-            state.play_intro_movie == 0,
+            settings.slot_count == 1 && state.play_intro_movie == 0,
         "stored values"
     );
     require(
@@ -1266,6 +1325,8 @@ void copy_track_type() {
 int main() {
     try {
         player_slots();
+        a_stored_skirmish_count_is_kept();
+        set_skirmish_player_count_writes_the_one_key();
         preferences();
         one_local_player();
         save_preferences();

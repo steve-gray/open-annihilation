@@ -307,6 +307,25 @@ void write_all_missions(const Preferences& p, PreferencesHost& h);
 /// @param[in,out] h Settings services.
 void write_skirmish_player_count(const game_entry::SkirmishSettings& s, PreferencesHost& h);
 
+/// Player rows a new install shows when NumSkirmishPlayers is not stored.
+inline constexpr int32_t default_skirmish_player_count = 10;
+
+/// Sets how many player rows the skirmish setup shows, and stores that one count.
+///
+/// A row that already holds metal the setup's buttons can give is left as it
+/// is. A row below that is filled the way a load fills a missing Player row:
+/// Open, a side and a colour from its place, no alliance, 1000 metal and
+/// 1000 energy. A count of zero stays in memory and is not stored, so a save
+/// before the setup is loaded writes no count.
+///
+/// @param settings Skirmish settings whose slot_count changes.
+/// @param count The rows the setup shows, from zero to the slot storage.
+/// @param[in,out] host Settings services.
+/// @throws std::invalid_argument when count is outside that range.
+void set_skirmish_player_count(
+    game_entry::SkirmishSettings& settings, int32_t count, PreferencesHost& host
+);
+
 /// Remembers the player's skirmish setup the first time a match is about to
 /// replace the slots. A setup already remembered stays remembered, so a
 /// restart keeps the setup from before the first match.

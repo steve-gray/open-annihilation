@@ -867,10 +867,11 @@ struct RowView {
     /// not fit beside it.
     bool control_below{};
     /// The lock stands at the start of the line under the label, before the
-    /// hints, because the label, the lock and a control on the label line do
-    /// not fit on one line. The control stays where it is. When the control
-    /// is also below, the lock is the line under the label and the control
-    /// the line under the lock.
+    /// hints, because the label and the lock do not fit on the label line.
+    /// A control that stays on that line keeps its place, and the label keeps
+    /// the room beside it, or the whole line when nothing else is on it.
+    /// When the control is also below, the lock is the line under the label
+    /// and the control the line under the lock.
     bool lock_below{};
     bool enabled{true}; ///< its control can be pressed now
 };
@@ -1024,19 +1025,22 @@ struct PlacedRows {
 /// right, the label ending label_gap short of it. A locked row's lock,
 /// lock_width wide (or the measured lock_columns), stands on the label line,
 /// label_gap left of a control that sits there, or at the label line's right
-/// for any other row. When the label, that lock and a control on the label
-/// line do not fit — the label's estimated width, the lock's icon and words,
-/// the control and the gaps — the lock moves to the start of the line under
-/// the label, before the hints, and the label keeps the room beside the
-/// control. A measured view says so with lock_below; otherwise the estimate
-/// decides, and the dropped lock is at least as wide as its words. The
-/// control stays where an unlocked row puts it. A value row's value shares
+/// when the control stands on a line of its own. When the label and the lock
+/// do not fit on that line — with a control that stays there, the label's
+/// estimated width, the lock, that control and the gaps; without one, the
+/// label and the lock — the lock moves to the start of the line under the
+/// label, before the hints. The label keeps the room beside a control that
+/// stays, or the whole line when the lock was the only other part. A measured
+/// view says so with lock_below; otherwise the estimate decides, and the
+/// dropped lock is at least as wide as its words. The control stays where an
+/// unlocked row puts it. A value row's value shares
 /// its label's line, or, when the view says the control stands below, the
 /// control's line, ending label_gap before the button. A link
 /// stands alone at the label line's left, as wide
 /// as the line or its control width, and short of its lock. The hint lines
-/// follow hint_gap under the label line, small_line each, tall_hint_line_gap
-/// more between lines while tall. A slider's track and value, slider_gap
+/// follow hint_gap under the lowest of the label line, a lock that dropped
+/// under it and a control that dropped under that, small_line each,
+/// tall_hint_line_gap more between lines while tall. A slider's track and value, slider_gap
 /// under the hints and slider_line_height high (the value slider_value_width
 /// wide at the right, slider_value_gap from the track), a drop-down's field
 /// (regular_line high) or a text field (field_height high), each slider_gap

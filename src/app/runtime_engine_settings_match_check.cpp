@@ -109,9 +109,12 @@ constexpr std::array<std::pair<int, int>, 6> kPlacedWindows{{
 /// The section whose rows a game locks: Engine Limits.
 constexpr std::array<settings::Page, 1> kLockedPages{settings::Page::common_tweaks};
 
-/// Engine Limits' rows a game locks: the unit limit and the pathfinding cycles.
-constexpr std::array<int32_t, 2> kLockedRows{
-    settings::first_row_control, settings::first_row_control + 1
+/// Engine Limits' rows a game locks: the unit limit, pathfinding and the
+/// skirmish player count.
+constexpr std::array<int32_t, 3> kLockedRows{
+    settings::first_row_control,
+    settings::first_row_control + 1,
+    settings::first_row_control + 2,
 };
 
 /// The keys of the made-up mods that stand in the Library for the mods
