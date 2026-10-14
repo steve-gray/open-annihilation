@@ -135,17 +135,19 @@ void draw_frame(SDL_Renderer* renderer, SDL_Texture* texture, SDL_ScaleMode mode
         throw_present_error("SDL_FlushRenderer");
 }
 
-void draw_frame(SDL_Renderer* renderer, TiledTexture& frame, SDL_ScaleMode mode) {
+void draw_frame(
+    SDL_Renderer* renderer, TiledTexture& frame, SDL_ScaleMode mode, const SDL_FRect* destination
+) {
     const bool filtered = mode != SDL_SCALEMODE_NEAREST && frame.set_scale_mode(mode);
     if (!filtered) {
         // A refused mode may have reached some tiles: all go back to NEAREST.
         if (mode != SDL_SCALEMODE_NEAREST)
             std::ignore = frame.set_scale_mode(SDL_SCALEMODE_NEAREST);
-        frame.draw(renderer, nullptr, nullptr);
+        frame.draw(renderer, nullptr, destination);
         return;
     }
     try {
-        frame.draw(renderer, nullptr, nullptr);
+        frame.draw(renderer, nullptr, destination);
     } catch (...) {
         std::ignore = frame.set_scale_mode(SDL_SCALEMODE_NEAREST);
         throw;

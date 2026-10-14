@@ -5,6 +5,7 @@
 // (window_pixels.hpp).
 #include "window_pixels.hpp"
 
+#include "oa/app/window_surface.hpp"
 #include "render_host.hpp"
 
 #include <cmath>
@@ -15,29 +16,29 @@ namespace oa::app {
 bool read_window_viewport(
     SDL_Window* window, SDL_Renderer* renderer, oa::ui::game_files::Viewport& viewport
 ) {
-    int window_width = 0;
-    int window_height = 0;
     int output_width = 0;
     int output_height = 0;
-    if (!SDL_GetWindowSize(window, &window_width, &window_height) ||
-        !SDL_GetRenderOutputSize(renderer, &output_width, &output_height) || window_width <= 0 ||
-        window_height <= 0 || output_width <= 0 || output_height <= 0)
+    // A renderer with no size yet leaves the viewport as it was. The surface
+    // then takes the larger of that output and the window's pixels, and the
+    // points the layout uses, which a headless density may have grown past.
+    if (window == nullptr || renderer == nullptr ||
+        !SDL_GetRenderOutputSize(renderer, &output_width, &output_height) || output_width <= 0 ||
+        output_height <= 0)
+        return false;
+    const WindowSurface surface = window_surface(window, renderer);
+    if (surface.pixel_width <= 0 || surface.pixel_height <= 0 || surface.points_width <= 0)
         return false;
     oa::ui::game_files::Viewport next;
-    next.width = output_width;
-    next.height = output_height;
-    next.px_per_point = static_cast<float>(output_width) / static_cast<float>(window_width);
+    next.width = surface.pixel_width;
+    next.height = surface.pixel_height;
+    next.px_per_point = surface.density;
     SDL_Rect safe{};
     if (SDL_GetWindowSafeArea(window, &safe) && safe.w > 0 && safe.h > 0) {
-        const float scale = next.px_per_point;
-        next.safe.left = static_cast<int>(std::lround(static_cast<float>(safe.x) * scale));
-        next.safe.top = static_cast<int>(std::lround(static_cast<float>(safe.y) * scale));
-        next.safe.right = static_cast<int>(
-            std::lround(static_cast<float>(window_width - safe.x - safe.w) * scale)
-        );
-        next.safe.bottom = static_cast<int>(
-            std::lround(static_cast<float>(window_height - safe.y - safe.h) * scale)
-        );
+        next.safe.left = surface_canvas_pixels(surface, safe.x, true);
+        next.safe.top = surface_canvas_pixels(surface, safe.y, false);
+        next.safe.right = surface_canvas_pixels(surface, surface.sdl_width - safe.x - safe.w, true);
+        next.safe.bottom =
+            surface_canvas_pixels(surface, surface.sdl_height - safe.y - safe.h, false);
     }
     const bool same = next.width == viewport.width && next.height == viewport.height &&
                       next.px_per_point == viewport.px_per_point &&

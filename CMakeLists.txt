@@ -976,6 +976,20 @@ if(BUILD_TESTING)
     add_test(NAME app-full-screen COMMAND oa-app-full-screen-test)
     set_tests_properties(app-full-screen PROPERTIES TIMEOUT 60
       ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
+    # A 1000 by 628 point window at one pixel per point and at two: the main
+    # menu's frame is the same letterbox, scaled; the setup's game step and
+    # the Settings dialog keep one layout. OA_PIXEL_DENSITY grows the dummy
+    # driver's window, which has no display scale of its own.
+    add_executable(oa-app-retina-layout-test src/app/retina_layout_test.cpp
+      src/app/window_surface.cpp)
+    target_include_directories(oa-app-retina-layout-test PRIVATE src/app/include)
+    target_link_libraries(oa-app-retina-layout-test PRIVATE SDL3::SDL3 oa-ui-first-run
+      oa-ui-engine-settings oa-options)
+    oa_copy_text_fonts(oa-app-retina-layout-test
+      "$<TARGET_FILE_DIR:oa-app-retina-layout-test>")
+    add_test(NAME app-retina-layout COMMAND oa-app-retina-layout-test)
+    set_tests_properties(app-retina-layout PROPERTIES TIMEOUT 120
+      ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
     # The texture limit the render policy corrects from the probe's report,
     # the line the game logs once its renderer is made, naming the driver,
     # the adapter, the texture limit and the tier with what it does or why
@@ -1090,7 +1104,8 @@ set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/screen_size
   src/app/runtime_game_files.cpp
   src/app/runtime_pad.cpp src/app/runtime_pad_actions.cpp src/app/runtime_pad_pointer.cpp
   src/app/runtime_pad_haptics.cpp src/app/runtime_text_input.cpp
-  src/app/folder_chooser_screen.cpp src/app/window_pixels.cpp src/app/runtime_found_install.cpp
+  src/app/folder_chooser_screen.cpp src/app/window_pixels.cpp src/app/window_surface.cpp
+  src/app/runtime_found_install.cpp
   src/app/simulation_hash.cpp
   src/app/presence_facts.cpp)
 # The macOS window's live content size. A resize a full-screen change skipped

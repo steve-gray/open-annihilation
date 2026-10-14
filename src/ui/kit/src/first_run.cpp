@@ -576,15 +576,28 @@ void write_place(
         result.append(pattern.substr(open, close - open + 1));
 }
 
+/// Tells whether the game font has a glyph to measure. A modern-only font does not.
+///
+/// @param fonts the fonts
+/// @return true when the regular font drew a glyph
+bool game_font_has_glyphs(const Fonts& fonts);
+
 /// Returns a button's width: button_width, or the caption with its insets.
 ///
-/// @param fonts the fonts; null uses button_width
+/// Fonts with no glyphs, and a null font, estimate the caption. The setup's
+/// smooth form draws that way, and the hit target is measured with no font,
+/// so the two stay the same width. A caption such as "Copy the game" is wider
+/// than button_width and would otherwise run off the window's edge.
+///
+/// @param fonts the fonts; null, or fonts with no glyphs, estimates the caption
 /// @param caption the button's words
 /// @return the width, in points
 int32_t setup_button_width(const Fonts* fonts, std::string_view caption) {
     int32_t text = 0;
-    if (fonts != nullptr)
+    if (fonts != nullptr && game_font_has_glyphs(*fonts))
         text = text_width(*fonts, FontRole::small, caption);
+    else
+        text = estimated_width(caption);
     return std::max(compact_metrics.button_width, text + 2 * compact_metrics.choice_text_inset);
 }
 
@@ -697,10 +710,6 @@ smooth_tracked(const Canvas& canvas, FontRole role, std::string_view text, int32
     return width;
 }
 
-/// Tells whether the game font has a glyph to measure. A modern-only font does not.
-///
-/// @param fonts the fonts
-/// @return true when the regular font drew a glyph
 bool game_font_has_glyphs(const Fonts& fonts) {
     return std::any_of(
         fonts.regular.font.glyphs.begin(), fonts.regular.font.glyphs.end(), [](const auto& glyph) {

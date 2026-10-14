@@ -14,11 +14,11 @@ The mod you play is not a setting here: you choose it in
 [the Library](library.md#choosing-a-mod), where **PLAY NOW** plays a mod
 and **SWITCH OFF** goes back to the game as 3.1c plays it.
 
-The pictures show each section at its defaults on a Mac, opened from the
-main menu, with Core Prime's list of content checked a few minutes before.
-They are from before Mods left the column on the left for the Library, and
-the top and middle of Graphics, and Controller, are pictures from 0.7, from
-before Downloads joined it.
+The pictures show each section at its defaults on a Mac, the dialog alone,
+unlocked, at Compact drawn at 2× (960 by 648), with Touch, Controller and
+Game files listed. They are drawn by `oa-ui-engine-settings-pictures`
+([how to draw them](../src/ui/engine-settings/README.md#the-manuals-pictures)). A section taller
+than the dialog shows its top; Downloads has a second picture of its end.
 
 ## Contents
 
@@ -205,7 +205,7 @@ Each of these takes effect at once.
 
 ## Engine Limits
 
-![The Engine Limits section: Unit limit at 250 per player and Pathfinding cycles at 1x.](images/settings/engine-limits.png)
+![The Engine Limits section: Unit limit at 250 per player, Pathfinding cycles at 1x and Skirmish players at 10.](images/settings/engine-limits.png)
 
 - **Unit limit**, 50 to 1500 units per player in steps of 50 (a mod may
   allow more). By default it is the unit limit your Total Annihilation
@@ -233,7 +233,7 @@ replay they show "Set by the host".
 
 ## Language & Text
 
-![The top of the Language & Text section, in a game: Language set to System default (English), Use modern fonts for game text On, Text size at 80% and the top of Font outline. More in the Library… is on the main menu, under Language.](images/settings/language-1.png)
+![The top of the Language & Text section: Language set to System default (English), More in the Library… under it, Use modern fonts for game text On, and the Text size row.](images/settings/language-1.png)
 
 The Language & Text section says which language the game's text is shown in and
 how that text is drawn. None of these changes the game itself, so no game
@@ -408,7 +408,10 @@ the game draws its text and how the modern fonts draw it.
   use every pixel of a high-density display. It needs at least 2 GB of
   memory, and a run started with `--no-hardware-acceleration` keeps it off.
   Turn it on for a sharper picture on such a display, if the frame rate
-  holds. It is always on on an iPhone and an iPad.
+  holds. It is always on on an iPhone and an iPad. The setup, this dialog
+  and the menus around the game's picture already lay out in points and
+  draw at the display's density, whether or not this switch is on. The
+  switch is the match and the game's own picture.
 - **Explosion flash**, Off, Reduced or Full, Full by default. Every
   explosion lights up the ground around it for under a second, brightest at
   its centre and nearly white where flashes overlap, as the game always
@@ -606,6 +609,8 @@ each setting's choices and default, and what every input does.
 
 ## Game files
 
+![The Game files section: Installed reading 3.1c, Core Contingency, Battle Tactics and music, with MANAGE…, Include in device backups Off, and Where the files are.](images/settings/game-files.png)
+
 On an iPhone or an iPad, the main menu's settings have a Game files
 section for the Total Annihilation files copied onto the device:
 
@@ -624,7 +629,7 @@ them.
 
 ![The top of the Downloads section: Check for content updates at Automatically, Install ID On with its hint, and under that hint the line "Made at your first download".](images/settings/downloads-1.png)
 
-![The Downloads section: Check for content updates at Automatically, Install ID On, the line "Made at your first download" under its hint, Downloaded files reading "Nothing kept" with EMPTY greyed, and REGISTRIES IN THE LIBRARY… with the line "Registries are in the Library."](images/settings/downloads-2.png)
+![The end of the Downloads section: Install ID On with "Made at your first download", Downloaded files reading "Nothing kept" with EMPTY greyed, and REGISTRIES IN THE LIBRARY… with the line "Registries are in the Library."](images/settings/downloads-2.png)
 
 Downloads says when Open Annihilation looks for new content, holds the
 install ID a registry asks for, and keeps the files downloads leave behind.
@@ -669,6 +674,8 @@ change.
 
 ## Game Content
 
+![The top of Game Content: the copy in Documents, then Total Annihilation, Core Contingency and Battle Tactics, each "All files match", and the top of Total Annihilation Music.](images/settings/game-content.png)
+
 Game Content lists each base game and expansion, its size, and what the
 last check said. A bundle that is not in the copy says "not added". A
 bundle whose files differ is marked.
@@ -686,7 +693,7 @@ installation is not used or changed.
 
 ## System
 
-![The top of the System section in a game: Your files with the folder path, Welcome setup locked ("Choose from the main menu.") with SHOW AGAIN faded, and the top of File Type Registration.](images/settings/system.png)
+![The top of the System section: Your files with the folder path and SAVES, SCREENSHOTS and MODS, Welcome setup with SHOW AGAIN, File Type Registration, and the Mod packages and Map packs switches On.](images/settings/system.png)
 
 System is where the game sits on your computer: your own folder, and which
 of the game's file types this copy opens.
@@ -751,7 +758,7 @@ of the game's file types this copy opens.
 
 ## Developer
 
-![The Developer section: Enable Developer Mode Off, Show performance statistics Off and UI kit gallery with its SHOW button, then the list of standard hacks by area, each area closed and showing how many of its hacks are on, and under the list Show Active Only and RESTORE PROFILE VALUES.](images/settings/developer.png)
+![The Developer section: Enable Developer Mode Off, Show performance statistics Off and UI kit gallery with its SHOW button, then the first areas of the standard hacks closed (AI, Aircraft, Console), and under them Show Active Only and RESTORE PROFILE VALUES.](images/settings/developer.png)
 
 The Developer section sits at the foot of the column, under the divider.
 

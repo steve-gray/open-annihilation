@@ -418,7 +418,9 @@ struct SetupButtons {
 /// Places Skip setup, Back and Next in the footer, each at least button_width
 /// and wide enough for its caption.
 ///
-/// @param fonts the fonts; null measures the captions as button_width
+/// @param fonts the fonts; null, or fonts with no glyphs, estimates each caption
+///     so a long one such as "Copy the game" is not clipped, and so the hit
+///     target matches the button the smooth form draws
 /// @param look the window and the buttons' words
 /// @return the three buttons
 [[nodiscard]] SetupButtons setup_buttons(const Fonts* fonts, const SetupChromeLook& look);
