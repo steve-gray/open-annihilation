@@ -765,15 +765,15 @@ void lay_language(
     // and the Active look while the step speaks its language, which is the
     // language in use or a built-in or installed language in the middle.
     // The language in use loses that look while another card is chosen.
-    const int32_t chosen = chosen_card(session);
-    carousel.chosen = chosen;
+    const int32_t chosen_index = chosen_card(session);
+    carousel.chosen = chosen_index;
     const bool chosen_speaks =
-        chosen >= 0 &&
-        (session.model.cards[static_cast<std::size_t>(chosen)].current || preview != nullptr);
+        chosen_index >= 0 &&
+        (session.model.cards[static_cast<std::size_t>(chosen_index)].current || preview != nullptr);
     carousel.cards.reserve(session.model.cards.size());
     for (std::size_t at = 0; at < session.model.cards.size(); ++at) {
         const Card& card = session.model.cards[at];
-        const bool active = chosen_speaks && static_cast<int32_t>(at) == chosen;
+        const bool active = chosen_speaks && static_cast<int32_t>(at) == chosen_index;
         kit::CarouselCard face;
         face.letters = badge_letters(card.tag);
         face.own_name = card.own_name;
