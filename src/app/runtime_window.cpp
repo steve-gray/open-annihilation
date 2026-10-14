@@ -26,13 +26,14 @@ namespace {
 
 /// The place this process remembers, and where a change is written.
 struct WindowPlaceMemory {
-    std::filesystem::path file;                 ///< the preferences file
-    std::map<std::string, std::string>* values; ///< the runtime's preferences; null before it
-    bool* dirty;                                ///< the runtime's unsaved-preferences flag
-    bool enabled;                               ///< this run may remember a change
-    bool has_last;                              ///< last holds a place
-    SavedWindow last;                           ///< the place last read or written
-    std::string last_written;                   ///< that place's text, so an unchanged one is kept
+    std::filesystem::path file; ///< the preferences file
+    /// The runtime's preferences; null before it exists.
+    std::map<std::string, std::string>* values = nullptr;
+    bool* dirty = nullptr;    ///< the runtime's unsaved-preferences flag
+    bool enabled = false;     ///< this run may remember a change
+    bool has_last = false;    ///< last holds a place
+    SavedWindow last;         ///< the place last read or written
+    std::string last_written; ///< that place's text, so an unchanged one is kept
 };
 
 /// The one window the process opens.

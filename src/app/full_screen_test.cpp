@@ -1071,7 +1071,10 @@ void test_saved_window_place() {
     negative.window.x = -3000;
     const oa::app::RestoredPlace moved =
         oa::app::restore_window_place(&negative, PlaceOverride::none, false, two);
-    CHECK(moved.x == -800 && moved.y == 100);
+    // Entirely left of the display. The least move that lands it wholly on
+    // the display puts its left edge on the display's left edge. The right
+    // edge of that display would be -800, which moves the window further.
+    CHECK(moved.x == -1920 && moved.y == 100);
     CHECK(wholly_inside(moved, left));
 
     std::map<std::string, std::string> values;
