@@ -8,12 +8,12 @@
 // engine options a run with the endpoint refuses, the usage text; and the
 // endpoint's token.
 #include "oa/app/app.hpp"
+#include "oa/app/netgame/launch_file.hpp"
 #include "oa/test/check.hpp"
 #include "options.hpp"
 #include "token.hpp"
 
 #include <filesystem>
-#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -184,109 +184,40 @@ void check_status_options() {
     OA_CHECK(message == "--status-file needs a file");
 }
 
-/// Writes a launch file and returns its path.
-///
-/// @param name the file's name in the scratch folder
-/// @param text the file
-/// @return the path
-std::filesystem::path write_launch(const char* name, std::string_view text) {
-    const std::filesystem::path path = std::filesystem::temp_directory_path() / name;
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    output << text;
-    return path;
-}
-
-/// Parses a command line whose --launch another extension takes.
-///
-/// The automation hooks see the path and decline the option, as they do
-/// when network play is the extension that takes it.
-///
-/// @param arguments the arguments after the program's name
-/// @return what the parse gave
-Parsed parse_beside_launch(const std::vector<const char*>& arguments) {
-    std::vector<std::string> storage{"open-annihilation"};
-    storage.insert(storage.end(), arguments.begin(), arguments.end());
-    std::vector<char*> argv;
-    for (auto& argument : storage)
-        argv.push_back(argument.data());
-
-    struct Holder {
-        automation::EndpointOptions endpoint{};
-        oa::app::Extension inner{};
-    } holder;
-
-    automation::fill_option_hooks(holder.inner, holder.endpoint);
-    oa::app::Extension table{};
-    table.context = &holder;
-    table.take_option = [](void* context,
-                           const char* name,
-                           const oa::app::OptionValues& values,
-                           uint32_t& effects) {
-        auto& held = *static_cast<Holder*>(context);
-        uint32_t taken = 0;
-        const bool accepted = held.inner.take_option(held.inner.context, name, values, taken);
-        if (std::string_view(name) == "--launch") {
-            if (accepted)
-                throw std::runtime_error("the status options took --launch");
-            (void)values.next(values.arguments);
-            return true;
-        }
-        if (accepted)
-            effects = taken;
-        return accepted;
-    };
-    table.check_options = [](void* context) {
-        auto& held = *static_cast<Holder*>(context);
-        held.inner.check_options(held.inner.context);
-    };
-    auto app = oa::app::parse_options(static_cast<int>(argv.size()), argv.data(), table);
-    return {holder.endpoint, std::move(app)};
-}
-
-/// A launch file's status block turns the stream on. The command line
-/// replaces one field. A file with no status block changes nothing, and a
-/// file that cannot be read reports no error here.
+/// The launch's status block, which network play keeps as it checks the
+/// command line, turns the stream on. The command line replaces one field.
+/// A run with no status block changes nothing.
 void check_launch_status() {
-    const auto both = write_launch(
-        "oa-g55-status-both.yaml",
-        "oalaunch: 1\nstatus:\n  stdout: true\n  quit-after-game: after-score\n"
-    );
-    const Parsed turned = parse_beside_launch({"--launch", both.string().c_str()});
+    namespace netgame = oa::app::netgame;
+    netgame::LaunchStatusChoice both;
+    both.standard_output_named = true;
+    both.standard_output = true;
+    both.quit_after = netgame::QuitAfter::after_score;
+    netgame::keep_launch_status(both);
+    const Parsed turned = parse({});
     OA_CHECK(turned.endpoint.status_stdout);
     OA_CHECK(turned.endpoint.quit_after == automation::QuitAfter::score);
     OA_CHECK(!turned.endpoint.status_file);
     OA_CHECK(!turned.endpoint.status_stdout_on_command);
     OA_CHECK(!turned.endpoint.quit_after_on_command);
 
-    const auto named = write_launch(
-        "oa-g55-status-file.yaml",
-        "oalaunch: 1\nstatus:\n  stdout: true\n  file: other.jsonl\n  quit-after-game: true\n"
-    );
-    const Parsed replaced =
-        parse_beside_launch({"--launch", named.string().c_str(), "--status-file", "chosen.jsonl"});
+    netgame::LaunchStatusChoice named;
+    named.standard_output_named = true;
+    named.standard_output = true;
+    named.file = "other.jsonl";
+    named.quit_after = netgame::QuitAfter::game;
+    netgame::keep_launch_status(named);
+    const Parsed replaced = parse({"--status-file", "chosen.jsonl"});
     OA_CHECK(replaced.endpoint.status_stdout);
     OA_CHECK(replaced.endpoint.status_file && *replaced.endpoint.status_file == "chosen.jsonl");
     OA_CHECK(replaced.endpoint.quit_after == automation::QuitAfter::game);
     OA_CHECK(replaced.endpoint.status_file_on_command);
 
-    const auto quiet =
-        write_launch("oa-g55-status-none.yaml", "oalaunch: 1\ngame:\n  role: host\n");
-    const Parsed unchanged = parse_beside_launch({"--launch", quiet.string().c_str()});
+    netgame::keep_launch_status({});
+    const Parsed unchanged = parse({});
     OA_CHECK(!unchanged.endpoint.status_stdout);
     OA_CHECK(!unchanged.endpoint.status_file);
     OA_CHECK(unchanged.endpoint.quit_after == automation::QuitAfter::none);
-
-    const Parsed standard_input = parse_beside_launch({"--launch", "-"});
-    OA_CHECK(!standard_input.endpoint.status_stdout);
-    OA_CHECK(standard_input.endpoint.quit_after == automation::QuitAfter::none);
-
-    const Parsed missing = parse_beside_launch({"--launch", "oa-g55-no-such-launch.yaml"});
-    OA_CHECK(!missing.endpoint.status_stdout);
-    OA_CHECK(missing.endpoint.quit_after == automation::QuitAfter::none);
-
-    std::filesystem::remove(both);
-    std::filesystem::remove(named);
-    std::filesystem::remove(quiet);
 }
 
 /// The usage names the options on the run options' line, says what --fark

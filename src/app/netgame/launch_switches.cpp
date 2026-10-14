@@ -79,11 +79,12 @@ int take_switch(
         const char* path = arguments->attached;
         if (*path == '\0') {
             path = arguments->next_token(arguments->tokens);
-            if (path == nullptr || *path == '\0' || *path == '-')
+            // "-" alone is standard input; another dash starts a switch.
+            if (path == nullptr || *path == '\0' || (*path == '-' && path[1] != '\0'))
                 path = nullptr;
         }
-        switches.ini_seen = true;
-        switches.ini_path = path != nullptr ? path : "";
+        switches.launch_seen = true;
+        switches.launch_path = path != nullptr ? path : "";
         *effects |= cl::switch_effect_skip_intro;
         return 1;
     }

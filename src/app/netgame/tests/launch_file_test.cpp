@@ -1,36 +1,53 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// A launch file fills one plan from TA Forever's INI or from Open
-// Annihilation's YAML, and the command line beside the file replaces the
-// fields it names.
+// A launch fills one plan from Open Annihilation's .oalaunch file, from TA
+// Forever's INI, from the options that name each launch setting, or from a
+// launch piped in on standard input. -c and --launch read either file by
+// what it holds, an option beside the file replaces its field, and every
+// refusal names the field or the option.
 #include "net_options.hpp"
 #include "oa/app/app.hpp"
 #include "oa/app/game_directory.hpp"
 #include "oa/app/netgame/launch_file.hpp"
 #include "oa/netgame/dplay.hpp"
 
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
 namespace fs = std::filesystem;
 namespace mp = oa::ui::frontend_multiplayer;
+namespace nl = oa::ui::frontend_multiplayer::launch;
+namespace launch_file = oa::app::netgame;
 
 namespace {
 
 int failures = 0;
 
-void expect(bool condition, const char* what) {
+void expect(bool condition, const std::string& what) {
     if (!condition) {
-        std::fprintf(stderr, "FAILED: %s\n", what);
+        std::fprintf(stderr, "FAILED: %s\n", what.c_str());
         ++failures;
     }
 }
@@ -40,7 +57,7 @@ struct Scratch {
     fs::path dir;
 
     Scratch() {
-        dir = fs::temp_directory_path() / "G52-launch-file";
+        dir = fs::temp_directory_path() / "G104-launch-file";
         std::error_code failure;
         fs::remove_all(dir, failure);
         fs::create_directories(dir);
@@ -51,18 +68,18 @@ struct Scratch {
         fs::remove_all(dir, failure);
     }
 
-    /// Writes one scratch file and returns its path.
+    /// Writes one scratch file and returns its path as UTF-8.
     ///
     /// @param name the file's name
     /// @param text the bytes
     /// @return the path
-    fs::path write(const char* name, std::string_view text) const {
+    std::string write(const char* name, std::string_view text) const {
         const fs::path file = dir / name;
         std::ofstream output(file, std::ios::binary);
         expect(static_cast<bool>(output), "the scratch file opens");
         output.write(text.data(), static_cast<std::streamsize>(text.size()));
         expect(static_cast<bool>(output), "the scratch file is written");
-        return file;
+        return oa::app::path_to_utf8(file);
     }
 };
 
@@ -87,190 +104,187 @@ tournment=1
 tournament=1
 )";
 
-constexpr std::string_view kYaml = R"(oalaunch: 1
+// Every launch setting, each with a value other than the battle room's own.
+constexpr std::string_view kLaunch = R"(oalaunch: 1
 game:
   role: host
-  address: 192.0.2.10
   name: Example game
-  player: Commander
   password: secret
-  dplay:
-    guid: "{99797420-F5F5-11CF-9827-00A0241496C8}"
+  player-limit: 6
+  launcher-name: Ladder
+  tournament: off
+  closed: off
+  directplay:
+    application-guid: "{99797420-F5F5-11CF-9827-00A0241496C8}"
     port: 47624
+player:
+  name: Commander
+  side: core
+  team: 3
+  colour: 5
+map: Acid Foursome
+rules:
+  commander-death: ends
+  metal: 1200
+  energy: 1500
+  unit-limit: 250
+  line-of-sight: circular
+  mapping: unmapped
+  start-positions: fixed
+  cheats: on
+  watchers: off
+  time-limit: 30
+  lock-options: true
+  unit-restrictions:
+    CORKROG: 0
+    ARMFLASH: no-limit
+    armmav: 5
+computer-players:
+  - side: core
+    team: 2
+    colour: 7
+    difficulty: medium
+  - side: arm
 content:
   base-game: totala
-  expansions: [campaign, core-contingency]
+  expansions: [core-contingency]
   mod: ridge
-map: "Acid Foursome"
-rules:
-  commander: ends
-  metal: 1000
-  energy: 1000
-  unit-limit: 250
-  line-of-sight: true
-  mapping: mapped
-  start-positions: random
-  cheats: false
-  watchers: true
-  player-limit: 4
-  time-limit: 0
-lock-options: false
-seat:
-  side: arm
-  team: 1
 status:
-  stdout: true
+  standard-output: true
   file: status.jsonl
-  quit-after-game: true
+  quit-after-game: after-score
 )";
 
-constexpr std::string_view kNamedYaml = R"(oalaunch: 1
+// A player who joins, and watches.
+constexpr std::string_view kJoin = R"(oalaunch: 1
+game:
+  role: join
+  address: 192.0.2.10
+player:
+  side: watcher
+)";
+
+// The same settings as kLaunch's network play reads, as options.
+const std::vector<const char*> kLaunchOptions = {
+    "--host",
+    "--game-name",
+    "Example game",
+    "--game-password",
+    "secret",
+    "--player-limit",
+    "6",
+    "--launcher-name",
+    "Ladder",
+    "--tournament=off",
+    "--closed=off",
+    "--dplay-guid",
+    "{99797420-F5F5-11CF-9827-00A0241496C8}",
+    "--dplay-port",
+    "47624",
+    "--player-name",
+    "Commander",
+    "--side",
+    "core",
+    "--team",
+    "3",
+    "--colour",
+    "5",
+    "--map",
+    "Acid Foursome",
+    "--commander-death",
+    "ends",
+    "--metal",
+    "1200",
+    "--energy",
+    "1500",
+    "--unit-limit",
+    "250",
+    "--line-of-sight",
+    "circular",
+    "--mapping",
+    "unmapped",
+    "--start-positions",
+    "fixed",
+    "--cheats",
+    "on",
+    "--watchers",
+    "off",
+    "--time-limit",
+    "30",
+    "--lock-options",
+    "--unit-restriction",
+    "CORKROG=0",
+    "--unit-restriction",
+    "ARMFLASH=no-limit",
+    "--unit-restriction",
+    "armmav=5",
+    "--computer-player",
+    "core:2:7:medium",
+    "--computer-player",
+    "arm",
+};
+
+// A host with the room's own values, which each option below replaces.
+constexpr std::string_view kPlainHost = R"(oalaunch: 1
 game:
   role: host
-  name: From file
-  password: secret
+  name: Plain
+player:
+  side: arm
+rules:
+  watchers: on
 )";
 
 bool same_text(const char* field, const char* expected) {
     return std::strcmp(field, expected) == 0;
 }
 
-/// The message a YAML text is refused with, or empty when it is accepted.
+/// Tells whether two launch blocks hold the same launch.
+///
+/// @param left one block
+/// @param right the other
+/// @return true when every field matches
+bool same_block(const nl::LaunchBlock& left, const nl::LaunchBlock& right) {
+    bool same =
+        left.connection_type == right.connection_type && left.hosting == right.hosting &&
+        left.player_limit == right.player_limit && left.time_limit == right.time_limit &&
+        left.pfs == right.pfs && left.lock_options == right.lock_options &&
+        left.max_units == right.max_units && left.energy == right.energy &&
+        left.metal == right.metal && left.death_option == right.death_option &&
+        left.los == right.los && left.cheats == right.cheats && left.location == right.location &&
+        left.mapping == right.mapping && left.watching == right.watching &&
+        left.tournament == right.tournament && left.faction == right.faction &&
+        left.team == right.team && left.color == right.color && left.watcher == right.watcher &&
+        left.computer_count == right.computer_count && left.closed == right.closed &&
+        left.restriction_count == right.restriction_count &&
+        same_text(left.provider_label, right.provider_label) &&
+        same_text(left.session_name, right.session_name) &&
+        same_text(left.mission, right.mission) && same_text(left.password, right.password) &&
+        same_text(left.user_name, right.user_name) && same_text(left.address, right.address);
+    for (int32_t at = 0; same && at < left.computer_count && at < nl::kLaunchComputerLimit; ++at) {
+        const auto& one = left.computers[at];
+        const auto& other = right.computers[at];
+        same = one.faction == other.faction && one.team == other.team && one.color == other.color &&
+               one.difficulty == other.difficulty;
+    }
+    for (int32_t at = 0; same && at < left.restriction_count && at < nl::kLaunchRestrictionLimit;
+         ++at)
+        same = same_text(left.restrictions[at].unit, right.restrictions[at].unit) &&
+               left.restrictions[at].limit == right.restrictions[at].limit;
+    return same;
+}
+
+/// The message a launch text is refused with, or empty when it is accepted.
 ///
 /// @param text the file's bytes
 /// @return the refusal
-std::string refused_yaml(std::string_view text) {
+std::string refused_text(std::string_view text) {
     try {
-        (void)oa::app::netgame::read_launch_text("launch.yaml", text, true);
-    } catch (const oa::app::netgame::LaunchRefusal& error) {
+        (void)launch_file::read_launch_text("launch.oalaunch", text);
+    } catch (const launch_file::LaunchRefusal& error) {
         return error.what();
     }
     return {};
-}
-
-/// TA Forever's example INI fills every field it names, and ignores registeredonly.
-///
-/// @param file the example file
-void check_ini(const fs::path& file) {
-    const auto plan = oa::app::netgame::read_launch_file(oa::app::path_to_utf8(file), false);
-    const auto& block = plan.block;
-    expect(plan.ini && plan.role == oa::app::netgame::LaunchRole::host, "an INI hosts");
-    expect(block.hosting == 1, "an INI creates the game");
-    expect(block.connection_type == mp::launch::connection_type::tcpip, "an INI plays over TCP/IP");
-    expect(block.watching == 2, "watching");
-    expect(block.mapping == 2, "mapmode");
-    expect(block.location == 2, "location");
-    expect(block.cheats == 1, "cheats");
-    expect(block.los == 1, "los");
-    expect(block.death_option == 2, "deathopt");
-    expect(block.metal == 1000 && block.energy == 1000, "metal and energy");
-    expect(block.lock_options == 0, "lockOptions");
-    expect(block.player_limit == 4, "playerlimit");
-    expect(block.pfs == 0 && block.time_limit == 0, "pfs and timelimit stay as written");
-    expect(block.tournament == 1, "tournment and tournament both set the tournament");
-    expect(same_text(block.session_name, "Example game"), "session");
-    expect(same_text(block.provider_label, "TAForever"), "provider");
-    expect(same_text(block.mission, "Acid Foursome"), "mission");
-    expect(plan.game_name == "Example game", "the game's name");
-    expect(
-        block.password[0] == '\0' && block.user_name[0] == '\0' && plan.password.empty() &&
-            plan.player_name.empty() && block.faction == 0 && block.team == 0 &&
-            block.max_units == 0,
-        "registeredonly and the unnamed fields add nothing"
-    );
-}
-
-/// The YAML example fills the plan, including DirectPlay, content, seat and status.
-void check_yaml() {
-    const auto plan = oa::app::netgame::read_launch_text("launch.yaml", kYaml, true);
-    const auto& block = plan.block;
-    expect(!plan.ini && plan.role == oa::app::netgame::LaunchRole::host, "the example hosts");
-    expect(plan.source == "launch.yaml", "the refusal names the file it was given");
-    expect(block.hosting == 1, "a host creates the game");
-    expect(block.connection_type == mp::launch::connection_type::tcpip, "a host plays over TCP/IP");
-    expect(plan.address == "192.0.2.10" && same_text(block.address, "192.0.2.10"), "address");
-    expect(
-        plan.game_name == "Example game" && same_text(block.session_name, "Example game"),
-        "game name"
-    );
-    expect(plan.player_name == "Commander" && same_text(block.user_name, "Commander"), "player");
-    expect(plan.password == "secret" && same_text(block.password, "secret"), "password is stored");
-    std::array<uint8_t, 16> guid{};
-    expect(
-        oa::netgame::parse_application_guid(
-            "{99797420-F5F5-11CF-9827-00A0241496C8}", guid.data()
-        ) && plan.dplay_guid &&
-            *plan.dplay_guid == guid,
-        "dplay guid"
-    );
-    expect(plan.dplay_port && *plan.dplay_port == 47624, "dplay port");
-    expect(
-        plan.content.named && plan.content.base_game == "totala" &&
-            plan.content.expansions.size() == 2 && plan.content.expansions[0] == "campaign" &&
-            plan.content.expansions[1] == "core-contingency" && plan.content.mod == "ridge",
-        "content"
-    );
-    expect(same_text(block.mission, "Acid Foursome"), "map");
-    expect(block.death_option == 2, "commander ends");
-    expect(block.metal == 1000 && block.energy == 1000, "resources");
-    expect(block.max_units == 250, "unit limit");
-    expect(block.los == 1, "true line of sight");
-    expect(block.mapping == 2 && block.location == 2, "mapped, random starts");
-    expect(block.cheats == 1 && block.watching == 2, "cheats off, watchers on");
-    expect(block.player_limit == 4 && block.time_limit == 0, "player limit and time limit");
-    expect(block.lock_options == 0, "options stay open");
-    expect(block.faction == mp::launch::faction::arm && block.team == 1, "Arm on team 1");
-    expect(
-        plan.status.stdout_named && plan.status.standard_output &&
-            plan.status.file == "status.jsonl" &&
-            plan.status.quit_after == oa::app::netgame::QuitAfter::game,
-        "status is kept"
-    );
-}
-
-/// Each refusal names its field, and none of them repeats the password.
-void check_refusals() {
-    const std::string unknown = refused_yaml("oalaunch: 1\nrules:\n  nope: 1\n");
-    expect(
-        unknown.find("rules.nope") != std::string::npos &&
-            unknown.find("is not a launch setting") != std::string::npos,
-        "an unknown key names its field"
-    );
-    const std::string metal =
-        refused_yaml("oalaunch: 1\ngame:\n  password: secret\nrules:\n  metal: 250000\n");
-    expect(
-        metal.find("rules.metal") != std::string::npos &&
-            metal.find("above 10000") != std::string::npos &&
-            metal.find("secret") == std::string::npos,
-        "metal above the slider names the field and not the password"
-    );
-    const std::string typed = refused_yaml("oalaunch: 1\nrules:\n  metal: lots\n");
-    expect(
-        typed.find("rules.metal") != std::string::npos &&
-            typed.find("expected a whole number") != std::string::npos,
-        "a wrong type names the field"
-    );
-    const std::string header = refused_yaml("oalaunch: 2\n");
-    expect(
-        header.find("oalaunch") != std::string::npos &&
-            header.find("expected 1") != std::string::npos,
-        "oalaunch must be 1"
-    );
-    const std::string players = refused_yaml("oalaunch: 1\nrules:\n  player-limit: 0\n");
-    expect(
-        players.find("rules.player-limit") != std::string::npos &&
-            players.find("is below 2") != std::string::npos,
-        "a player limit of 0 names the field"
-    );
-    constexpr std::string_view password = "G52-password-that-must-stay-out-XX";
-    const std::string long_password =
-        refused_yaml("oalaunch: 1\ngame:\n  password: G52-password-that-must-stay-out-XX\n");
-    expect(
-        long_password.find("game.password") != std::string::npos &&
-            long_password.find("is longer than 31") != std::string::npos &&
-            long_password.find(password) == std::string::npos,
-        "a long password is refused without being repeated"
-    );
 }
 
 struct Parsed {
@@ -309,62 +323,737 @@ std::string rejection(const std::vector<const char*>& arguments) {
     return {};
 }
 
-/// Options beside a file replace that field, in either order.
+/// Joins two argument lists.
+///
+/// @param first the first
+/// @param second the second
+/// @return first, then second
+std::vector<const char*>
+joined(const std::vector<const char*>& first, const std::vector<const char*>& second) {
+    std::vector<const char*> both = first;
+    both.insert(both.end(), second.begin(), second.end());
+    return both;
+}
+
+/// TA Forever's example INI fills every field it names, and ignores registeredonly.
+///
+/// @param path the example file
+void check_ini(const std::string& path) {
+    const auto plan = launch_file::read_launch_file(path);
+    const auto& block = plan.block;
+    expect(plan.ini && plan.role == launch_file::LaunchRole::host, "an INI hosts");
+    expect(block.hosting == 1, "an INI creates the game");
+    expect(block.connection_type == nl::connection_type::tcpip, "an INI plays over TCP/IP");
+    expect(block.watching == 2, "watching");
+    expect(block.mapping == 2, "mapmode");
+    expect(block.location == 2, "location");
+    expect(block.cheats == 1, "cheats");
+    expect(block.los == 1, "los");
+    expect(block.death_option == 2, "deathopt");
+    expect(block.metal == 1000 && block.energy == 1000, "metal and energy");
+    expect(block.lock_options == 0, "lockOptions");
+    expect(block.player_limit == 4, "playerlimit");
+    expect(block.pfs == 0 && block.time_limit == 0, "pfs and timelimit stay as written");
+    expect(block.tournament == 1, "tournment and tournament both set the tournament");
+    expect(same_text(block.session_name, "Example game"), "session");
+    expect(same_text(block.provider_label, "TAForever"), "provider");
+    expect(same_text(block.mission, "Acid Foursome"), "mission");
+    expect(plan.game_name == "Example game", "the game's name");
+    expect(
+        block.password[0] == '\0' && block.user_name[0] == '\0' && plan.password.empty() &&
+            plan.player_name.empty() && block.faction == 0 && block.team == 0 &&
+            block.max_units == 0 && block.computer_count == 0,
+        "registeredonly and the unnamed fields add nothing"
+    );
+    // Every key of the INI's table is one TA Forever writes, and each names a
+    // launch field, or none for the two the battle room does not use.
+    for (const auto& key : launch_file::launch_ini_keys())
+        expect(
+            key.field.empty() ? key.key == "pfs" || key.key == "registeredonly"
+                              : launch_file::find_launch_field(key.field) != nullptr,
+            std::string(key.key) + " names a launch field"
+        );
+}
+
+/// The .oalaunch example fills every field of the plan.
+void check_launch() {
+    const auto plan = launch_file::read_launch_text("launch.oalaunch", kLaunch);
+    const auto& block = plan.block;
+    expect(!plan.ini && plan.role == launch_file::LaunchRole::host, "the example hosts");
+    expect(plan.source == "launch.oalaunch", "the refusal names the file it was given");
+    expect(block.hosting == 1, "a host creates the game");
+    expect(block.connection_type == nl::connection_type::tcpip, "a host plays over TCP/IP");
+    expect(
+        plan.game_name == "Example game" && same_text(block.session_name, "Example game"),
+        "game.name"
+    );
+    expect(plan.password == "secret" && same_text(block.password, "secret"), "game.password");
+    expect(block.player_limit == 6, "game.player-limit");
+    expect(same_text(block.provider_label, "Ladder"), "game.launcher-name");
+    expect(block.tournament == 0, "game.tournament");
+    expect(block.closed == 0, "game.closed");
+    std::array<uint8_t, 16> guid{};
+    expect(
+        oa::netgame::parse_application_guid(
+            "{99797420-F5F5-11CF-9827-00A0241496C8}", guid.data()
+        ) && plan.dplay_guid &&
+            *plan.dplay_guid == guid,
+        "game.directplay.application-guid"
+    );
+    expect(plan.dplay_port && *plan.dplay_port == 47624, "game.directplay.port");
+    expect(
+        plan.player_name == "Commander" && same_text(block.user_name, "Commander"), "player.name"
+    );
+    expect(block.faction == nl::faction::core && block.watcher == 0, "player.side");
+    expect(block.team == 3, "player.team");
+    expect(block.color == 5, "player.colour");
+    expect(same_text(block.mission, "Acid Foursome"), "map");
+    expect(block.death_option == 2, "rules.commander-death");
+    expect(block.metal == 1200 && block.energy == 1500, "rules.metal and rules.energy");
+    expect(block.max_units == 250, "rules.unit-limit");
+    expect(block.los == 2, "rules.line-of-sight");
+    expect(block.mapping == 1 && block.location == 1, "rules.mapping and rules.start-positions");
+    expect(block.cheats == 2 && block.watching == 1, "rules.cheats and rules.watchers");
+    expect(block.time_limit == 30, "rules.time-limit");
+    expect(block.lock_options == 1, "rules.lock-options");
+    expect(
+        block.restriction_count == 3 && same_text(block.restrictions[0].unit, "CORKROG") &&
+            block.restrictions[0].limit == 0 && same_text(block.restrictions[1].unit, "ARMFLASH") &&
+            block.restrictions[1].limit == nl::kLaunchNoLimit &&
+            same_text(block.restrictions[2].unit, "armmav") && block.restrictions[2].limit == 5,
+        "rules.unit-restrictions"
+    );
+    expect(
+        block.computer_count == 2 && block.computers[0].faction == nl::faction::core &&
+            block.computers[0].team == 2 && block.computers[0].color == 7 &&
+            block.computers[0].difficulty == nl::difficulty::medium &&
+            block.computers[1].faction == nl::faction::arm && block.computers[1].team == 0 &&
+            block.computers[1].color == 0 && block.computers[1].difficulty == nl::difficulty::none,
+        "computer-players"
+    );
+    expect(
+        plan.content.named && plan.content.base_game == "totala" &&
+            plan.content.expansions.size() == 1 &&
+            plan.content.expansions[0] == "core-contingency" && plan.content.mod == "ridge",
+        "content"
+    );
+    expect(
+        plan.status.standard_output_named && plan.status.standard_output &&
+            plan.status.file == "status.jsonl" &&
+            plan.status.quit_after == launch_file::QuitAfter::after_score,
+        "status"
+    );
+    // Every field of the table is one the examples name, so a new setting
+    // needs a value here.
+    for (const auto& field : launch_file::launch_fields()) {
+        const auto last = field.field.rfind('.');
+        const std::string key(field.field.substr(last == std::string_view::npos ? 0 : last + 1));
+        expect(
+            kLaunch.find(key + ":") != std::string_view::npos ||
+                kJoin.find(key + ":") != std::string_view::npos,
+            std::string(field.field) + " is in the examples"
+        );
+    }
+    const auto joiner = launch_file::read_launch_text("join.oalaunch", kJoin);
+    expect(
+        joiner.role == launch_file::LaunchRole::join && joiner.block.hosting == 0 &&
+            joiner.address == "192.0.2.10" && same_text(joiner.block.address, "192.0.2.10") &&
+            joiner.block.watcher == 1,
+        "a joiner's file names the address and may watch"
+    );
+}
+
+/// The file and the options fill the same plan, and an option beside the file replaces its field.
+void check_options_match_the_file(const std::string& launch, const std::string& plain) {
+    const auto from_file = parse({"--launch", launch.c_str()});
+    const auto from_options = parse(kLaunchOptions);
+    expect(
+        same_block(from_file.launch.block, from_options.launch.block),
+        "the options fill the battle room's block as the file does"
+    );
+    expect(
+        from_file.net.direct_game.game_name == from_options.net.direct_game.game_name &&
+            from_file.net.direct_game.player_name == from_options.net.direct_game.player_name &&
+            from_file.net.direct_game.password == from_options.net.direct_game.password &&
+            from_file.net.dplay_port == from_options.net.dplay_port &&
+            from_file.net.dplay_guid == from_options.net.dplay_guid &&
+            from_file.net.direct_game.kind == from_options.net.direct_game.kind,
+        "the options name the game as the file does"
+    );
+    expect(
+        from_file.net.launch_planned && from_options.net.launch_planned &&
+            from_options.app.skip_intro,
+        "both plan a launch and skip the intro"
+    );
+
+    // Each of network play's launch options replaces the plain host's field,
+    // before or after the file.
+    struct Replacement {
+        std::vector<const char*> option;
+        bool (*holds)(const Parsed&);
+    };
+
+    const Replacement replacements[] = {
+        {{"--player-limit", "8"}, [](const Parsed& p) { return p.launch.block.player_limit == 8; }},
+        {{"--launcher-name", "Tourney"},
+         [](const Parsed& p) { return same_text(p.launch.block.provider_label, "Tourney"); }},
+        {{"--tournament"}, [](const Parsed& p) { return p.launch.block.tournament == 1; }},
+        {{"--closed"}, [](const Parsed& p) { return p.launch.block.closed == 1; }},
+        {{"--unit-restriction", "CORKROG=3"},
+         [](const Parsed& p) {
+             const auto& block = p.launch.block;
+             return block.restriction_count == 1 &&
+                    same_text(block.restrictions[0].unit, "CORKROG") &&
+                    block.restrictions[0].limit == 3;
+         }},
+        {{"--side", "watcher"},
+         [](const Parsed& p) {
+             return p.launch.block.watcher == 1 && p.launch.block.faction == 0;
+         }},
+        {{"--team", "none"}, [](const Parsed& p) { return p.launch.block.team == 0; }},
+        {{"--colour", "10"}, [](const Parsed& p) { return p.launch.block.color == 10; }},
+        {{"--map", "Coast To Coast"},
+         [](const Parsed& p) { return same_text(p.launch.block.mission, "Coast To Coast"); }},
+        {{"--commander-death", "continues"},
+         [](const Parsed& p) { return p.launch.block.death_option == 1; }},
+        {{"--metal", "0"}, [](const Parsed& p) { return p.launch.block.metal == 0; }},
+        {{"--energy", "10000"}, [](const Parsed& p) { return p.launch.block.energy == 10000; }},
+        {{"--unit-limit", "6553"},
+         [](const Parsed& p) { return p.launch.block.max_units == 6553; }},
+        {{"--line-of-sight", "permanent"}, [](const Parsed& p) { return p.launch.block.los == 3; }},
+        {{"--mapping", "mapped"}, [](const Parsed& p) { return p.launch.block.mapping == 2; }},
+        {{"--start-positions", "random"},
+         [](const Parsed& p) { return p.launch.block.location == 2; }},
+        {{"--cheats", "off"}, [](const Parsed& p) { return p.launch.block.cheats == 1; }},
+        {{"--watchers", "off"}, [](const Parsed& p) { return p.launch.block.watching == 1; }},
+        {{"--time-limit", "45"}, [](const Parsed& p) { return p.launch.block.time_limit == 45; }},
+        {{"--lock-options=on"}, [](const Parsed& p) { return p.launch.block.lock_options == 1; }},
+        {{"--computer-player", "core:none:4:easy"}, [](const Parsed& p) {
+             const auto& block = p.launch.block;
+             return block.computer_count == 1 && block.computers[0].faction == nl::faction::core &&
+                    block.computers[0].team == 0 && block.computers[0].color == 4 &&
+                    block.computers[0].difficulty == nl::difficulty::easy;
+         }},
+    };
+    std::set<std::string> replaced;
+    for (const auto& replacement : replacements) {
+        const std::string name(replacement.option.front());
+        replaced.insert(name.substr(0, name.find('=')));
+        const auto file_first = joined({"--launch", plain.c_str()}, replacement.option);
+        const auto option_first = joined(replacement.option, {"--launch", plain.c_str()});
+        expect(replacement.holds(parse(file_first)), name + " replaces the file's field");
+        expect(
+            replacement.holds(parse(option_first)), name + " replaces the field before the file"
+        );
+    }
+    const auto restricted =
+        parse({"--launch", launch.c_str(), "--unit-restriction", "corkrog=no-limit"}).launch.block;
+    expect(
+        restricted.restriction_count == 1 && restricted.restrictions[0].limit == nl::kLaunchNoLimit,
+        "the first --unit-restriction replaces the file's restrictions"
+    );
+    const auto twice =
+        parse({"--host", "--unit-restriction", "CORKROG=1", "--unit-restriction", "corkrog=2"})
+            .launch.block;
+    expect(
+        twice.restriction_count == 1 && twice.restrictions[0].limit == 2,
+        "a later restriction of the same unit replaces the earlier"
+    );
+    const auto listed =
+        parse({"--launch", launch.c_str(), "--computer-player", "arm"}).launch.block;
+    expect(
+        listed.computer_count == 1 && listed.computers[0].faction == nl::faction::arm &&
+            listed.computers[0].difficulty == nl::difficulty::none,
+        "the first --computer-player replaces the file's list"
+    );
+    expect(
+        parse({"--launch", plain.c_str(), "--computer-player", "arm", "--computer-player", "core"})
+                .launch.block.computer_count == 2,
+        "each --computer-player adds one"
+    );
+    for (const auto& field : launch_file::launch_fields())
+        if (field.reader == launch_file::LaunchOptionReader::network_play) {
+            const std::string option(field.option.substr(0, field.option.find_first_of(" [")));
+            expect(replaced.contains(option), option + " has a replacement case");
+        }
+}
+
+/// Each refusal names the field in the file, or the option, and why.
 ///
 /// @param scratch the directory the files are written in
-void check_command_line(const Scratch& scratch) {
-    const std::string yaml = oa::app::path_to_utf8(scratch.write("game.yaml", kNamedYaml));
-    const std::string ini = oa::app::path_to_utf8(scratch.write("totala.ini", kIni));
-    const std::string bad = oa::app::path_to_utf8(scratch.write("bad.yaml", R"(oalaunch: 1
-game:
-  role: host
-  password: secret
-rules:
-  metal: 250000
-)"));
+void check_refusals(const Scratch& scratch) {
+    struct Refused {
+        const char* option;
+        const char* value; // null for an option that takes none
+        const char* file;  // the same value in the file: a dotted field, then its YAML
+        const char* why;
+    };
 
-    const auto name_first = parse({"--game-name", "Override", "--launch", yaml.c_str()});
-    const auto file_first = parse({"--launch", yaml.c_str(), "--game-name", "Override"});
+    const Refused refused[] = {
+        {"--player-limit", "11", "game:\n  player-limit: 11\n", "11 is above 10"},
+        {"--launcher-name",
+         "SixteenLettersXX",
+         "game:\n  launcher-name: SixteenLettersXX\n",
+         "is longer than 15 characters"},
+        {"--tournament=maybe", nullptr, "game:\n  tournament: maybe\n", "expected on or off"},
+        {"--closed=maybe", nullptr, "game:\n  closed: maybe\n", "expected on or off"},
+        {"--unit-restriction",
+         "CORKROG=101",
+         "rules:\n  unit-restrictions:\n    CORKROG: 101\n",
+         "101 is above 100"},
+        {"--side", "zeta", "player:\n  side: zeta\n", "expected arm, core or watcher"},
+        {"--team", "6", "player:\n  team: 6\n", "expected 1 to 5 or none"},
+        {"--colour", "11", "player:\n  colour: 11\n", "11 is above 10"},
+        {"--map",
+         "A map whose name is far longer than the sixty-three characters a launch keeps",
+         "map: A map whose name is far longer than the sixty-three characters a launch keeps\n",
+         "is longer than 63 characters"},
+        {"--commander-death",
+         "sometimes",
+         "rules:\n  commander-death: sometimes\n",
+         "expected continues, ends or deathmatch"},
+        {"--metal", "10001", "rules:\n  metal: 10001\n", "10001 is above 10000"},
+        {"--energy", "-1", "rules:\n  energy: -1\n", "-1 is below 0"},
+        {"--unit-limit", "19", "rules:\n  unit-limit: 19\n", "19 is below 20"},
+        {"--line-of-sight",
+         "false",
+         "rules:\n  line-of-sight: false\n",
+         "expected true, circular or permanent"},
+        {"--mapping", "half", "rules:\n  mapping: half\n", "expected mapped or unmapped"},
+        {"--start-positions",
+         "near",
+         "rules:\n  start-positions: near\n",
+         "expected fixed or random"},
+        {"--cheats", "yes", "rules:\n  cheats: yes\n", "expected on or off"},
+        {"--watchers", "1", "rules:\n  watchers: 1\n", "expected on or off"},
+        {"--time-limit", "-5", "rules:\n  time-limit: -5\n", "-5 is below 0"},
+        {"--lock-options=sometimes",
+         nullptr,
+         "rules:\n  lock-options: sometimes\n",
+         "expected on or off"},
+        {"--computer-player",
+         "green",
+         "computer-players:\n  - side: green\n",
+         "expected arm or core"},
+    };
+    std::set<std::string> covered;
+    for (const auto& case_of : refused) {
+        const std::string option(case_of.option);
+        const std::string name = option.substr(0, option.find('='));
+        covered.insert(name);
+        std::vector<const char*> arguments{"--host", case_of.option};
+        if (case_of.value != nullptr)
+            arguments.push_back(case_of.value);
+        const std::string by_option = rejection(arguments);
+        expect(
+            by_option.starts_with(name) && by_option.find(case_of.why) != std::string::npos,
+            name + " is refused naming the option: " + by_option
+        );
+        const std::string text = std::string("oalaunch: 1\ngame:\n  role: host\n") + case_of.file;
+        // A group the file names twice is refused for that; join it to the host's.
+        std::string merged = text;
+        if (std::string_view(case_of.file).starts_with("game:\n"))
+            merged = std::string("oalaunch: 1\ngame:\n  role: host\n") +
+                     std::string(case_of.file).substr(std::strlen("game:\n"));
+        const std::string by_file = refused_text(merged);
+        expect(
+            by_file.starts_with("launch.oalaunch: ") &&
+                by_file.find(case_of.why) != std::string::npos,
+            name + " is refused in the file naming the field: " + by_file
+        );
+    }
+    for (const auto& field : launch_file::launch_fields())
+        if (field.reader == launch_file::LaunchOptionReader::network_play) {
+            const std::string option(field.option.substr(0, field.option.find_first_of(" [")));
+            expect(covered.contains(option), option + " has a refusal case");
+        }
+
+    const std::string unknown = refused_text("oalaunch: 1\nrules:\n  nope: 1\n");
     expect(
-        same_text(name_first.launch.block.session_name, "Override") &&
-            name_first.net.direct_game.game_name == "Override" &&
-            same_text(file_first.launch.block.session_name, "Override") &&
-            file_first.net.direct_game.game_name == "Override",
-        "--game-name wins in either order"
+        unknown == "launch.oalaunch: rules.nope: is not a launch setting",
+        "an unknown key names its field: " + unknown
+    );
+    const std::string legacy = refused_text("oalaunch: 1\nrules:\n  los: 1\n");
+    expect(
+        legacy == "launch.oalaunch: rules.los: is not a launch setting",
+        "a legacy name is not a field: " + legacy
+    );
+    const std::string metal =
+        refused_text("oalaunch: 1\ngame:\n  password: secret\nrules:\n  metal: 250000\n");
+    expect(
+        metal == "launch.oalaunch: rules.metal: 250000 is above 10000",
+        "metal above the slider names the field and not the password: " + metal
     );
     expect(
-        name_first.app.skip_intro && name_first.net.launch_from_file, "--launch skips the intro"
+        refused_text("oalaunch: 1\nrules:\n  metal: lots\n") ==
+            "launch.oalaunch: rules.metal: expected a whole number",
+        "a wrong type names the field"
+    );
+    expect(refused_text("oalaunch: 2\n") == "launch.oalaunch: oalaunch: expected 1", "oalaunch: 1");
+    constexpr std::string_view password = "G104-password-that-must-stay-out";
+    const std::string long_password =
+        refused_text("oalaunch: 1\ngame:\n  password: G104-password-that-must-stay-out\n");
+    expect(
+        long_password == "launch.oalaunch: game.password: is longer than 31 characters" &&
+            long_password.find(password) == std::string::npos,
+        "a long password is refused without being repeated"
+    );
+    const std::string option_password =
+        rejection({"--host", "--metal", "1000", "--game-password", password.data()});
+    expect(
+        option_password == "--game-password: is longer than 31 characters",
+        "a long --game-password beside a launch names the option: " + option_password
+    );
+    expect(
+        refused_text("oalaunch: 1\ncontent:\n  expansions: [core-contingency]\n") ==
+            "launch.oalaunch: content.base-game: expected a base game",
+        "expansions need a base game, wherever the file writes them"
     );
 
+    // The plan is checked as a whole, naming the field or the option.
+    const std::string deathmatch = refused_text(
+        "oalaunch: 1\nrules:\n  commander-death: deathmatch\ncomputer-players:\n  - side: arm\n"
+    );
+    std::string checked;
+    try {
+        launch_file::check_launch_plan(
+            launch_file::read_launch_text(
+                "launch.oalaunch",
+                "oalaunch: 1\nrules:\n  commander-death: deathmatch\ncomputer-players:\n  - side: "
+                "arm\n"
+            )
+        );
+    } catch (const launch_file::LaunchRefusal& error) {
+        checked = error.what();
+    }
+    expect(
+        deathmatch.empty() &&
+            checked.starts_with("launch.oalaunch: computer-players: a deathmatch"),
+        "a deathmatch seats no computer players: " + checked
+    );
+    const std::string tournament =
+        rejection({"--host", "--tournament", "--computer-player", "arm"});
+    expect(
+        tournament.starts_with("--computer-player: a tournament game"),
+        "a tournament seats no computer players: " + tournament
+    );
+    const std::string crowded = rejection(
+        {"--host", "--player-limit", "2", "--computer-player", "arm", "--computer-player", "core"}
+    );
+    expect(
+        crowded.starts_with("--computer-player: 2 computer players and the player are more"),
+        "the computer players fit the player limit: " + crowded
+    );
+    const std::string watching = rejection({"--host", "--watchers", "off", "--side", "watcher"});
+    expect(
+        watching == "--side: a host who watches needs rules.watchers on",
+        "a host who watches allows watchers: " + watching
+    );
+    const std::string roleless = rejection({"--metal", "2000"});
+    expect(roleless == "--metal needs --host or --join", "options alone need a role: " + roleless);
+    const std::string address = rejection(
+        {"--launch", scratch.write("join.oalaunch", "oalaunch: 1\ngame:\n  role: join\n").c_str()}
+    );
+    expect(
+        address.ends_with(
+            "join.oalaunch: game.address: a player who joins needs the game's address"
+        ),
+        "a join needs an address: " + address
+    );
+    const std::string unknown_option = rejection({"--host", "--metal=5"});
+    expect(
+        unknown_option == "unknown option: --metal=5",
+        "only --tournament and --lock-options take =: " + unknown_option
+    );
+}
+
+/// -c and --launch read either kind of file by what it holds, whatever its name.
+///
+/// @param scratch the directory the files are written in
+void check_either_file(const Scratch& scratch) {
+    const std::string launch_named_ini = scratch.write("launch.ini", kLaunch);
+    const std::string ini_named_launch = scratch.write("totala.oalaunch", kIni);
+    const std::string neither = scratch.write("notes.txt", "hello\n");
+    expect(
+        launch_file::launch_file_kind(kLaunch) == launch_file::LaunchFileKind::open_annihilation &&
+            launch_file::launch_file_kind(kIni) == launch_file::LaunchFileKind::ta_forever &&
+            launch_file::launch_file_kind("# a comment\n\noalaunch: 1\n") ==
+                launch_file::LaunchFileKind::open_annihilation &&
+            launch_file::launch_file_kind("\xef\xbb\xbfoalaunch: 1\n") ==
+                launch_file::LaunchFileKind::open_annihilation &&
+            launch_file::launch_file_kind("; TA Forever\n[TotalA]\nmetal=1\n") ==
+                launch_file::LaunchFileKind::ta_forever &&
+            launch_file::launch_file_kind("game:\n  role: host\noalaunch: 1\n") ==
+                launch_file::LaunchFileKind::neither &&
+            launch_file::launch_file_kind("hello\n") == launch_file::LaunchFileKind::neither,
+        "a launch file is told by what it holds"
+    );
+    const auto c_launch = parse({"-c", launch_named_ini.c_str()});
+    const auto option_ini = parse({"--launch", ini_named_launch.c_str()});
+    expect(
+        c_launch.net.launch_planned && c_launch.launch.block.computer_count == 2 &&
+            same_text(c_launch.launch.block.provider_label, "Ladder"),
+        "-c reads an .oalaunch file, whatever its name"
+    );
+    expect(
+        option_ini.net.launch_planned && option_ini.launch.block.tournament == 1 &&
+            same_text(option_ini.launch.block.provider_label, "TAForever"),
+        "--launch reads TA Forever's INI, whatever its name"
+    );
+    const std::string refused = rejection({"-c", neither.c_str()});
+    expect(
+        refused.find("notes.txt: the file: is neither a launch file") != std::string::npos,
+        "a file that is neither is refused: " + refused
+    );
+    expect(
+        rejection({"-c", ini_named_launch.c_str(), "--launch", launch_named_ini.c_str()}) ==
+            "-c and --launch cannot both be given",
+        "-c and --launch cannot both be given"
+    );
+    expect(rejection({"-c"}) == "-c: the file: -c needs a file", "-c needs a file");
+
+    // The options the direct game took before launches keep their place.
+    const std::string ini = scratch.write("taforever.ini", kIni);
     const auto join_first = parse({"--join", "192.0.2.10", "-c", ini.c_str()});
     const auto file_join = parse({"-c", ini.c_str(), "--join", "192.0.2.10"});
-    const auto joined = [&](const Parsed& taken) {
+    const auto is_join = [](const Parsed& taken) {
         return taken.net.direct_game.kind == mp::DirectGame::Kind::join &&
                taken.launch.block.hosting == 0 && taken.net.direct_game.address == "192.0.2.10" &&
                same_text(taken.launch.block.address, "192.0.2.10");
     };
-    expect(joined(join_first) && joined(file_join), "--join overrides -c");
+    expect(is_join(join_first) && is_join(file_join), "--join replaces -c's host");
+    const auto renamed = parse({"--game-name", "Override", "-c", launch_named_ini.c_str()});
+    expect(
+        same_text(renamed.launch.block.session_name, "Override") &&
+            renamed.net.direct_game.game_name == "Override",
+        "--game-name replaces the file's name"
+    );
+    expect(
+        rejection({"--list-content"}) == "--list-content needs --json" &&
+            rejection({"--json"}) == "--json needs --list-content",
+        "--list-content and --json go together"
+    );
+}
 
-    const std::string refused = rejection({"--launch", bad.c_str()});
+/// The status block is kept for the status stream, from any launch.
+///
+/// @param scratch the directory the files are written in
+void check_kept_status(const Scratch& scratch) {
+    const std::string launch = scratch.write("status.oalaunch", kLaunch);
+    (void)parse({"-c", launch.c_str()});
+    const auto& kept = launch_file::kept_launch_status();
     expect(
-        refused.find("rules.metal") != std::string::npos &&
-            refused.find("above 10000") != std::string::npos &&
-            refused.find("secret") == std::string::npos,
-        "a bad file names the field and not the password"
+        kept.standard_output_named && kept.standard_output && kept.file == "status.jsonl" &&
+            kept.quit_after == launch_file::QuitAfter::after_score,
+        "the launch's status block is kept for the status stream"
     );
+    (void)parse({"--host"});
     expect(
-        rejection({"--list-content"}).find("--list-content needs --json") != std::string::npos,
-        "--list-content needs --json"
+        !launch_file::kept_launch_status().standard_output_named &&
+            launch_file::kept_launch_status().file.empty(),
+        "a run without a launch keeps no status block"
     );
+}
+
+#if defined(_WIN32)
+using Writer = HANDLE;
+
+/// Makes a pipe: the reading end as an input handle and the writing end.
+///
+/// @param[out] reader the end the launch is read from
+/// @param[out] writer the end the test writes
+/// @return true when the pipe was made
+bool make_pipe(launch_file::InputHandle& reader, Writer& writer) {
+    HANDLE read_end = nullptr;
+    HANDLE write_end = nullptr;
+    if (CreatePipe(&read_end, &write_end, nullptr, 0) == FALSE)
+        return false;
+    reader = read_end;
+    writer = write_end;
+    return true;
+}
+
+/// Writes all of a text to the pipe's writing end.
+///
+/// @param writer the writing end
+/// @param text the bytes
+void write_all(Writer writer, std::string_view text) {
+    DWORD written = 0;
     expect(
-        rejection({"--json"}).find("--json needs --list-content") != std::string::npos,
-        "--json needs --list-content"
+        WriteFile(writer, text.data(), static_cast<DWORD>(text.size()), &written, nullptr) !=
+                FALSE &&
+            written == text.size(),
+        "the pipe takes the text"
     );
-    const auto listed = parse({"--list-content", "--json"});
+}
+
+/// Closes a writing end.
+///
+/// @param writer the end
+void close_writer(Writer writer) {
+    CloseHandle(writer);
+}
+
+/// Closes a reading end.
+///
+/// @param reader the end
+void close_reader(launch_file::InputHandle reader) {
+    CloseHandle(static_cast<HANDLE>(reader));
+}
+
+/// Opens a file to read as an input.
+///
+/// @param path the file
+/// @return the input, or an invalid handle
+launch_file::InputHandle open_input(const std::string& path) {
+    const std::wstring wide = fs::path(oa::app::path_from_utf8(path)).wstring();
+    return CreateFileW(
+        wide.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr
+    );
+}
+#else
+using Writer = int;
+
+bool make_pipe(launch_file::InputHandle& reader, Writer& writer) {
+    int ends[2] = {-1, -1};
+    if (::pipe(ends) != 0)
+        return false;
+    reader = ends[0];
+    writer = ends[1];
+    return true;
+}
+
+void write_all(Writer writer, std::string_view text) {
     expect(
-        listed.net.list_content && listed.net.json_requested && listed.app.skip_intro,
-        "--list-content --json lists content and skips the intro"
+        ::write(writer, text.data(), text.size()) == static_cast<ssize_t>(text.size()),
+        "the pipe takes the text"
     );
+}
+
+void close_writer(Writer writer) {
+    ::close(writer);
+}
+
+void close_reader(launch_file::InputHandle reader) {
+    ::close(reader);
+}
+
+launch_file::InputHandle open_input(const std::string& path) {
+    return ::open(path.c_str(), O_RDONLY);
+}
+#endif
+
+/// What a look at a pipe found, and how long it took.
+struct Looked {
+    launch_file::PipedLaunch piped{};
+    std::string refusal{};
+    std::chrono::milliseconds took{};
+};
+
+/// Looks at a pipe holding a text, its writing end left open or closed.
+///
+/// @param text the bytes written first
+/// @param close_after true to close the writing end, as a finished pipe is
+/// @param first_wait how long to wait for the first byte
+/// @param rest_wait how long the rest may take
+/// @return what was found
+Looked look_at_pipe(
+    std::string_view text,
+    bool close_after,
+    std::chrono::milliseconds first_wait,
+    std::chrono::milliseconds rest_wait
+) {
+    Looked looked;
+    launch_file::InputHandle reader{};
+    Writer writer{};
+    if (!make_pipe(reader, writer)) {
+        expect(false, "a pipe is made");
+        return looked;
+    }
+    if (!text.empty())
+        write_all(writer, text);
+    if (close_after)
+        close_writer(writer);
+    const auto started = std::chrono::steady_clock::now();
+    try {
+        looked.piped = launch_file::read_piped_launch(reader, first_wait, rest_wait);
+    } catch (const launch_file::LaunchRefusal& error) {
+        looked.refusal = error.what();
+    }
+    looked.took = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started
+    );
+    if (!close_after)
+        close_writer(writer);
+    close_reader(reader);
+    return looked;
+}
+
+/// A launch piped in is read; an idle pipe, another program's input and an
+/// empty one are left after at most the wait.
+///
+/// @param scratch the directory the files are written in
+void check_standard_input(const Scratch& scratch) {
+    using std::chrono::milliseconds;
+    // A margin for a busy machine: the waits are what the check is about,
+    // not this machine's scheduling.
+    const milliseconds margin{1500};
+    const auto piped =
+        look_at_pipe(kLaunch, true, launch_file::kPipedLaunchWait, milliseconds{2000});
+    expect(
+        piped.piped.found && piped.piped.text == kLaunch, "a launch piped in is read to its end"
+    );
+    const auto plan = launch_file::read_launch_text("standard input", piped.piped.text);
+    expect(plan.block.computer_count == 2, "the piped launch is the file's");
+    const auto marked = look_at_pipe(
+        std::string("\xef\xbb\xbf") + std::string(kLaunch),
+        true,
+        milliseconds{250},
+        milliseconds{2000}
+    );
+    expect(marked.piped.found, "a byte order mark before the header is read");
+
+    const auto idle = look_at_pipe({}, false, launch_file::kPipedLaunchWait, milliseconds{2000});
+    expect(!idle.piped.found && idle.refusal.empty(), "an idle pipe holds no launch");
+    expect(
+        idle.took >= launch_file::kPipedLaunchWait - milliseconds{20} &&
+            idle.took < launch_file::kPipedLaunchWait + margin,
+        "an idle pipe is left after the wait: " + std::to_string(idle.took.count()) + " ms"
+    );
+    const auto other =
+        look_at_pipe("hello, other program\n", false, milliseconds{250}, milliseconds{2000});
+    expect(
+        !other.piped.found && other.refusal.empty() && other.took < margin,
+        "another program's input is left at once"
+    );
+    const auto empty = look_at_pipe({}, true, milliseconds{250}, milliseconds{2000});
+    expect(!empty.piped.found && empty.took < margin, "an empty pipe is left at once");
+    const auto stalled = look_at_pipe("oalaunch: 1\n", false, milliseconds{250}, milliseconds{100});
+    expect(
+        !stalled.piped.found &&
+            stalled.refusal == "standard input: the file: did not end within 100 milliseconds",
+        "a launch that does not end is refused: " + stalled.refusal
+    );
+
+    const std::string file = scratch.write("piped.oalaunch", kLaunch);
+    const auto input = open_input(file);
+    const auto from_file =
+        launch_file::read_piped_launch(input, milliseconds{250}, milliseconds{2000});
+    close_reader(input);
+    expect(from_file.found && from_file.text == kLaunch, "a file given as standard input is read");
+    const std::string blank = scratch.write("blank.txt", "");
+    const auto empty_input = open_input(blank);
+    expect(
+        !launch_file::read_piped_launch(empty_input, milliseconds{250}, milliseconds{2000}).found,
+        "an empty file holds no launch"
+    );
+    close_reader(empty_input);
 }
 
 } // namespace
@@ -372,10 +1061,15 @@ rules:
 int main() {
     const Scratch scratch;
     check_ini(scratch.write("taforever.ini", kIni));
-    check_yaml();
-    check_refusals();
-    check_command_line(scratch);
+    check_launch();
+    check_options_match_the_file(
+        scratch.write("launch.oalaunch", kLaunch), scratch.write("plain.oalaunch", kPlainHost)
+    );
+    check_refusals(scratch);
+    check_either_file(scratch);
+    check_kept_status(scratch);
+    check_standard_input(scratch);
     if (failures != 0)
-        std::fprintf(stderr, "%d launch file checks failed\n", failures);
+        std::fprintf(stderr, "%d launch checks failed\n", failures);
     return failures == 0 ? 0 : 1;
 }

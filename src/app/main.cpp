@@ -1344,7 +1344,7 @@ std::optional<int>
 publish_launch_catalogue(const Options& options, const GameDirectory& directory) {
     auto& net = netgame_context().options;
     auto& block = netgame_context().launch.block;
-    const bool named_map = net.launch_from_file && block.hosting != 0 && block.mission[0] != '\0';
+    const bool named_map = net.launch_planned && block.hosting != 0 && block.mission[0] != '\0';
     if (!net.list_content && !named_map)
         return std::nullopt;
     if (!net.list_content)
@@ -1406,9 +1406,9 @@ publish_launch_catalogue(const Options& options, const GameDirectory& directory)
     std::string why;
     const CatalogueMap* chosen = resolve_catalogue_map(asked, maps, why);
     if (chosen == nullptr)
-        throw netgame::LaunchRefusal(net.launch_source + ": map: \"" + asked + "\" " + why);
+        throw netgame::LaunchRefusal(launch_place("map") + ": \"" + asked + "\" " + why);
     if (chosen->key.size() >= sizeof block.mission)
-        throw netgame::LaunchRefusal(net.launch_source + ": map: is longer than 63 characters");
+        throw netgame::LaunchRefusal(launch_place("map") + ": is longer than 63 characters");
     oa::base::text::copy_terminated(block.mission, chosen->key);
     return std::nullopt;
 }
@@ -2090,6 +2090,9 @@ int main(int argc, char** argv) {
         // line is parsed; the runtime gets the table that combines them.
         const ExtensionList extensions(registered_extensions());
         const Extension& extension = extensions.combined();
+        // A launch piped in on standard input is read when no launch file is
+        // named (cat host.oalaunch | open-annihilation).
+        allow_piped_launch();
         Options parsed = parse_options(argc, argv, extension);
         // The Game files screen's check installs its scripted platform
         // before anything reads the hooks.

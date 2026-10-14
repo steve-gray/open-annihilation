@@ -45,15 +45,13 @@ for those who write a program that drives the game.
   that effect, so the battle room line does not gain ` REMOTED`. While
   any of them is on, the extension asks the main loop to keep running
   while the window is inactive, so the lines keep coming.
-- A launch file's `status` block
+- A launch's `status` block
   ([docs/multiplayer/launch-file.md](../../../docs/multiplayer/launch-file.md))
-  turns the same three on. The extension reads only that block, with the
-  mod profile's reader. Network play still takes `--launch` and still
-  refuses a file that cannot be used; this extension reports no second
-  error for it. Each status option on the command line replaces that
-  field of the block. `--launch -` is the launch file on standard input,
-  which network play reads. This extension does not read it, so that
-  stream's `status` block does not turn the stream on.
+  turns the same three on. Network play reads the launch, from `-c`,
+  `--launch` or standard input, refuses one that cannot be used, and keeps
+  its status block (`oa::app::netgame::kept_launch_status`). Its check comes
+  before this extension's, which turns on what the kept block asks for.
+  Each status option on the command line replaces that field of the block.
 
 As the first runtime starts, the endpoint listens and writes its file,
 first beside it and then renamed over it, with only its owner allowed to

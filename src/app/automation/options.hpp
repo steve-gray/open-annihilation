@@ -66,9 +66,6 @@ struct EndpointOptions {
     /// --quit-after-game was on the command line, so a launch file does not
     /// replace when the run leaves.
     bool quit_after_on_command{};
-    /// The file --launch names, as given. "-" is standard input, which this
-    /// extension does not read. Nothing when --launch was not seen.
-    std::optional<std::string> launch_file{};
 };
 
 /// Reads a listen address: 127.0.0.1:PORT or [::1]:PORT, PORT from 0 to 65535.

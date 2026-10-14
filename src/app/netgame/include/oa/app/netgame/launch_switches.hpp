@@ -48,10 +48,12 @@ struct LaunchSwitches {
     // The game's launch block: -c, -n, -n1:<address>, -h and -h<name> write it
     // and a launching extension fills it.
     LaunchBlock block{};
-    // "-c FILE" names TA Forever's INI. The file is read once the other
-    // switches are known, so a switch beside it can override one field.
-    bool ini_seen = false;
-    std::string ini_path{};
+    // "-c FILE" names a launch file, an .oalaunch or TA Forever's INI, told
+    // apart by what it holds; "-c -" reads it from standard input. The file
+    // is read once the other switches are known, so a switch beside it can
+    // replace one field.
+    bool launch_seen = false;
+    std::string launch_path{};
     // "-h" stored a session name. A launch file does not replace that name.
     bool session_from_switch = false;
     // "-n" stored a connection type or an address. A launch file does not
@@ -68,9 +70,10 @@ struct LaunchSwitches {
 /// the next token, which is then not parsed as a switch. Its reset sets
 /// net_timeout_seconds to kDefaultNetTimeoutSeconds and send_error_percent to
 /// 0. The letters it takes:
-///  - "-c <file>" stores the path of TA Forever's INI (ini_path). A separate
-///    path that is missing, empty or starts with '-' is consumed and the path
-///    is left empty. The file is read later.
+///  - "-c <file>" stores the path of a launch file (launch_path), and "-c -"
+///    stores "-" for standard input. A separate path that is missing, empty or
+///    starts with '-' and is not "-" alone is consumed and the path is left
+///    empty. The file is read later.
 ///  - "-e <percent>" stores the send-error percentage; outside 0..100 or an
 ///    argument starting with '-' stores 0.
 ///  - "-h<name>" hosts under the name (set_host_game); a separate name that is

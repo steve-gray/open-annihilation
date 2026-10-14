@@ -2,20 +2,25 @@
 # SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Check a network game started from a launch file, end to end.
+"""Check a network game started from a launch, end to end.
 
 Each game runs as a program of its own on the dummy SDL drivers, over
 127.0.0.1, at a DirectPlay port of the check's own (--dplay-port), so the
 check runs beside anything else on this machine:
 
-- --launch with a host file opens the battle room on the file's map and rules;
-- -c with TA Forever's file does the same;
-- a file whose metal is above the slider ends with status 2 and names the field;
-- --list-content --json prints one JSON object and ends with status 0.
+- --launch with an .oalaunch host file opens the battle room on the file's
+  map and rules, seats the player and two computer players as the file says;
+- -c with the same file, under another name, does the same;
+- the same launch piped in on standard input, with no option, does the same;
+- the same launch as options alone does the same;
+- -c with TA Forever's file opens the battle room on its map and rules;
+- a file whose metal is above the slider ends with status 2 and names the
+  field, and an option above it names the option;
+- --list-content --json prints one JSON object and ends with status 0, and
+  does so at once with an idle pipe as its standard input.
 
-The file starts the host. The battle room's lines are read from the game's
-log (--log-dir), which is where those lines are kept. The password in the
-file is never printed.
+The battle room's lines are read from the game's log (--log-dir), which is
+where those lines are kept. The password in the file is never printed.
 """
 import argparse
 import json
@@ -36,38 +41,65 @@ RUNNER = shlex.split(os.environ.get("OA_TEST_RUNNER", ""))
 ADDRESS = "127.0.0.1"
 # Seconds a game may take to print a line the check waits for, or to end.
 LINE_TIMEOUT = 120
+# Seconds an idle pipe on standard input may hold a start up: the game waits
+# a quarter of a second for its first byte; the rest is the start itself.
+IDLE_PIPE_LIMIT = 60
 RULES = ("multiplayer: battle room rules: commander ends, metal 1000, energy 1000, "
          "los true, mapping mapped, starts random, cheats off, watchers on, player limit 4")
+LAUNCH_RULES = ("multiplayer: battle room rules: commander ends, metal 1000, energy 1000, "
+                "units 250, los true, mapping mapped, starts random, cheats off, watchers on, "
+                "player limit 4")
 MAP_LINE = "multiplayer: battle room map: Acid Foursome"
 ROOM_LINE = 'multiplayer: in the battle room of "Example game" as Commander'
+SEATS_LINE = ("multiplayer: battle room seats: Commander core team 1 colour 2, "
+              "AI:Commander arm team 2 colour 5 hard, AI:Commander core team 1 colour 1 easy")
 
 YAML = """oalaunch: 1
 game:
   role: host
-  address: 192.0.2.10
   name: Example game
-  player: Commander
   password: secret
-  dplay:
-    guid: "{99797420-F5F5-11CF-9827-00A0241496C8}"
-    port: 47624
+  player-limit: 4
+  launcher-name: Ladder
+  directplay:
+    application-guid: "{99797420-F5F5-11CF-9827-00A0241496C8}"
+player:
+  name: Commander
+  side: core
+  team: 1
+  colour: 2
 map: "Acid Foursome"
 rules:
-  commander: ends
+  commander-death: ends
   metal: 1000
   energy: 1000
+  unit-limit: 250
   line-of-sight: true
   mapping: mapped
   start-positions: random
-  cheats: false
-  watchers: true
-  player-limit: 4
+  cheats: off
+  watchers: on
   time-limit: 0
-lock-options: false
-seat:
-  side: arm
-  team: 1
+  lock-options: false
+computer-players:
+  - side: arm
+    team: 2
+    colour: 5
+    difficulty: hard
+  - side: core
+    team: 1
+    difficulty: easy
 """
+
+# The same launch as options alone.
+OPTIONS = [
+    "--host", "--game-name", "Example game", "--game-password", "secret",
+    "--player-limit", "4", "--launcher-name", "Ladder", "--side", "core", "--team", "1",
+    "--colour", "2", "--map", "Acid Foursome", "--commander-death", "ends", "--metal", "1000",
+    "--energy", "1000", "--unit-limit", "250", "--line-of-sight", "true", "--mapping", "mapped",
+    "--start-positions", "random", "--cheats", "off", "--watchers", "on", "--time-limit", "0",
+    "--computer-player", "arm:2:5:hard", "--computer-player", "core:1::easy",
+]
 
 INI = """[totala]
 watching=2
@@ -115,7 +147,10 @@ def free_port():
 class Game:
     """One running game. Standard output and, when asked, the log are both read."""
 
-    def __init__(self, native, game_dir, workdir, name, arguments, log_dir=None):
+    def __init__(self, native, game_dir, workdir, name, arguments, log_dir=None, piped=None):
+        """Starts the game. piped is the text written to its standard input,
+        which is then closed; "" leaves the pipe open and idle; None gives
+        the game no pipe."""
         self.name = name
         self.lines = []
         self.log_dir = log_dir
@@ -128,7 +163,11 @@ class Game:
             [*RUNNER, str(native), "--game-dir", str(game_dir), "--mute",
              "--preferences-file", str(self.preferences), *arguments],
             cwd=workdir, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL if piped is None else subprocess.PIPE,
             text=True, errors="replace")
+        if piped:
+            self.process.stdin.write(piped)
+            self.process.stdin.close()
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self):
@@ -202,10 +241,12 @@ class Game:
             raise LaunchFileFailure(f"{self.name} exited with {status}, expected {expected}")
 
     def stop(self):
-        """Ends the game if it still runs."""
+        """Ends the game if it still runs, and closes a pipe left open."""
         if self.process.poll() is None:
             self.process.kill()
             self.process.wait()
+        if self.process.stdin is not None and not self.process.stdin.closed:
+            self.process.stdin.close()
 
     def output(self):
         """Returns what the game has printed."""
@@ -218,8 +259,9 @@ def require_quiet_password(game):
         raise LaunchFileFailure(f"{game.name} printed the password")
 
 
-def battle_room(native, game_dir, workdir, name, launch_arguments):
-    """Starts a host from a launch file and waits for its map and rules in the log."""
+def battle_room(native, game_dir, workdir, name, launch_arguments, rules=RULES, seats=None,
+                piped=None):
+    """Starts a host from a launch and waits for its map, rules and seats in the log."""
     port = free_port()
     user = workdir / f"{name}-user"
     user.mkdir()
@@ -228,18 +270,17 @@ def battle_room(native, game_dir, workdir, name, launch_arguments):
     game = Game(native, game_dir, workdir, name, [
         "--skip-intro", "--dplay-port", str(port), "--player-name", "Commander",
         "--user-folder", str(user), "--log-dir", str(logs), *launch_arguments,
-    ], log_dir=logs)
+    ], log_dir=logs, piped=piped)
+    expected = [ROOM_LINE, MAP_LINE, rules] + ([seats] if seats else [])
     try:
-        game.wait_in_log(ROOM_LINE)
-        game.wait_in_log(MAP_LINE)
-        game.wait_in_log(RULES)
+        for line in expected:
+            game.wait_in_log(line)
         require_quiet_password(game)
     finally:
         game.stop()
     require_quiet_password(game)
-    print(f"{name}: {ROOM_LINE}")
-    print(f"{name}: {MAP_LINE}")
-    print(f"{name}: {RULES}")
+    for line in expected:
+        print(f"{name}: {line}")
 
 
 def check_bad_file(native, game_dir, workdir):
@@ -262,19 +303,39 @@ def check_bad_file(native, game_dir, workdir):
         raise LaunchFileFailure("bad-file printed the password")
     named = next(line for line in game.lines if "rules.metal" in line)
     print(f"bad-file: {named}")
+    option_user = workdir / "bad-option-user"
+    option_user.mkdir()
+    option = Game(native, game_dir, workdir, "bad-option", [
+        "--skip-intro", "--host", "--metal", "20000", "--user-folder", str(option_user),
+    ])
+    try:
+        option.wait_status(2)
+    finally:
+        option.stop()
+    if "--metal: 20000 is above 10000" not in option.output():
+        raise LaunchFileFailure(f"bad-option did not name --metal:\n{option.output()}")
+    print("bad-option: --metal: 20000 is above 10000")
 
 
 def check_list(native, game_dir, workdir):
-    """--list-content --json prints the installed maps, mods and expansions."""
+    """--list-content --json prints the installed maps, mods and expansions.
+
+    Its standard input is a pipe nothing is written to, which the game
+    leaves after a short wait rather than holding the start up.
+    """
     user = workdir / "list-user"
     user.mkdir()
+    started = time.monotonic()
     game = Game(native, game_dir, workdir, "list-content", [
         "--skip-intro", "--list-content", "--json", "--user-folder", str(user),
-    ])
+    ], piped="")
     try:
         game.wait_status(0)
     finally:
         game.stop()
+    took = time.monotonic() - started
+    if took > IDLE_PIPE_LIMIT:
+        raise LaunchFileFailure(f"an idle pipe held the start up for {took:.1f} s")
     listed = None
     for line in game.lines:
         if line.startswith("{") and '"maps"' in line:
@@ -306,11 +367,19 @@ def check_list(native, game_dir, workdir):
 
 def check(native, game_dir, workdir):
     """Runs each launch-file case; raises LaunchFileFailure when one differs."""
-    yaml_path = workdir / "launch.yaml"
-    yaml_path.write_text(YAML, encoding="utf-8")
+    launch_path = workdir / "host.oalaunch"
+    launch_path.write_text(YAML, encoding="utf-8")
+    renamed_path = workdir / "host-settings.ini"
+    renamed_path.write_text(YAML, encoding="utf-8")
     ini_path = workdir / "totala.ini"
     ini_path.write_text(INI, encoding="utf-8")
-    battle_room(native, game_dir, workdir, "yaml-host", ["--launch", str(yaml_path)])
+    battle_room(native, game_dir, workdir, "launch-host", ["--launch", str(launch_path)],
+                LAUNCH_RULES, SEATS_LINE)
+    battle_room(native, game_dir, workdir, "c-launch-host", ["-c", str(renamed_path)],
+                LAUNCH_RULES, SEATS_LINE)
+    battle_room(native, game_dir, workdir, "piped-host", [], LAUNCH_RULES, SEATS_LINE,
+                piped=YAML)
+    battle_room(native, game_dir, workdir, "options-host", OPTIONS, LAUNCH_RULES, SEATS_LINE)
     battle_room(native, game_dir, workdir, "ini-host", ["-c", str(ini_path)])
     check_bad_file(native, game_dir, workdir)
     check_list(native, game_dir, workdir)
@@ -323,15 +392,16 @@ def main():
     parser.add_argument("--scratch-root", type=Path, required=True)
     args = parser.parse_args()
     args.scratch_root.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="G52-native-launch-file-",
+    with tempfile.TemporaryDirectory(prefix="G104-native-launch-file-",
                                      dir=args.scratch_root.resolve()) as scratch:
         try:
             check(args.native.resolve(), args.game_dir.resolve(), Path(scratch))
         except LaunchFileFailure as failure:
             print(f"launch file check: {failure}", file=sys.stderr)
             return 1
-    print("launch file check: --launch and -c opened the battle room on Acid Foursome with the "
-          "file's rules, a bad file exited 2, and --list-content --json parsed")
+    print("launch file check: --launch, -c, a pipe and the options opened the battle room on "
+          "Acid Foursome with the launch's rules and seats, -c read TA Forever's file, a bad "
+          "file and a bad option exited 2, and --list-content --json parsed beside an idle pipe")
     return 0
 
 
