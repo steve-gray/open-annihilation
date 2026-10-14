@@ -30,7 +30,9 @@ if(BUILD_TESTING)
   target_link_libraries(oa-ui-library-test PRIVATE oa-ui-library oa-data-languages
     oa-data-mod-profile oa-test-support oa-options)
   add_test(NAME ui-library COMMAND oa-ui-library-test)
-  set_tests_properties(ui-library PROPERTIES TIMEOUT 30)
+  # The base game chooser and locked-pill checks walk every short sequence of
+  # presses (about 115,000), a second here and minutes in a Windows debug build.
+  set_tests_properties(ui-library PROPERTIES TIMEOUT 120)
 
   # The update question: when it is asked (never for a built-in registry's
   # update, one that keeps the rules, or a language or map pack), its words
