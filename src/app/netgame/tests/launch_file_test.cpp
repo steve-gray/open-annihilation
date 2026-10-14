@@ -5,7 +5,10 @@
 // Forever's INI, from the options that name each launch setting, or from a
 // launch piped in on standard input. -c and --launch read either file by
 // what it holds, an option beside the file replaces its field, and every
-// refusal names the field or the option.
+// refusal names the field or the option. The INI is read as 3.1c reads it:
+// every key of its table, a Windows settings file's rules, hosting and joining
+// from connect, creator and address, -h, -n and -b around -c, and the lines
+// the start keeps for the log.
 #include "net_options.hpp"
 #include "oa/app/app.hpp"
 #include "oa/app/game_directory.hpp"
@@ -24,6 +27,8 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -335,26 +340,30 @@ joined(const std::vector<const char*>& first, const std::vector<const char*>& se
     return both;
 }
 
-/// TA Forever's example INI fills every field it names, and ignores registeredonly.
+/// TA Forever's file from issue 19, unchanged, fills every field it names,
+/// reads registeredonly and leaves tournment and tournament unread.
 ///
 /// @param path the example file
 void check_ini(const std::string& path) {
     const auto plan = launch_file::read_launch_file(path);
     const auto& block = plan.block;
-    expect(plan.ini && plan.role == launch_file::LaunchRole::host, "an INI hosts");
-    expect(block.hosting == 1, "an INI creates the game");
-    expect(block.connection_type == nl::connection_type::tcpip, "an INI plays over TCP/IP");
-    expect(block.watching == 2, "watching");
-    expect(block.mapping == 2, "mapmode");
-    expect(block.location == 2, "location");
-    expect(block.cheats == 1, "cheats");
-    expect(block.los == 1, "los");
-    expect(block.death_option == 2, "deathopt");
+    expect(plan.ini && !plan.connection_named, "TA Forever's file names no connection");
+    expect(
+        plan.role == launch_file::LaunchRole::host && block.hosting == 1 &&
+            block.connection_type == nl::connection_type::tcpip,
+        "a file that names no connection hosts over TCP/IP"
+    );
+    expect(block.watching == 2, "watching=2 allows watchers");
+    expect(block.mapping == 2, "mapmode=2 starts mapped");
+    expect(block.location == 2, "location=2 starts at random");
+    expect(block.cheats == 1, "cheats=1 disallows the cheat codes");
+    expect(block.los == 1, "los=1 is true line of sight");
+    expect(block.death_option == 2, "deathopt=2 ends the game");
     expect(block.metal == 1000 && block.energy == 1000, "metal and energy");
     expect(block.lock_options == 0, "lockOptions");
     expect(block.player_limit == 4, "playerlimit");
-    expect(block.pfs == 0 && block.time_limit == 0, "pfs and timelimit stay as written");
-    expect(block.tournament == 1, "tournment and tournament both set the tournament");
+    expect(block.pfs == 0 && block.time_limit == 0, "pfs and timelimit");
+    expect(block.tournament == 0, "tournment and tournament are not read");
     expect(same_text(block.session_name, "Example game"), "session");
     expect(same_text(block.provider_label, "TAForever"), "provider");
     expect(same_text(block.mission, "Acid Foursome"), "mission");
@@ -362,17 +371,562 @@ void check_ini(const std::string& path) {
     expect(
         block.password[0] == '\0' && block.user_name[0] == '\0' && plan.password.empty() &&
             plan.player_name.empty() && block.faction == 0 && block.team == 0 &&
-            block.max_units == 0 && block.computer_count == 0,
+            block.max_units == 0 && block.computer_count == 0 && block.address[0] == '\0',
         "registeredonly and the unnamed fields add nothing"
     );
-    // Every key of the INI's table is one TA Forever writes, and each names a
-    // launch field, or none for the two the battle room does not use.
-    for (const auto& key : launch_file::launch_ini_keys())
+    expect(
+        plan.notes.size() == 1 && plan.notes[0].ends_with(
+                                      "taforever.ini: tournment, tournament: not read, as 3.1c "
+                                      "does not read them"
+                                  ),
+        "the two keys not read are noted once, by their names in the file"
+    );
+    expect(
+        launch_file::launch_place(plan, "map").ends_with("taforever.ini: mission") &&
+            launch_file::launch_place(plan, "game.name").ends_with("taforever.ini: session"),
+        "a refusal of a field the file filled names its key"
+    );
+    // The table holds the 22 keys 3.1c reads, then the two it never reads;
+    // each read key names a launch field, or none.
+    const auto keys = launch_file::launch_ini_keys();
+    expect(keys.size() == 24, "the INI's table has 24 keys");
+    std::size_t read = 0;
+    for (const auto& key : keys) {
+        read += key.read ? 1 : 0;
         expect(
-            key.field.empty() ? key.key == "pfs" || key.key == "registeredonly"
+            key.field.empty() ? key.key == "connect" || key.key == "registeredonly" ||
+                                    key.key == "pfs" || !key.read
                               : launch_file::find_launch_field(key.field) != nullptr,
             std::string(key.key) + " names a launch field"
         );
+    }
+    expect(read == 22, "3.1c reads 22 keys");
+}
+
+/// The plan an INI's `[TotalA]` lines give.
+///
+/// @param lines the section's lines
+/// @return the plan
+launch_file::LaunchPlan ini_plan(std::string_view lines) {
+    return launch_file::read_launch_text("k.ini", "[TotalA]\n" + std::string(lines));
+}
+
+/// The block an INI's `[TotalA]` lines give.
+///
+/// @param lines the section's lines
+/// @return the block
+nl::LaunchBlock ini_block(std::string_view lines) {
+    return ini_plan(lines).block;
+}
+
+/// Each key of the INI's table, with the values 3.1c reads and the odd ones it never refuses.
+void check_ini_keys() {
+    // connect: a word of three letters or more over the shorter length, in
+    // 3.1c's order, else a number.
+    const std::pair<const char*, int32_t> transports[] = {
+        {"tcpip", 1},
+        {"TCPIP", 1},
+        {"tcp", 1},
+        {"internet", 1},
+        {"internetwork", 1},
+        {"ipx", 2},
+        {"novell", 2},
+        {"modem", 3},
+        {"serial", 4},
+        {"ser", 4},
+        {"1", 1},
+        {"2", 2},
+        {"7", 7},
+        {"tc", 0},
+        {"0", 0},
+        {"\"tcpip\"", 1},
+        {"4 cables", 4},
+        {"satellite", 0},
+    };
+    for (const auto& [value, transport] : transports)
+        expect(
+            ini_block(std::string("connect=") + value + "\n").connection_type == transport,
+            std::string("connect=") + value
+        );
+    const auto absent = ini_plan("creator=0\n");
+    expect(
+        absent.block.connection_type == 0 && absent.connection_named,
+        "connect is 0 when absent from a file that names creator"
+    );
+    expect(
+        !ini_plan("").connection_named && ini_block("").connection_type == 1,
+        "a file that names none of connect, creator and address hosts over TCP/IP"
+    );
+    // creator: any whole number but 0 hosts.
+    expect(ini_block("creator=1\n").hosting == 1, "creator=1 hosts");
+    expect(ini_block("creator=5\n").hosting == 1, "creator=5 hosts");
+    expect(ini_block("creator=-1\n").hosting == 1, "creator=-1 hosts");
+    expect(ini_block("creator=0\n").hosting == 0, "creator=0 joins");
+    // registeredonly: read, and nothing comes of it.
+    expect(
+        same_block(ini_block("registeredonly=1\n"), ini_block("registeredonly=0\n")),
+        "registeredonly changes nothing"
+    );
+    // playerlimit: 6 when absent; 1 or less the game's own; above 10 is 10.
+    const std::pair<const char*, int32_t> limits[] = {
+        {"", 6},
+        {"playerlimit=2\n", 2},
+        {"playerlimit=10\n", 10},
+        {"playerlimit=11\n", 10},
+        {"playerlimit=99\n", 10},
+        {"playerlimit=1\n", 0},
+        {"playerlimit=0\n", 0},
+        {"playerlimit=-3\n", 0},
+        {"playerlimit=\n", 6},
+    };
+    for (const auto& [lines, limit] : limits)
+        expect(ini_block(lines).player_limit == limit, std::string("player limit: ") + lines);
+    // timelimit: passed on; below 0 is 0.
+    expect(ini_block("timelimit=30\n").time_limit == 30, "timelimit");
+    expect(ini_block("timelimit=-5\n").time_limit == 0, "a negative timelimit is 0");
+    // pfs: kept for the send rate (check_ini_hosting applies it).
+    expect(ini_block("pfs=12\n").pfs == 12 && ini_block("pfs=-1\n").pfs == -1, "pfs");
+    // Texts: quotes dropped, cut to their fields.
+    const std::string long_text(80, 'x');
+    const auto texts = ini_plan(
+        "provider=" + long_text + "\nsession=" + long_text + "\nmission=" + long_text +
+        "\npassword=" + long_text + "\nplayer=" + long_text + "\naddress=" + long_text + "\n"
+    );
+    expect(
+        std::string_view(texts.block.provider_label).size() == 15 &&
+            std::string_view(texts.block.session_name).size() == 63 &&
+            std::string_view(texts.block.mission).size() == 63 &&
+            std::string_view(texts.block.password).size() == 31 &&
+            std::string_view(texts.block.user_name).size() == 31 &&
+            std::string_view(texts.block.address).size() == 63,
+        "a long text is cut to its field, never refused"
+    );
+    expect(
+        texts.game_name.size() == 63 && texts.password.size() == 31 &&
+            texts.player_name.size() == 31 && texts.address.size() == 63,
+        "the plan's names are cut as the block's are"
+    );
+    const auto named = ini_plan(
+        "session=\"Friday game\"\nplayer='Commander'\npassword=\"secret\"\nprovider=\"Ladder\n"
+        "mission=Acid Foursome\naddress=192.0.2.10\n"
+    );
+    expect(
+        named.game_name == "Friday game" && same_text(named.block.user_name, "Commander") &&
+            named.password == "secret" && same_text(named.block.provider_label, "\"Ladder") &&
+            same_text(named.block.mission, "Acid Foursome") &&
+            same_text(named.block.address, "192.0.2.10"),
+        "quotes around a value are dropped, an unmatched one is kept"
+    );
+    // lockOptions: any whole number but 0 locks.
+    expect(ini_block("lockOptions=1\n").lock_options == 1, "lockOptions=1 locks");
+    expect(ini_block("lockoptions=7\n").lock_options == 1, "lockOptions=7 locks");
+    expect(ini_block("LOCKOPTIONS=-1\n").lock_options == 1, "lockOptions=-1 locks");
+    expect(ini_block("lockOptions=0\n").lock_options == 0, "lockOptions=0 unlocks");
+    // maxunits: 0 leaves the room's; kept from 20 through 6553.
+    const std::pair<const char*, int32_t> units[] = {
+        {"maxunits=0\n", 0},
+        {"maxunits=250\n", 250},
+        {"maxunits=5\n", 20},
+        {"maxunits=-10\n", 20},
+        {"maxunits=9999\n", 6553},
+    };
+    for (const auto& [lines, limit] : units)
+        expect(ini_block(lines).max_units == limit, std::string("unit limit: ") + lines);
+    // energy and metal: 0 leaves the room's 1000; kept from 0 through 10000.
+    const std::pair<const char*, int32_t> amounts[] = {
+        {"0", 0},
+        {"500", 500},
+        {"10000", 10000},
+        {"20000", 10000},
+        {"40000", 10000},
+        {"-5", 0},
+    };
+    for (const auto& [value, amount] : amounts) {
+        expect(ini_block(std::string("energy=") + value).energy == amount, value);
+        expect(ini_block(std::string("metal=") + value).metal == amount, value);
+    }
+    // The battle room's choices: 0, and an unknown code, leave the room's own.
+    const std::tuple<const char*, int32_t nl::LaunchBlock::*, int32_t> choices[] = {
+        {"deathopt=1", &nl::LaunchBlock::death_option, 1},
+        {"deathopt=2", &nl::LaunchBlock::death_option, 2},
+        {"deathopt=3", &nl::LaunchBlock::death_option, 3},
+        {"deathopt=4", &nl::LaunchBlock::death_option, 0},
+        {"deathopt=-1", &nl::LaunchBlock::death_option, 0},
+        {"los=1", &nl::LaunchBlock::los, 1},
+        {"los=2", &nl::LaunchBlock::los, 2},
+        {"los=3", &nl::LaunchBlock::los, 3},
+        {"los=0", &nl::LaunchBlock::los, 0},
+        {"los=9", &nl::LaunchBlock::los, 0},
+        {"cheats=2", &nl::LaunchBlock::cheats, 2},
+        {"cheats=1", &nl::LaunchBlock::cheats, 1},
+        {"cheats=5", &nl::LaunchBlock::cheats, 1},
+        {"cheats=0", &nl::LaunchBlock::cheats, 0},
+        {"location=1", &nl::LaunchBlock::location, 1},
+        {"location=2", &nl::LaunchBlock::location, 2},
+        {"location=7", &nl::LaunchBlock::location, 2},
+        {"location=0", &nl::LaunchBlock::location, 0},
+        {"mapmode=1", &nl::LaunchBlock::mapping, 1},
+        {"mapmode=2", &nl::LaunchBlock::mapping, 2},
+        {"mapmode=3", &nl::LaunchBlock::mapping, 2},
+        {"mapmode=0", &nl::LaunchBlock::mapping, 0},
+        {"watching=2", &nl::LaunchBlock::watching, 2},
+        {"watching=1", &nl::LaunchBlock::watching, 1},
+        {"watching=9", &nl::LaunchBlock::watching, 1},
+        {"watching=0", &nl::LaunchBlock::watching, 0},
+    };
+    for (const auto& [line, field, code] : choices)
+        expect(ini_block(std::string(line) + "\n").*field == code, line);
+    // tournament and tournment: not read, whatever they hold.
+    const auto unread = ini_plan("tournament=1\ntournment=1\n");
+    expect(unread.block.tournament == 0, "tournament and tournment are not read");
+    expect(
+        unread.notes.size() == 1 &&
+            unread.notes[0] == "k.ini: tournament, tournment: not read, as 3.1c does not read them",
+        "they are noted"
+    );
+}
+
+/// The INI is read as a Windows settings file is, and nothing in it is refused.
+void check_ini_reader() {
+    expect(
+        launch_file::read_launch_text("k.ini", "[TOTALA]\nmetal=300\n").block.metal == 300 &&
+            launch_file::read_launch_text("k.ini", "[totala]\nmetal=300\n").block.metal == 300,
+        "the section's name is read in any case"
+    );
+    expect(
+        launch_file::read_launch_text("k.ini", "[Other]\nmetal=5\n[TotalA]\nmetal=7\n")
+                .block.metal == 7,
+        "another section is skipped"
+    );
+    const auto first = launch_file::read_launch_text(
+        "k.ini", "[TotalA]\nmetal=100\n[Other]\nenergy=5\n[TotalA]\nmetal=200\nenergy=300\n"
+    );
+    expect(
+        first.block.metal == 100 && first.block.energy == 0,
+        "only the first [TotalA] section is read"
+    );
+    expect(ini_block("metal=100\nMETAL=200\n").metal == 100, "the first copy of a key counts");
+    expect(ini_block("MeTaL=500\n").metal == 500, "a key is read in any case");
+    expect(ini_block("  metal  =   700   \r\n").metal == 700, "spaces around key and value");
+    expect(ini_block("metal=12abc\n").metal == 12, "a number is what the value begins with");
+    expect(ini_block("metal=abc\n").metal == 0, "a value without a number is 0");
+    expect(ini_block("metal=+300\n").metal == 300, "a sign may come first");
+    expect(ini_block("metal=\"800\"\n").metal == 800, "a quoted number");
+    expect(ini_block("metal=\n").metal == 0, "an empty value is the default");
+    expect(ini_block(";metal=900\n").metal == 0, "a line that begins ; is a comment");
+    expect(
+        ini_block("junk line without a value\nmetal=400\n").metal == 400,
+        "a line without = is no setting and is not refused"
+    );
+    const auto noted = ini_plan("foo=1\nFOO=2\nbar=3\nmetal=1\n");
+    expect(
+        noted.notes.size() == 1 &&
+            noted.notes[0] == "k.ini: foo, bar: not read, as 3.1c does not read them",
+        "a key 3.1c does not read is noted once, by its first name"
+    );
+    expect(
+        launch_file::read_launch_text("k.ini", "\xef\xbb\xbf[TotalA]\nmetal=600\n").block.metal ==
+            600,
+        "a byte order mark is skipped"
+    );
+    // A file of odd values throughout is read, never refused.
+    std::string odd;
+    for (const auto& key : launch_file::launch_ini_keys())
+        odd += std::string(key.key) + "=\"-99999999999 not a number\n";
+    expect(refused_text("[TotalA]\n" + odd).empty(), "no value of the INI is refused");
+}
+
+/// Who hosts or joins, from connect, creator and address, with -h, -n and the long options.
+///
+/// @param scratch the directory the files are written in
+void check_ini_hosting(const Scratch& scratch) {
+    using Kind = mp::DirectGame::Kind;
+    const std::string taforever = scratch.write("G105-taforever.ini", kIni);
+    const auto file = [&scratch](const char* name, std::string_view lines) {
+        return scratch.write(name, "[TotalA]\n" + std::string(lines));
+    };
+    const auto plain = parse({"-c", taforever.c_str()});
+    expect(
+        plain.net.launch_planned && plain.net.direct_game.kind == Kind::host &&
+            plain.launch.block.hosting == 1 &&
+            plain.launch.block.connection_type == nl::connection_type::tcpip,
+        "TA Forever's file hosts over TCP/IP"
+    );
+    const auto host = parse(
+        {"-c", file("G105-host.ini", "connect=tcpip\ncreator=1\naddress=127.0.0.1\n").c_str()}
+    );
+    expect(
+        host.net.direct_game.kind == Kind::host && host.launch.block.hosting == 1,
+        "connect, creator and address host at once"
+    );
+    const auto join =
+        parse({"-c", file("G105-join.ini", "connect=1\ncreator=0\naddress=192.0.2.10\n").c_str()});
+    expect(
+        join.net.direct_game.kind == Kind::join && join.net.direct_game.address == "192.0.2.10" &&
+            join.launch.block.hosting == 0,
+        "connect and address without creator join the game there"
+    );
+    const auto panel = parse({"-c", file("G105-panel.ini", "connect=1\ncreator=1\n").c_str()});
+    expect(
+        panel.net.launch_planned && panel.net.direct_game.kind == Kind::none &&
+            panel.launch.block.connection_type == 1 && panel.launch.block.hosting == 1,
+        "TCP/IP without an address leaves the address to the screens"
+    );
+    const auto menus = parse({"-c", file("G105-menus.ini", "creator=1\n").c_str()});
+    expect(
+        menus.net.launch_planned && menus.net.direct_game.kind == Kind::none &&
+            menus.launch.block.connection_type == 0,
+        "creator alone leaves the menus as they are"
+    );
+    const auto ipx =
+        parse({"-c", file("G105-ipx.ini", "connect=ipx\ncreator=1\naddress=a\n").c_str()});
+    const auto& ipx_notes = oa::app::start_notes();
+    expect(
+        ipx.net.direct_game.kind == Kind::none && ipx.launch.block.connection_type == 2 &&
+            std::any_of(
+                ipx_notes.begin(),
+                ipx_notes.end(),
+                [](const std::string& note) {
+                    return note.ends_with(
+                        "G105-ipx.ini: connect names IPX, which this game does not have; the "
+                        "multiplayer screens open on the provider list"
+                    );
+                }
+            ),
+        "a transport this game does not have opens the provider list, and is noted"
+    );
+    const auto with_name =
+        parse({"--player-name", "Commander", "-c", file("G105-name.ini", "creator=1\n").c_str()});
+    expect(
+        with_name.net.launch_planned && same_text(with_name.launch.block.user_name, "Commander"),
+        "--player-name names the player of a launch the screens choose for"
+    );
+
+    // -h and -n after -c decide as the file's keys would; before it they are lost.
+    const auto named = parse({"-c", taforever.c_str(), "-hFriday"});
+    expect(
+        named.net.direct_game.kind == Kind::none && named.launch.block.hosting == 1 &&
+            same_text(named.launch.block.session_name, "Friday") &&
+            named.launch.block.connection_type == 0,
+        "-h after -c names the game and the host, and the menus choose the transport"
+    );
+    const auto joined = parse({"-c", taforever.c_str(), "-n1:192.0.2.20"});
+    expect(
+        joined.net.direct_game.kind == Kind::join && joined.net.direct_game.address == "192.0.2.20",
+        "-n1:ADDRESS after -c joins the game there"
+    );
+    const auto hosted = parse({"-c", taforever.c_str(), "-n1:192.0.2.20", "-hFriday"});
+    expect(
+        hosted.net.direct_game.kind == Kind::host && hosted.net.direct_game.game_name == "Friday",
+        "-n1:ADDRESS and -h after -c host"
+    );
+    const auto lost = parse({"-n1:192.0.2.20", "-hEarly", "-c", taforever.c_str()});
+    const auto& lost_notes = oa::app::start_notes();
+    expect(
+        lost.net.direct_game.kind == Kind::host &&
+            same_text(lost.launch.block.session_name, "Example game") &&
+            std::find(
+                lost_notes.begin(),
+                lost_notes.end(),
+                "-c clears the launch, as in 3.1c: what -h, -n set before it is lost"
+            ) != lost_notes.end(),
+        "-h and -n before -c are lost, and noted"
+    );
+    // The long options win whatever their order.
+    const std::string join_file =
+        file("G105-join-long.ini", "connect=1\ncreator=0\naddress=192.0.2.10\nsession=Ini\n");
+    const auto long_host = parse({"--host", "-c", join_file.c_str()});
+    expect(long_host.net.direct_game.kind == Kind::host, "--host wins over the file's join");
+    const auto long_join = parse(
+        {"-c",
+         file("G105-host-long.ini", "connect=1\ncreator=1\naddress=a\n").c_str(),
+         "--join",
+         "192.0.2.30"}
+    );
+    expect(
+        long_join.net.direct_game.kind == Kind::join &&
+            long_join.net.direct_game.address == "192.0.2.30",
+        "--join wins over the file's host"
+    );
+    const auto long_name = parse({"--game-name", "Long", "-c", join_file.c_str(), "-hShort"});
+    expect(
+        long_name.net.direct_game.game_name == "Long" &&
+            same_text(long_name.launch.block.session_name, "Long"),
+        "--game-name wins over -h and the file"
+    );
+    // pfs sets the send rate in place of -p, whichever comes first.
+    const std::string paced = file("G105-pfs.ini", "pfs=12\n");
+    const auto pfs_after = parse({"-p5", "-c", paced.c_str()});
+    const auto pfs_before = parse({"-c", paced.c_str(), "-p5"});
+    expect(
+        pfs_after.launch.send_pacing == 12 && pfs_after.launch.send_pacing_set == 1 &&
+            pfs_before.launch.send_pacing == 12,
+        "pfs replaces -p"
+    );
+    const auto unpaced = parse({"-p5", "-c", file("G105-pfs0.ini", "pfs=0\n").c_str()});
+    expect(unpaced.launch.send_pacing == 5, "pfs=0 leaves -p's rate");
+    // A refusal of the map names the key.
+    expect(
+        plain.net.launch_replaced.end() !=
+            std::find_if(
+                plain.net.launch_replaced.begin(),
+                plain.net.launch_replaced.end(),
+                [](const auto& entry) {
+                    return entry.first == "map" &&
+                           entry.second.ends_with("G105-taforever.ini: mission");
+                }
+            ),
+        "a refusal of the INI's map names mission"
+    );
+    const auto map_option = parse({"-c", taforever.c_str(), "--map", "Coast To Coast"});
+    expect(
+        same_text(map_option.launch.block.mission, "Coast To Coast") &&
+            std::any_of(
+                map_option.net.launch_replaced.begin(),
+                map_option.net.launch_replaced.end(),
+                [](const auto& entry) { return entry.first == "map" && entry.second == "--map"; }
+            ),
+        "--map replaces mission, and a refusal names --map"
+    );
+}
+
+/// "-b WORD" sets a battle room option of the launch, after -c, below the long options.
+///
+/// @param scratch the directory the files are written in
+void check_battle_words(const Scratch& scratch) {
+    const std::string taforever = scratch.write("G105-battle.ini", kIni);
+    const auto after =
+        parse({"-c", taforever.c_str(), "-b", "deathmatch", "-bpermlos", "-b", "lock"});
+    expect(
+        after.launch.block.death_option == 3 && after.launch.block.los == 3 &&
+            after.launch.block.lock_options == 1,
+        "-b after -c replaces the file's options"
+    );
+    const auto before = parse({"-b", "deathmatch", "-c", taforever.c_str()});
+    expect(before.launch.block.death_option == 2, "-b before -c is lost");
+    const auto option = parse({"-c", taforever.c_str(), "-b", "cheating", "--cheats", "off"});
+    expect(option.launch.block.cheats == 1, "--cheats wins over -b cheating");
+    const auto host = parse(
+        {"--host",
+         "-b",
+         "watching",
+         "-b",
+         "fixedloc",
+         "-b",
+         "mapping",
+         "-b",
+         "circlos",
+         "-b",
+         "deathplays"}
+    );
+    expect(
+        host.net.launch_planned && host.launch.block.watching == 2 &&
+            host.launch.block.location == 1 && host.launch.block.mapping == 2 &&
+            host.launch.block.los == 2 && host.launch.block.death_option == 1,
+        "-b beside --host makes a launch"
+    );
+    const auto alone = parse({"-b", "deathends"});
+    const auto& notes = oa::app::start_notes();
+    expect(
+        !alone.net.launch_planned && alone.app.launch.language[0] == '\0' &&
+            std::any_of(
+                notes.begin(),
+                notes.end(),
+                [](const std::string& note) {
+                    return note.starts_with("-b names battle room options");
+                }
+            ),
+        "-b with no launch does nothing and is noted"
+    );
+}
+
+/// -c with no file, a missing file, and a name with no folder.
+///
+/// @param scratch the directory the files are written in
+void check_c_file(const Scratch& scratch) {
+    const auto alone = parse({"-c"});
+    expect(
+        !alone.net.launch_planned && alone.app.launch.skip_intro == 1 &&
+            std::find(
+                oa::app::start_notes().begin(),
+                oa::app::start_notes().end(),
+                "-c names no file: it skips the intro and starts no launch, as in 3.1c"
+            ) != oa::app::start_notes().end(),
+        "-c alone starts no launch, skips the intro and is noted"
+    );
+    const std::string launch = scratch.write("G105-c-launch.oalaunch", kLaunch);
+    const auto beside = parse({"-c", "--launch", launch.c_str()});
+    expect(
+        beside.net.launch_planned && beside.launch.block.computer_count == 2,
+        "-c with no file leaves --launch's file"
+    );
+    const std::string missing = (scratch.dir / "G105-missing.ini").string();
+    expect(
+        rejection({"-c", missing.c_str()}).ends_with("G105-missing.ini: the file: cannot be read"),
+        "a file that cannot be read is refused, naming it"
+    );
+    // A bare name is looked for in the game folder after the current one.
+    const fs::path game = scratch.dir / "G105-game";
+    fs::create_directories(game);
+    {
+        std::ofstream output(game / "G105-bare.ini", std::ios::binary);
+        output << "[TotalA]\nmetal=4000\n";
+    }
+    const std::string game_dir = oa::app::path_to_utf8(game);
+    const auto bare = parse({"--game-dir", game_dir.c_str(), "-c", "G105-bare.ini"});
+    expect(
+        bare.net.launch_planned && bare.launch.block.metal == 4000 &&
+            std::any_of(
+                oa::app::start_notes().begin(),
+                oa::app::start_notes().end(),
+                [](const std::string& note) {
+                    return note.starts_with("G105-bare.ini was read from the game folder");
+                }
+            ),
+        "a bare name is read from the game folder, and noted"
+    );
+    expect(
+        rejection({"--game-dir", game_dir.c_str(), "-c", "G105-not-there.ini"}) ==
+            "G105-not-there.ini: the file: cannot be read from the current folder or the game "
+            "folder",
+        "a bare name in neither folder is refused"
+    );
+    expect(launch_file::names_bare_file("a.ini"), "a.ini is a bare name");
+    expect(
+        !launch_file::names_bare_file("dir/a.ini") && !launch_file::names_bare_file("dir\\a.ini") &&
+            !launch_file::names_bare_file("C:a.ini"),
+        "a name with a folder or a drive is not bare"
+    );
+}
+
+/// The engine's switches with no effect here are noted, and the notes go to the log once.
+void check_switch_notes() {
+    (void)parse({"-f", "-l", "-w", "-memfussy", "-gonzo", "-y"});
+    const auto& notes = oa::app::start_notes();
+    const auto noted = [&notes](std::string_view start) {
+        return std::any_of(notes.begin(), notes.end(), [start](const std::string& note) {
+            return note.starts_with(start);
+        });
+    };
+    expect(noted("-f looks for 3.1c's disc"), "-f is noted");
+    expect(noted("-l has no effect"), "-l is noted");
+    expect(noted("-w plays 3.1c's sounds"), "-w is noted");
+    expect(
+        noted("-memfussy and 1 more are 3.1c's developer switches"), "developer switches are noted"
+    );
+    expect(noted("-y opens 3.1c's built-in internet lobby"), "-y is noted");
+    expect(notes.size() == 5, "one note each");
+    (void)parse({"-s", "-t60"});
+    expect(oa::app::start_notes().empty(), "switches with their effect are not noted");
+
+    // The frontend's start writes the notes and drops them.
+    oa::app::NetgameContext context{};
+    oa::app::Extension table{};
+    oa::app::fill_option_hooks(table, context);
+    oa::app::keep_start_note("G105 note");
+    oa::ui::frontend_state::StateHandler handler{};
+    table.frontend_states(table.context, handler);
+    expect(oa::app::start_notes().empty(), "the notes are written once");
 }
 
 /// The .oalaunch example fills every field of the plan.
@@ -796,7 +1350,7 @@ void check_either_file(const Scratch& scratch) {
         "-c reads an .oalaunch file, whatever its name"
     );
     expect(
-        option_ini.net.launch_planned && option_ini.launch.block.tournament == 1 &&
+        option_ini.net.launch_planned && option_ini.launch.block.watching == 2 &&
             same_text(option_ini.launch.block.provider_label, "TAForever"),
         "--launch reads TA Forever's INI, whatever its name"
     );
@@ -810,7 +1364,7 @@ void check_either_file(const Scratch& scratch) {
             "-c and --launch cannot both be given",
         "-c and --launch cannot both be given"
     );
-    expect(rejection({"-c"}) == "-c: the file: -c needs a file", "-c needs a file");
+    expect(rejection({"-c"}).empty(), "-c without a file is not refused");
 
     // The options the direct game took before launches keep their place.
     const std::string ini = scratch.write("taforever.ini", kIni);
@@ -1061,6 +1615,12 @@ void check_standard_input(const Scratch& scratch) {
 int main() {
     const Scratch scratch;
     check_ini(scratch.write("taforever.ini", kIni));
+    check_ini_keys();
+    check_ini_reader();
+    check_ini_hosting(scratch);
+    check_battle_words(scratch);
+    check_c_file(scratch);
+    check_switch_notes();
     check_launch();
     check_options_match_the_file(
         scratch.write("launch.oalaunch", kLaunch), scratch.write("plain.oalaunch", kPlainHost)

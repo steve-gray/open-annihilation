@@ -426,8 +426,11 @@ struct HostDisplay {
                 std::cerr << "open-annihilation: the window's place was not read: " << error.what()
                           << '\n';
             }
+            // -df is full screen for this run, and -d a window; neither is remembered.
             const PlaceOverride override_mode =
-                options.launch.display_option != 0 ? PlaceOverride::window : PlaceOverride::none;
+                options.launch.display_option == 0 ? PlaceOverride::none
+                : options.start_full_screen        ? PlaceOverride::full_screen
+                                                   : PlaceOverride::window;
             RestoredPlace restored = restore_window_place(
                 saved_place ? &*saved_place : nullptr,
                 override_mode,

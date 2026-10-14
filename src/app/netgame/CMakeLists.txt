@@ -25,8 +25,8 @@ target_include_directories(oa-app-netgame-options PUBLIC "${CMAKE_CURRENT_SOURCE
 target_link_libraries(oa-app-netgame-options PUBLIC oa::app::headers oa-app-netgame-launch oa-netgame-frontend
   oa-app-command-line oa-ui-frontend-renderer oa-ui-frontend-state oa-sim-scenario oa-ui-screen-registry
   oa-core-types
-  PRIVATE oa-netgame oa-options oa-formats-oamod oa-base-text oa-base-threads oa-platform-file-types
-  oa-data-content-bundles)
+  PRIVATE oa-netgame oa-options oa-formats-oamod oa-base-text oa-platform-shims oa-base-threads
+  oa-platform-file-types oa-data-content-bundles)
 
 # The network rules a mod profile gives network play, which their test
 # reads without a running app.

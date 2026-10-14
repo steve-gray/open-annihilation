@@ -108,8 +108,9 @@ struct NetOptions {
     // the map, the rules and the seats.
     bool launch_planned = false;
     std::string launch_source{};
-    // The fields an option replaced, each with that option, so a later
-    // refusal names the option (launch_place).
+    // Where a later refusal of a field points (launch_place): the option
+    // that replaced it, or the key of an INI that filled it, written
+    // "taforever.ini: mission".
     std::vector<std::pair<std::string, std::string>> launch_replaced{};
     // Which of the direct-game options the command line itself named, so a
     // launch file does not replace them.
@@ -205,9 +206,40 @@ void allow_piped_launch() noexcept;
 /// Returns where a refusal of one of the launch's fields points.
 ///
 /// @param field the dotted field, such as map
-/// @return the option that replaced it, such as --map, or the launch's
+/// @return the option that replaced it, such as --map, the INI's key that
+///         filled it, such as "taforever.ini: mission", or the launch's
 ///         source and the field, such as "host.oalaunch: map"
 [[nodiscard]] std::string launch_place(std::string_view field);
+
+/// Names where check_options looks for a launch file named without a folder, after the current folder.
+///
+/// The engine names the game folder while it parses the command line, and
+/// names none again after.
+///
+/// @param folders the game folder's finder; an empty one looks in the current folder alone
+void find_launch_files_in(const netgame::LaunchFolders& folders) noexcept;
+
+/// Keeps a line about the command line for the game's log.
+///
+/// The lines are written, each after "open-annihilation: ", when the game's
+/// first frontend starts, once the log is open. check_options drops those of
+/// an earlier parse.
+///
+/// @param line the line, such as "-l has no effect"
+void keep_start_note(std::string line);
+
+/// Returns the lines kept for the game's log and not written yet.
+///
+/// @return the lines, in the order they were kept
+[[nodiscard]] const std::vector<std::string>& start_notes() noexcept;
+
+/// Keeps a line for the log about each engine switch of the 3.1c command line that has no effect here.
+///
+/// The developer switches, -f and -l have none; -w turns the sound off,
+/// where 3.1c plays it through the system's sound player.
+///
+/// @param options the parsed command line
+void note_game_switches(const Options& options);
 
 /// Raises a launch-file refusal that check_options kept.
 ///

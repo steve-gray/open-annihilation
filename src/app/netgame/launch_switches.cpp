@@ -5,11 +5,68 @@
 #include "oa/base/text.hpp"
 
 #include <cstring>
+#include <string>
 
 namespace oa::app::netgame::launch {
 namespace {
 
 namespace cl = oa::app::command_line;
+
+// The launch block's codes the "-b" words set, as a launch file's keys set them.
+constexpr int32_t kCommanderContinues = 1;
+constexpr int32_t kCommanderEnds = 2;
+constexpr int32_t kCommanderDeathmatch = 3;
+constexpr int32_t kSightTrue = 1;
+constexpr int32_t kSightCircular = 2;
+constexpr int32_t kSightPermanent = 3;
+constexpr int32_t kStartsFixed = 1;   // LaunchBlock::location
+constexpr int32_t kMapMapped = 2;     // LaunchBlock::mapping
+constexpr int32_t kChoiceAllowed = 2; // LaunchBlock::cheats and watching
+constexpr uint32_t kOptionsLocked = 1;
+
+/// Which battle room option a "-b" word sets.
+enum class BattleOption : uint8_t { lock, commander, sight, starts, mapping, cheats, watching };
+
+/// One "-b" word and the option and code it sets.
+struct BattleWord {
+    const char* word{};
+    BattleOption option{};
+    int32_t code{};
+};
+
+// Every "-b" word, with the meaning its name gives it.
+constexpr BattleWord kBattleWords[] = {
+    {"lock", BattleOption::lock, static_cast<int32_t>(kOptionsLocked)},
+    {"deathplays", BattleOption::commander, kCommanderContinues},
+    {"deathends", BattleOption::commander, kCommanderEnds},
+    {"deathmatch", BattleOption::commander, kCommanderDeathmatch},
+    {"truelos", BattleOption::sight, kSightTrue},
+    {"circlos", BattleOption::sight, kSightCircular},
+    {"permlos", BattleOption::sight, kSightPermanent},
+    {"mapping", BattleOption::mapping, kMapMapped},
+    {"fixedloc", BattleOption::starts, kStartsFixed},
+    {"cheating", BattleOption::cheats, kChoiceAllowed},
+    {"watching", BattleOption::watching, kChoiceAllowed},
+};
+
+/// Lowers an ASCII capital letter; other characters are returned unchanged.
+///
+/// @param c Character.
+/// @return The lower-case character.
+char fold(char c) noexcept {
+    return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : c;
+}
+
+/// Compares two texts, ignoring ASCII case.
+///
+/// @param a First text.
+/// @param b Second text.
+/// @return Whether they are the same letters.
+bool same_word(const char* a, const char* b) noexcept {
+    for (; *a != '\0' && fold(*a) == fold(*b); ++a, ++b) {
+    }
+    return fold(*a) == fold(*b);
+}
 
 /// Tests for the C locale's space class: blank, tab, newline, vertical tab, form feed and return.
 ///
@@ -68,21 +125,30 @@ const char* argument(const cl::SwitchArguments* arguments) noexcept {
 /// @param context The LaunchSwitches.
 /// @param letter Lower-case switch letter.
 /// @param arguments Text after the letter and the following tokens.
-/// @param[out] effects Gains switch_effect_skip_intro for -n.
-/// @return 1 when the letter is one of -c -e -h -n -p -t, else 0.
+/// @param[out] effects Gains switch_effect_skip_intro for -c, -n and -y.
+/// @return 1 when the letter is one of -b -c -e -h -n -p -t -y, else 0.
 int take_switch(
     void* context, char letter, const cl::SwitchArguments* arguments, uint32_t* effects
 ) noexcept {
     LaunchSwitches& switches = *static_cast<LaunchSwitches*>(context);
     switch (letter) {
+    case 'b': {
+        const char* word = argument(arguments);
+        if (word == nullptr || *word == '\0')
+            switches.notes.emplace_back("-b names no battle room option, so it does nothing");
+        else if (!take_battle_word(switches.battle, word))
+            switches.notes.push_back(
+                std::string("-b ") + word + " names no battle room option, so it does nothing"
+            );
+        return 1;
+    }
     case 'c': {
+        // The next token is the file whatever it starts with: "-" alone is
+        // standard input, and "-x" a file of that name.
         const char* path = arguments->attached;
-        if (*path == '\0') {
+        if (*path == '\0')
             path = arguments->next_token(arguments->tokens);
-            // "-" alone is standard input; another dash starts a switch.
-            if (path == nullptr || *path == '\0' || (*path == '-' && path[1] != '\0'))
-                path = nullptr;
-        }
+        clear_launch_record(switches);
         switches.launch_seen = true;
         switches.launch_path = path != nullptr ? path : "";
         *effects |= cl::switch_effect_skip_intro;
@@ -114,17 +180,14 @@ int take_switch(
         if (value != nullptr && *value != '\0' && *value != '-') {
             const char* colon = std::strchr(value, ':');
             const int32_t type = decode_int(value);
-            bool stored = false;
             if (type == kAddressedConnectionType && colon != nullptr) {
                 set_connection_address(switches, colon + 1);
-                stored = true;
+                switches.address_from_switch = true;
             }
             if (type >= kFirstConnectionType && type <= kLastConnectionType) {
                 set_connection_type(switches, type);
-                stored = true;
+                switches.connection_type_from_switch = true;
             }
-            if (stored)
-                switches.connection_from_switch = true;
         }
         *effects |= cl::switch_effect_skip_intro;
         return 1;
@@ -147,18 +210,28 @@ int take_switch(
         }
         return 1;
     }
+    case 'y':
+        // 3.1c opens its built-in internet lobby; this game has none, so -y
+        // keeps only the intro skip.
+        switches.notes.emplace_back(
+            "-y opens 3.1c's built-in internet lobby, which this game does not have; it only "
+            "skips the intro"
+        );
+        *effects |= cl::switch_effect_skip_intro;
+        return 1;
     default:
         return 0;
     }
 }
 
-/// Resets the net timeout and send-error percentage before a parse (SwitchHandler::reset).
+/// Resets the net timeout, send-error percentage and notes before a parse (SwitchHandler::reset).
 ///
 /// @param context The LaunchSwitches.
 void reset_switches(void* context) noexcept {
     LaunchSwitches& switches = *static_cast<LaunchSwitches*>(context);
     switches.net_timeout_seconds = kDefaultNetTimeoutSeconds;
     switches.send_error_percent = 0;
+    switches.notes.clear();
 }
 
 } // namespace
@@ -189,6 +262,79 @@ void set_connection_type(LaunchSwitches& switches, int32_t type) noexcept {
 
 void enable_netsetup(LaunchSwitches& switches) noexcept {
     switches.netsetup = 1;
+}
+
+void clear_launch_record(LaunchSwitches& switches) {
+    std::string lost;
+    const auto add = [&lost](const char* name) {
+        if (!lost.empty())
+            lost += ", ";
+        lost += name;
+    };
+    if (switches.session_from_switch)
+        add("-h");
+    if (switches.connection_type_from_switch || switches.address_from_switch)
+        add("-n");
+    if (switches.battle.named())
+        add("-b");
+    if (!lost.empty())
+        switches.notes.push_back(
+            "-c clears the launch, as in 3.1c: what " + lost + " set before it is lost"
+        );
+    switches.block = LaunchBlock{};
+    switches.session_from_switch = false;
+    switches.connection_type_from_switch = false;
+    switches.address_from_switch = false;
+    switches.battle = BattleWords{};
+}
+
+bool take_battle_word(BattleWords& battle, const char* word) noexcept {
+    for (const BattleWord& entry : kBattleWords) {
+        if (!same_word(word, entry.word))
+            continue;
+        switch (entry.option) {
+        case BattleOption::lock:
+            battle.lock = static_cast<uint32_t>(entry.code);
+            break;
+        case BattleOption::commander:
+            battle.death_option = entry.code;
+            break;
+        case BattleOption::sight:
+            battle.los = entry.code;
+            break;
+        case BattleOption::starts:
+            battle.location = entry.code;
+            break;
+        case BattleOption::mapping:
+            battle.mapping = entry.code;
+            break;
+        case BattleOption::cheats:
+            battle.cheats = entry.code;
+            break;
+        case BattleOption::watching:
+            battle.watching = entry.code;
+            break;
+        }
+        return true;
+    }
+    return false;
+}
+
+void apply_battle_words(const BattleWords& battle, LaunchBlock& block) noexcept {
+    if (battle.lock != 0)
+        block.lock_options = battle.lock;
+    if (battle.death_option != 0)
+        block.death_option = battle.death_option;
+    if (battle.los != 0)
+        block.los = battle.los;
+    if (battle.location != 0)
+        block.location = battle.location;
+    if (battle.mapping != 0)
+        block.mapping = battle.mapping;
+    if (battle.cheats != 0)
+        block.cheats = battle.cheats;
+    if (battle.watching != 0)
+        block.watching = battle.watching;
 }
 
 } // namespace oa::app::netgame::launch

@@ -11,7 +11,9 @@
 #include "oa/core/game_state.h"
 #include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/netgame/dplay.hpp"
+#include "oa/platform/log_files.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <optional>
@@ -20,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace oa::app {
 namespace {
@@ -38,6 +41,40 @@ using netgame::LaunchRole;
 std::string& held_launch_refusal() {
     static std::string held;
     return held;
+}
+
+/// The lines about the command line kept for the game's log (keep_start_note).
+///
+/// @return the lines not written yet
+std::vector<std::string>& held_start_notes() {
+    static std::vector<std::string> held;
+    return held;
+}
+
+/// Where a launch file named without a folder is looked for after the current folder.
+///
+/// @return the finder the engine named (find_launch_files_in)
+netgame::LaunchFolders& launch_folders() {
+    static netgame::LaunchFolders folders;
+    return folders;
+}
+
+/// Names a transport the launch block holds that this game does not have.
+///
+/// @param transport the block's connection type
+/// @return "IPX", "a modem", "a serial cable", or the number
+std::string transport_name(int32_t transport) {
+    namespace transports = oa::app::netgame::launch::connection_type;
+    switch (transport) {
+    case transports::ipx:
+        return "IPX";
+    case transports::modem:
+        return "a modem";
+    case transports::serial:
+        return "a serial cable";
+    default:
+        return "transport " + std::to_string(transport);
+    }
 }
 
 /// Parses a UDP port number.
@@ -245,20 +282,37 @@ void store_launch_text(std::span<char> field, std::string_view text, std::string
 
 /// Puts a launch plan into the context, then puts the command line's own fields back.
 ///
-/// --host, --join, --player-name, --game-name, --game-password, --dplay-guid,
-/// --dplay-port, "-h" and "-n" each keep the field they named. The plan is
-/// then checked as a whole with the role the run takes. The password is
-/// stored and not written out.
+/// --host, --join, --player-name, --game-name, --game-password, --dplay-guid
+/// and --dplay-port keep the field they named, wherever they stand. "-h" and
+/// "-n" after the last "-c" replace the file's game name, host flag,
+/// transport and address, as in 3.1c. The role then follows the first that
+/// applies: --host or --join; an INI that, with "-h" and "-n", names none of
+/// the transport, the host flag and the address hosts over TCP/IP; an INI
+/// otherwise decides as 3.1c's screens do (role_from_record), which may
+/// leave the choice to the multiplayer screens; "-h" hosts an .oalaunch
+/// file's game; the file's game.role. The plan is then checked as a whole. A
+/// nonzero pfs sets the send rate in place of "-p". The password is stored
+/// and not written out.
 ///
 /// @param[in,out] netgame the context the plan and the command line share
-/// @param plan the launch, from a file, standard input or the launch settings' options
-void apply_launch_plan(NetgameContext& netgame, LaunchPlan plan) {
+/// @param plan the launch, from a file, standard input, the launch settings'
+///             options or "-b"
+/// @return false when the plan holds "-b" words alone, which a run without a
+///         launch does not apply; nothing is planned then
+bool apply_launch_plan(NetgameContext& netgame, LaunchPlan plan) {
     namespace nl = oa::app::netgame::launch;
     using Kind = oa::ui::frontend_multiplayer::DirectGame::Kind;
     auto& options = netgame.options;
     auto& switches = netgame.launch;
 
     const Kind cli_kind = options.direct_game.kind;
+    if (cli_kind == Kind::none && plan.source.empty() && options.launch_options.empty()) {
+        keep_start_note(
+            "-b names battle room options, which only a launch applies: -c FILE, --launch FILE, "
+            "or --host or --join; it does nothing here"
+        );
+        return false;
+    }
     const std::string cli_address = options.direct_game.address;
     const std::string cli_player = options.direct_game.player_name;
     const std::string cli_game = options.direct_game.game_name;
@@ -270,19 +324,37 @@ void apply_launch_plan(NetgameContext& netgame, LaunchPlan plan) {
     const auto cli_guid = options.dplay_guid;
     const bool from_session = switches.session_from_switch;
     const std::string saved_session(switches.block.session_name);
-    const uint32_t saved_hosting = switches.block.hosting;
-    const bool from_connection = switches.connection_from_switch;
+    const bool from_type = switches.connection_type_from_switch;
     const int32_t saved_type = switches.block.connection_type;
+    const bool from_address = switches.address_from_switch;
     const std::string saved_address(switches.block.address);
+    const bool switch_named = from_session || from_type || from_address;
 
     switches.block = plan.block;
-    if (from_session)
-        store_launch_text(switches.block.session_name, saved_session, "-h");
-    if (from_connection) {
-        switches.block.connection_type = saved_type;
-        store_launch_text(switches.block.address, saved_address, "-n");
+    // An INI that names none of the three hosts over TCP/IP. When a switch
+    // names one, the record decides instead, from the file's own values.
+    const bool record_decides = plan.ini && (plan.connection_named || switch_named);
+    if (plan.ini && !plan.connection_named && switch_named) {
+        switches.block.connection_type = nl::connection_type::none;
+        switches.block.hosting = 0;
     }
+    if (from_session) {
+        store_launch_text(switches.block.session_name, saved_session, "-h");
+        switches.block.hosting = 1;
+    }
+    if (from_type)
+        switches.block.connection_type = saved_type;
+    if (from_address)
+        store_launch_text(switches.block.address, saved_address, "-n");
 
+    LaunchRole role = plan.role;
+    std::string join_address = from_address ? saved_address : plan.address;
+    if (record_decides) {
+        role = netgame::role_from_record(switches.block);
+        join_address = switches.block.address;
+    } else if (from_session) {
+        role = LaunchRole::host;
+    }
     if (cli_kind == Kind::host) {
         options.direct_game.kind = Kind::host;
         options.direct_game.address.clear();
@@ -291,24 +363,24 @@ void apply_launch_plan(NetgameContext& netgame, LaunchPlan plan) {
         options.direct_game.kind = Kind::join;
         options.direct_game.address = cli_address;
         switches.block.hosting = 0;
-        if (!from_connection)
+        if (!from_address)
             store_launch_text(switches.block.address, cli_address, "--join");
-    } else if (from_session) {
-        options.direct_game.kind = Kind::host;
-        options.direct_game.address.clear();
-        switches.block.hosting = saved_hosting;
-    } else if (plan.role == LaunchRole::host || plan.ini) {
+    } else if (role == LaunchRole::host) {
         options.direct_game.kind = Kind::host;
         options.direct_game.address.clear();
         switches.block.hosting = 1;
-        if (!from_connection)
+        if (!from_type)
             switches.block.connection_type = nl::connection_type::tcpip;
-    } else if (plan.role == LaunchRole::join) {
+    } else if (role == LaunchRole::join) {
         options.direct_game.kind = Kind::join;
-        options.direct_game.address = plan.address;
+        options.direct_game.address = join_address;
         switches.block.hosting = 0;
-        if (!from_connection)
+        if (!from_type)
             switches.block.connection_type = nl::connection_type::tcpip;
+    } else if (plan.ini) {
+        // The multiplayer screens choose, as 3.1c's menus do, with the
+        // record's transport, host flag and address.
+        options.direct_game.kind = Kind::none;
     } else if (!plan.source.empty()) {
         throw LaunchRefusal(
             plan.source + ": game.role: expected host or join, or --host or --join beside the file"
@@ -316,7 +388,9 @@ void apply_launch_plan(NetgameContext& netgame, LaunchPlan plan) {
     } else {
         throw LaunchRefusal(options.launch_options.front().first + " needs --host or --join");
     }
-    plan.role = options.direct_game.kind == Kind::host ? LaunchRole::host : LaunchRole::join;
+    plan.role = options.direct_game.kind == Kind::host   ? LaunchRole::host
+                : options.direct_game.kind == Kind::join ? LaunchRole::join
+                                                         : LaunchRole::unset;
     plan.address = options.direct_game.address;
 
     if (cli_game_set) {
@@ -351,59 +425,103 @@ void apply_launch_plan(NetgameContext& netgame, LaunchPlan plan) {
     else
         options.dplay_guid = plan.dplay_guid;
 
+    // pfs sets the send rate as the connection starts, in place of -p's.
+    if (switches.block.pfs != 0) {
+        switches.send_pacing = switches.block.pfs;
+        switches.send_pacing_set = 1;
+    }
+
     netgame::check_launch_plan(plan);
     options.launch_content = plan.content;
     options.launch_status = plan.status;
     options.launch_planned = true;
     options.launch_source = plan.source;
     options.launch_replaced = plan.replaced;
+    for (const auto& [field, key] : plan.ini_keys)
+        if (std::none_of(
+                plan.replaced.begin(), plan.replaced.end(), [&field](const auto& replaced) {
+                    return replaced.first == field;
+                }
+            ))
+            options.launch_replaced.emplace_back(field, plan.source + ": " + key);
     netgame::keep_launch_status(plan.status);
+    for (std::string& note : plan.notes)
+        keep_start_note(std::move(note));
+    return true;
 }
 
-/// Reads the launch the command line names: a file, standard input, and the launch settings' options.
+/// Reads the launch the command line names: a file, standard input, "-b" and the launch settings' options.
 ///
 /// "-c FILE" and --launch FILE name one file of either kind, and cannot both
-/// be given. Without one, a launch piped in on standard input is read when
-/// the program allows it. Each launch setting's option then replaces its
-/// field, in command-line order; options alone make a plan of their own.
+/// name one; a "-c" with no file names none, as in 3.1c. Without either, a
+/// launch piped in on standard input is read when the program allows it.
+/// The battle room options "-b" named after the last "-c" then replace the
+/// file's, and each launch setting's option replaces its field, in
+/// command-line order. "-b" and the options alone make a plan of their own.
 ///
 /// @param netgame the context the command line filled
 /// @return the plan, or nothing when the command line names no launch
 std::optional<LaunchPlan> read_named_launch(const NetgameContext& netgame) {
     const auto& options = netgame.options;
     const auto& switches = netgame.launch;
-    if (switches.launch_seen && !options.launch_path.empty())
+    const bool c_file = switches.launch_seen && !switches.launch_path.empty();
+    if (c_file && !options.launch_path.empty())
         throw LaunchRefusal("-c and --launch cannot both be given");
-    if (switches.launch_seen && switches.launch_path.empty())
-        throw LaunchRefusal("-c: the file: -c needs a file");
-    const std::string& path = switches.launch_seen ? switches.launch_path : options.launch_path;
+    if (switches.launch_seen && !c_file)
+        keep_start_note("-c names no file: it skips the intro and starts no launch, as in 3.1c");
+    const std::string& path = c_file ? switches.launch_path : options.launch_path;
     std::optional<LaunchPlan> plan;
     if (!path.empty()) {
-        plan = netgame::read_launch_file(path);
-    } else if (options.piped_launch_allowed) {
+        plan = netgame::read_launch_file(path, launch_folders());
+    } else if (options.piped_launch_allowed && !switches.launch_seen) {
         const auto piped = netgame::read_piped_launch(
             netgame::standard_input(), netgame::kPipedLaunchWait, netgame::kPipedLaunchRest
         );
         if (piped.found)
             plan = netgame::read_launch_text("standard input", piped.text);
     }
-    if (!options.launch_options.empty() && !plan)
+    if (!plan && (!options.launch_options.empty() || switches.battle.named()))
         plan.emplace();
+    if (plan)
+        oa::app::netgame::launch::apply_battle_words(switches.battle, plan->block);
     for (const auto& [option, given] : options.launch_options)
         netgame::replace_launch_field(*plan, *netgame::find_launch_option(option), option, given);
     return plan;
+}
+
+/// Keeps a note for a transport the launch block holds that this game does not have.
+///
+/// The multiplayer screens then open the provider list, as 3.1c's do when
+/// the transport is not installed.
+///
+/// @param netgame the context the command line filled
+void note_missing_transport(const NetgameContext& netgame) {
+    namespace transports = oa::app::netgame::launch::connection_type;
+    const int32_t transport = netgame.launch.block.connection_type;
+    if (transport == transports::none || transport == transports::tcpip)
+        return;
+    const auto& options = netgame.options;
+    const std::string who = netgame.launch.connection_type_from_switch || !options.launch_planned
+                                ? std::string("-n")
+                                : options.launch_source + ": connect";
+    keep_start_note(
+        who + " names " + transport_name(transport) +
+        ", which this game does not have; the multiplayer screens open on the provider list"
+    );
 }
 
 /// Checks the network game options as a whole (Extension::check_options).
 ///
 /// A launch is read here, after the long options and the game switches, and
 /// each field the command line named is put back. --player-name,
-/// --game-name and --game-password need --host or --join, or a launch that
-/// hosts or joins. A game to host or join has the frontend open
-/// multiplayer over TCP/IP at once, whatever connection "-n" named.
-/// --list-content needs --json, and --json needs --list-content. A refused
-/// combination throws std::runtime_error. A launch that cannot be used is
-/// kept, and raise_launch_refusal raises it after the hook returns.
+/// --game-name and --game-password need --host or --join, or a launch. A
+/// game to host or join has the frontend open multiplayer over TCP/IP at
+/// once, whatever connection "-n" named. --list-content needs --json, and
+/// --json needs --list-content. A refused combination throws
+/// std::runtime_error. A launch that cannot be used is kept, and
+/// raise_launch_refusal raises it after the hook returns. The notes of the
+/// switches and the launch are kept for the log (keep_start_note), and a
+/// transport this game does not have is noted.
 ///
 /// @param context The NetgameContext whose options are checked.
 void check_options(void* context) {
@@ -411,6 +529,7 @@ void check_options(void* context) {
     auto& options = netgame.options;
     options.launch_refusal.clear();
     held_launch_refusal().clear();
+    held_start_notes() = netgame.launch.notes;
     netgame::keep_launch_status({});
     try {
         if (options.list_content && !options.json_requested)
@@ -418,9 +537,13 @@ void check_options(void* context) {
         if (options.json_requested && !options.list_content)
             throw std::runtime_error("--json needs --list-content");
         if (std::optional<LaunchPlan> plan = read_named_launch(netgame))
-            apply_launch_plan(netgame, std::move(*plan));
+            (void)apply_launch_plan(netgame, std::move(*plan));
         const auto& game = options.direct_game;
         if (game.kind == oa::ui::frontend_multiplayer::DirectGame::Kind::none) {
+            note_missing_transport(netgame);
+            // A launch the multiplayer screens choose for takes the names.
+            if (options.launch_planned)
+                return;
             if (!game.player_name.empty())
                 throw std::runtime_error("--player-name needs --host or --join");
             if (!game.game_name.empty())
@@ -475,7 +598,7 @@ const std::string& usage_runs() {
     return runs;
 }
 
-/// Returns network play's wording of the usage text and of the -r refusal (Extension::text).
+/// Returns network play's wording of the usage text and of the line -r ends the start with (Extension::text).
 ///
 /// @param context Extension context (unused).
 /// @param which Text asked for.
@@ -487,12 +610,12 @@ const char* text(void* /*context*/, ExtensionText which) {
     case ExtensionText::usage_runs:
         return usage_runs().c_str();
     case ExtensionText::usage_switches:
-        return "-c FILE|- -t SECONDS -n TYPE[:ADDRESS] -hNAME ";
+        return "-b WORD -c FILE|- -e PERCENT -h NAME -n TYPE[:ADDRESS] -p RATE -t SECONDS -y ";
     case ExtensionText::usage_note:
         return "";
     case ExtensionText::register_switch:
         return "-r registers the game as a DirectPlay application, which this game does not "
-               "need";
+               "need; it ends here, as 3.1c does after -r";
     }
     return nullptr;
 }
@@ -516,14 +639,19 @@ void frontend_entry(void* context, FrontendEntry& entry) {
 
 /// Starts the multiplayer frontend states with the fields the network switches set (Extension::frontend_states).
 ///
-/// A connection type ("-n") opens multiplayer from the main menu at once and
-/// a setup request (request_setup, which "-y" makes) asks for step
-/// setup_requested on the first main-menu update.
+/// A connection type ("-n", or a launch's) opens multiplayer from the main
+/// menu at once and a setup request (request_setup, which a launching
+/// extension makes) asks for step setup_requested on the first main-menu
+/// update. The lines kept about the command line are written here, the
+/// first time: the game's log is open by now.
 ///
 /// @param context The NetgameContext holding the switches and the states.
 /// @param[out] handler Receives the handler that runs the states.
 void frontend_states(void* context, oa::ui::frontend_state::StateHandler& handler) {
     auto& netgame = context_of(context);
+    for (const std::string& line : held_start_notes())
+        oa::platform::log_files::write_line("open-annihilation: " + line);
+    held_start_notes().clear();
     netgame.frontend.state.connection_type = netgame.launch.block.connection_type;
     netgame.frontend.state.setup_request = netgame.launch.netsetup;
     handler = oa::netgame::frontend::state_handler(netgame.frontend);
@@ -574,6 +702,45 @@ std::string launch_place(std::string_view field) {
     if (net.launch_source.empty())
         return std::string(field);
     return net.launch_source + ": " + std::string(field);
+}
+
+void find_launch_files_in(const netgame::LaunchFolders& folders) noexcept {
+    launch_folders() = folders;
+}
+
+void keep_start_note(std::string line) {
+    held_start_notes().push_back(std::move(line));
+}
+
+const std::vector<std::string>& start_notes() noexcept {
+    return held_start_notes();
+}
+
+void note_game_switches(const Options& options) {
+    const auto& switches = options.launch;
+    if (switches.developer_switches == 1)
+        keep_start_note(
+            std::string(switches.developer_switch) +
+            " is one of 3.1c's developer switches, which have no effect"
+        );
+    else if (switches.developer_switches > 1)
+        keep_start_note(
+            std::string(switches.developer_switch) + " and " +
+            std::to_string(switches.developer_switches - 1) +
+            " more are 3.1c's developer switches, which have no effect"
+        );
+    if (switches.forced_disc_drive != 0)
+        keep_start_note(
+            "-f looks for 3.1c's disc on drive H:; this game reads the installed game, so -f "
+            "has no effect"
+        );
+    if (switches.l_switch_flag == 0)
+        keep_start_note("-l has no effect, as in 3.1c");
+    if (switches.system_sound != 0)
+        keep_start_note(
+            "-w plays 3.1c's sounds through the system's sound player; this game has no second "
+            "player, so -w turns the sound off, as -s does"
+        );
 }
 
 void raise_launch_refusal() {
