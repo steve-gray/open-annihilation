@@ -7,7 +7,7 @@
 // the user's XDG data folder, with the system's database tools run after a change. Four are
 // files the game installs or adds; the fifth, a launch file, starts the game in its battle
 // room (-c FILE). macOS and iOS declare the types in the bundle's Info.plist. On macOS a
-// switch chooses whether this copy is the default opener of each of the four, and only a
+// switch chooses whether this copy is the default opener of each of the five, and only a
 // switch that changed is asked; a start never replaces a choice made in Finder. iOS does
 // nothing at run time. Each registration writes only what differs from what is there.
 #pragma once
@@ -141,7 +141,7 @@ inline constexpr std::array<ExportedContentType, 5> exported_content_types{{
 
 /// Which of the five file types a registration or a withdrawal acts on. Each is on unless a
 /// caller turns it off, so a call that names no set acts on all five. Settings has a switch
-/// for each of the first four; a launch file has none and stays on.
+/// for each of the five.
 struct TypeSet {
     bool mod{true};      ///< a mod package, .oamod
     bool language{true}; ///< a language pack, .oalang

@@ -204,7 +204,7 @@ constexpr std::array<Setting, 3> kModChatRows{
 constexpr std::array<Setting, 0> kDownloadsRows{};
 /// System where the game registers file types at run time: Your files, then
 /// Welcome setup, then the group's heading and one switch for each type.
-constexpr std::array<Setting, 7> kSystemRuntimeRows{
+constexpr std::array<Setting, 8> kSystemRuntimeRows{
     Setting::user_folder,
     Setting::welcome_setup,
     Setting::file_type_registration,
@@ -212,6 +212,7 @@ constexpr std::array<Setting, 7> kSystemRuntimeRows{
     Setting::file_type_oamap,
     Setting::file_type_oalang,
     Setting::file_type_oareg,
+    Setting::file_type_oalaunch,
 };
 /// System where the app's bundle declares the types: Your files, then
 /// Welcome setup, then the text row in place of the switches.
@@ -2419,6 +2420,8 @@ constexpr std::array<SettingRow, kSettingCount> kDeclared{{
      .spec = engine_switch<&E::file_type_oalang>("file-type-oalang", "Language packs (.oalang)", {})},
     {.setting = S::file_type_oareg,
      .spec = engine_switch<&E::file_type_oareg>("file-type-oareg", "Registry files (.oareg)", {})},
+    {.setting = S::file_type_oalaunch,
+     .spec = engine_switch<&E::file_type_oalaunch>("file-type-oalaunch", "Launch files (.oalaunch)", {})},
     {.setting = S::file_types_note,
      .spec = file_types_note_row()},
     {.setting = S::skirmish_players,
@@ -2515,6 +2518,7 @@ constexpr std::array<std::string_view, kSettingCount> kSettingNames{
     "file-type-oamap",
     "file-type-oalang",
     "file-type-oareg",
+    "file-type-oalaunch",
     "file-types",
     "skirmish-players",
     "first-run",

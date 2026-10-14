@@ -250,6 +250,7 @@ inline constexpr std::string_view interface_words[] = {
     "Language packs (.oalang)",
     "Large",
     "Larger",
+    "Launch files (.oalaunch)",
     "Left-handed",
     "Left-handed layout",
     "Library",

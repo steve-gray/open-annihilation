@@ -18,7 +18,8 @@ The pictures show each section at its defaults on a Mac, the dialog alone,
 unlocked, at Compact drawn at 2× (960 by 648), with Touch, Controller and
 Game files listed. They are drawn by `oa-ui-engine-settings-pictures`
 ([how to draw them](../src/ui/engine-settings/README.md#the-manuals-pictures)). A section taller
-than the dialog shows its top; Downloads has a second picture of its end.
+than the dialog shows its top; Controls, Downloads and System have a second
+picture of their end.
 
 ## Contents
 
@@ -718,7 +719,7 @@ installation is not used or changed.
 
 ## System
 
-![The top of the System section: Your files with the folder path and SAVES, SCREENSHOTS and MODS, Welcome setup with SHOW AGAIN, File Type Registration, and the Mod packages and Map packs switches On.](images/settings/system.png)
+![The top of the System section: Your files with the folder path and SAVES, SCREENSHOTS and MODS, Welcome setup with SHOW AGAIN, File Type Registration, and the Mod packages and Map packs switches On.](images/settings/system-1.png)
 
 System is where the game sits on your computer: your own folder, and which
 of the game's file types this copy opens.
@@ -741,11 +742,17 @@ of the game's file types this copy opens.
   menu. **Cancel** leaves it as it was. During a game the row is locked
   and says "Choose from the main menu." The welcome itself is
   [the first-run setup](first-run.md).
-- **File Type Registration**, on Windows, Linux and macOS. Four switches:
+- **File Type Registration**, on Windows, Linux and macOS. Five switches,
+  all On at first:
   - **Mod packages (.oamod)**
   - **Map packs (.oamap)**
   - **Language packs (.oalang)**
   - **Registry files (.oareg)**
+  - **Launch files (.oalaunch)**: a launch file opened from the file
+    manager starts the game in its battle room
+    ([Opening a launch file](command-line.md#opening-a-launch-file))
+
+  ![The end of the System section: File Type Registration with its line, then the Mod packages, Map packs, Language packs, Registry files and Launch files switches, each On.](images/settings/system-2.png)
 
   The hint says "Open these files with the game from your file manager."
   **OK** applies a switch you moved, at once. **Cancel** leaves every
@@ -754,21 +761,25 @@ of the game's file types this copy opens.
   the game does not put a type back.
   Each switch is kept as `on` or `off` under
   `open-annihilation.file-types.` and its extension (`.oamod`, `.oamap`,
-  `.oalang`, `.oareg`). A missing key, or any text other than `off`, leaves
-  the type on.
+  `.oalang`, `.oareg`, `.oalaunch`). A missing key, or any text other than
+  `off`, leaves the type on. Each switch acts on its own type alone: moving
+  one never registers, withdraws or changes the opener of another.
 
   On Windows and Linux, a switch that is on makes this copy of the game
   the opener of that kind of file, and one that is off withdraws that
-  registration. The file manager takes the change with no restart.
+  registration. The file manager takes the change with no restart. On
+  Windows the installer also registers launch files for everyone who uses
+  the computer; Launch files Off withdraws only your own registration, so a
+  copy the installer set up still opens them until it is uninstalled.
 
   On a Mac, a switch that is on means Open Annihilation is the program
   Finder uses to open that type. The switch shows that choice as it is
   now, not only what was stored. Off hands the type back to the program
   that opens a zip archive (the three packages, usually Archive Utility)
-  or plain text (a registry file). The app keeps the type and its icon
-  either way; only the program that opens it changes. If the system
-  refuses, the log says so and the switch shows the choice the system
-  kept. When macOS keeps Open Annihilation as the opener, the hint under
+  or plain text (a registry file or a launch file). The app keeps the type
+  and its icon either way; only the program that opens it changes. If the
+  system refuses, the log says so and the switch shows the choice the
+  system kept. When macOS keeps Open Annihilation as the opener, the hint under
   File Type Registration names each type that stayed, in one sentence:
   "macOS kept Open Annihilation as the opener of .oamod. To choose another,
   select a .oamod file in Finder, then File › Get Info › Open with ›
@@ -777,7 +788,7 @@ of the game's file types this copy opens.
   System opens in this run, and it goes away when every switch matches
   what you asked. [macOS](installation/macos.md) says the same for opening
   a file.
-- **File types**, on iPhone and iPad, in place of the four switches. The
+- **File types**, on iPhone and iPad, in place of the five switches. The
   system takes the types from the app, and there is no way to choose a
   default opener, so there is no switch. The hint is one sentence.
 

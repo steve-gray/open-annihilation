@@ -659,6 +659,52 @@ std::string played_mod_name(const Library& library) {
     return {};
 }
 
+/// Turns an expansion on or off on the pending choice as its pill would, and
+/// returns the result without keeping it. A mod being played that the
+/// pending choice has not already unloaded passes its needs.
+///
+/// @param library the Library
+/// @param pending the pending choice
+/// @param id the expansion
+/// @param on_now the expansion is on in the pending choice
+/// @return what turning it gives
+bundles::ContentChangeResult turned_by_pill(
+    const Library& library, const PendingChoice& pending, std::string_view id, bool on_now
+) {
+    const std::vector<std::string_view> copied_ids = id_views(library.inputs.content.copied);
+    // The mod is already coming off, so a later pill does not ask again.
+    const bool playing = mod_is_played(library) && !library.content.unload_mod;
+    const std::vector<std::string_view> required_ids =
+        playing ? id_views(library.inputs.content.mod_required) : std::vector<std::string_view>{};
+    return bundles::turn_content_expansion(
+        pending.choice, id, !on_now, copied_ids, library.inputs.in_match, playing, required_ids
+    );
+}
+
+/// Tells whether a pill is locked: the command line chose the mod being
+/// played, and pressing the pill would turn off an expansion that mod needs.
+/// Closing the Library never unloads that mod, so press_expansion refuses
+/// the press. During a match and while `--content` locked the run every
+/// press is refused, and a pill that is off turns on, so none of those is
+/// locked.
+///
+/// @param library the Library
+/// @param pending the pending choice
+/// @param id an expansion of the pending base game
+/// @return true when the pill is locked
+bool locked_by_command_line(
+    const Library& library, const PendingChoice& pending, std::string_view id
+) {
+    if (!library.inputs.mod_from_command_line || library.inputs.content.locked ||
+        library.inputs.in_match)
+        return false;
+    if (!holds(pending.choice.expansions, id))
+        return false;
+    const bundles::ContentChangeResult turned = turned_by_pill(library, pending, id, true);
+    return turned.refusal == bundles::ContentRefusal::none && turned.applied &&
+           turned.mod_cleared == bundles::ModClearReason::required_expansion_off;
+}
+
 } // namespace
 
 void note_content(Library& library) {
@@ -736,6 +782,7 @@ ActiveContent active_content(const Library& library) {
     const bool pills_on = !stored.locked && !library.inputs.in_match;
     face.change_enabled = pills_on && !library.inputs.mod_from_command_line;
     int32_t on_count = 0;
+    std::vector<std::string> locked_names;
     face.pills.reserve(expansions.size());
     for (const bundles::Bundle* bundle : expansions) {
         ExpansionPill pill;
@@ -767,7 +814,16 @@ ActiveContent active_content(const Library& library) {
         pill.enabled = pills_on;
         if (!copied && !on)
             set_download_arrow(pill, library, offer, pills_on);
+        if (locked_by_command_line(library, pending, bundle->id)) {
+            pill.locked = true;
+            pill.enabled = false;
+            locked_names.push_back(bundle_name(bundle->id));
+        }
         face.pills.push_back(std::move(pill));
+    }
+    if (!locked_names.empty()) {
+        const std::string names = join_and(text, locked_names);
+        face.lock = filled(text, words::active_command_line_needs, {{"names", names}});
     }
 
     if (expansions.empty()) {
@@ -840,21 +896,14 @@ ContentPress press_expansion(Library& library, std::string_view id) {
     if (library.inputs.content.locked || library.inputs.in_match)
         return result;
 
-    const std::vector<std::string_view> copied_ids = id_views(library.inputs.content.copied);
-    // The mod is already coming off, so a later pill does not ask again.
-    const bool playing = mod_is_played(library) && !library.content.unload_mod;
-    const std::vector<std::string_view> required_ids =
-        playing ? id_views(library.inputs.content.mod_required) : std::vector<std::string_view>{};
-    const bool turning_on = !on_now;
-    const bundles::ContentChangeResult turned = bundles::turn_content_expansion(
-        pending.choice, id, turning_on, copied_ids, library.inputs.in_match, playing, required_ids
-    );
+    const bundles::ContentChangeResult turned = turned_by_pill(library, pending, id, on_now);
     if (turned.refusal != bundles::ContentRefusal::none || !turned.applied)
         return result;
 
     if (turned.mod_cleared == bundles::ModClearReason::required_expansion_off) {
         // Closing the Library does not unload the mod the command line chose,
-        // so an expansion it needs stays on, as CHANGE… stays off.
+        // so an expansion it needs stays on, as CHANGE… stays off. The pill
+        // is locked by the same rule (locked_by_command_line).
         if (library.inputs.mod_from_command_line)
             return result;
         ContentDraft& draft = library.content;

@@ -13,9 +13,8 @@ types in the bundle's `Info.plist`
 ([src/app/Info.plist.in](../../app/Info.plist.in),
 [platforms/ios/Info.plist.in](../../../platforms/ios/Info.plist.in)). On
 macOS a switch in Settings chooses whether this copy is the default opener
-of each of the four; a start never replaces a choice made in Finder. A
-launch file has no switch: it is registered whenever the game registers,
-and on macOS the bundle is its owner. iOS does nothing at run time.
+of each of the five; a start never replaces a choice made in Finder. On
+macOS the bundle owns a launch file's type. iOS does nothing at run time.
 
 `oa/platform/file_types.hpp` (namespace `oa::platform::file_types`):
 
@@ -26,9 +25,11 @@ and on macOS the bundle is its owner. iOS does nothing at run time.
   running bundle with `running_application()` instead.
 - `TypeSet` names which of the five a call acts on. Each is on unless the
   caller turns it off, so a call that passes none acts on all five; Settings
-  has a switch for each of the four it installs or adds, and leaves
-  `launch` on. `installs_any()` tells whether it holds one of those four,
-  and `complement()` is the types it does not hold.
+  has a switch for each of the five, each standing for its own type alone
+  (`oa/ui/engine_settings/file_types.hpp` turns the switches into a set and
+  into opener changes). `installs_any()` tells whether it holds one of the
+  four the game installs or adds, and `complement()` is the types it does
+  not hold.
 - `register_file_types(executable, icon_png, places, types)` registers the
   program for `types` on Windows and Linux and says what it did in a
   `Registration`: whether this system registers at run time, whether
@@ -172,7 +173,7 @@ a removed file loses it too.
 The bundle keeps the five declarations and their icons. A switch does not
 remove one. It chooses the default opener. The bundle owns the launch
 file's type (`net.coreprime.open-annihilation.oalaunch`, a kind of
-`public.plain-text`), and Settings has no switch for it; the default-opener
+`public.plain-text`), and its switch is the fifth; the default-opener
 questions answer for it as for the others (`TypeSet::launch`;
 `apply_opener_changes` hands it back to the opener of plain text). The
 bundle also takes `public.plain-text` it is handed without being its opener
@@ -181,7 +182,7 @@ bundle also takes `public.plain-text` it is handed without being its opener
 | Switch | On | Off |
 |---|---|---|
 | `.oamod`, `.oalang`, `.oamap` | this copy opens that exported type | the default opener of `public.zip-archive` |
-| `.oareg` | this copy opens that exported type | the default opener of `public.plain-text` |
+| `.oareg`, `.oalaunch` | this copy opens that exported type | the default opener of `public.plain-text` |
 
 On every macOS version both questions use
 `LSSetDefaultRoleHandlerForContentType` and
@@ -241,8 +242,10 @@ text among them.
 - Windows XP draws no PNG-compressed icon, and every entry of the
   executable's icon is one, so on XP neither the program nor one of the
   five file types shows the game's icon.
-- Settings has no switch for launch files: they stay registered while the
-  game registers anything.
+- The Windows installer registers launch files for everyone, under
+  `HKEY_LOCAL_MACHINE\Software\Classes`. A withdrawal acts under
+  `HKEY_CURRENT_USER` only, so with Settings' Launch files switch off a
+  copy the installer set up still opens them until it is uninstalled.
 - A registration only follows the copy that ran last: two copies in
   different folders take the files from each other at each start.
 - Nothing is removed when the game is removed; the installation pages say

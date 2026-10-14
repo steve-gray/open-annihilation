@@ -204,14 +204,16 @@ of range is clamped. A switch is On for any number above 0: a word such as
 | `open-annihilation.file-types.oamap` | `on` or `off`, as the mod packages' key | on: this copy opens map packs |
 | `open-annihilation.file-types.oalang` | `on` or `off`, as the mod packages' key | on: this copy opens language packs |
 | `open-annihilation.file-types.oareg` | `on` or `off`, as the mod packages' key | on: this copy opens registry files |
+| `open-annihilation.file-types.oalaunch` | `on` or `off`, as the mod packages' key | on: this copy opens launch files |
 | `open-annihilation.base-game` | `totala` or `totala-demo`; any other text reads as `totala` | `totala`, with every copied expansion of it that can be on |
 | `open-annihilation.expansions.<game>` | comma-separated expansion ids, in the built-in order; empty means none on | every copied expansion of that game that can be on |
 | `open-annihilation.content-note` | `required-expansion` when a mod was cleared because an expansion it needs went off | no note waiting |
 
-The four file-type keys are words, `on` and `off`, not the `0` and `1` of
+The five file-type keys are words, `on` and `off`, not the `0` and `1` of
 the other switches. Settings › System shows a switch for each on Windows,
 Linux and macOS, and OK registers, withdraws or changes the default opener
-of a type whose switch moved. On macOS the switch shows whether this copy
+of a type whose switch moved, that type alone. A start registers the types
+whose key is not `off` and withdraws the rest on Windows and Linux. On macOS the switch shows whether this copy
 is the default opener now, and a start does not replace a choice made in
 Finder. On iOS the page shows a text row instead of the switches, because
 there is no way to choose a default opener.

@@ -14,6 +14,7 @@
 #include "oa/app/window_icon.hpp"
 #include "oa/base/sha256.hpp"
 #include "oa/data/mod_profile.hpp"
+#include "oa/platform/file_types.hpp"
 #include "oa/ui/engine_settings.hpp"
 #include "oa/ui/engine_settings/dialog.hpp"
 
@@ -97,14 +98,11 @@ struct Runtime::EngineSettingsState {
     /// The section the dialog showed when it last closed; it opens there,
     /// and on its first section, Controls, the first time.
     oa::ui::engine_settings::Page last_page{oa::ui::engine_settings::Page::controls};
-    /// What OK last asked of the four file-type switches, on a Mac. The
-    /// hint under File Type Registration names a type this copy still opens
-    /// that was asked off, until a later opening's read-back matches this.
-    bool file_type_asked_known{};
-    bool file_type_asked_oamod{};
-    bool file_type_asked_oamap{};
-    bool file_type_asked_oalang{};
-    bool file_type_asked_oareg{};
+    /// What OK last asked of the five file-type switches, on a Mac; none
+    /// before OK asked. The hint under File Type Registration names a type
+    /// this copy still opens that was asked off, until a later opening's
+    /// read-back matches this.
+    std::optional<oa::platform::file_types::TypeSet> file_type_asked{};
     /// That hint, kept for this run. Empty once every switch matches.
     std::string file_type_kept_hint{};
     std::optional<oa::ui::engine_settings::DialogFonts> fonts; ///< loaded on first use
