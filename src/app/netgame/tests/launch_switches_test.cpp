@@ -3,13 +3,15 @@
 
 // The network play switches parsed through oa::app::command_line::parse with the
 // handler launch_switch_handler returns: each 3.1c switch of network play, the
-// battle room words -b names, what -c clears, and the notes for the log.
+// battle room words -b names, what -c clears, the notes for the log, and an
+// argument with a space in it taken whole.
 #include "oa/app/netgame/launch_switches.hpp"
 
 #include <cstdio>
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace cl = oa::app::command_line;
 namespace nl = oa::app::netgame::launch;
@@ -37,6 +39,17 @@ cl::Status parse(const char* line, Parsed& parsed) {
 Parsed parsed(const char* line, cl::Status expected = cl::Status::run) {
     Parsed result;
     require(parse(line, result) == expected, line);
+    return result;
+}
+
+/// Parses the arguments a program was started with, each one word.
+///
+/// @param words the arguments
+/// @return the engine's switches and the launch switches
+Parsed parsed_words(const std::vector<const char*>& words) {
+    Parsed result;
+    const cl::SwitchHandler handler = nl::launch_switch_handler(&result.launch);
+    require(cl::parse(words, result.engine, &handler) == cl::Status::run, "words run");
     return result;
 }
 
@@ -275,6 +288,39 @@ void hosting() {
     );
 }
 
+/// Each argument is one word: -c takes a path with a space in it whole,
+/// however it is written, and -h a game name with a space in it.
+void spaced_arguments() {
+    const char* path = "/Users/me/Launch Files/host.oalaunch";
+    for (const char* letter : {"-c", "-C", "/c", "/C"}) {
+        const std::string attached = std::string(letter) + path;
+        const auto apart = parsed_words({letter, path, "german"});
+        const auto joined = parsed_words({attached.c_str()});
+        require(
+            apart.launch.launch_seen && apart.launch.launch_path == path &&
+                std::strcmp(apart.engine.language, "german") == 0 && apart.engine.skip_intro == 1,
+            "-c takes a spaced path apart, and the next word is the language"
+        );
+        require(
+            joined.launch.launch_path == path && joined.engine.language[0] == '\0',
+            "-c takes a spaced path attached"
+        );
+    }
+    const auto named = parsed_words({"-c", path, "-h", "Friday game", "-n", "1:10.0.0.5"});
+    require(
+        named.launch.launch_path == path && named.launch.block.hosting == 1 &&
+            std::strcmp(named.launch.block.session_name, "Friday game") == 0 &&
+            named.launch.block.connection_type == 1 && named.engine.language[0] == '\0',
+        "-h after -c names a game with a space in it"
+    );
+    const auto attached_name = parsed_words({"-hMy Game"});
+    require(
+        std::strcmp(attached_name.launch.block.session_name, "My Game") == 0 &&
+            attached_name.engine.language[0] == '\0',
+        "an attached name keeps its space when it is one argument"
+    );
+}
+
 void pacing_and_debug_switches() {
     const auto pacing = parsed("-p12");
     require(pacing.launch.send_pacing_set == 1 && pacing.launch.send_pacing == 12, "pacing value");
@@ -363,6 +409,7 @@ int main() {
     intro_and_connection();
     hosting();
     launch_clears_the_record();
+    spaced_arguments();
     battle_words();
     pacing_and_debug_switches();
     registration_stops_the_scan();

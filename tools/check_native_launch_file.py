@@ -15,6 +15,9 @@ check runs beside anything else on this machine:
 - the same launch as options alone does the same;
 - -c with TA Forever's file opens the battle room on its map and rules, and
   the log names the two keys 3.1c does not read;
+- -c with either file in a folder whose name has a space, the .oalaunch file
+  apart and TA Forever's file attached to -C, does the same: each argument
+  is one word;
 - -c with a bare name in the current folder, a file that names connect,
   creator and address as 3.1c reads them, and -b after it, hosts at once with
   the values 3.1c's battle room takes;
@@ -152,6 +155,7 @@ KEYS_RULES = ("multiplayer: battle room rules: commander deathmatch, metal 2500,
               "player limit 6")
 KEYS_NOTE = "open-annihilation: keys.ini: tournament: not read, as 3.1c does not read them"
 INI_NOTE = "totala.ini: tournment, tournament: not read, as 3.1c does not read them"
+SPACED_INI_NOTE = "TA Forever.ini: tournment, tournament: not read, as 3.1c does not read them"
 
 BAD_YAML = """oalaunch: 1
 game:
@@ -429,6 +433,18 @@ def check(native, game_dir, workdir):
                 piped=YAML)
     battle_room(native, game_dir, workdir, "options-host", OPTIONS, LAUNCH_RULES, SEATS_LINE)
     battle_room(native, game_dir, workdir, "ini-host", ["-c", str(ini_path)], notes=[INI_NOTE])
+    # A path with a space in it, as a launcher's folder or a player's often
+    # has, is one argument, and -c reads it whole.
+    spaced = workdir / "G113 Launch Files"
+    spaced.mkdir()
+    spaced_launch = spaced / "host game.oalaunch"
+    spaced_launch.write_text(YAML, encoding="utf-8")
+    spaced_ini = spaced / "TA Forever.ini"
+    spaced_ini.write_text(INI, encoding="utf-8")
+    battle_room(native, game_dir, workdir, "spaced-launch-host", ["-c", str(spaced_launch)],
+                LAUNCH_RULES, SEATS_LINE)
+    battle_room(native, game_dir, workdir, "spaced-ini-host", ["-C" + str(spaced_ini)],
+                notes=[SPACED_INI_NOTE])
     # A bare name is read from the current folder, which is the scratch folder.
     (workdir / "keys.ini").write_text(KEYS_INI, encoding="utf-8")
     battle_room(native, game_dir, workdir, "keys-host", ["-c", "keys.ini", "-b", "permlos"],
@@ -454,7 +470,8 @@ def main():
             return 1
     print("launch file check: --launch, -c, a pipe and the options opened the battle room on "
           "Acid Foursome with the launch's rules and seats, -c read TA Forever's file and a "
-          "file of 3.1c's keys as 3.1c reads them, a bad file and a bad option exited 2, -r "
+          "file of 3.1c's keys as 3.1c reads them, -c and -C read both from a folder whose "
+          "name has a space, a bad file and a bad option exited 2, -r "
           "exited 0, and --list-content --json parsed beside an idle pipe")
     return 0
 

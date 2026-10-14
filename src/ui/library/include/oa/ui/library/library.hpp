@@ -375,7 +375,7 @@ struct Inputs {
     bool in_match{};                        ///< a game is being played
     /// The command line chose this run's mod (--mod-dir or --base-game):
     /// PLAY NOW and SWITCH OFF are off, a mod's details say why, and an
-    /// expansion that mod needs stays on.
+    /// expansion that mod needs stays on, its pill locked.
     bool mod_from_command_line{};
     bool can_check{}; ///< a registry is on that the refresh icon can ask for its list
     bool checking{};  ///< the registries are being asked for their lists now
@@ -1050,6 +1050,13 @@ struct ExpansionPill {
     /// Why the arrow is off, in the player's words. Empty when it takes a press
     /// or there is no arrow.
     std::string blocked{};
+    /// The command line chose the mod being played, and turning this expansion
+    /// off would unload that mod, which closing the Library never does. The
+    /// pill stays on and takes no press (`enabled` is false). The Active tab
+    /// draws it faded, as a lock, and ActiveContent::lock says why. Set only
+    /// while that is the one reason a press is refused: never during a match,
+    /// while `--content` locked the run, or on a pill that is off.
+    bool locked{};
 };
 
 /// What the Active tab shows of the base game and its expansions.
@@ -1071,6 +1078,10 @@ struct ActiveContent {
     std::vector<ExpansionPill> pills{};
     /// What an expansion needs, or that a pending change applies when the Library closes.
     std::string hint{};
+    /// Why the locked pills stay on, drawn after a padlock in the lock colour
+    /// under the pills: "The command line chose this run's mod, which needs
+    /// Campaign." It names every locked pill. Empty when none is locked.
+    std::string lock{};
     /// CHANGE… takes a press. Off during a match, while `--content` locked the
     /// run, and while the command line chose the mod.
     bool change_enabled{true};
@@ -1079,7 +1090,9 @@ struct ActiveContent {
 /// Describes the base game tile and the expansion pills.
 ///
 /// The choice is the pending draft while it has been edited, and the stored
-/// choice otherwise. The rules of turning a pill are not applied here.
+/// choice otherwise, and nothing here changes it. A pill is locked when the
+/// command line chose the mod being played and turning that pill off would
+/// unload the mod, the same rule by which press_expansion refuses it.
 ///
 /// @param library the Library
 /// @return the tile
@@ -1111,7 +1124,8 @@ struct ContentPress {
 /// result is kept on the pending draft. It is not written to the preferences.
 /// Turning one off that a playing mod needs does not change the draft: it
 /// stores the choice returned and waits for accept_expansion_off. While the
-/// command line chose that mod, the press is refused instead. An expansion
+/// command line chose that mod, the press is refused instead, and
+/// active_content marks that pill locked. An expansion
 /// that is not copied and that no registry offers is `add` and is not turned
 /// on. One a registry offers is downloaded: the ask is remembered, and the
 /// pill turns on once the copy is in the game's folder, still only on the

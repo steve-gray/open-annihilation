@@ -139,8 +139,13 @@ under them, so the maps pane keeps a row.
   with **No Mod**. The hint then names the mod and the expansion: "Ridge
   was unloaded because Campaign is off. The game plays with No Mod."
   Turning that expansion back on clears the sentence. While the command
-  line chose the mod, the Library cannot unload it, so a press that would
-  turn off an expansion it needs does nothing. When a stored note
+  line chose the mod, the Library cannot unload it, so the pill of an
+  expansion it needs is locked while it is on: it stays filled but faded,
+  pressing it does nothing, and Tab passes over it. The same goes for an
+  expansion that would take a needed one off with it, as Campaign takes
+  Core Contingency. Under the pills, beside a padlock in amber, the
+  Library says why: "The command line chose this run's mod, which needs
+  Campaign." A pill that is off still turns on. When a stored note
   says a mod was cleared for the same reason, and this tab has not edited
   the choice, the hint is "The mod was unloaded because an expansion it
   needs is off. The game plays with No Mod." The pills are greyed during
@@ -207,7 +212,8 @@ is one line. On the largest the maps stand in two columns when you have
 more than one. The tab has no catalogue search and no filters. The base,
 expansions, mod and language labels and each map's title line take no
 press, except the title of a map whose pack holds only that map: that
-title is the link to the pack. **CHANGE…**, each expansion pill (the
+title is the link to the pack. **CHANGE…**, each expansion pill but a
+locked one (the
 download arrow sits inside a pill a registry offers, and that pill is
 the press), **UNLOAD MOD**, each map's link to its pack while that link
 shows, and the maps search do take a press. Tab and the arrows reach
