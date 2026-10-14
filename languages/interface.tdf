@@ -282,6 +282,14 @@
 	it=Un driver grafico non è riuscito, quindi il gioco ne usa un altro. Puoi riprovarlo in Grafica, nelle impostazioni di OA.;
 	}
 
+[A launch is already open. Quit Open Annihilation, then open the file again.]
+	{
+	de=Eine Startdatei ist schon geöffnet. Beende Open Annihilation und öffne die Datei dann erneut.;
+	fr=Un fichier de lancement est déjà ouvert. Quitte Open Annihilation, puis ouvre de nouveau le fichier.;
+	es=Ya hay un archivo de lanzamiento abierto. Sal de Open Annihilation y vuelve a abrir el archivo.;
+	it=Un file di avvio è già aperto. Esci da Open Annihilation, poi apri di nuovo il file.;
+	}
+
 [A map in the pack does not fit the base game.]
 	{
 	de=Eine Karte im Paket passt nicht zum Grundspiel.;
@@ -4578,6 +4586,14 @@
 	it=BLOCCATO;
 	}
 
+[LAUNCH FILE NOT OPENED]
+	{
+	de=STARTDATEI NICHT GEÖFFNET;
+	fr=FICHIER DE LANCEMENT NON OUVERT;
+	es=ARCHIVO DE LANZAMIENTO NO ABIERTO;
+	it=FILE DI AVVIO NON APERTO;
+	}
+
 [LOAD]
 	{
 	de=VERLADEN;
@@ -4680,6 +4696,14 @@
 	fr=Dernière;
 	es=Más reciente;
 	it=Più recente;
+	}
+
+[Launch file not opened: finish or leave this game first.]
+	{
+	de=Startdatei nicht geöffnet: Beende oder verlasse zuerst diese Partie.;
+	fr=Fichier de lancement non ouvert : termine ou quitte d'abord cette partie.;
+	es=Archivo de lanzamiento no abierto: termina o abandona primero esta partida.;
+	it=File di avvio non aperto: finisci o abbandona prima questa partita.;
 	}
 
 [Left out]
@@ -6128,6 +6152,14 @@
 	fr=Open Annihilation ne peut peut-être plus lire {location}. Choisis le dossier à nouveau pour continuer. Ce qui a été copié est gardé.;
 	es=Puede que Open Annihilation ya no pueda leer {location}. Elige la carpeta de nuevo para seguir. Lo copiado se conserva.;
 	it=Open Annihilation potrebbe non poter più leggere {location}. Scegli di nuovo la cartella per continuare. Ciò che è stato copiato viene tenuto.;
+	}
+
+[Open Annihilation opens a launch file's battle room from the main menu. Go back to the main menu, then open the file again.]
+	{
+	de=Open Annihilation öffnet den Gefechtsraum einer Startdatei vom Hauptmenü aus. Geh zurück zum Hauptmenü und öffne die Datei dann erneut.;
+	fr=Open Annihilation ouvre la salle de bataille d'un fichier de lancement depuis le menu principal. Reviens au menu principal, puis ouvre de nouveau le fichier.;
+	es=Open Annihilation abre la sala de batalla de un archivo de lanzamiento desde el menú principal. Vuelve al menú principal y abre de nuevo el archivo.;
+	it=Open Annihilation apre la sala di battaglia di un file di avvio dal menu principale. Torna al menu principale, poi apri di nuovo il file.;
 	}
 
 [Open Annihilation plays the game from your own copy, as it does on a computer. It comes with no game data and downloads nothing: the files are copied onto this {device} once and stay here.]
@@ -9080,6 +9112,14 @@
 	fr=Ce n'est pas l'installateur de la démo;
 	es=Este no es el instalador de la demo;
 	it=Questo non è l'installer della demo;
+	}
+
+[This launch plays other content than the game plays now. Quit Open Annihilation, then open the file again.]
+	{
+	de=Diese Startdatei spielt andere Inhalte, als das Spiel gerade spielt. Beende Open Annihilation und öffne die Datei dann erneut.;
+	fr=Ce fichier de lancement utilise un autre contenu que le jeu en cours. Quitte Open Annihilation, puis ouvre de nouveau le fichier.;
+	es=Este archivo de lanzamiento usa otro contenido que el que se juega ahora. Sal de Open Annihilation y vuelve a abrir el archivo.;
+	it=Questo file di avvio usa contenuti diversi da quelli in gioco ora. Esci da Open Annihilation, poi apri di nuovo il file.;
 	}
 
 [This map is for the TA demo.]

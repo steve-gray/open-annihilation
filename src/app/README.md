@@ -3167,7 +3167,10 @@ in place, and how what a stop leaves is settled). The runtime's part:
   (`mod_install_watch.cpp`), started right after each start of SDL's video
   (the window, the folder dialog's and the runtime's own), copies each file
   the game opens into the inbox as it is queued, whatever polls the queue
-  then, and logs any other. A platform that
+  then, reads a launch file (a `.oalaunch` file, or any file whose text
+  begins `oalaunch:`, as `open -f` hands one over) into network play's
+  waiting launches (`oa/app/netgame/opened_launch.hpp`, see
+  [Network play](#network-play)), and logs any other. A platform that
   brings opened files into its own storage first does so through
   `PlatformHooks::take_opened_file`, and gets its copy back through
   `release_opened_file` once the install is done with it. On Windows and
@@ -3220,7 +3223,8 @@ in place, and how what a stop leaves is settled). The runtime's part:
   NOT ROLLED BACK, `ModInstallState::roll_back_refusal`), pushed over it at
   once, whose OK returns to it; the status line shows the same words.
 - **Registering the file type.** A start someone plays makes the game the
-  opener of `.oamod`, `.oalang`, `.oamap` and `.oareg` files for the player
+  opener of `.oamod`, `.oalang`, `.oamap` and `.oareg` files, and of
+  `.oalaunch` launch files (opened with `-c FILE`), for the player
   where the system registers at run
   time (`oa/platform/file_types.hpp`); none does with `--preferences-file`,
   `--user-folder`, `--data-dir`, unattended, headless or on SDL's dummy or
@@ -4062,6 +4066,30 @@ host or join a
 TCP/IP game at once, each screen doing what a player would
 (`multiplayer_bind_direct_game`), and print the battle room's progress;
 `--check-multiplayer-menu` runs its check of the multiplayer screens.
+A launch file the system opens in the game (`opened_launch.hpp`) is read
+as it arrives and waits for the game to take it. One that arrives before
+the runtime starts is the start's launch, exactly as `-c FILE` makes it:
+`main.cpp` pumps SDL's events once the window is up, so that the file
+macOS hands a game it starts for arrives then, and before the game folder
+is resolved puts the launch in place (`put_launch_in_place`, the public
+entry point that puts a plan in place after the command line was checked),
+adopts its content and skips the intro; the map check then runs before the
+runtime as for `-c`, and a refusal ends the start with status 2. One that
+arrives while the game runs is network play's frame's
+(`follow_opened_launches`): from the main menu, settled for two frames
+with no dialog and no multiplayer signal waiting, the launch is put in
+place, made active, the direct game bound and the main menu sent to
+multiplayer, as `-n` sends it, so the battle room opens on the file's map,
+rules and seats; the single-player menu goes back to the main menu first.
+During a match the match's message log says the file was not opened; while
+a game is being set up, on any other screen, while a launch is already
+under way, for a file the battle room cannot use, and for a launch whose
+content (mod, base game or expansions) differs from what the game plays,
+a notice says so, and nothing is put in place. In the intro, a loading
+screen or a change of screen the file waits. A late launch's status group
+has no effect. `--check-opened-launch start|menu FILE` opens FILE as the
+system would, a drop of the file, as the window first shows or once the
+main menu has settled (`native-opened-launch`).
 MULTI on the main menu asks the extensions (`select_multiplayer`), and
 network play answers by moving the frontend to its multiplayer states;
 when no extension answers, MULTI does nothing. Over game data with no

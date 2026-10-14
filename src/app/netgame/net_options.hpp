@@ -12,6 +12,7 @@
 #include "oa/netgame/frontend/multiplayer_states.hpp"
 #include "oa/app/netgame/launch_file.hpp"
 #include "oa/app/netgame/launch_switches.hpp"
+#include "oa/app/netgame/opened_launch.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/ui/screen_registry.hpp"
 
@@ -30,6 +31,13 @@ namespace oa::app {
 namespace fs = std::filesystem;
 
 constexpr std::size_t kDefaultDemoTicks = 600; // headless --play-demo without --match-ticks
+
+// When --check-opened-launch opens its file in the game, as the system opens one.
+enum class OpenedLaunchCheck : uint8_t {
+    none,  // no check
+    start, // as the window first shows, before the game's first screen
+    menu,  // once the main menu has settled
+};
 
 struct NetOptions {
     // Headless in-process host/join over loopback: networked ticks to run.
@@ -120,6 +128,10 @@ struct NetOptions {
     // A launch file check_options refused. The message is raised after the
     // hook returns, so the process exits 2. Empty when the file was accepted.
     std::string launch_refusal{};
+    // --check-opened-launch start|menu FILE: the file is opened in the game as
+    // the system opens one (a drop of the file on the game), at that moment.
+    OpenedLaunchCheck opened_launch_check = OpenedLaunchCheck::none;
+    std::string opened_launch_check_file{};
 };
 
 // A recording the engine handed network play to replay
@@ -241,9 +253,26 @@ void raise_launch_refusal();
 /// The mod's folder is resolved later, once the game folder is known. A unit
 /// test that parses a local context leaves the process's context alone, so
 /// this reads the process's context: the game's own extension uses that one.
+/// A base game or expansion the launch names that the game does not know is
+/// refused with LaunchRefusal, naming the file and the field.
 ///
 /// @param[in,out] options the parsed command line
 void adopt_launch_run(Options& options);
+
+/// Puts a launch in place once the command line was checked, as check_options puts a -c file in place.
+///
+/// The plan goes into the launch block and the game to host or join
+/// (apply_launch_plan, which keeps the fields the command line named), and
+/// a launch that hosts or joins has the multiplayer screens take TCP/IP at
+/// once, as check_options does. A launch file the system
+/// opened the game with is put in place this way before the runtime starts,
+/// and one opened while the game runs before the game goes to its battle
+/// room. A refusal puts nothing in place: the context is as it was.
+///
+/// @param[in,out] netgame the context the launch goes into
+/// @param plan the launch, as read_opened_launch_plan reads it
+/// @throws LaunchRefusal a field the battle room cannot use
+void put_launch_in_place(NetgameContext& netgame, netgame::LaunchPlan plan);
 
 /// Binds the multiplayer frontend states' answers about joining and leaving a session to the dispatcher (query_register).
 ///

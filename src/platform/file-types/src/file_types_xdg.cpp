@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// The XDG registration: the MIME package, the desktop entry and the icons in the user's data
-// folder, and the database tools run after a change, without a shell, and at later starts
-// until a run succeeds.
+// The XDG registration: the MIME package, the two desktop entries (the files the game
+// installs or adds, and launch files) and the icons in the user's data folder, and the
+// database tools run after a change, without a shell, and at later starts until a run
+// succeeds.
 
 #include "oa/platform/file_types.hpp"
 
@@ -595,7 +596,8 @@ struct DataPlaces {
     fs::path applications_folder{};
     fs::path hicolor_folder{};
     fs::path package_file{};
-    fs::path entry_file{};
+    fs::path entry_file{};        ///< the desktop entry of the four the game installs or adds
+    fs::path launch_entry_file{}; ///< the desktop entry of launch files
     fs::path mime_stamp{};
     fs::path applications_stamp{};
     fs::path icon_stamp{};
@@ -618,6 +620,8 @@ DataPlaces data_places(const fs::path& data) {
     named.icon_stamp = named.hicolor_folder / stamp_name;
     named.package_file = named.mime_folder / "packages" / (named.name + ".xml");
     named.entry_file = named.applications_folder / (named.name + ".desktop");
+    named.launch_entry_file =
+        named.applications_folder / (std::string(launch_desktop_id) + ".desktop");
     return named;
 }
 
@@ -716,14 +720,7 @@ Registration register_in(
         return done;
     }
     // A path a desktop entry cannot hold registers nothing, and removes nothing.
-    if (desktop_entry(executable, types).empty() && !types.none()) {
-        done.lines.push_back(
-            "skipped: the program's path holds a control character or is not "
-            "UTF-8, which a desktop entry cannot hold"
-        );
-        return done;
-    }
-    if (types.none() && desktop_exec_argument(detail::utf8_of(executable)).empty()) {
+    if (desktop_exec_argument(detail::utf8_of(executable)).empty()) {
         done.lines.push_back(
             "skipped: the program's path holds a control character or is not "
             "UTF-8, which a desktop entry cannot hold"
@@ -737,7 +734,6 @@ Registration register_in(
         return done;
     }
     const DataPlaces named = data_places(*data);
-    const std::string entry = types.none() ? std::string{} : desktop_entry(executable, types);
 
     // The icons first, so that the desktop entry finds its icon once it is read: the
     // program's, and one for each file type that stays on. A type left out loses its icon.
@@ -770,40 +766,45 @@ Registration register_in(
     if (removed_icons == Written::written)
         icon_changed = true;
 
-    Written package = Written::same;
-    Written desktop = Written::same;
-    if (types.none()) {
-        package = remove_if_present(named.package_file, named.mime_stamp, why, done);
-        if (package == Written::failed) {
-            done.error = why;
-            return done;
-        }
-        desktop = remove_if_present(named.entry_file, named.applications_stamp, why, done);
-        if (desktop == Written::failed) {
-            done.error = why;
-            return done;
-        }
-    } else {
-        package = write_if_different(
-            named.package_file, bytes_of(mime_package(types)), named.mime_stamp, why
-        );
-        if (package == Written::failed) {
-            done.error = why;
-            return done;
-        }
-        if (package == Written::written)
-            done.lines.push_back("wrote " + detail::utf8_of(named.package_file));
-        desktop =
-            write_if_different(named.entry_file, bytes_of(entry), named.applications_stamp, why);
-        if (desktop == Written::failed) {
-            done.error = why;
-            return done;
-        }
-        if (desktop == Written::written)
-            done.lines.push_back("wrote " + detail::utf8_of(named.entry_file));
+    // Each file is written while it lists a type, and removed once it would list none: the
+    // MIME package with none of the five, the entry of the four with none of them, and the
+    // launch file's entry without it.
+    const auto keep = [&](const fs::path& file, const std::string& text, const fs::path& stamp) {
+        if (text.empty())
+            return remove_if_present(file, stamp, why, done);
+        const Written written = write_if_different(file, bytes_of(text), stamp, why);
+        if (written == Written::written)
+            done.lines.push_back("wrote " + detail::utf8_of(file));
+        return written;
+    };
+    const Written package = keep(
+        named.package_file, types.none() ? std::string{} : mime_package(types), named.mime_stamp
+    );
+    if (package == Written::failed) {
+        done.error = why;
+        return done;
+    }
+    const Written desktop = keep(
+        named.entry_file,
+        types.installs_any() ? desktop_entry(executable, types) : std::string{},
+        named.applications_stamp
+    );
+    if (desktop == Written::failed) {
+        done.error = why;
+        return done;
+    }
+    const Written launch_desktop = keep(
+        named.launch_entry_file,
+        types.launch ? launch_desktop_entry(executable) : std::string{},
+        named.applications_stamp
+    );
+    if (launch_desktop == Written::failed) {
+        done.error = why;
+        return done;
     }
 
-    done.changed = icon_changed || package == Written::written || desktop == Written::written;
+    done.changed = icon_changed || package == Written::written || desktop == Written::written ||
+                   launch_desktop == Written::written;
     // Each tool runs after a change to the files it reads, and at each later start until a
     // run succeeds and leaves its stamp.
     run_due_tools(named, !icon_png.empty() || icon_changed, places, done);
@@ -839,28 +840,35 @@ Registration withdraw_in(TypeSet types, const Places& places) {
     }
     bool icons_changed = removed_icons == Written::written;
 
-    const TextFile entry_read = read_text(named.entry_file, why);
-    if (entry_read.state == Read::failed) {
-        done.error = why;
-        return done;
-    }
-    Written desktop = Written::same;
-    if (entry_read.state == Read::read) {
+    // Each desktop entry loses the types withdrawn, and goes once it lists none.
+    const auto withdraw_entry = [&](const fs::path& file) {
+        const TextFile entry_read = read_text(file, why);
+        if (entry_read.state == Read::failed)
+            return Written::failed;
+        if (entry_read.state != Read::read)
+            return Written::same;
         bool emptied = false;
         const std::pair<std::string, bool> revised =
             desktop_without(entry_read.text, types, emptied);
         if (emptied)
-            desktop = remove_if_present(named.entry_file, named.applications_stamp, why, done);
-        else if (revised.second)
-            desktop = write_if_different(
-                named.entry_file, bytes_of(revised.first), named.applications_stamp, why
-            );
-        if (desktop == Written::failed) {
-            done.error = why;
-            return done;
-        }
-        if (desktop == Written::written && !emptied)
-            done.lines.push_back("wrote " + detail::utf8_of(named.entry_file));
+            return remove_if_present(file, named.applications_stamp, why, done);
+        if (!revised.second)
+            return Written::same;
+        const Written written =
+            write_if_different(file, bytes_of(revised.first), named.applications_stamp, why);
+        if (written == Written::written)
+            done.lines.push_back("wrote " + detail::utf8_of(file));
+        return written;
+    };
+    const Written desktop = withdraw_entry(named.entry_file);
+    if (desktop == Written::failed) {
+        done.error = why;
+        return done;
+    }
+    const Written launch_desktop = withdraw_entry(named.launch_entry_file);
+    if (launch_desktop == Written::failed) {
+        done.error = why;
+        return done;
     }
 
     const TextFile package_read = read_text(named.package_file, why);
@@ -886,7 +894,8 @@ Registration withdraw_in(TypeSet types, const Places& places) {
             done.lines.push_back("wrote " + detail::utf8_of(named.package_file));
     }
 
-    done.changed = icons_changed || desktop == Written::written || package == Written::written;
+    done.changed = icons_changed || desktop == Written::written ||
+                   launch_desktop == Written::written || package == Written::written;
     run_due_tools(named, icons_changed, places, done);
     return done;
 }

@@ -374,7 +374,8 @@ struct Inputs {
     bool offline{};                         ///< the last fetch could not reach a registry
     bool in_match{};                        ///< a game is being played
     /// The command line chose this run's mod (--mod-dir or --base-game):
-    /// PLAY NOW and SWITCH OFF are off, and a mod's details say why.
+    /// PLAY NOW and SWITCH OFF are off, a mod's details say why, and an
+    /// expansion that mod needs stays on.
     bool mod_from_command_line{};
     bool can_check{}; ///< a registry is on that the refresh icon can ask for its list
     bool checking{};  ///< the registries are being asked for their lists now
@@ -587,11 +588,14 @@ enum class PendingClear : uint8_t {
 
 /// The choice the Active tab is holding until the Library closes.
 ///
-/// `edited` is set when the pills or the base game chooser have changed the
-/// stored choice. `asking` is set while the player is being asked before a
-/// mod is unloaded. Nothing here writes a preference or remounts the files:
+/// `edited` is set when the pills, the base game chooser or the question
+/// before a mod is unloaded have left something for the close to store.
+/// `asking` is set while the player is being asked before a mod is unloaded. Nothing here writes a preference or remounts the files:
 /// the host reads this when the Library closes, and only then.
 struct ContentDraft {
+    /// Closing the Library has something to store: another base game, other
+    /// expansions, or a mod to unload. The host stores only an edited draft,
+    /// so a draft that is not edited shows the stored choice and the mod played.
     bool edited{};
     /// The base game the pending choice names. Empty until a pill or the
     /// chooser edits it, and then the stored base game.
@@ -619,7 +623,8 @@ struct ContentDraft {
     /// The mod tile shows No Mod. The mod stays mounted until the Library closes.
     /// Choosing another base game and a required expansion going off are the
     /// two reasons, and `clear_reason` says which. The host clears the
-    /// remembered mod for either when the Library closes.
+    /// remembered mod for either when the Library closes. Choosing the stored
+    /// base game again drops an unload for another base game.
     bool unload_mod{};
     /// Why `unload_mod` is set.
     PendingClear clear_reason{PendingClear::none};
@@ -1105,7 +1110,8 @@ struct ContentPress {
 /// A copied expansion is turned on or off by turn_content_expansion, and the
 /// result is kept on the pending draft. It is not written to the preferences.
 /// Turning one off that a playing mod needs does not change the draft: it
-/// stores the choice returned and waits for accept_expansion_off. An expansion
+/// stores the choice returned and waits for accept_expansion_off. While the
+/// command line chose that mod, the press is refused instead. An expansion
 /// that is not copied and that no registry offers is `add` and is not turned
 /// on. One a registry offers is downloaded: the ask is remembered, and the
 /// pill turns on once the copy is in the game's folder, still only on the
@@ -1178,8 +1184,10 @@ void note_base_copy_problem(Library& library, std::string_view problem);
 /// A game that is not copied is `needs_source` and the chooser stays open.
 /// A copied game is given to choose_content_base_game and kept on the pending
 /// draft: every copied expansion of it is on, and a mod being played is
-/// marked unloaded. The same game as the pending choice only closes the
-/// chooser. Nothing is written to the preferences, and nothing is remounted.
+/// marked unloaded. The stored base game, chosen again after another, drops
+/// that unload, so the mod played with it plays again. The same game as the
+/// pending choice only closes the chooser. Nothing is written to the
+/// preferences, and nothing is remounted.
 ///
 /// @param[in,out] library the Library
 /// @return what the press did
