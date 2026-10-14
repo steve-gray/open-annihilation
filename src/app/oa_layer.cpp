@@ -7,9 +7,10 @@
 // frames, the settings dialog as one of its screens (Runtime::SettingsScreen),
 // on the main menu and in a match, the screens of a notice and a question
 // (NoticeScreen, QuestionScreen), and the UI kit gallery over the whole
-// window (GalleryScreen). On the front end the screens are
-// laid out at the size class of the window's canvas and drawn at its scale
-// in the window's own pixels: crisp at a whole scale, smooth at 150%.
+// window (GalleryScreen). On the front end the screens are laid out from the
+// window's size in points and drawn at its pixel density, in the window's own
+// pixels: crisp at a whole scale, smooth at 150%. A 2× window shows the same
+// arrangement as that window at one pixel per point, with sharper edges.
 
 #include "oa_layer.hpp"
 
@@ -19,7 +20,9 @@
 
 #include "oa/app/automation_host.hpp"
 #include "oa/app/frame_coordinates.hpp"
+#include "oa/app/render_policy.hpp"
 #include "oa/app/runtime.hpp"
+#include "oa/app/window_surface.hpp"
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/platform/log_files.hpp"
 #include "oa/platform/system.hpp"
@@ -432,41 +435,61 @@ struct WindowPlace {
 /// @param match a match shows
 /// @param surface_width the front end's picture's width, without a logical presentation
 /// @param surface_height its height
+/// @param scaling how Menu scaling holds the picture, used when no logical
+///     presentation is set
 /// @return the placement
-WindowPlace
-window_place(SDL_Renderer* renderer, bool match, int32_t surface_width, int32_t surface_height) {
+WindowPlace window_place(
+    SDL_Renderer* renderer,
+    bool match,
+    int32_t surface_width,
+    int32_t surface_height,
+    render_policy::MenuScaling scaling
+) {
     WindowPlace place{};
     place.renderer = renderer;
     if (renderer == nullptr)
         return place;
-    if (SDL_Window* window = SDL_GetRenderWindow(renderer)) {
+    SDL_Window* window = SDL_GetRenderWindow(renderer);
+    if (window != nullptr) {
         const float density = SDL_GetWindowPixelDensity(window);
         if (density > 0.0F)
             place.density = density;
     }
-    SDL_FRect area{};
-    int output_width = 0;
-    int output_height = 0;
-    if (match || !SDL_GetRenderLogicalPresentationRect(renderer, &area) || !(area.w > 0.0F) ||
-        !(area.h > 0.0F) || !SDL_GetRenderOutputSize(renderer, &output_width, &output_height))
+    if (match)
         return place;
-    // The picture's own size, which the logical presentation scales into area.
-    int picture_width = 0;
-    int picture_height = 0;
+    int frame_w = surface_width;
+    int frame_h = surface_height;
+    int logical_w = 0;
+    int logical_h = 0;
     SDL_RendererLogicalPresentation mode = SDL_LOGICAL_PRESENTATION_DISABLED;
-    if (!SDL_GetRenderLogicalPresentation(renderer, &picture_width, &picture_height, &mode) ||
-        mode == SDL_LOGICAL_PRESENTATION_DISABLED || picture_width <= 0 || picture_height <= 0) {
-        picture_width = surface_width;
-        picture_height = surface_height;
+    if (SDL_GetRenderLogicalPresentation(renderer, &logical_w, &logical_h, &mode) &&
+        mode != SDL_LOGICAL_PRESENTATION_DISABLED && logical_w > 0 && logical_h > 0) {
+        frame_w = logical_w;
+        frame_h = logical_h;
     }
-    if (picture_width <= 0 || picture_height <= 0)
+    if (frame_w <= 0 || frame_h <= 0)
+        return place;
+    const WindowSurface surface = window_surface(window, renderer);
+    const int pixel_w = surface.pixel_width > 0 ? surface.pixel_width : 0;
+    const int pixel_h = surface.pixel_height > 0 ? surface.pixel_height : 0;
+    if (pixel_w <= 0 || pixel_h <= 0)
+        return place;
+    // The mode SDL is presenting with, so a whole-steps picture is not read
+    // back as a letterbox. With none set, Menu scaling decides.
+    const bool whole_steps =
+        mode == SDL_LOGICAL_PRESENTATION_INTEGER_SCALE ||
+        (mode == SDL_LOGICAL_PRESENTATION_DISABLED &&
+         render_policy::frame_fit(scaling, pixel_w, pixel_h, frame_w, frame_h) ==
+             render_policy::FrameFit::whole_steps);
+    const PlacedFrame placed = place_frame(window, renderer, frame_w, frame_h, whole_steps);
+    if (!(placed.drawn.w > 0.0F) || !(placed.drawn.h > 0.0F))
         return place;
     place.front_end = true;
-    place.picture = area;
-    place.scale_x = static_cast<double>(area.w) / picture_width;
-    place.scale_y = static_cast<double>(area.h) / picture_height;
-    place.output_width = output_width;
-    place.output_height = output_height;
+    place.picture = placed.drawn;
+    place.scale_x = static_cast<double>(placed.drawn.w) / static_cast<double>(frame_w);
+    place.scale_y = static_cast<double>(placed.drawn.h) / static_cast<double>(frame_h);
+    place.output_width = pixel_w;
+    place.output_height = pixel_h;
     return place;
 }
 
@@ -1770,52 +1793,52 @@ LayerView OaLayer::view() const {
     viewport.height = picture_height;
     SDL_Renderer* sdl_renderer = runtime_.sdl_.renderer;
     SDL_Window* window = runtime_.sdl_.window;
-    int output_width = 0;
-    int output_height = 0;
-    if (sdl_renderer != nullptr &&
-        SDL_GetRenderOutputSize(sdl_renderer, &output_width, &output_height) && output_width > 0 &&
-        output_height > 0) {
-        // The canvas in pixels and the window points it holds, as the Game
-        // files screen fills its viewport.
-        viewport.width = output_width;
-        viewport.height = output_height;
-        int window_width = 0;
-        int window_height = 0;
-        if (window != nullptr && SDL_GetWindowSize(window, &window_width, &window_height) &&
-            window_width > 0)
-            viewport.density = static_cast<float>(output_width) / static_cast<float>(window_width);
-        // The window's safe area, kept clear while the game has touch controls.
-        SDL_Rect safe{};
-        if (window != nullptr && runtime_.touch_controls_active() &&
-            SDL_GetWindowSafeArea(window, &safe) && safe.w > 0 && safe.h > 0) {
-            const auto pixels = [&viewport](int points) {
-                return static_cast<int32_t>(
-                    std::lround(static_cast<float>(points) * viewport.density)
-                );
-            };
-            viewport.safe = {
-                pixels(safe.x),
-                pixels(safe.y),
-                pixels(window_width - safe.x - safe.w),
-                pixels(window_height - safe.y - safe.h)
-            };
-        }
-        // Where the picture is drawn, from the whole pixel SDL starts it at.
+    if (sdl_renderer != nullptr && window != nullptr) {
+        int frame_w = picture_width;
+        int frame_h = picture_height;
         int logical_width = 0;
         int logical_height = 0;
         SDL_RendererLogicalPresentation mode = SDL_LOGICAL_PRESENTATION_DISABLED;
-        SDL_FRect reckoned{};
         if (SDL_GetRenderLogicalPresentation(
                 sdl_renderer, &logical_width, &logical_height, &mode
             ) &&
-            mode != SDL_LOGICAL_PRESENTATION_DISABLED && logical_width > 0 && logical_height > 0 &&
-            SDL_GetRenderLogicalPresentationRect(sdl_renderer, &reckoned) && reckoned.w > 0.0F &&
-            reckoned.h > 0.0F) {
-            const SDL_Rect drawn = drawn_frame_rect(reckoned);
-            seen.picture = {drawn.x, drawn.y, drawn.w, drawn.h};
-            seen.picture_size = {logical_width, logical_height};
-        } else {
-            seen.picture = {0, 0, output_width, output_height};
+            mode != SDL_LOGICAL_PRESENTATION_DISABLED && logical_width > 0 && logical_height > 0) {
+            frame_w = logical_width;
+            frame_h = logical_height;
+        }
+        const WindowSurface surface = window_surface(window, sdl_renderer);
+        if (surface.pixel_width > 0 && surface.pixel_height > 0 && surface.points_width > 0) {
+            // The canvas in pixels, and the points a pixel's density lays out
+            // at. A 2× surface of a 1000×628 point window is that window.
+            viewport.width = surface.pixel_width;
+            viewport.height = surface.pixel_height;
+            viewport.density = surface.density;
+            SDL_Rect safe{};
+            if (runtime_.touch_controls_active() && SDL_GetWindowSafeArea(window, &safe) &&
+                safe.w > 0 && safe.h > 0) {
+                viewport.safe = {
+                    surface_canvas_pixels(surface, safe.x, true),
+                    surface_canvas_pixels(surface, safe.y, false),
+                    surface_canvas_pixels(surface, surface.sdl_width - safe.x - safe.w, true),
+                    surface_canvas_pixels(surface, surface.sdl_height - safe.y - safe.h, false)
+                };
+            }
+            const bool whole_steps = mode == SDL_LOGICAL_PRESENTATION_INTEGER_SCALE ||
+                                     (mode == SDL_LOGICAL_PRESENTATION_DISABLED &&
+                                      render_policy::frame_fit(
+                                          runtime_.menu_scaling(),
+                                          surface.pixel_width,
+                                          surface.pixel_height,
+                                          frame_w,
+                                          frame_h
+                                      ) == render_policy::FrameFit::whole_steps);
+            const PlacedFrame placed =
+                place_frame(window, sdl_renderer, frame_w, frame_h, whole_steps);
+            if (placed.drawn.w > 0.0F && placed.drawn.h > 0.0F) {
+                const SDL_Rect drawn = drawn_frame_rect(placed.drawn);
+                seen.picture = {drawn.x, drawn.y, drawn.w, drawn.h};
+                seen.picture_size = {frame_w, frame_h};
+            }
         }
     }
     seen.room = {
@@ -3575,7 +3598,8 @@ OaLayer::MenuButtonWindows OaLayer::menu_button_windows() const {
         runtime_.sdl_.renderer,
         seen.match,
         static_cast<int32_t>(runtime_.surface_.width),
-        static_cast<int32_t>(runtime_.surface_.height)
+        static_cast<int32_t>(runtime_.surface_.height),
+        runtime_.menu_scaling()
     );
     const auto window_of = [&](const artless::SourceRect& at) {
         return window_rect_of(
@@ -3599,7 +3623,8 @@ void OaLayer::automation_controls(std::vector<AutomationControl>& controls) cons
         runtime_.sdl_.renderer,
         seen.match,
         static_cast<int32_t>(runtime_.surface_.width),
-        static_cast<int32_t>(runtime_.surface_.height)
+        static_cast<int32_t>(runtime_.surface_.height),
+        runtime_.menu_scaling()
     );
     // A button of the main menu's picture or the in-game menu's column, with
     // no dialog. Under a modal screen it takes no press.

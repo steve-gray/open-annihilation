@@ -96,4 +96,17 @@ if(BUILD_TESTING)
   oa_add_game_data_test(ui-engine-settings-pixels-data oa-ui-engine-settings-pixels-test
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/pixels.txt --data)
   set_tests_properties(ui-engine-settings-pixels ui-engine-settings-pixels-data PROPERTIES TIMEOUT 60)
+
+  # The manual's pictures: each section alone, unlocked, Compact at 2x.
+  # The test writes them into a scratch folder; run the program with
+  # docs/images/settings to refresh the manual.
+  add_executable(oa-ui-engine-settings-pictures tests/pictures.cpp)
+  target_link_libraries(oa-ui-engine-settings-pictures PRIVATE oa-ui-engine-settings
+    oa-formats-png oa-formats-hpi oa-platform-text-font oa-test-game-data)
+  # The header draws the app icon from the source tree's branding folder.
+  target_compile_definitions(oa-ui-engine-settings-pictures PRIVATE
+    OA_BRANDING_DIR="${PROJECT_SOURCE_DIR}/branding")
+  oa_add_game_data_test(ui-engine-settings-pictures oa-ui-engine-settings-pictures
+    "${CMAKE_CURRENT_BINARY_DIR}/G95-settings-pictures")
+  set_tests_properties(ui-engine-settings-pictures PROPERTIES TIMEOUT 60)
 endif()

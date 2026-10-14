@@ -541,7 +541,14 @@ void draw_frame(SDL_Renderer* renderer, SDL_Texture* texture, SDL_ScaleMode mode
 /// @param renderer the renderer the frame was made on
 /// @param frame the frame, whose scale mode is NEAREST
 /// @param mode the scale mode
-void draw_frame(SDL_Renderer* renderer, TiledTexture& frame, SDL_ScaleMode mode);
+/// @param destination where the frame is drawn, in window pixels; null draws it
+///     through the logical presentation, over the whole output
+void draw_frame(
+    SDL_Renderer* renderer,
+    TiledTexture& frame,
+    SDL_ScaleMode mode,
+    const SDL_FRect* destination = nullptr
+);
 
 /// Probes whether the renderer's pixel-art scale mode works: a 2x1 black
 /// and white texture drawn at 2.5 times into a 5x1 target must read back
