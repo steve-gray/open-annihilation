@@ -2585,7 +2585,9 @@ struct Runtime::LibraryScreen final : LayerScreen {
                     turn_off = index;
             }
             QuestionScreen::Host answers;
-            // The host outlives the question: it is the runtime's Library.
+            // The host outlives the question: it is the runtime's Library. The
+            // question can tick once more after this screen has gone, so it
+            // holds the runtime, not the screen.
             answers.answer = [&host, turn_off](int32_t button) {
                 if (button == turn_off)
                     library::accept_expansion_off(host.model);
@@ -2594,7 +2596,22 @@ struct Runtime::LibraryScreen final : LayerScreen {
                 ++host.model_revision;
                 return true;
             };
-            answers.tick = [this] { return runtime_.screen_ != Screen::main_menu; };
+            // The question goes with the main menu, as the Library does. A
+            // catalogue or a picture that arrives keeps it on the draft, and a
+            // different stored choice drops it there: then it closes, since
+            // its answer would change nothing.
+            answers.tick = [&runtime = runtime_, &host] {
+                return runtime.screen_ != Screen::main_menu || !host.model.content.asking;
+            };
+            // A question that leaves unanswered, as when the main menu goes or
+            // the Library is opened again over it, leaves the draft as CANCEL
+            // does, so the pills and CHANGE… take presses again.
+            answers.closed = [&host](const QuestionScreen&) {
+                if (!host.model.content.asking)
+                    return;
+                library::cancel_expansion_off(host.model);
+                ++host.model_revision;
+            };
             OaLayer& layer = runtime_.oa_layer();
             layer.push(
                 std::make_unique<QuestionScreen>(

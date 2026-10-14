@@ -55,7 +55,10 @@ translator finds them together. Every word passes through `Library::text`
   open base game chooser stays open on the game it marks while the stored
   base game and expansions are the same, its rows read again from the new
   inputs, so a catalogue or a picture that arrives while the player
-  chooses does not close it; a different stored choice closes it. When
+  chooses does not close it; a different stored choice closes it. The
+  question asked before an expansion a playing mod needs goes off waits
+  for its answer the same way, so its TURN OFF still turns the expansion
+  off; a different stored choice drops it, and the host closes it. When
   the selected entry no longer shows, the first visible entry is selected
   and the details close. An update the installed copy has already reached,
   or a finished queue item whose catalogue release is above 0 and at least
@@ -608,7 +611,10 @@ the Active tab's mod, language and maps in each case, ordered by folded
 title and then pack, with the From link when the pack holds several maps and the minimap when one is set;
 the order with
 no search; the update count; the selection across refreshes and browsing;
-the buttons of every state, SWITCH OFF on the mod played and PLAY NOW and
+the base game chooser, the expansion-off question and its answer, and TURN
+ON kept through a refresh that brings the same stored choice, and the
+chooser and the question dropped by another; the buttons of every state,
+SWITCH OFF on the mod played and PLAY NOW and
 SWITCH OFF off while the command line chose the mod, its note, and when
 the refresh icon can be pressed; the summary, the manifest's description standing
 in for a listing's for a mod of the player's own, and "No oamod.yaml

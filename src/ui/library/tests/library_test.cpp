@@ -3050,6 +3050,92 @@ void test_base_chooser_through_refresh() {
     OA_CHECK(stored.chooser.rows.empty());
 }
 
+/// A catalogue or a picture that arrives while the expansion-off question
+/// shows keeps the question, so TURN OFF still turns the expansion off and
+/// CANCEL still leaves it on. The answer is kept through the next refresh. A
+/// different stored choice drops the question.
+void test_expansion_off_question_through_refresh() {
+    lib::Inputs inputs;
+    inputs.registries = fixture_registries();
+    inputs.content.base_id = "totala";
+    inputs.content.copied = {"campaign", "core-contingency"};
+    inputs.content.enabled = {"campaign", "core-contingency"};
+    inputs.content.mod_required = {"campaign"};
+    lib::Installed ridge;
+    ridge.kind = Kind::mod;
+    ridge.key = "ridge";
+    ridge.folder = "ridge";
+    ridge.name = "Ridge";
+    ridge.playing = true;
+    inputs.installed.push_back(ridge);
+    lib::Library library;
+    lib::refresh(library, inputs);
+    OA_CHECK(lib::press_expansion(library, "campaign").kind == lib::ContentPressKind::ask);
+    const oa::ui::kit::Question asked = lib::expansion_off_question(library);
+
+    // The catalogue the Library asked for as it opened, and the base game's
+    // picture, arrive while the question shows. The stored choice is the same.
+    lib::Inputs arrived = inputs;
+    arrived.listings.push_back(listing(core, Kind::mod, "ridge", "Ridge"));
+    arrived.base_game_badge = lib::Badge{std::vector<uint8_t>(1 * 1 * 4, 9), 1, 1};
+    lib::refresh(library, arrived);
+    OA_CHECK(library.content.asking);
+    OA_CHECK(library.content.ask_id == "campaign");
+    OA_CHECK(!holds_id(library.content.proposed, "campaign"));
+    OA_CHECK(holds_id(library.content.turned_off, "core-contingency"));
+    OA_CHECK(!library.content.edited);
+    const oa::ui::kit::Question still = lib::expansion_off_question(library);
+    OA_CHECK_TEXT(still.title, asked.title);
+    OA_CHECK(still.paragraphs.size() == asked.paragraphs.size());
+    // The pills and CHANGE… still wait for the answer.
+    OA_CHECK(lib::press_expansion(library, "core-contingency").kind == lib::ContentPressKind::none);
+    OA_CHECK(!lib::open_base_chooser(library).opened);
+
+    // TURN OFF turns Campaign off, Core Contingency with it, and unloads Ridge.
+    lib::accept_expansion_off(library);
+    OA_CHECK(!library.content.asking);
+    OA_CHECK(library.content.edited);
+    OA_CHECK(!holds_id(library.content.expansions, "campaign"));
+    OA_CHECK(!holds_id(library.content.expansions, "core-contingency"));
+    OA_CHECK(library.content.unload_mod);
+    OA_CHECK(library.content.clear_reason == lib::PendingClear::required_expansion_off);
+
+    // The answer is kept through the next refresh.
+    lib::refresh(library, arrived);
+    OA_CHECK(library.content.edited);
+    OA_CHECK(!holds_id(library.content.expansions, "campaign"));
+    OA_CHECK(library.content.unload_mod);
+    OA_CHECK_TEXT(
+        lib::active_content(library).hint,
+        "Ridge was unloaded because Campaign is off. The game plays with No Mod."
+    );
+    OA_CHECK_TEXT(lib::active_setup(library).mod_line, "No Mod");
+
+    // CANCEL after a refresh leaves Campaign on, and the pill asks again.
+    lib::Library kept_on;
+    lib::refresh(kept_on, inputs);
+    OA_CHECK(lib::press_expansion(kept_on, "campaign").kind == lib::ContentPressKind::ask);
+    lib::refresh(kept_on, arrived);
+    OA_CHECK(kept_on.content.asking);
+    lib::cancel_expansion_off(kept_on);
+    OA_CHECK(!kept_on.content.asking && !kept_on.content.edited);
+    OA_CHECK(!kept_on.content.unload_mod);
+    OA_CHECK(lib::press_expansion(kept_on, "campaign").kind == lib::ContentPressKind::ask);
+
+    // A different stored choice drops the question, as it drops an edit, and
+    // TURN OFF then changes nothing.
+    lib::Library dropped;
+    lib::refresh(dropped, inputs);
+    OA_CHECK(lib::press_expansion(dropped, "campaign").kind == lib::ContentPressKind::ask);
+    lib::Inputs switched = arrived;
+    switched.content.enabled = {"campaign"};
+    lib::refresh(dropped, std::move(switched));
+    OA_CHECK(!dropped.content.asking);
+    OA_CHECK(dropped.content.ask_id.empty() && dropped.content.proposed.empty());
+    lib::accept_expansion_off(dropped);
+    OA_CHECK(!dropped.content.edited && !dropped.content.unload_mod);
+}
+
 /// Returns a button of an action, or null.
 ///
 /// @param buttons the buttons
@@ -3129,6 +3215,19 @@ void test_package_needs() {
     const lib::ActionButton* play_after = button_of(after, Action::play_now);
     OA_CHECK(play_after != nullptr && play_after->enabled);
     OA_CHECK_TEXT(lib::content_lines(library, *entry).row, "Needs Battle Tactics · on");
+    // A picture that arrives after TURN ON keeps it on the draft: the row
+    // still reads on, and PLAY NOW stays on.
+    lib::Inputs pictured = library.inputs;
+    pictured.base_game_badge = lib::Badge{std::vector<uint8_t>(1 * 1 * 4, 9), 1, 1};
+    lib::refresh(library, std::move(pictured));
+    const lib::Entry* turned = at(library, core, Kind::mod, "ridge");
+    OA_CHECK(turned != nullptr);
+    if (turned != nullptr) {
+        OA_CHECK_TEXT(lib::content_lines(library, *turned).row, "Needs Battle Tactics · on");
+        const std::vector<lib::ActionButton> kept = lib::entry_actions(library, *turned);
+        const lib::ActionButton* play_kept = button_of(kept, Action::play_now);
+        OA_CHECK(play_kept != nullptr && play_kept->enabled);
+    }
 
     // Battle Tactics pulls Campaign on with it, and not Core Contingency.
     lib::Inputs waiting = base_inputs();
@@ -3515,6 +3614,7 @@ int main() {
     test_expansion_download();
     test_base_chooser();
     test_base_chooser_through_refresh();
+    test_expansion_off_question_through_refresh();
     test_base_game_after_required_off();
     test_check_now();
     test_built_in_languages();
