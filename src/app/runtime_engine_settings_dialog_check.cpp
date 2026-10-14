@@ -9,7 +9,8 @@
 // effect for the next frame drawn, the zoom's limits stepped by the keys on
 // their drop-downs, View past the map's edge's 25% in effect at once,
 // Window edge's strip and Edge stickiness's slider, locked but for Sticky,
-// in effect at once and fitting the 640x480 dialog in English and German, OK,
+// in effect at once and fitting the 640x480 dialog in English and German,
+// System's five file-type switches fitting it too, OK,
 // Cancel and Restore defaults and the preferences they leave, Developer
 // Mode's overrides in effect and kept), and the main menu
 // with its OA button and Settings button and the dialog as the window shows
@@ -194,7 +195,7 @@ void require(bool ok, std::string_view what) {
 }
 
 #if defined(__APPLE__) && !TARGET_OS_IPHONE
-/// The four file-type switches, cleared, so a comparison can ignore them.
+/// The five file-type switches, cleared, so a comparison can ignore them.
 ///
 /// @param settings the settings
 /// @return the same settings with every file-type switch off
@@ -203,6 +204,7 @@ settings::EngineSettings without_file_type_switches(settings::EngineSettings set
     settings.file_type_oamap = false;
     settings.file_type_oalang = false;
     settings.file_type_oareg = false;
+    settings.file_type_oalaunch = false;
     return settings;
 }
 #endif
@@ -406,6 +408,8 @@ std::string_view label_of(settings::Setting setting) {
         return "Language packs (.oalang)";
     case settings::Setting::file_type_oareg:
         return "Registry files (.oareg)";
+    case settings::Setting::file_type_oalaunch:
+        return "Launch files (.oalaunch)";
     case settings::Setting::file_types_note:
         return "File types";
     case settings::Setting::skirmish_players:
@@ -2741,6 +2745,7 @@ void Runtime::check_engine_settings_window_sizes() {
         }
     }
     check_window_edge_rows_fit();
+    check_file_type_rows_fit();
     if (!SDL_SetWindowSize(sdl_.window, kDefaultWindowWidth, kDefaultWindowHeight) ||
         !SDL_SyncWindow(sdl_.window))
         throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError());
@@ -2815,6 +2820,87 @@ void Runtime::check_window_edge_rows_fit() {
         }
         std::cout << "engine settings check: Window edge and Edge stickiness fit the 640x480 "
                      "dialog in "
+                  << tag << '\n';
+    }
+    set_language_choice(kept_language);
+}
+
+void Runtime::check_file_type_rows_fit() {
+    // System's File Type Registration and its five switches, the launch
+    // file's last, on the 640x480 window, Compact, in English and German, at
+    // the section's top and at its end: no text of theirs is wider than its
+    // box or drawn across another. Simplified Chinese draws from its pack,
+    // and --check-text-fit shows every section in it.
+    if (!settings::file_types_switchable)
+        return;
+    if (!SDL_SetWindowSize(sdl_.window, 640, 480) || !SDL_SyncWindow(sdl_.window))
+        throw std::runtime_error(std::string("SDL_SetWindowSize: ") + SDL_GetError());
+    load(Screen::main_menu);
+    require(screen_ == Screen::main_menu, "the main menu did not open on the 640x480 window");
+    const std::string kept_language = language_state().choice;
+    constexpr std::array<std::string_view, 7> words{
+        "File Type Registration",
+        "Open these files with the game from your file manager.",
+        "Mod packages (.oamod)",
+        "Map packs (.oamap)",
+        "Language packs (.oalang)",
+        "Registry files (.oareg)",
+        "Launch files (.oalaunch)",
+    };
+    for (const std::string_view tag : {std::string_view{"en"}, std::string_view{"de"}}) {
+        set_language_choice(tag);
+        require(
+            shown_language().tag == tag,
+            "the check could not show the settings in " + std::string(tag)
+        );
+        bool launch_shown = false;
+        for (const int32_t scroll : {int32_t{0}, std::numeric_limits<int32_t>::max()}) {
+            open_engine_settings_from_menu();
+            settings::Dialog* dialog = engine_settings_dialog();
+            require(dialog != nullptr, "Settings did not open on the 640x480 window");
+            require(dialog->file_type_switches, "System does not list the file-type switches");
+            dialog->page = settings::Page::system;
+            dialog->scroll[static_cast<std::size_t>(settings::Page::system)] = scroll;
+            const std::string screen =
+                std::string("settings/system/") + (scroll == 0 ? "top" : "end");
+            oa::ui::kit::set_text_fit_screen(screen);
+            bool running = true;
+            // The first frame settles the size class; the second is read.
+            for (int frame = 0; frame < 2; ++frame) {
+                oa::ui::kit::begin_text_fit_frame();
+                run_frame(running);
+                require(running, "a frame ended the run");
+            }
+            // The launch file's switch is among the rows drawn, in either
+            // language's words.
+            const std::string launch_label{
+                oa::data::languages::interface_text("Launch files (.oalaunch)")
+            };
+            const auto parts = settings::dialog_layout(*dialog);
+            for (const settings::LayoutPart& part : parts)
+                if (part.text == launch_label || part.text == "Launch files (.oalaunch)")
+                    launch_shown = true;
+            for (const oa::ui::kit::TextFitRecord& noted : oa::ui::kit::text_fit_records()) {
+                if ((!noted.wider && !noted.across) || noted.text.empty())
+                    continue;
+                for (const std::string_view word : words) {
+                    const std::string shown{oa::data::languages::interface_text(word)};
+                    require(
+                        shown.find(noted.text) == std::string::npos,
+                        screen + " in " + std::string(tag) + ": '" + noted.text + "' is " +
+                            (noted.wider ? "wider than its box" : "drawn across other text")
+                    );
+                }
+            }
+            take_settings_screen_action(settings::DialogAction::cancelled);
+            require(engine_settings_dialog() == nullptr, "Cancel did not close Settings");
+        }
+        require(
+            launch_shown,
+            "System at its end does not show Launch files (.oalaunch) in " + std::string(tag)
+        );
+        std::cout << "engine settings check: File Type Registration and its five switches fit "
+                     "the 640x480 dialog in "
                   << tag << '\n';
     }
     set_language_choice(kept_language);

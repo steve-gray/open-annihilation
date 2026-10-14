@@ -189,6 +189,9 @@ inline constexpr std::string_view file_type_oalang = "open-annihilation.file-typ
 /// "on" or "off" (EngineSettings::file_type_oareg). Absent, or any text
 /// other than off, the game opens registry files.
 inline constexpr std::string_view file_type_oareg = "open-annihilation.file-types.oareg";
+/// "on" or "off" (EngineSettings::file_type_oalaunch). Absent, or any text
+/// other than off, the game opens launch files.
+inline constexpr std::string_view file_type_oalaunch = "open-annihilation.file-types.oalaunch";
 static_assert(base_game.find('|') == std::string_view::npos);
 static_assert(base_game.find('\\') == std::string_view::npos);
 static_assert(expansions_prefix.find('|') == std::string_view::npos);
@@ -1059,6 +1062,9 @@ struct EngineSettings {
     bool file_type_oamap{true};  ///< the game opens map packs (.oamap)
     bool file_type_oalang{true}; ///< the game opens language packs (.oalang)
     bool file_type_oareg{true};  ///< the game opens registry files (.oareg)
+    /// The game opens launch files (.oalaunch), which start it in their
+    /// battle room, as -c does.
+    bool file_type_oalaunch{true};
     /// How many player rows the skirmish setup shows. The dialog's working
     /// copy of NumSkirmishPlayers: read_settings and write_settings leave it
     /// out, and OK stores it as that one count.

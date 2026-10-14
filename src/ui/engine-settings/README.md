@@ -72,8 +72,8 @@ the locks a running game puts on them (`settings_locks`).
 | Game files, listed only in the main menu's dialog where the platform brings game files in | Include in device backups | Off, On | Off | `open-annihilation.game-files-backed-up` |
 | Downloads, listed in every dialog of the engine's settings, before System | Check for content updates | Automatically, Only when I open the Library, Never | Automatically | `open-annihilation.content-updates` (`automatically`, `library` or `never`); takes effect at OK, and Cancel and Restore defaults apply |
 | System, listed in every dialog of the engine's settings, after Downloads and before Developer | Your files: the player's own folder and buttons that open its Saves, Screenshots and Mods folders | changes no setting | | `open-annihilation.user-folder`, read at start (`src/app/include/oa/app/user_folder.hpp`) |
-| | File Type Registration, then one switch for each type, on Windows and Linux | Off, On | On | `open-annihilation.file-types.oamod`, `.oamap`, `.oalang`, `.oareg` (`on` or `off`; only `off` turns one off). OK registers a type turned on and withdraws one turned off, at once |
-| | File types, the text row on macOS and iOS in place of the switches | changes no setting | | none |
+| | File Type Registration, then one switch for each of the five types, the launch file's last, on Windows, Linux and macOS | Off, On | On | `open-annihilation.file-types.oamod`, `.oamap`, `.oalang`, `.oareg`, `.oalaunch` (`on` or `off`; only `off` turns one off). On Windows and Linux OK registers a type turned on and withdraws one turned off, at once; on macOS it changes the default opener of a switch that moved. Each switch acts on its own type alone (`engine_settings/file_types.hpp`) |
+| | File types, the text row on iOS in place of the switches | changes no setting | | none |
 | Developer | Enable Developer Mode | Off, On | Off | `open-annihilation.developer-mode` |
 | | Show performance statistics | Off, On | Off | `open-annihilation.frame-stats` |
 | | UI kit gallery: SHOW opens the gallery of every part of OA's own screens (`DialogAction::show_gallery`) | | | none |
@@ -354,6 +354,14 @@ always plays at 1× pathfinding and the host's unit limit. Vertical sync is
 locked during a shared game or a replay, its value set before the game kept
 in effect; Hardware acceleration never is, so that it can always be set to
 Off, and set to Basic or Full there it takes effect from the next game.
+
+`engine_settings/file_types.hpp` turns System's five file-type switches
+into the file types they choose, each switch its own type alone:
+`file_type_set` is the set a registration acts on (its complement is the
+set a withdrawal acts on), `set_file_type_switches` shows a set the system
+reports, and `moved_file_type_switches` gives the default-opener change of
+each switch that moved, in System's order. The application registers,
+withdraws and asks macOS through `oa/platform/file_types.hpp` with them.
 
 ## The dialog
 
@@ -1251,7 +1259,22 @@ with and without the player's own file, its six words each read and
 written alone, `150` with the modern fonts On, and as 100% read with them
 Off from the key or from a named file's default, the words it refuses
 (`0` among them) read as Auto, other keys left as they were, and Restore
-defaults;
+defaults; and the five file-type switches: on by default, only `off`
+turning one off, the launch file's switch stored alone as `off` and as `on`
+with the other four keys untouched, and erased by Restore defaults;
+`ui-engine-settings-file-types` that each file-type switch stands for its
+own type alone, in the set a registration acts on, the set a withdrawal
+acts on and the opener change it asks for; that the launch file's switch
+turned off and on again, as OK applies it, registers and withdraws launch
+files alone: elsewhere than on Windows in a scratch XDG data folder (the
+launch file's desktop entry, icon and part of the MIME package go and come
+back, and no file of the other four, nor the program's icon, is written or
+removed), and on Windows under a scratch key of `HKEY_CURRENT_USER` (the
+launch file's six values go and come back, the other four's 24 never
+written or removed); and that on macOS, against a stand-in for the
+system's questions, it hands launch files alone back to the opener of
+plain text and takes them back, the switches then show what the system
+reports, and a launch file the system kept is named in the hint's list;
 `ui-engine-settings-dialog` the dialog's layout (every part inside the
 panel and none overlapping), and at Regular and Large every section with
 Touch, Controller and Game files listed inside the dialog under every lock,
@@ -1268,8 +1291,9 @@ order on every section); the OA button's icon at its size in both buttons, at re
 the pointer, held and twice as large, and the mark without it; with the
 installed game, the header's icon in its place and the mark without it;
 the sections' order and names, Developer at the foot under the divider,
-and System holding Your files, then File Type Registration's switches
-where the game registers file types at run time or the File types text row
+and System holding Your files, then File Type Registration's five
+switches, Launch files last, where the game registers file types at run
+time or the File types text row
 where the app declares them, and Engine Limits holding the unit limit, pathfinding and the skirmish
 player count;
 Language's drop-down, four switches and Text size slider,
@@ -1347,6 +1371,9 @@ waits for the game's end. It also finds Text size locked with the modern
 fonts Off, turns them On and raises the size a stop, which the text style
 reads at once and OK saves, and chooses Deutsch from the Language
 drop-down, which puts German in effect at once, and steps back to English.
+On a 640 by 480 window it shows System at its top and its end in English
+and German, and finds File Type Registration and its five switches, Launch
+files among them, drawn with no text wider than its box or across another.
 With touch controls on it finds Touch listed between User Interface and
 Developer with its rows at their defaults, and a finger's press beside
 Haptics' switch taking it where a mouse press there does nothing; in the
@@ -1411,8 +1438,9 @@ alone, unlocked, at Compact and 2× (960 by 648), in the installed game's
 fonts (`OA_GAME_DIR`). The header shows the shipped app icon, the plates,
 cropped to the pixels that show (`branding/open-annihilation-256.png`). It writes one PNG a section, under the names
 `docs/images/settings/` uses (`controls-1.png`, `language-1.png`,
-`graphics-1.png`, `downloads-1.png`, and `page_word` plus `.png` for the
-others), and `downloads-2.png` with Downloads scrolled to its end. The
+`graphics-1.png`, `downloads-1.png`, `system-1.png`, and `page_word` plus
+`.png` for the others), and `controls-2.png`, `downloads-2.png` and
+`system-2.png` with those sections scrolled to their ends. The
 rows a host fills (Your files, Game files, Downloads' install ID, Game
 Content) are the defaults the manual describes. The data test
 `ui-engine-settings-pictures` runs the same program into a scratch folder

@@ -9,17 +9,18 @@
 # their own in the same look (engine_settings/prompt.hpp), the download
 # check (engine_settings/challenge.hpp), the Add registry window
 # (engine_settings/add_registry.hpp) and the missing-language notice
-# (engine_settings/language_notice.hpp).
+# (engine_settings/language_notice.hpp), and System's file-type switches as the file types
+# they choose (engine_settings/file_types.hpp).
 add_library(oa-ui-engine-settings src/engine_settings.cpp src/dialog.cpp src/dialog_draw.cpp
   src/developer.cpp src/downloads_page.cpp src/content_page.cpp src/language_page.cpp
   src/language_notice.cpp src/notice.cpp src/prompt.cpp src/challenge.cpp
-  src/add_registry.cpp src/registered.cpp src/settings_rows.cpp)
+  src/add_registry.cpp src/registered.cpp src/settings_rows.cpp src/file_types.cpp)
 add_library(oa::ui::engine_settings ALIAS oa-ui-engine-settings)
 target_include_directories(oa-ui-engine-settings PUBLIC include)
 target_compile_features(oa-ui-engine-settings PUBLIC cxx_std_20)
-target_link_libraries(oa-ui-engine-settings PUBLIC oa-platform-preferences oa-data-languages oa-data-limits
-  oa-data-mod-profile oa-ui-pad-controls oa-present oa-ui-frontend-renderer oa-formats-fnt oa-formats-hpi
-  oa-ui-kit PRIVATE oa-sim-session oa-ui-decoded oa-ui-library oa-formats-url oa-options
+target_link_libraries(oa-ui-engine-settings PUBLIC oa-platform-preferences oa-platform-file-types
+  oa-data-languages oa-data-limits oa-data-mod-profile oa-ui-pad-controls oa-present
+  oa-ui-frontend-renderer oa-formats-fnt oa-formats-hpi oa-ui-kit PRIVATE oa-sim-session oa-ui-decoded oa-ui-library oa-formats-url oa-options
   oa-base-text oa-platform-display-modes)
 
 if(BUILD_TESTING)
@@ -53,6 +54,19 @@ if(BUILD_TESTING)
   target_link_libraries(oa-ui-engine-settings-challenge-test PRIVATE oa-ui-engine-settings
     oa-test-support oa-options)
   add_test(NAME ui-engine-settings-challenge COMMAND oa-ui-engine-settings-challenge-test)
+
+  # System's file-type switches: each chooses its own type, and the launch file's switch
+  # registers and withdraws that type alone (XDG in a scratch data folder, or the registry
+  # under a scratch key of HKEY_CURRENT_USER) and changes only its default opener on macOS
+  # (a stand-in for the system's questions).
+  add_executable(oa-ui-engine-settings-file-types-test tests/file_types_test.cpp)
+  target_link_libraries(oa-ui-engine-settings-file-types-test PRIVATE oa-ui-engine-settings
+    oa-platform-file-types oa-test-support oa-options)
+  if(WIN32)
+    target_link_libraries(oa-ui-engine-settings-file-types-test PRIVATE advapi32 shlwapi)
+  endif()
+  add_test(NAME ui-engine-settings-file-types COMMAND oa-ui-engine-settings-file-types-test)
+  set_tests_properties(ui-engine-settings-file-types PROPERTIES TIMEOUT 60)
 
   add_executable(oa-ui-engine-settings-dialog-test tests/dialog_test.cpp)
   target_link_libraries(oa-ui-engine-settings-dialog-test PRIVATE oa-ui-engine-settings
