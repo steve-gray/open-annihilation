@@ -413,7 +413,7 @@ void draw_text_line(const Canvas& canvas, const PlacedLine& line, std::string_vi
         text,
         line.rect,
         Align::left,
-        line.failure ? colour::lock : colour::text
+        line.failure ? colour::lock : (line.path ? colour::hint : colour::text)
     );
 }
 
@@ -464,7 +464,7 @@ void add_text_line(DisplayList& list, const PlacedLine& line, std::string text) 
     item.text = std::move(text);
     item.font = line.path ? FontRole::regular : FontRole::small;
     item.align = Align::left;
-    item.colour = line.failure ? colour::lock : colour::text;
+    item.colour = line.failure ? colour::lock : (line.path ? colour::hint : colour::text);
     list.items.push_back(std::move(item));
 }
 

@@ -24,8 +24,9 @@ constexpr int32_t kButtonWidth = 220;
 constexpr int32_t kCancelWidth = 140;
 
 /// The sentence under the heading, looked up whole.
-constexpr std::string_view kIntro = "OA plays from its own copy in Documents › Open Annihilation. "
-                                    "The installation is not used or changed.";
+constexpr std::string_view kIntro =
+    "OA plays from its own copy in Documents ›\u00a0Open Annihilation. "
+    "The installation is not used or changed.";
 
 /// Makes a button row with an empty label, so the caption does not meet it.
 ///

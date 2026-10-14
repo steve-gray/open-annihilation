@@ -546,13 +546,15 @@ host's offer (`set_downloads_offer`), not from a fixed list of settings:
   defaults sets Automatically.
 - One install ID for each registry the offer names, built-in first. The
   switch is labelled Install ID, or Install ID · {name} when more than one
-  registry uses an ID. Its hint names that registry. Off, the value reads
-  Off. On, with an ID stored, it reads the first 8 hex digits, a gap, and
-  the last 4 (7f3a90d2 · · · c91e). With none stored yet it reads Made at
-  your first download. RESET, beside the value, is disabled while the
-  switch is off or no ID is stored. Turning the switch off or on takes
-  effect at OK and Cancel puts it back. RESET acts at once, names the
-  registry on `Dialog::install_id_registry`, and is not undone by Cancel.
+  registry uses an ID. Its hint names that registry. While no install ID
+  exists, "Made at your first download" is that hint's second line, and
+  there is no value row and no RESET. Once one exists, a row labelled
+  "Your install ID" shows the first 8 hex digits, a gap, and the last 4
+  (7f3a90d2 · · · c91e), or Off while the switch is off, with RESET beside
+  the value. RESET is disabled while the switch is off. Turning the switch
+  off or on takes effect at OK and Cancel puts it back. RESET acts at
+  once, names the registry on `Dialog::install_id_registry`, and is not
+  undone by Cancel.
 - Downloaded files: the size kept for resuming and repairs, or Nothing
   kept. EMPTY acts at once. It is disabled when nothing is kept, and while
   a download is queued, running or paused the value names that the files
@@ -565,10 +567,14 @@ host's offer (`set_downloads_offer`), not from a fixed list of settings:
   themselves are drawn by the Library (`oa-ui-library`), not by this
   dialog.
 
-In a game the page still shows. RESET and EMPTY are locked: the padlock
-and "Locked during a game." stand where those buttons were, and neither
-button is drawn. The check and the install-ID switch stay editable. The
-link is not listed.
+In a game the page still shows. RESET and EMPTY stay where they are,
+drawn faded, and an accent button loses its accent. The padlock and
+"Locked during a game" stand at the right of the label line, immediately
+left of the button when the button sits on that line. When the label, the
+lock and the button do not fit on that line, the lock moves to the start
+of the line under the label and the button stays. Downloaded files
+shows no size line while locked: its label, the lock and the faded EMPTY.
+The check and the install-ID switch stay editable. The link is not listed.
 
 `open_language_text_dialog` opens a dialog of the third kind,
 `DialogKind::language_text`: Language alone, its entry at the top
@@ -612,12 +618,18 @@ sync on SDL's software renderer or where each change would reset the
 graphics device), "Needs modern fonts" (Text size while the modern fonts
 are Off), "Needs Dots" (After zoom while Zoomed out units is Rendered) or
 "Always on here" (Native pixel density where the platform
-opens every window at native density). A locked slider shows the padlock at the right of its
-label line. A locked switch keeps its switch, faded, with the padlock left
-of it, so that its value still shows: Vertical sync's. A locked row whose
-hint lines are its status, Hardware acceleration's strip, shows the padlock
-where its control was, and fades only its label line, so that the status
-keeps its strength.
+opens every window at native density). Every locked row uses one look.
+The control stays where it is, drawn in that fade, and an accent button
+loses its accent. The padlock stands at the right end of the label line,
+immediately left of the control when the control sits on that line (a
+button or a switch). When the label, the padlock and that control do not
+fit on one line, the padlock moves to the start of the line under the
+label, before the hint, and the control stays. A control that does not
+fit beside its label stands on the next line, and the padlock stays on
+the label line unless the label and the padlock do not fit there either.
+A row whose hint lines are its status fades its label line and a lock or
+a control that dropped under it, and stops at the status, so that the
+status keeps its strength.
 
 Changes show at once; OK keeps them, Cancel puts back what the dialog opened
 with, Restore defaults resets every setting that is not locked. A click on a
@@ -1163,7 +1175,9 @@ orders of Controls, Graphics and Developer with an area open as literals.
 Developer for every combination of Touch, Controller and Game files, its
 rows for none, one and three registries with the Registries row last
 (three scroll at Compact), the
-labels and hints filled with the registries' names, an install ID shown as
+labels and hints filled with the registries' names, "Made at your first
+download" as the switch's second hint while no install ID exists and a
+labelled "Your install ID" row once one does, an install ID shown as
 its first 8 and last 4 hex digits, each state's value text, RESET and EMPTY
 disabled when they cannot act, those two locked during a game while the
 check and the switches stay editable, Cancel putting the switches and the

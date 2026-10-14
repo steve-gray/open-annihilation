@@ -666,8 +666,8 @@ struct Row {
     SourceRect lock_area{};      ///< its padlock and lock text; empty when unlocked
     std::array<SourceRect, most_row_lines> hints{}; ///< its hint's or notice's lines
     std::size_t hint_lines{};                       ///< the lines its hint takes
-    /// Its switch, level strip or slider track; empty for a locked row
-    /// whose hint lines are its status, which shows its lock there.
+    /// Its switch, level strip, button or slider track. A lock never
+    /// clears it: the control stays and is drawn faded.
     SourceRect control_area{};
     SourceRect value{}; ///< a slider's value; empty for the others
 };
@@ -1012,8 +1012,8 @@ struct RowContext {
 [[nodiscard]] RowContext row_context(const Dialog& dialog) noexcept;
 
 /// Tells whether a setting's hint lines are its status, as its row spec
-/// says: such a row, locked, shows its lock where its control was, and only
-/// its label line fades.
+/// says: such a row, locked, keeps its control, faded, and fades only its
+/// label line and that control, so the status keeps its strength.
 ///
 /// @param setting the setting
 /// @return true for Hardware acceleration, whose hint lines are its status
@@ -1094,9 +1094,13 @@ using TextWidth = std::function<int32_t(std::string_view)>;
 /// Places the rows of a section; Developer's own, over its list, with
 /// developer_row_padding.
 ///
-/// A locked switch keeps its switch, faded, with its lock left of it, so
-/// that its value shows; a locked switch or strip whose hint lines are its
-/// status shows its lock where its control was.
+/// A locked row keeps its control, drawn faded. Its lock stands on the
+/// label line, left of a button or a switch that sits there, otherwise at
+/// the line's right. When the label, the lock and that control do not fit
+/// on one line, the lock moves to the start of the line under the label,
+/// before the hint, and the control stays. A row whose hint lines are its
+/// status fades that line and a lock or a control that dropped under it,
+/// and stops before the status.
 ///
 /// @param page the section
 /// @param locks the dialog's locks

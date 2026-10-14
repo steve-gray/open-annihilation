@@ -76,7 +76,8 @@ inline constexpr std::string_view interface_words[] = {
     "Locate another…",
     "Nothing is installed and your files are not changed.",
     "OA copies the game once. The installation is left as it is.",
-    "OA plays from its own copy in Documents › Open Annihilation. The installation is not used or "
+    "OA plays from its own copy in Documents ›\u00a0Open Annihilation. The installation is not "
+    "used or "
     "changed.",
     "Open folder",
     "Pause",
