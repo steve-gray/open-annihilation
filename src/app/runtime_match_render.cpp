@@ -940,6 +940,9 @@ void Runtime::render_match_surface() {
         track_match_drag();
     auto viewport = live_viewport(camera_x, camera_y);
     match_use_layers_ = sdl_.renderer != nullptr && !options_.headless_check;
+    // The sweep that has just opened the menu shows the sound page on this
+    // frame, so the HUD drawn below is that page and not the tabs alone.
+    advance_options_lightbar();
     // The HUD is drawn into the memory of the layer the frame before last
     // showed, so that a frame takes none of its own.
     renderer::Surface hud = std::move(spare_match_hud_);
