@@ -1197,6 +1197,8 @@ void FirstRunHost::finish(Runtime& runtime) {
     runtime.preference_values_[std::string(first_run::preference_key)] =
         std::string(first_run::preference_done);
     flush(runtime);
+    // A --first-run start's menu hum waits for this (Runtime::menu_hum_waits).
+    runtime.setup_finished_ = true;
     // Skip setup and Start playing both end the walk. --first-run shows it
     // again, so the movies stay until that return will not happen.
     runtime.play_intro_after_setup();

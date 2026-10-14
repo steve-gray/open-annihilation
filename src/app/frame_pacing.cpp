@@ -652,11 +652,13 @@ FrameStatsTable frame_stats_table(
     if (notes.model_budget == 0)
         std::snprintf(models.note.text.data(), models.note.text.size(), "MB%s", dots);
     else
+        // Five digits keep the note in its 24 bytes; a budget is far below
+        // 99999 MB, and one above it shows as 99999.
         std::snprintf(
             models.note.text.data(),
             models.note.text.size(),
             "MB of %llu%s",
-            megabytes(notes.model_budget),
+            std::min(megabytes(notes.model_budget), 99999ULL),
             dots
         );
     set_renderer_row(table.rows[kRendererRow], renderer);

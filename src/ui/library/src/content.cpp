@@ -648,12 +648,19 @@ void note_content(Library& library) {
     // A download asked for before the copy arrives has not edited the choice.
     // A refresh that brings the same stored choice keeps that ask. A different
     // stored choice drops it, as it drops an edit.
-    if (same_seed && (draft.edited || !draft.downloads.empty()))
-        return;
-    draft = {};
-    draft.seed_base = base;
-    draft.seed_enabled = enabled;
-    library.chooser = {};
+    if (!same_seed || (!draft.edited && draft.downloads.empty())) {
+        draft = {};
+        draft.seed_base = base;
+        draft.seed_enabled = enabled;
+    }
+    // Catalogues, pictures and update searches arrive while the Library is
+    // open, often in the first second. The chooser stays open through them,
+    // on the game the player marked, with its rows read from the new inputs.
+    // A different stored choice closes it.
+    if (same_seed)
+        refresh_base_chooser(library);
+    else
+        library.chooser = {};
 }
 
 ActiveContent active_content(const Library& library) {

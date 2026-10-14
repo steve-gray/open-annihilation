@@ -2272,10 +2272,11 @@ struct Runtime::LibraryScreen final : LayerScreen {
             );
             return;
         }
-        // The copy is in the player's folder. A rebuild reads that, and drops
-        // a chooser whose choice is not stored yet, so the chooser is opened
-        // again on the game just copied. The files stay as they are until the
-        // Library closes.
+        // The copy is in the player's folder. A rebuild reads that. The
+        // chooser stays open through it while the stored choice is the same,
+        // and is opened again when a different stored choice closed it. The
+        // game just copied is then marked and used. The files stay as they
+        // are until the Library closes.
         host.rebuild(runtime_);
         if (!host.model.chooser.open) {
             const library::BaseOpen opened = library::open_base_chooser(host.model);

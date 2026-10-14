@@ -4,7 +4,6 @@
 // SDL event dispatch, menu audio and movie playback.
 #include "oa/app/runtime.hpp"
 #include "oa/app/hook_call.hpp"
-#include "oa/ui/frontend/main_menu.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 #include "oa/media/intro_player.hpp"
 #include "oa/present/typed_text.hpp"
@@ -645,18 +644,6 @@ void Runtime::show_unsupported(std::string_view message) {
     }
 }
 
-void Runtime::start_menu_music() {
-    music_main_menu();
-    play_menu_voice(oa::ui::frontend::kMainMenuMusic);
-}
-
-void Runtime::play_menu_voice(std::string_view sound) {
-    if (menu_music_playing_)
-        return;
-    // A voice that does not start is reported by play_alternate_sound.
-    std::ignore = play_alternate_sound(sound);
-}
-
 bool Runtime::play_alternate_sound(std::string_view sound) {
     if (options_.mute || options_.headless_check)
         return false;
@@ -672,12 +659,6 @@ bool Runtime::play_alternate_sound(std::string_view sound) {
     if (!menu_music_playing_)
         std::cerr << "menu BGM unavailable: " << error << '\n';
     return menu_music_playing_;
-}
-
-void Runtime::stop_menu_music() {
-    audio_player_.stop_loop();
-    menu_music_playing_ = false;
-    music_begin_match();
 }
 
 void Runtime::play_menu_sound(menu::Sound sound) {
