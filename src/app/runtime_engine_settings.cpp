@@ -48,6 +48,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstddef>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -81,6 +83,11 @@
 namespace oa::app {
 
 namespace settings = oa::ui::engine_settings;
+
+static_assert(
+    settings::default_skirmish_players == init::default_skirmish_player_count,
+    "the slider's default and a new install's skirmish rows are the same count"
+);
 namespace kit = oa::ui::kit;
 namespace render_probe = oa::platform::render_probe;
 
@@ -1602,6 +1609,13 @@ settings::Dialog& Runtime::open_engine_settings_dialog(settings::DialogKind kind
     // game files in, Manage… runs over the menu, never over a match.
     const bool game_files =
         screen_ == Screen::main_menu && game_files_import_offered(game_files_hooks());
+    // The slider shows the count the setup has. Zero means the setup is not
+    // loaded yet, so the dialog keeps the new-install default and OK writes
+    // nothing until the player moves the slider.
+    const int32_t shown_players = skirmish_settings_.slot_count;
+    if (shown_players > 0 &&
+        static_cast<std::size_t>(shown_players) <= skirmish_settings_.slots.size())
+        state.current.skirmish_players = shown_players;
     settings::open_dialog(
         dialog,
         state.current,
@@ -2058,6 +2072,11 @@ bool Runtime::take_engine_settings_action(settings::DialogAction action) {
         // before the settings are written, so the same flush records it.
         if (dialog->welcome_again)
             forget_first_run();
+        // The same NumSkirmishPlayers the setup's key codes store. A slider
+        // that did not move leaves a stored count, including one the stops
+        // do not offer, where it was.
+        if (chosen.skirmish_players != dialog->opened.skirmish_players)
+            init::set_skirmish_player_count(skirmish_settings_, chosen.skirmish_players, *this);
         const auto failure = save_engine_settings(dialog->opened, chosen, dialog->restored);
         tell_install_switches(content_downloads(), switches_opened, switches_chosen);
         if (check_changed)
