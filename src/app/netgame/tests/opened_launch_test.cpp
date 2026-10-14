@@ -197,7 +197,9 @@ void test_waiting() {
 ///
 /// @param[in,out] context the context the hooks fill
 /// @param arguments the arguments after the program name
-void parse(oa::app::NetgameContext& context, const std::vector<std::string>& arguments) {
+/// @return the run's options
+oa::app::Options
+parse(oa::app::NetgameContext& context, const std::vector<std::string>& arguments) {
     std::vector<std::string> storage{"open-annihilation"};
     storage.insert(storage.end(), arguments.begin(), arguments.end());
     std::vector<char*> argv;
@@ -205,16 +207,22 @@ void parse(oa::app::NetgameContext& context, const std::vector<std::string>& arg
         argv.push_back(argument.data());
     oa::app::Extension table{};
     oa::app::fill_option_hooks(table, context);
-    static_cast<void>(oa::app::parse_options(static_cast<int>(argv.size()), argv.data(), table));
+    return oa::app::parse_options(static_cast<int>(argv.size()), argv.data(), table);
 }
 
 /// A launch file opened with the game becomes the start's launch exactly as -c FILE makes it.
 void test_start_is_minus_c(const Scratch& scratch) {
     const fs::path file = scratch.write("tonight.oalaunch", kLaunch);
     oa::app::NetgameContext with_c{};
-    parse(with_c, {"-c", oa::app::path_to_utf8(file)});
+    const oa::app::Options c_run = parse(with_c, {"-c", oa::app::path_to_utf8(file)});
+    // A .oalaunch file after -c is -c's file, as the registrations write it: it is not
+    // taken out of the switch line as a file to open.
+    OA_CHECK(c_run.open_files.empty());
+    OA_CHECK(with_c.options.launch_planned);
+    OA_CHECK(with_c.options.launch_source == oa::app::path_to_utf8(file));
+    OA_CHECK(with_c.launch.block.computer_count == 2);
     oa::app::NetgameContext opened{};
-    parse(opened, {});
+    static_cast<void>(parse(opened, {}));
     OA_CHECK(!opened.options.launch_planned);
     const std::optional<net::OpenedLaunch> taken = net::read_opened_launch(file);
     OA_CHECK(taken.has_value());
@@ -231,7 +239,7 @@ void test_start_is_minus_c(const Scratch& scratch) {
     // The temporary .txt file `open -f` hands over gives the same launch.
     const fs::path piped = scratch.write("0F3A9C.txt", kLaunch);
     oa::app::NetgameContext from_text{};
-    parse(from_text, {});
+    static_cast<void>(parse(from_text, {}));
     const std::optional<net::OpenedLaunch> text = net::read_opened_launch(piped);
     OA_CHECK(text.has_value());
     if (text) {
@@ -242,7 +250,7 @@ void test_start_is_minus_c(const Scratch& scratch) {
 
     // A join keeps its address.
     oa::app::NetgameContext join{};
-    parse(join, {});
+    static_cast<void>(parse(join, {}));
     oa::app::put_launch_in_place(join, net::read_launch_text("join.oalaunch", kMarkedLaunch));
     OA_CHECK(join.options.direct_game.kind == mp::DirectGame::Kind::join);
     OA_CHECK(join.options.direct_game.address == "192.0.2.10");
@@ -257,7 +265,7 @@ void test_refusal_puts_nothing(const Scratch& scratch) {
     deathmatch.replace(deathmatch.find(ends), ends.size(), "commander-death: deathmatch");
     const fs::path file = scratch.write("deathmatch.oalaunch", deathmatch);
     oa::app::NetgameContext context{};
-    parse(context, {});
+    static_cast<void>(parse(context, {}));
     const std::optional<net::OpenedLaunch> taken = net::read_opened_launch(file);
     OA_CHECK(taken.has_value());
     std::string refusal;
@@ -342,16 +350,16 @@ void test_steps() {
 /// --check-opened-launch takes when and the file.
 void test_check_option() {
     oa::app::NetgameContext start{};
-    parse(start, {"--check-opened-launch", "start", "host.oalaunch"});
+    static_cast<void>(parse(start, {"--check-opened-launch", "start", "host.oalaunch"}));
     OA_CHECK(start.options.opened_launch_check == oa::app::OpenedLaunchCheck::start);
     OA_CHECK(start.options.opened_launch_check_file == "host.oalaunch");
     oa::app::NetgameContext menu{};
-    parse(menu, {"--check-opened-launch", "menu", "launch.txt"});
+    static_cast<void>(parse(menu, {"--check-opened-launch", "menu", "launch.txt"}));
     OA_CHECK(menu.options.opened_launch_check == oa::app::OpenedLaunchCheck::menu);
     std::string refused;
     try {
         oa::app::NetgameContext later{};
-        parse(later, {"--check-opened-launch", "later", "launch.txt"});
+        static_cast<void>(parse(later, {"--check-opened-launch", "later", "launch.txt"}));
     } catch (const std::runtime_error& error) {
         refused = error.what();
     }
