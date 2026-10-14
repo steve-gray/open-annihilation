@@ -93,6 +93,7 @@ enum class Halt : uint8_t {
     not_found,       ///< the package address answered 404
     range_satisfied, ///< 416
     other_status,    ///< some other status, with nothing written
+    browser_check,   ///< a check meant for a web browser, with nothing written
 };
 
 /// How a stretch of waiting ended.
@@ -563,6 +564,19 @@ bool hash_prefix(
     return !stopped && !failed;
 }
 
+/// Tells whether a package address's answer is a check meant for a web
+/// browser: the firewall's header names one whatever the status, and an HTML
+/// page where the package was expected is one unless it answered 403, 404 or
+/// 416, which keep their own meaning.
+///
+/// @param seen the answer
+/// @return true for a check
+bool package_check(const Answered& seen) {
+    if (!seen.check_header.empty())
+        return true;
+    return seen.browser_check && seen.status != 403 && seen.status != 404 && seen.status != 416;
+}
+
 } // namespace
 
 /// The queue, its items and the flags the worker and the main thread share.
@@ -590,6 +604,10 @@ struct Downloads::State {
         uint32_t hash_failures = 0;
         bool fetched_whole_after_range = false;
         std::optional<InstallOutcome> outcome;
+        std::string install_reason;      ///< the installer's reason for its outcome
+        std::optional<Answered> asked;   ///< what the last key request was answered
+        std::optional<Answered> fetched; ///< what the last package fetch was answered
+        bool logged = false;             ///< the failure's log line is written
     };
 
     threads::Mutex mutex;
@@ -629,6 +647,25 @@ struct Downloads::State {
     ///
     /// @param line the line
     void log_line(std::string_view line);
+
+    /// Fails an item. The caller holds the lock.
+    ///
+    /// The detail is kept only when it says more than the failure's text,
+    /// so a message never names its reason twice. The worker logs the
+    /// failure once (log_failures).
+    ///
+    /// @param item the item
+    /// @param failure why
+    /// @param detail the registry's message or the installer's reason; may be empty
+    void fail(Item& item, DownloadFailure failure, std::string detail);
+
+    /// Writes one log line for each failed item not yet logged. The lock is not held.
+    void log_failures();
+
+    /// True when a failed item has not been logged. The caller holds the lock.
+    ///
+    /// @return true while a failure waits for its line
+    bool failure_unlogged() const;
 
     /// Copies the log sink. The caller holds the lock.
     ///
@@ -749,10 +786,18 @@ class PartSink final : public http::BodySink {
 
     /// Accepts a length that matches the catalogue, and restarts on a 200.
     ///
+    /// A check meant for a web browser is never written: the firewall's
+    /// header names one whatever the status, and an HTML page where the
+    /// package was expected is one unless it answered 403, 404 or 416.
+    ///
     /// @param head the response, before any body byte
     /// @return false when the body must not be written
     bool begin(const http::Response& head) override {
         status_ = head.status;
+        if (package_check(answered({}, head))) {
+            halt_ = Halt::browser_check;
+            return false;
+        }
         if (head.status == 403) {
             halt_ = Halt::forbidden;
             return false;
@@ -1006,6 +1051,60 @@ void Downloads::State::log_line(std::string_view line) {
         sink(context, line);
 }
 
+void Downloads::State::fail(Item& item, DownloadFailure failure, std::string detail) {
+    item.state = DownloadState::failed;
+    item.failure = failure;
+    // The failure's own text is what the message and the log line start
+    // with; a detail that only repeats it is dropped.
+    item.detail = detail == failure_text(failure) ? std::string() : std::move(detail);
+    item.challenge.reset();
+    item.logged = false;
+    mark_dirty();
+    touch();
+}
+
+bool Downloads::State::failure_unlogged() const {
+    for (const Item& item : items)
+        if (item.state == DownloadState::failed && !item.logged)
+            return true;
+    return false;
+}
+
+void Downloads::State::log_failures() {
+    std::vector<std::string> lines;
+    LogSink sink = nullptr;
+    void* context = nullptr;
+    {
+        threads::LockGuard guard(mutex);
+        copy_log(sink, context);
+        for (Item& item : items) {
+            if (item.state != DownloadState::failed || item.logged)
+                continue;
+            item.logged = true;
+            std::string line = "download of ";
+            line += item.target.name.empty() ? item.target.key : item.target.name;
+            line += " (" + item.target.registry + " " + item.target.key + ", release " +
+                    std::to_string(item.target.release) + ") failed: ";
+            line += failure_text(item.failure);
+            if (!item.detail.empty())
+                line += " (" + item.detail + ")";
+            if (item.asked)
+                line += "; key request: " + answered_text(*item.asked);
+            if (item.fetched)
+                line += "; package: " + answered_text(*item.fetched);
+            // One failure is one line, whatever a reason holds.
+            for (char& character : line)
+                if (character == '\n' || character == '\r')
+                    character = ' ';
+            lines.push_back(std::move(line));
+        }
+    }
+    if (sink == nullptr)
+        return;
+    for (const std::string& line : lines)
+        sink(context, line);
+}
+
 Downloads::State::Item* Downloads::State::find(uint64_t id) {
     for (Item& item : items) {
         if (item.id == id)
@@ -1248,12 +1347,7 @@ KeyGate Downloads::State::ensure_key(http::Client& client, uint64_t id) {
             }
             if (item->target.install_id == data::registry::InstallIdUse::required &&
                 id_off(item->target.registry)) {
-                item->state = DownloadState::failed;
-                item->failure = DownloadFailure::install_id_off;
-                item->detail = failure_text(DownloadFailure::install_id_off);
-                item->challenge.reset();
-                mark_dirty();
-                touch();
+                fail(*item, DownloadFailure::install_id_off, {});
                 return KeyGate::failed;
             }
             if (!item->target.api)
@@ -1261,11 +1355,7 @@ KeyGate Downloads::State::ensure_key(http::Client& client, uint64_t id) {
             const int64_t now = seconds_now(options.clock);
             if (item->key && item->key->expires < now + key_fresh_seconds) {
                 if (item->expiry_rekeys >= rekey_limit) {
-                    item->state = DownloadState::failed;
-                    item->failure = DownloadFailure::unreachable;
-                    item->detail = failure_text(DownloadFailure::unreachable);
-                    mark_dirty();
-                    touch();
+                    fail(*item, DownloadFailure::unreachable, {});
                     return KeyGate::failed;
                 }
                 ++item->expiry_rekeys;
@@ -1300,8 +1390,22 @@ KeyGate Downloads::State::ensure_key(http::Client& client, uint64_t id) {
         http_cancel.store(quit_flag.load() || item_cancel.load() || match_flag.load());
         const KeyAnswer answer = ask_for_key(client, fields.api, fields.request, &http_cancel);
         phase.store(0);
+        {
+            threads::LockGuard guard(mutex);
+            if (Item* item = find(id))
+                item->asked = answer.answered;
+        }
         if (quit_flag.load())
             return KeyGate::quit;
+        if (answer.kind == KeyAnswer::Kind::browser_check) {
+            // Never answered, asked again or tried at another address: the
+            // player is told, and RETRY asks again when they choose.
+            threads::LockGuard guard(mutex);
+            Item* item = find(id);
+            if (item != nullptr && still_open(item->state))
+                fail(*item, DownloadFailure::server_check, {});
+            return KeyGate::failed;
+        }
         if (answer.kind == KeyAnswer::Kind::key && answer.key) {
             threads::LockGuard guard(mutex);
             Item* item = find(id);
@@ -1343,12 +1447,7 @@ KeyGate Downloads::State::ensure_key(http::Client& client, uint64_t id) {
                     threads::LockGuard guard(mutex);
                     Item* item = find(id);
                     if (item != nullptr && still_open(item->state)) {
-                        item->state = DownloadState::failed;
-                        item->failure = DownloadFailure::challenge_expired;
-                        item->detail = failure_text(DownloadFailure::challenge_expired);
-                        item->challenge.reset();
-                        mark_dirty();
-                        touch();
+                        fail(*item, DownloadFailure::challenge_expired, {});
                     }
                     return KeyGate::failed;
                 }
@@ -1399,12 +1498,7 @@ KeyGate Downloads::State::ensure_key(http::Client& client, uint64_t id) {
                     threads::LockGuard guard(mutex);
                     Item* item = find(id);
                     if (item != nullptr && still_open(item->state)) {
-                        item->state = DownloadState::failed;
-                        item->failure = DownloadFailure::challenge_expired;
-                        item->detail = failure_text(DownloadFailure::challenge_expired);
-                        item->challenge.reset();
-                        mark_dirty();
-                        touch();
+                        fail(*item, DownloadFailure::challenge_expired, {});
                     }
                     return KeyGate::failed;
                 }
@@ -1413,12 +1507,7 @@ KeyGate Downloads::State::ensure_key(http::Client& client, uint64_t id) {
                 threads::LockGuard guard(mutex);
                 Item* item = find(id);
                 if (item != nullptr && still_open(item->state)) {
-                    item->state = DownloadState::failed;
-                    item->failure = DownloadFailure::challenge_expired;
-                    item->detail = failure_text(DownloadFailure::challenge_expired);
-                    item->challenge.reset();
-                    mark_dirty();
-                    touch();
+                    fail(*item, DownloadFailure::challenge_expired, {});
                 }
                 return KeyGate::failed;
             }
@@ -1427,14 +1516,8 @@ KeyGate Downloads::State::ensure_key(http::Client& client, uint64_t id) {
         if (answer.kind == KeyAnswer::Kind::not_offered) {
             threads::LockGuard guard(mutex);
             Item* item = find(id);
-            if (item != nullptr && still_open(item->state)) {
-                item->state = DownloadState::failed;
-                item->failure = DownloadFailure::not_offered;
-                item->detail = answer.detail.empty() ? failure_text(DownloadFailure::not_offered)
-                                                     : answer.detail;
-                mark_dirty();
-                touch();
-            }
+            if (item != nullptr && still_open(item->state))
+                fail(*item, DownloadFailure::not_offered, answer.detail);
             return KeyGate::failed;
         }
         if (answer.kind == KeyAnswer::Kind::refused) {
@@ -1442,14 +1525,8 @@ KeyGate Downloads::State::ensure_key(http::Client& client, uint64_t id) {
                 log_line(std::string("the registry refused a field: ") + answer.error.field);
             threads::LockGuard guard(mutex);
             Item* item = find(id);
-            if (item != nullptr && still_open(item->state)) {
-                item->state = DownloadState::failed;
-                item->failure = DownloadFailure::refused;
-                item->detail =
-                    answer.detail.empty() ? failure_text(DownloadFailure::refused) : answer.detail;
-                mark_dirty();
-                touch();
-            }
+            if (item != nullptr && still_open(item->state))
+                fail(*item, DownloadFailure::refused, answer.detail);
             return KeyGate::failed;
         }
         if (answer.kind == KeyAnswer::Kind::rate_limited) {
@@ -1460,13 +1537,7 @@ KeyGate Downloads::State::ensure_key(http::Client& client, uint64_t id) {
                 if (!live(id) || item == nullptr)
                     return quit_flag.load() ? KeyGate::quit : KeyGate::failed;
                 if (item->rate_limits >= rate_reasks) {
-                    item->state = DownloadState::failed;
-                    item->failure = DownloadFailure::unreachable;
-                    item->detail = answer.detail.empty()
-                                       ? failure_text(DownloadFailure::unreachable)
-                                       : answer.detail;
-                    mark_dirty();
-                    touch();
+                    fail(*item, DownloadFailure::unreachable, answer.detail);
                     return KeyGate::failed;
                 }
                 waits = item->rate_limits;
@@ -1556,19 +1627,14 @@ namespace {
 /// @param state the queue
 /// @param item the item
 /// @param failure why
-/// @param detail the sentence a log would use
+/// @param detail what the failure's text does not say; dropped when it repeats it
 void fail_locked(
     Downloads::State& state,
     Downloads::State::Item& item,
     DownloadFailure failure,
     std::string detail
 ) {
-    item.state = DownloadState::failed;
-    item.failure = failure;
-    item.detail = std::move(detail);
-    item.challenge.reset();
-    state.mark_dirty();
-    state.touch();
+    state.fail(item, failure, std::move(detail));
 }
 
 /// Room for the bytes still to come, plus one step.
@@ -1761,17 +1827,25 @@ FetchEnd fetch_url(
     sink.finish_tail(response.failure == http::Failure::none && sink.halt_ == Halt::none);
     sink.commit();
     state.phase.store(0);
+    const Answered seen = answered(request.url, response);
     {
         threads::LockGuard guard(state.mutex);
         Downloads::State::Item* item = state.find(id);
-        if (item != nullptr && still_open(item->state))
-            item->bytes_fetched += response.body_bytes;
+        if (item != nullptr) {
+            item->fetched = seen;
+            if (still_open(item->state))
+                item->bytes_fetched += response.body_bytes;
+        }
     }
     // A declared length past the catalogue never reaches the sink: the client
-    // stops it as too large. That is still a file that is not the catalogue's.
-    const Halt halt = sink.halt_ == Halt::none && response.failure == http::Failure::too_large
-                          ? Halt::differs
-                          : sink.halt_;
+    // stops it as too large. That is a check when the answer is one (a page
+    // longer than a small package), and otherwise still a file that is not
+    // the catalogue's.
+    Halt halt = sink.halt_;
+    if (halt == Halt::none && response.status != 0 && package_check(seen))
+        halt = Halt::browser_check;
+    else if (halt == Halt::none && response.failure == http::Failure::too_large)
+        halt = Halt::differs;
     if (halt == Halt::paused) {
         threads::LockGuard guard(state.mutex);
         Downloads::State::Item* item = state.find(id);
@@ -1793,6 +1867,15 @@ FetchEnd fetch_url(
             state.touch();
         }
         return FetchEnd::cancelled;
+    }
+    if (halt == Halt::browser_check) {
+        // Never answered, asked again or tried at another address: the
+        // player is told, and RETRY asks again when they choose.
+        threads::LockGuard guard(state.mutex);
+        Downloads::State::Item* item = state.find(id);
+        if (item != nullptr && still_open(item->state))
+            fail_locked(state, *item, DownloadFailure::server_check, {});
+        return FetchEnd::failed;
     }
     if (halt == Halt::differs) {
         threads::LockGuard guard(state.mutex);
@@ -2002,14 +2085,12 @@ void Downloads::State::deliver(http::Client& client, uint64_t id, const fs::path
                 item->failure = DownloadFailure::none;
                 result = KeyResult::installed;
             } else if (outcome == InstallOutcome::refused) {
-                item->state = DownloadState::failed;
-                item->failure = DownloadFailure::install_refused;
-                item->detail = failure_text(DownloadFailure::install_refused);
+                // The installer's own reason is the detail, so the message
+                // and the log line name it.
+                fail(*item, DownloadFailure::install_refused, item->install_reason);
                 result = KeyResult::refused;
             } else if (outcome == InstallOutcome::failed) {
-                item->state = DownloadState::failed;
-                item->failure = DownloadFailure::install_failed;
-                item->detail = failure_text(DownloadFailure::install_failed);
+                fail(*item, DownloadFailure::install_failed, item->install_reason);
                 result = KeyResult::failed;
             } else {
                 item->state = DownloadState::cancelled;
@@ -2439,22 +2520,28 @@ void Downloads::State::run() {
             wake.wait(mutex);
     }
     if (quit_flag.load()) {
+        log_failures();
         save_queue();
         return;
     }
     restore_queue();
     while (!quit_flag.load()) {
         save_queue();
+        // Each failure is logged here once, the main thread's (an install
+        // ID turned off) as well as the worker's.
+        log_failures();
         uint64_t id = 0;
         {
             threads::LockGuard guard(mutex);
             id = pick();
-            while (!quit && id == 0) {
+            while (!quit && id == 0 && !failure_unlogged()) {
                 wake.wait(mutex);
                 id = pick();
             }
             if (quit)
                 break;
+            if (id == 0)
+                continue;
             current_id = id;
             item_cancel.store(false);
         }
@@ -2467,6 +2554,7 @@ void Downloads::State::run() {
             phase.store(0);
         }
     }
+    log_failures();
     save_queue();
 }
 
@@ -2597,6 +2685,10 @@ void Downloads::retry(uint64_t item) {
     found->hash_failures = 0;
     found->fetched_whole_after_range = false;
     found->outcome.reset();
+    found->install_reason.clear();
+    found->asked.reset();
+    found->fetched.reset();
+    found->logged = false;
     state_->mark_dirty();
     state_->touch();
     state_->wake.notify_all();
@@ -2624,10 +2716,7 @@ void Downloads::set_install_id(std::string_view registry, std::optional<std::str
             continue;
         if (item.target.install_id != data::registry::InstallIdUse::required)
             continue;
-        item.state = DownloadState::failed;
-        item.failure = DownloadFailure::install_id_off;
-        item.detail = failure_text(DownloadFailure::install_id_off);
-        item.challenge.reset();
+        state_->fail(item, DownloadFailure::install_id_off, {});
         if (state_->current_id == item.id)
             state_->http_cancel.store(true);
         changed = true;
@@ -2657,7 +2746,7 @@ void Downloads::set_language(std::string tag) {
     state_->options.language = std::move(tag);
 }
 
-void Downloads::report_install(uint64_t item, InstallOutcome outcome) {
+void Downloads::report_install(uint64_t item, InstallOutcome outcome, std::string reason) {
     threads::LockGuard guard(state_->mutex);
     State::Item* found = state_->find(item);
     if (found == nullptr)
@@ -2665,6 +2754,7 @@ void Downloads::report_install(uint64_t item, InstallOutcome outcome) {
     if (found->state != DownloadState::installing && found->state != DownloadState::handing_over)
         return;
     found->outcome = outcome;
+    found->install_reason = std::move(reason);
     state_->wake.notify_all();
 }
 
@@ -2714,6 +2804,36 @@ std::vector<std::filesystem::path> Downloads::files_in_use() const {
         paths.push_back(package_path(folder, item.target.sha256, item.target.kind, false));
     }
     return paths;
+}
+
+std::string failure_message(const DownloadView& item, LookUp look_up) {
+    const auto words = [look_up](std::string_view english) {
+        if (english.empty() || look_up == nullptr)
+            return std::string(english);
+        return std::string(look_up(english));
+    };
+    std::string message;
+    if (item.failure == DownloadFailure::server_check) {
+        message = words(server_check_words);
+        const std::string name =
+            item.target.registry_name.empty() ? item.target.registry : item.target.registry_name;
+        constexpr std::string_view place = "{registry}";
+        const std::size_t at = message.find(place);
+        if (at != std::string::npos)
+            message.replace(at, place.size(), name);
+    } else if (
+        !item.detail.empty() && (item.failure == DownloadFailure::install_refused ||
+                                 item.failure == DownloadFailure::install_failed)
+    ) {
+        message = item.detail;
+    } else {
+        message = words(failure_text(item.failure));
+        if (!item.detail.empty() && message.find(item.detail) == std::string::npos)
+            message += message.empty() ? item.detail : " (" + item.detail + ")";
+    }
+    if (!message.empty() && message[0] >= 'a' && message[0] <= 'z')
+        message[0] = static_cast<char>(message[0] - 'a' + 'A');
+    return message;
 }
 
 std::optional<DownloadTarget> download_target(

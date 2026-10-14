@@ -11130,6 +11130,14 @@
 	it=la fonte ha rifiutato il download;
 	}
 
+[the server asked for a check the game cannot do]
+	{
+	de=der Server hat eine Prüfung verlangt, die das Spiel nicht durchführen kann;
+	fr=le serveur a demandé une vérification que le jeu ne peut pas faire;
+	es=el servidor pidió una comprobación que el juego no puede hacer;
+	it=il server ha chiesto una verifica che il gioco non può fare;
+	}
+
 [the server could not be reached]
 	{
 	de=der Server war nicht erreichbar;
@@ -12192,6 +12200,14 @@
 	fr={problem} · RÉESSAYER;
 	es={problem} · REINTENTAR;
 	it={problem} · RIPROVA;
+	}
+
+[{registry} asked for a check the game cannot do. Try again later.]
+	{
+	de={registry} hat eine Prüfung verlangt, die das Spiel nicht durchführen kann. Versuch es später noch einmal.;
+	fr={registry} a demandé une vérification que le jeu ne peut pas faire. Réessaie plus tard.;
+	es={registry} pidió una comprobación que el juego no puede hacer. Inténtalo de nuevo más tarde.;
+	it={registry} ha chiesto una verifica che il gioco non può fare. Riprova più tardi.;
 	}
 
 [{registry} · Not reviewed by the OA team]

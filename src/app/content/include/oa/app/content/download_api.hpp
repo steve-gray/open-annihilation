@@ -136,30 +136,88 @@ enum class KeyResult : uint8_t {
 /// @return the body
 [[nodiscard]] std::string result_body(KeyResult result, uint64_t bytes, int64_t seconds);
 
+/// What one answer from a server was, for a log line.
+///
+/// The address keeps nothing of its query or fragment, where a signed
+/// package address carries its key.
+struct Answered {
+    std::string address;            ///< the address asked, without its query or fragment
+    int status = 0;                 ///< the HTTP status; 0 when no answer was read
+    std::string content_type;       ///< the Content-Type the answer sent, as a log keeps it
+    std::optional<uint64_t> length; ///< the Content-Length the answer sent
+    uint64_t body_bytes = 0;        ///< the body bytes read
+    std::string failure;        ///< why the fetch stopped early, in English; empty when it ended
+    bool browser_check = false; ///< the answer is a check meant for a web browser
+    std::string check_header;   ///< the firewall header that names the check, as "name: value"
+};
+
+/// Tells whether an answer is a check meant for a web browser, which the
+/// game never answers.
+///
+/// The firewall in front of a server names such a check with a header of
+/// its own: x-amzn-waf-action (a captcha or a challenge), or cf-mitigated
+/// set to challenge. An HTML page (text/html or application/xhtml+xml)
+/// where a package or the API's JSON was expected is one too, unless its
+/// status is a server error (5xx), which is an error page.
+///
+/// @param response the answer's head
+/// @return true for a check meant for a web browser
+[[nodiscard]] bool browser_check(const netgame::http::Response& response);
+
+/// Drops an address's query and fragment, which may hold a key.
+///
+/// @param address the address
+/// @return the address up to its first `?` or `#`
+[[nodiscard]] std::string address_without_query(std::string_view address);
+
+/// Records an answer for a log line.
+///
+/// A fetch the caller's sink stopped records no failure: the sink chose it.
+/// Nor does a check meant for a web browser, whose page is never read whole.
+///
+/// @param address the address asked; its query and fragment are dropped
+/// @param response the outcome of the fetch
+/// @return the answer
+[[nodiscard]] Answered answered(std::string_view address, const netgame::http::Response& response);
+
+/// Writes an answer for a log line.
+///
+/// "http://host/v1/p/name.oamap answered 405, text/html, 2134 bytes, a
+/// check meant for a web browser (x-amzn-waf-action: captcha)", or, when no
+/// answer was read, the address and why: "http://host/api/v1/downloads: the
+/// connection could not be opened".
+///
+/// @param answer the answer
+/// @return the text; never empty
+[[nodiscard]] std::string answered_text(const Answered& answer);
+
 /// What one key request came back as.
 struct KeyAnswer {
     /// Which kind of answer it was.
     enum class Kind : uint8_t {
-        key,          ///< a key was issued
-        challenge,    ///< the registry asked for a check
-        refused,      ///< a client fault or a refusal; do not try a mirror
-        not_offered,  ///< the registry no longer offers this release
-        rate_limited, ///< wait and ask again
-        retry,        ///< a failure that may be tried again, then a mirror
+        key,           ///< a key was issued
+        challenge,     ///< the registry asked for a check
+        refused,       ///< a client fault or a refusal; do not try a mirror
+        not_offered,   ///< the registry no longer offers this release
+        rate_limited,  ///< wait and ask again
+        retry,         ///< a failure that may be tried again, then a mirror
+        browser_check, ///< a check meant for a web browser; the game gives up for now
     } kind = Kind::retry;
 
     std::optional<IssuedKey> key;       ///< set for a key
     std::optional<Challenge> challenge; ///< set for a check
     ApiError error;                     ///< the error body, when there was one
     std::string detail;                 ///< why, for a log
+    Answered answered;                  ///< what the server sent, for a log
 };
 
 /// Asks a registry for one key.
 ///
-/// One request. 201 is a key, 428 a check, 404 and 409 not offered, 429 rate
-/// limited, and any other 4xx refused. Anything else, a 201 or 428 that does
-/// not read, and a network failure are retry. The cancel flag is read by the
-/// fetch.
+/// One request. A check meant for a web browser (browser_check) is that,
+/// whatever its status. 201 is a key, 428 a check, 404 and 409 not offered,
+/// 429 rate limited, and any other 4xx refused. Anything else, a 201 or 428
+/// that does not read, and a network failure are retry. The cancel flag is
+/// read by the fetch.
 ///
 /// @param client the worker's client
 /// @param api the registry's download API
