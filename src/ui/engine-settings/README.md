@@ -1406,7 +1406,8 @@ asked for the language, writes that language's tag into
 `oa-ui-engine-settings-pictures DIRECTORY` draws each section the engine's
 dialog lists when Touch, Controller and Game files are on: the dialog
 alone, unlocked, at Compact and 2× (960 by 648), in the installed game's
-fonts (`OA_GAME_DIR`). It writes one PNG a section, under the names
+fonts (`OA_GAME_DIR`). The header shows the shipped app icon, the plates,
+cropped to the pixels that show (`branding/open-annihilation-256.png`). It writes one PNG a section, under the names
 `docs/images/settings/` uses (`controls-1.png`, `language-1.png`,
 `graphics-1.png`, `downloads-1.png`, and `page_word` plus `.png` for the
 others), and `downloads-2.png` with Downloads scrolled to its end. The
