@@ -4079,6 +4079,11 @@ A transport named with no game to host or join (`-n`, or the `-c` file's
 3.1c: each frame asks for a frontend pass until a multiplayer screen shows
 (`transport_frame`), and the screens take the transport, so `-n1:ADDRESS`
 alone lists the games at that address for the player to choose.
+A launch's player and game names keep 16 characters and its password 10,
+the battle room's and the session's own limits (`kPlayerNameLimit`,
+`kGameNameLimit`, `kPasswordLimit` in `launch_file.hpp`, which
+`launch_file.cpp` checks against those fields): a longer one is refused,
+and TA Forever's file keeps the first ones.
 A launch file the system opens in the game (`opened_launch.hpp`) is read
 as it arrives and waits for the game to take it. One that arrives before
 the runtime starts is the start's launch, exactly as `-c FILE` makes it:

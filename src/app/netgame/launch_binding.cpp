@@ -4,6 +4,7 @@
 // The launch block as the running game binds it (launch_binding.hpp).
 #include "launch_binding.hpp"
 
+#include "oa/app/netgame/launch_file.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
 
 #include <cstddef>
@@ -17,7 +18,7 @@ namespace mp = oa::ui::frontend_multiplayer;
 namespace nl = oa::app::netgame::launch;
 
 // Characters of the player's name the nickname keeps.
-constexpr std::size_t kNicknameLimit = 0x10;
+constexpr std::size_t kNicknameLimit = oa::app::netgame::kPlayerNameLimit;
 
 LaunchBinding g_launch{};
 // A launch is active: applied, or marked active, and not ended since.

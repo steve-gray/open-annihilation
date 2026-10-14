@@ -818,15 +818,15 @@ settings in src/app/netgame/launch_file.cpp, word for word. -->
 |---|---|---|
 | `game.role` | `--host \| --join ADDRESS` | Hosts the game, or joins the game at `game.address`: `host` or `join`. A host plays over TCP/IP. |
 | `game.address` | `--join ADDRESS` | The address of the game to join, at most 63 characters. A host needs none. |
-| `game.name` | `--game-name NAME` | The game's name, at most 63 characters. |
-| `game.password` | `--game-password PASSWORD` | The game's password, at most 31 characters. It is never written to the log. |
+| `game.name` | `--game-name NAME` | The game's name, at most 16 characters. |
+| `game.password` | `--game-password PASSWORD` | The game's password, at most 10 characters. It is never written to the log. |
 | `game.player-limit` | `--player-limit N` | How many players the game takes, from 2 through 10. |
 | `game.launcher-name` | `--launcher-name NAME` | The launcher's name, at most 15 characters. The battle room shows it in place of Previous Menu when it has at most 11. |
 | `game.tournament` | `--tournament[=on\|off]` | A tournament game: `on` or `off`. It seats no computer players, and with `rules.lock-options` the players' sides and teams are locked too. |
 | `game.closed` | `--closed[=on\|off]` | Closes the game to more players once the launch's own computer players are seated: `on` or `off`. |
 | `game.directplay.application-guid` | `--dplay-guid GUID` | The DirectPlay application GUID the game hosts under and looks for, with or without braces. |
 | `game.directplay.port` | `--dplay-port PORT` | The DirectPlay port the game hosts on and looks for games at, from 1 through 65535. |
-| `player.name` | `--player-name NAME` | The player's name, at most 31 characters. |
+| `player.name` | `--player-name NAME` | The player's name, at most 16 characters. |
 | `player.side` | `--side arm\|core\|watcher` | The player's side, or `watcher` to watch instead of play. |
 | `player.team` | `--team 1-5\|none` | The player's team, from 1 through 5, or `none`. |
 | `player.colour` | `--colour 1-10` | The player's colour, from 1 through 10 in the order the battle room steps through them. A colour another player has gives the next free one. |
@@ -1046,7 +1046,7 @@ switches, a `-b` that does nothing, a `-c` with no file, and `-h`, `-n` and
 | `-d`, `-df` | `-d` runs the game in a window, where the intro does not play, and `-df` full screen, for this run only: neither is remembered. Another letter after `d` counts as `-d`. |
 | `-e PERCENT` | Drops that percentage of this machine's outgoing network frames at random, to test a poor connection: 0 to 100. Anything else, or a value that begins with `-`, is 0. |
 | `-f` | Nothing. |
-| `-h NAME` | Marks this machine as the host and names the game; 63 characters are kept. A next word that begins with `-` is used up and sets nothing. |
+| `-h NAME` | Marks this machine as the host and names the game; its first 16 characters are kept. A next word that begins with `-` is used up and sets nothing. |
 | `-l` | Nothing, as in 3.1c. |
 | `-n TYPE[:ADDRESS]` | Skips the intro, and the main menu goes straight to the multiplayer screens on the transport it names: `1` TCP/IP, with the address to connect to after a colon (`-n1:192.0.2.10`), whose games the game list then shows for the player to choose, or, with no address, the screens ask for one; `2` IPX, `3` a modem and `4` a serial cable, which this game does not have, so the screens open on the provider list. Another number only skips the intro. |
 | `-p RATE` | The network send rate in packets per second: 1 counts as 2 and above 30 as 30, 0 is 5 a second, and below 0, or a value that begins with `-`, turns paced sending off. A launch file's `pfs` replaces it. |
@@ -1110,10 +1110,10 @@ the -c file in src/app/netgame/launch_file.cpp, word for word. -->
 | `timelimit` | `rules.time-limit` | Passed on with the score report; it does not end the game. Below 0 counts as 0. |
 | `pfs` | none | The network send rate in packets per second, in place of `-p`: below 0 turns paced sending off, 1 counts as 2, above 30 counts as 30, and 0 leaves the rate alone. |
 | `provider` | `game.launcher-name` | The launcher's name, its first 15 characters kept. The battle room shows it in place of Previous Menu when it has at most 11. |
-| `session` | `game.name` | The game's name, its first 63 characters kept. |
+| `session` | `game.name` | The game's name, its first 16 characters kept. |
 | `mission` | `map` | The map the host plays, by the name the list shows or its key, its first 63 characters kept. A map that is not installed ends the start. |
-| `password` | `game.password` | The game's password, its first 31 characters kept. |
-| `player` | `player.name` | The player's name, its first 31 characters kept. Empty leaves the player's own name. |
+| `password` | `game.password` | The game's password, its first 10 characters kept. |
+| `player` | `player.name` | The player's name, its first 16 characters kept. Empty leaves the player's own name. |
 | `address` | `game.address` | The TCP/IP address, its first 63 characters kept. With TCP/IP, a host creates its game at once and a player who joins joins the game there. |
 | `lockOptions` | `rules.lock-options` | Any whole number but 0 locks the battle room's options, and 0 unlocks them. |
 | `maxunits` | `rules.unit-limit` | The most units each player may have; 0 leaves the battle room's own. Below 20 counts as 20, and above 6553 as 6553. |
