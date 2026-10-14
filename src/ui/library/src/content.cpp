@@ -645,10 +645,14 @@ void note_content(Library& library) {
     const std::vector<std::string>& enabled = library.inputs.content.enabled;
     ContentDraft& draft = library.content;
     const bool same_seed = draft.seed_base == base && same_ids(draft.seed_enabled, enabled);
-    // A download asked for before the copy arrives has not edited the choice.
-    // A refresh that brings the same stored choice keeps that ask. A different
-    // stored choice drops it, as it drops an edit.
-    if (!same_seed || (!draft.edited && draft.downloads.empty())) {
+    // A download asked for before the copy arrives has not edited the choice,
+    // and nor has the question asked before an expansion a playing mod needs
+    // goes off. A refresh that brings the same stored choice keeps both, so
+    // the question's TURN OFF still turns the expansion off when a catalogue
+    // or a picture arrived while it showed. A different stored choice drops
+    // them, as it drops an edit.
+    const bool kept = draft.edited || draft.asking || !draft.downloads.empty();
+    if (!same_seed || !kept) {
         draft = {};
         draft.seed_base = base;
         draft.seed_enabled = enabled;
