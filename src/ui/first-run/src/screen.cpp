@@ -1388,14 +1388,15 @@ void lay_game(
     std::vector<CardPlan> plans = plan_cards(text_w);
     int32_t content_height = list_height(plans);
 
-    // Under the rows: Locate another…, the line under it, and the band's
-    // last line, which the controller's hint takes.
+    // Under the rows: Locate another…, the line under it, and with a
+    // controller the band's last line, which its hint takes.
     const std::string locate = show("Locate another…");
     const std::string copies = show("Copies go to Documents › Open Annihilation");
     const int32_t button_height = kit::compact_metrics.button_height;
-    const int32_t under_rows = metrics.padding + button_height + 8 +
-                               paragraph_height(fonts, column, copies, kit::FontRole::small) +
-                               kit::compact_metrics.small_line;
+    const int32_t under_rows =
+        metrics.padding + button_height + 8 +
+        paragraph_height(fonts, column, copies, kit::FontRole::small) +
+        (session.model.controller ? kit::compact_metrics.small_line : int32_t{0});
     const int32_t room = std::max(band.top + band.height - under_rows - list_top, int32_t{0});
     const bool scrolls = count > 0 && content_height > room;
     if (scrolls && left + column + kBarGap + kWellWidth > band.left + band.width) {

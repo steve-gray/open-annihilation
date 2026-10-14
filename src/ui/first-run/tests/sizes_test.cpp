@@ -928,9 +928,14 @@ int main(int argc, char** argv) {
                     full_copy_session(CopyStage::started),
                     full_copy_session(CopyStage::underway),
                     full_copy_session(CopyStage::checked),
+                    crowded_game_session(),
+                    full_copy_session(CopyStage::started),
                     language_session(language.tag),
                 };
-                steps[7].model.step = first_run::Step::online;
+                // With a controller its hint takes the band's last line.
+                steps[7].model.controller = true;
+                steps[8].model.controller = true;
+                steps[9].model.step = first_run::Step::online;
                 for (first_run::Session& session : steps) {
                     session.model.windowed = windowed;
                     check_step(fonts.get(), window, session, language.tag);
