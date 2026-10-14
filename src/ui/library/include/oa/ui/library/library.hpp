@@ -764,9 +764,10 @@ void refresh(Library& library, Inputs inputs);
 
 /// Keeps or drops the Active tab's pending choice after the inputs change.
 ///
-/// A draft that was edited from the stored base game and expansions now in
-/// the inputs is kept, including a question that is waiting. Any other
-/// refresh stores that choice as the new seed and clears the draft.
+/// A draft taken from the stored base game and expansions now in the inputs
+/// is kept while it was edited, a question is waiting for its answer, or an
+/// expansion download was asked for. Any other refresh stores that choice as
+/// the new seed and clears the draft, the waiting question with it.
 /// An open base game chooser stays open on its marked game while the stored
 /// choice is the same, its rows read again from the inputs; a different
 /// stored choice closes it.
