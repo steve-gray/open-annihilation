@@ -34,7 +34,8 @@
 # machines run the behaviour in a multiplayer game. Hacks: title is the name players see, in English and
 # Title Case, unique among the hacks; area-titles names each area the same way; implemented says whether
 # this engine carries the behaviour out; a profile that turns on a hack that is not implemented is
-# refused unless the resolver is told to accept it. Limits and hacks: shorthand names the single
+# refused unless the resolver is told to accept it. off says what a hack written false leaves, for a hack
+# whose behaviour OA keeps when it is off (absent: 3.1c behaviour). Limits and hacks: shorthand names the single
 # parameter a scalar value sets; constraints are checked after resolution; presets are complete
 # parameter sets named for what they do, never for a mod (baseline equals the baselines and exists only
 # when the entry can express 3.1c while on). Identity, layout, strings and media: key is the profile
@@ -898,6 +899,7 @@ entries:
     summary: A machine may add more than one AI player in the multiplayer battle room.
     ownership: host
     scope: sim
+    off: OA's battle room still seats several computer players; the value is kept so a profile that names the hack still loads.
     params: {}
   setup.ai-player-name-format:
     kind: hack
@@ -1086,6 +1088,7 @@ entries:
     summary: "+AI and +Control move from the developer group (flag 4) to the classic cheat group (flag 2), so they work in multiplayer with the lobby Cheats option."
     ownership: all-machines
     scope: sim
+    off: "`+AI` and `+Control` stay cheats either way."
     params: {}
   console.lostype-cheat-group:
     kind: hack

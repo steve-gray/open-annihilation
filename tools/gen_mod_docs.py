@@ -555,7 +555,8 @@ def schema(eid, e, entries):
     sh = e.get("shorthand")
     if sh:
         ways.append((f"{eid}: {yaml_value(params[sh]['default'])}", f"On, the shorthand: a bare value sets `{sh}`."))
-    ways.append((f"{eid}: false", "Off, the same as leaving it out: 3.1c behaviour."))
+    off = f"Off, the same as leaving it out. {e['off']}" if "off" in e else "Off, the same as leaving it out: 3.1c behaviour."
+    ways.append((f"{eid}: false", off))
     out += ["| Write | Means |", "| --- | --- |"] + [f"| {code(w)} | {m} |" for w, m in ways] + [""]
 
     out += ["### Parameters", ""]
@@ -914,6 +915,11 @@ def self_test():
                    "the host may also change it", "| `units.example-ticks` | unit |"):
         if needle not in page:
             failures.append(f"the schema of units.example lacks {needle!r}")
+    if "Off, the same as leaving it out: 3.1c behaviour." not in page:
+        failures.append("the schema of units.example does not say off is 3.1c behaviour")
+    kept = schema("ui.plain", dict(reg["entries"]["ui.plain"], off="It still draws."), reg["entries"])
+    if "| `ui.plain: false` | Off, the same as leaving it out. It still draws. |" not in kept:
+        failures.append("the schema of a hack with off does not use its words")
 
     with tempfile.TemporaryDirectory() as tmp:
         docs = Path(tmp) / "docs"
