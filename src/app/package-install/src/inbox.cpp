@@ -211,8 +211,10 @@ bool package_files_waiting() {
 
 bool opens_file(const fs::path& file) {
     const std::string extension = extension_of(file);
+    // A launch file is network play's, not the inbox's.
     for (const oa::platform::file_types::FileType& type : oa::platform::file_types::file_types)
-        if (extension == type.extension)
+        if (extension == type.extension &&
+            type.opening == oa::platform::file_types::Opening::install)
             return true;
     return false;
 }

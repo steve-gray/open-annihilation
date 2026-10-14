@@ -124,6 +124,68 @@ it must arrive within two seconds, and the game refuses a launch that does
 not end by then. TA Forever's file is read from standard input only with
 `-c -` or `--launch -`.
 
+On Windows the same works from the command prompt:
+
+```bat
+type host-now.oalaunch | open-annihilation.exe
+```
+
+A program started on macOS from the Finder or the Dock has no standard
+input to read, so there the launch is handed to the game as a file:
+
+```sh
+cat host-now.oalaunch | open -f -a "Open Annihilation"
+```
+
+`open -f` writes what it is given to a temporary `.txt` file and opens that
+file in the game, which reads it by what it holds, as the next section says.
+
+## Opening a launch file
+
+`.oalaunch` is one of the file types the game registers, with the game's
+icon, so a launch file a lobby or a friend gives you opens with a
+double-click, from Open With, or dropped on the game's window:
+
+- **Windows:** the game registers it for you each time it starts, under
+  `HKEY_CURRENT_USER\Software\Classes`, and the installer registers it for
+  everyone who uses the computer. Both open it with
+  `"<install folder>\open-annihilation.exe" -c "%1"`; uninstalling removes
+  the installer's association.
+- **Linux:** the game adds the MIME type `application/x-oalaunch` to your
+  data folder, for files named `*.oalaunch` and for any text that begins
+  `oalaunch:`, and a desktop entry of its own that opens it with
+  `open-annihilation -c %f`.
+- **macOS:** the app declares the type and is its owner, so Finder opens it
+  with Open Annihilation. The app also takes a plain text file it is handed
+  without being its opener, which is what `open -f -a` sends.
+
+What an opened launch file does depends on when it arrives:
+
+- **When it starts the game,** it is the start's launch, exactly as
+  `-c FILE`: the intro is skipped, the launch's content chooses what the
+  game plays, and the battle room opens on the file's map, rules and
+  players. A file the game cannot use ends the game with status 2 and a
+  message that names the file and the field.
+- **While the game shows the main menu,** the game goes to that launch's
+  battle room. From the single-player menu it goes back to the main menu
+  first.
+- **During a match,** while a game is being set up (a skirmish, a campaign
+  mission, the multiplayer screens), or on any other screen, the game opens
+  nothing and says so: in the match's message log, or with a notice. A
+  launch is not opened while another launch is under way either.
+- **While the game runs,** a launch whose `content` names a mod, base game
+  or expansions other than those the game plays is not opened; the notice
+  says to quit the game and open the file again, which then starts it with
+  that content. A file the battle room cannot use is not opened, and the
+  notice names the file and the field.
+
+The `status` group of a launch file opened in the game has no effect: the
+status stream is set up from the command line, before the file arrives.
+
+On Windows and Linux, opening a launch file while the game runs starts a
+second copy of the game with `-c FILE`, which starts as any second copy
+does. On macOS the system hands the file to the copy that runs.
+
 ## Launch settings
 
 Every setting a host or a joining player can choose in the battle room is a

@@ -1334,48 +1334,6 @@ void write_startup_line(std::string_view text) {
     std::exit(0);
 }
 
-/// Turns a content choice the launch named into a refusal that names the field.
-///
-/// @param problem the message `--content` would have reported
-/// @return the launch refusal, naming the file and the field
-std::string launch_content_error(std::string_view problem) {
-    const auto& net = netgame_context().options;
-    const std::string prefix = net.launch_source + ": ";
-    auto line = [&](std::string_view field, std::string_view id, std::string_view why) {
-        return prefix + std::string(field) + ": \"" + std::string(id) + "\" " + std::string(why);
-    };
-    constexpr std::string_view unknown_base = "--content names an unknown base game: ";
-    constexpr std::string_view expansion_as_base =
-        "--content names an expansion as the base game: ";
-    constexpr std::string_view unknown_expansion = "--content names an unknown expansion: ";
-    constexpr std::string_view base_as_expansion = "--content names a base game as an expansion: ";
-    if (problem.starts_with(unknown_base))
-        return line(
-            "content.base-game",
-            problem.substr(unknown_base.size()),
-            "is not an installed base game"
-        );
-    if (problem.starts_with(expansion_as_base))
-        return line(
-            "content.base-game",
-            problem.substr(expansion_as_base.size()),
-            "is not an installed base game"
-        );
-    if (problem.starts_with(unknown_expansion))
-        return line(
-            "content.expansions",
-            problem.substr(unknown_expansion.size()),
-            "is not an installed expansion"
-        );
-    if (problem.starts_with(base_as_expansion))
-        return line(
-            "content.expansions",
-            problem.substr(base_as_expansion.size()),
-            "is not an installed expansion"
-        );
-    return prefix + "content.base-game: " + std::string(problem);
-}
-
 [[nodiscard]] Options parse_options(int argc, char** argv, const Extension& extension) {
     Options result;
     std::string joined_line;
@@ -1770,14 +1728,12 @@ std::string launch_content_error(std::string_view problem) {
             "--choose-game-dir opens a dialog, which headless, check, benchmark, --frames and "
             "--snapshot runs never show"
         );
+    // A launch's content was checked as it was taken (adopt_launch_run).
     if (!result.content.empty()) {
         const oa::data::content_bundles::ContentChoice named =
             oa::data::content_bundles::parse_content_argument(result.content);
-        if (!named.error.empty()) {
-            if (netgame_context().options.launch_content_applied)
-                throw netgame::LaunchRefusal(launch_content_error(named.error));
+        if (!named.error.empty())
             throw std::runtime_error(named.error);
-        }
     }
     return result;
 }

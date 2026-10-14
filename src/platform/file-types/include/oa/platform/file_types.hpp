@@ -1,14 +1,15 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Makes the running copy of the game the opener of the four file types for the user who runs
+// Makes the running copy of the game the opener of the five file types for the user who runs
 // it, with the game's icon on those files where the system takes one: the registry under
-// HKEY_CURRENT_USER on Windows, and on Linux the MIME package, desktop entry and icons in the
-// user's XDG data folder, with the system's database tools run after a change. macOS and iOS
-// declare the types in the bundle's Info.plist. On macOS a switch chooses whether this copy
-// is the default opener, and only a switch that changed is asked; a start never replaces a
-// choice made in Finder. iOS does nothing at run time. Each registration writes only what
-// differs from what is there.
+// HKEY_CURRENT_USER on Windows, and on Linux the MIME package, desktop entries and icons in
+// the user's XDG data folder, with the system's database tools run after a change. Four are
+// files the game installs or adds; the fifth, a launch file, starts the game in its battle
+// room (-c FILE). macOS and iOS declare the types in the bundle's Info.plist. On macOS a
+// switch chooses whether this copy is the default opener of each of the four, and only a
+// switch that changed is asked; a start never replaces a choice made in Finder. iOS does
+// nothing at run time. Each registration writes only what differs from what is there.
 #pragma once
 
 #include <stdint.h>
@@ -29,7 +30,7 @@ inline constexpr std::string_view mod_extension = "oamod";
 inline constexpr std::string_view mod_mime_type = "application/x-oamod";
 /// What the system calls a mod package in its file managers.
 inline constexpr std::string_view mod_type_name = "Open Annihilation mod";
-/// The Windows program identifier the mod package's extension names, one of the four file types.
+/// The Windows program identifier the mod package's extension names, one of the five file types.
 inline constexpr std::string_view mod_program_id = "OpenAnnihilation.Mod";
 /// A language pack's file name extension, without its dot; matched without case.
 inline constexpr std::string_view language_extension = "oalang";
@@ -55,26 +56,53 @@ inline constexpr std::string_view registry_mime_type = "application/x-oareg";
 inline constexpr std::string_view registry_type_name = "Open Annihilation registry";
 /// The Windows program identifier a .oareg file's extension names.
 inline constexpr std::string_view registry_program_id = "OpenAnnihilation.Registry";
+/// A launch file's extension, without its dot; matched without case. A .oalaunch file.
+inline constexpr std::string_view launch_extension = "oalaunch";
+/// The MIME type of a .oalaunch launch file.
+inline constexpr std::string_view launch_mime_type = "application/x-oalaunch";
+/// What the system calls a .oalaunch launch file in its file managers.
+inline constexpr std::string_view launch_type_name = "Open Annihilation launch file";
+/// The Windows program identifier a .oalaunch file's extension names.
+inline constexpr std::string_view launch_program_id = "OpenAnnihilation.Launch";
+/// What a launch file's text begins with, after an optional UTF-8 byte order mark; the MIME
+/// package's magic, so that a launch with another name is known by its content.
+inline constexpr std::string_view launch_magic = "oalaunch:";
 /// The name of the desktop entry, MIME package and program icon on Linux, without their
 /// extensions; also the macOS and iOS bundle identifier.
 inline constexpr std::string_view desktop_id = "net.coreprime.open-annihilation";
-/// The command-line option the registrations use to open one of the four file types.
+/// The name of the desktop entry that opens launch files on Linux, without its extension.
+inline constexpr std::string_view launch_desktop_id = "net.coreprime.open-annihilation.launch";
+/// The command-line option the registrations use to open one of the four files the game
+/// installs or adds.
 inline constexpr std::string_view open_option = "--open";
+/// The command-line option the registrations use to open a launch file: the game starts with
+/// it as its launch.
+inline constexpr std::string_view launch_option = "-c";
 /// The most milliseconds a database tool may run before it is stopped.
 inline constexpr uint32_t default_tool_time_limit_ms = 5000;
 
-/// One of the four file types the game opens.
+/// What the game does with a file of one of the types it opens.
+enum class Opening : uint8_t {
+    /// installs it, or adds the registry it names, once the main menu shows: --open FILE on
+    /// Windows, a bare argument on Linux
+    install,
+    /// takes it as the launch, which opens its battle room: -c FILE
+    launch,
+};
+
+/// One of the five file types the game opens.
 struct FileType {
     std::string_view extension{};        ///< the file name extension, without its dot
     std::string_view mime_type{};        ///< the MIME type
     std::string_view type_name{};        ///< what file managers call it
     std::string_view program_id{};       ///< the Windows program identifier
     std::string_view parent_mime_type{}; ///< the MIME type it is a kind of
+    Opening opening{Opening::install};   ///< what the game does with such a file
 };
 
-/// The four file types, in the order a registration writes them: the three packages, each a
-/// kind of zip, then a .oareg registry file, a kind of plain text.
-inline constexpr std::array<FileType, 4> file_types{{
+/// The five file types, in the order a registration writes them: the three packages, each a
+/// kind of zip, a .oareg registry file and a .oalaunch launch file, each a kind of plain text.
+inline constexpr std::array<FileType, 5> file_types{{
     {mod_extension, mod_mime_type, mod_type_name, mod_program_id, "application/zip"},
     {language_extension,
      language_mime_type,
@@ -83,33 +111,43 @@ inline constexpr std::array<FileType, 4> file_types{{
      "application/zip"},
     {map_extension, map_mime_type, map_type_name, map_program_id, "application/zip"},
     {registry_extension, registry_mime_type, registry_type_name, registry_program_id, "text/plain"},
+    {launch_extension,
+     launch_mime_type,
+     launch_type_name,
+     launch_program_id,
+     "text/plain",
+     Opening::launch},
 }};
 
 /// One file type as macOS names it, and the content type a switch that is off hands back to.
-/// The identifiers are the ones the bundle exports. The bundle declares each as public.data,
-/// so a browser does not unpack a package; handing a switch off gives the type to the default
-/// opener of a zip archive, or of plain text for a registry file.
+/// The identifiers are the ones the bundle exports. The bundle declares each package and the
+/// registry file as public.data, so a browser does not unpack a package; a launch file is
+/// plain text. Handing a type off gives it to the default opener of a zip archive, or of
+/// plain text for a registry or launch file.
 struct ExportedContentType {
     std::string_view extension{};     ///< the file name extension, without its dot
     std::string_view content_type{};  ///< the exported type identifier
     std::string_view hands_back_to{}; ///< the content type Off asks for an opener
 };
 
-/// The four exported content types, in the same order as file_types.
-inline constexpr std::array<ExportedContentType, 4> exported_content_types{{
+/// The five exported content types, in the same order as file_types.
+inline constexpr std::array<ExportedContentType, 5> exported_content_types{{
     {mod_extension, "net.coreprime.open-annihilation.oamod", "public.zip-archive"},
     {language_extension, "net.coreprime.open-annihilation.oalang", "public.zip-archive"},
     {map_extension, "net.coreprime.open-annihilation.oamap", "public.zip-archive"},
     {registry_extension, "net.coreprime.open-annihilation.oareg", "public.plain-text"},
+    {launch_extension, "net.coreprime.open-annihilation.oalaunch", "public.plain-text"},
 }};
 
-/// Which of the four file types a registration or a withdrawal acts on. Each is on unless a
-/// caller turns it off, so a call that names no set acts on all four.
+/// Which of the five file types a registration or a withdrawal acts on. Each is on unless a
+/// caller turns it off, so a call that names no set acts on all five. Settings has a switch
+/// for each of the first four; a launch file has none and stays on.
 struct TypeSet {
     bool mod{true};      ///< a mod package, .oamod
     bool language{true}; ///< a language pack, .oalang
     bool map{true};      ///< a map pack, .oamap
     bool registry{true}; ///< a registry file, .oareg
+    bool launch{true};   ///< a launch file, .oalaunch
 
     /// Reports whether the set holds the file type whose extension is `extension`.
     ///
@@ -124,20 +162,27 @@ struct TypeSet {
             return map;
         if (extension == registry_extension)
             return registry;
+        if (extension == launch_extension)
+            return launch;
         return false;
     }
 
-    /// Reports whether the set holds none of the four.
-    [[nodiscard]] constexpr bool none() const noexcept {
-        return !mod && !language && !map && !registry;
+    /// Reports whether the set holds one of the four files the game installs or adds.
+    [[nodiscard]] constexpr bool installs_any() const noexcept {
+        return mod || language || map || registry;
     }
 
-    /// Reports whether the set holds all four.
-    [[nodiscard]] constexpr bool all() const noexcept { return mod && language && map && registry; }
+    /// Reports whether the set holds none of the five.
+    [[nodiscard]] constexpr bool none() const noexcept { return !installs_any() && !launch; }
 
-    /// Returns the four types this set does not hold.
+    /// Reports whether the set holds all five.
+    [[nodiscard]] constexpr bool all() const noexcept {
+        return mod && language && map && registry && launch;
+    }
+
+    /// Returns the five types this set does not hold.
     [[nodiscard]] constexpr TypeSet complement() const noexcept {
-        return TypeSet{!mod, !language, !map, !registry};
+        return TypeSet{!mod, !language, !map, !registry, !launch};
     }
 };
 
@@ -177,8 +222,9 @@ struct Registration {
 /// Registers `executable` as the opener of the file types in `types` for the user who runs it,
 /// writing only what differs from what is there, with `icon_png` as the program's and the
 /// files' icon where the system takes an icon file (XDG). On Linux the MIME package and the
-/// desktop entry then list exactly those types, a type left out loses its mimetype icon, and
-/// with none of the four the desktop entry and the MIME package are removed. A Windows copy
+/// two desktop entries then list exactly those types, a type left out loses its mimetype icon,
+/// the desktop entry of the four is removed with none of them, the launch file's entry
+/// without it, and the MIME package with none of the five. A Windows copy
 /// started from the temporary folder, as one started from inside a zip is, and a Linux copy
 /// under $TMPDIR or /tmp, inside a Flatpak or a Snap, or whose path holds a control character
 /// or is not UTF-8, register nothing and say so in a line. macOS and iOS register through the
@@ -187,7 +233,7 @@ struct Registration {
 /// @param executable the program, absolute, as running_executable gives it
 /// @param icon_png the icon, a PNG file's bytes; empty writes no icon
 /// @param places where it writes; the defaults are the user's own
-/// @param types the file types to register; all four when omitted
+/// @param types the file types to register; all five when omitted
 /// @return what was done
 [[nodiscard]] Registration register_file_types(
     const std::filesystem::path& executable,
@@ -201,8 +247,8 @@ struct Registration {
 /// under OpenWithProgids, and the extension's (Default) and Content Type values only while
 /// they still name this game's program identifier and MIME type. Another program's values,
 /// and the player's own choice of opener, stay. On Linux it takes those types out of the MIME
-/// package and the desktop entry's MimeType list, removes their mimetype icons, and removes
-/// the desktop entry and the MIME package once neither lists a type. The program's own icon
+/// package and the desktop entries' MimeType lists, removes their mimetype icons, and removes
+/// a desktop entry or the MIME package once it lists no type. The program's own icon
 /// stays. A missing value is already withdrawn. The same skips as a registration apply on
 /// Linux (a Flatpak, a Snap). macOS and iOS withdraw nothing at run time: there supported is
 /// false. On macOS the switches call apply_opener_changes, which changes the default opener
@@ -216,10 +262,12 @@ struct Registration {
 
 #ifndef _WIN32
 /// Registers `executable` as the opener of the file types in `types` in an XDG data folder:
-/// the MIME package (mime_package), the desktop entry (desktop_entry) and the icon as the
+/// the MIME package (mime_package), the desktop entry of the four the game installs or adds
+/// (desktop_entry), the launch file's desktop entry (launch_desktop_entry) and the icon as the
 /// program's and each included type's, 256 pixels square, in the hicolor theme. A type left
-/// out loses its mimetype icon. With none of the four, the desktop entry and the MIME package
-/// are removed instead of written empty, and the program's icon stays. Each file is written
+/// out loses its mimetype icon. A desktop entry that would list no type, and the MIME package
+/// with none of the five, are removed instead of written empty, and the program's icon stays.
+/// Each file is written
 /// only when its bytes differ, through a temporary file renamed over it. After a change it
 /// runs update-mime-database for a new MIME package, update-desktop-database for a new desktop
 /// entry, and gtk-update-icon-cache for a new icon where the user's hicolor folder holds an
@@ -233,7 +281,7 @@ struct Registration {
 /// @param executable the program, absolute
 /// @param icon_png the icon, a PNG file's bytes; empty writes no icon
 /// @param places where it writes, and whether and how long it runs the tools
-/// @param types the file types to register; all four when omitted
+/// @param types the file types to register; all five when omitted
 /// @return what was done
 [[nodiscard]] Registration register_xdg(
     const std::filesystem::path& executable,
@@ -243,8 +291,8 @@ struct Registration {
 );
 
 /// Withdraws the file types in `types` from an XDG data folder: each is taken out of the MIME
-/// package and the desktop entry, its mimetype icon is removed, and the desktop entry and the
-/// MIME package are removed once neither lists a type. The program's icon stays. A file that
+/// package and the desktop entries, its mimetype icon is removed, and a desktop entry or the
+/// MIME package is removed once it lists no type. The program's icon stays. A file that
 /// is already absent is left so. The stamp rules are the ones a write uses. Built on every
 /// system but Windows, so that its tests run there too. Never throws.
 ///
@@ -256,14 +304,15 @@ struct Registration {
 /// Registers `executable` as the opener of the file types in `types` in the registry under
 /// HKEY_CURRENT_USER\<places.classes_key>: each extension's program identifier and MIME type,
 /// the program identifier's name, its icon (the executable's first icon, default_icon) and
-/// its open command (open_command). Each value is written only when it is missing or differs,
+/// its open command (open_command, with --open, or -c for a launch file). Each value is
+/// written only when it is missing or differs,
 /// and the shell is told once after any write. A type left out is not written and not removed;
 /// withdraw_windows removes one. A choice of opener the player made in Windows is never
 /// touched. Uses only calls Windows XP has. Never throws.
 ///
 /// @param executable the program, absolute
 /// @param places where it writes, and whether it tells the shell
-/// @param types the file types to register; all four when omitted
+/// @param types the file types to register; all five when omitted
 /// @return what was done
 [[nodiscard]] Registration
 register_windows(const std::filesystem::path& executable, const Places& places, TypeSet types = {});
@@ -283,8 +332,9 @@ register_windows(const std::filesystem::path& executable, const Places& places, 
 [[nodiscard]] Registration withdraw_windows(TypeSet types, const Places& places);
 #endif
 
-/// Returns the desktop entry that opens the file types in `types` with `executable`, with no
-/// entry in the application menus. A type left out is absent from MimeType.
+/// Returns the desktop entry that opens the four file types the game installs or adds that
+/// are in `types` with `executable`, the file as a bare argument, with no entry in the
+/// application menus. A type left out is absent from MimeType; a launch file is never in it.
 ///
 /// @param executable the program, absolute; its UTF-8 spelling is written
 /// @param types the file types the entry opens; all four when omitted
@@ -293,11 +343,20 @@ register_windows(const std::filesystem::path& executable, const Places& places, 
 [[nodiscard]] std::string
 desktop_entry(const std::filesystem::path& executable, TypeSet types = {});
 
-/// Returns the shared-mime-info package that names the file types in `types`, each a kind of
-/// its parent: the three packages a kind of zip, and a .oareg file a kind of plain text. A
-/// type left out has no mime-type element.
+/// Returns the desktop entry that opens a launch file with `executable` as `-c FILE`, with
+/// no entry in the application menus. Its MimeType is the launch file's alone.
 ///
-/// @param types the file types the package names; all four when omitted
+/// @param executable the program, absolute; its UTF-8 spelling is written
+/// @return the entry's text, UTF-8; empty when the path cannot be written in an entry
+///         (desktop_exec_argument)
+[[nodiscard]] std::string launch_desktop_entry(const std::filesystem::path& executable);
+
+/// Returns the shared-mime-info package that names the file types in `types`, each a kind of
+/// its parent: the three packages a kind of zip, a .oareg file and a .oalaunch file each a
+/// kind of plain text. A launch file is also known by its content, a text that begins with
+/// launch_magic, whatever its name. A type left out has no mime-type element.
+///
+/// @param types the file types the package names; all five when omitted
 /// @return the package's XML text, UTF-8
 [[nodiscard]] std::string mime_package(TypeSet types = {});
 
@@ -310,12 +369,14 @@ desktop_entry(const std::filesystem::path& executable, TypeSet types = {});
 ///         which an entry cannot hold
 [[nodiscard]] std::string desktop_exec_argument(std::string_view path_utf8);
 
-/// Returns the Windows command that opens one of the four file types with `executable`:
-/// "<executable>" --open "%1".
+/// Returns the Windows command that opens a file with `executable`: "<executable>" --open
+/// "%1" for the four the game installs or adds, "<executable>" -c "%1" for a launch file.
 ///
 /// @param executable the program, absolute
+/// @param opening what the game does with the file
 /// @return the command, UTF-8
-[[nodiscard]] std::string open_command(const std::filesystem::path& executable);
+[[nodiscard]] std::string
+open_command(const std::filesystem::path& executable, Opening opening = Opening::install);
 
 /// Returns the Windows icon location of `executable`'s first icon: <executable>,0, which the
 /// system splits at its last comma.
@@ -349,11 +410,11 @@ struct HandlerCalls {
 
 /// One switch that moved: the extension, and whether this copy should open it.
 struct OpenerChange {
-    std::string_view extension{}; ///< one of the four, without its dot
+    std::string_view extension{}; ///< one of the five, without its dot
     bool open{}; ///< true: this copy; false: the opener of the type it hands back to
 };
 
-/// What the system reports for the four switches.
+/// What the system reports for the five types.
 struct OpenerReport {
     /// On when this copy's bundle identifier is the default opener. A type whose question
     /// failed keeps the value `fallback` held.
@@ -373,13 +434,13 @@ struct OpenerReport {
 /// application bundle, and everywhere but macOS.
 [[nodiscard]] Handler running_application();
 
-/// Reports which of the four this copy opens by default, asking `calls`. A null
+/// Reports which of the five this copy opens by default, asking `calls`. A null
 /// default_handler leaves `fallback` as it was and records no error. Never throws.
 ///
 /// @param calls the questions; a test's, or system_handler_calls
 /// @param bundle_id this copy's bundle identifier
 /// @param fallback what a failed question leaves that switch showing
-/// @return the four switches, and any question that failed
+/// @return the five types, and any question that failed
 [[nodiscard]] OpenerReport
 reported_openers(const HandlerCalls& calls, std::string_view bundle_id, TypeSet fallback);
 

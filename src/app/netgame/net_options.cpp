@@ -9,6 +9,7 @@
 #include "oa/app/game_directory.hpp"
 #include "oa/base/text.hpp"
 #include "oa/core/game_state.h"
+#include "oa/data/content_bundles/content_choice.hpp"
 #include "oa/netgame/dplay.hpp"
 #include "oa/platform/log_files.hpp"
 
@@ -107,6 +108,48 @@ std::string transport_name(int32_t transport) {
     return bytes;
 }
 
+/// Turns a content choice the launch named into a refusal that names the field.
+///
+/// @param source the launch's file, as a refusal names it
+/// @param problem the message `--content` would have reported
+/// @return the launch refusal, naming the file and the field
+std::string launch_content_error(std::string_view source, std::string_view problem) {
+    const std::string prefix = std::string(source) + ": ";
+    auto line = [&](std::string_view field, std::string_view id, std::string_view why) {
+        return prefix + std::string(field) + ": \"" + std::string(id) + "\" " + std::string(why);
+    };
+    constexpr std::string_view unknown_base = "--content names an unknown base game: ";
+    constexpr std::string_view expansion_as_base =
+        "--content names an expansion as the base game: ";
+    constexpr std::string_view unknown_expansion = "--content names an unknown expansion: ";
+    constexpr std::string_view base_as_expansion = "--content names a base game as an expansion: ";
+    if (problem.starts_with(unknown_base))
+        return line(
+            "content.base-game",
+            problem.substr(unknown_base.size()),
+            "is not an installed base game"
+        );
+    if (problem.starts_with(expansion_as_base))
+        return line(
+            "content.base-game",
+            problem.substr(expansion_as_base.size()),
+            "is not an installed base game"
+        );
+    if (problem.starts_with(unknown_expansion))
+        return line(
+            "content.expansions",
+            problem.substr(unknown_expansion.size()),
+            "is not an installed expansion"
+        );
+    if (problem.starts_with(base_as_expansion))
+        return line(
+            "content.expansions",
+            problem.substr(base_as_expansion.size()),
+            "is not an installed expansion"
+        );
+    return prefix + "content.base-game: " + std::string(problem);
+}
+
 /// Returns the NetgameContext behind an extension context pointer.
 ///
 /// @param context The extension table's context.
@@ -122,7 +165,9 @@ NetgameContext& context_of(void* context) {
 /// --check-host-not-found an unattended run that skips the intro,
 /// --check-recording-hook an unattended headless run that skips the intro,
 /// --host, --join, --launch and the launch settings' options a run that skips
-/// the intro, and --list-content the same for a content list. --json is
+/// the intro, and --list-content the same for a content list.
+/// --check-opened-launch takes when (start or menu) and the file, and skips
+/// the intro too. --json is
 /// taken only beside --list-content. A launch setting's option is kept with
 /// its value and checked with the launch. A missing or malformed value
 /// throws std::runtime_error.
@@ -159,6 +204,16 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
         effects |= option_effect::skip_intro;
     } else if (argument == "--list-content") {
         result.list_content = true;
+        effects |= option_effect::skip_intro;
+    } else if (argument == "--check-opened-launch") {
+        const std::string_view when = value();
+        if (when == "start")
+            result.opened_launch_check = OpenedLaunchCheck::start;
+        else if (when == "menu")
+            result.opened_launch_check = OpenedLaunchCheck::menu;
+        else
+            throw std::runtime_error("--check-opened-launch expects start or menu, then a file");
+        result.opened_launch_check_file = std::string(value());
         effects |= option_effect::skip_intro;
     } else if (argument == "--json")
         result.json_requested = true;
@@ -535,6 +590,7 @@ const std::string& usage_runs() {
         listed += "[--list-content --json] "
                   "[--net-loopback-check TICKS] [--net-loopback-watcher] "
                   "[--net-loopback-computer] [--net-loopback-each-ai] [--check-host-not-found] "
+                  "[--check-opened-launch start|menu FILE] "
                   "[--play-demo FILE.tad] "
                   "[--demo-unit-table strict|ignore] [--net-record FILE] [--replay-viewer] ";
         return listed;
@@ -722,6 +778,10 @@ void adopt_launch_run(Options& options) {
             }
         }
         if (!text.empty()) {
+            const oa::data::content_bundles::ContentChoice named =
+                oa::data::content_bundles::parse_content_argument(text);
+            if (!named.error.empty())
+                throw LaunchRefusal(launch_content_error(net.launch_source, named.error));
             options.content = std::move(text);
             net.launch_content_applied = true;
         }
@@ -729,6 +789,30 @@ void adopt_launch_run(Options& options) {
     if (!net.launch_content.mod.empty() && options.mod_file.empty() && options.mod_dir.empty() &&
         !options.base_game)
         net.launch_mod_pending = true;
+}
+
+void put_launch_in_place(NetgameContext& netgame, LaunchPlan plan) {
+    // A refusal half way leaves nothing behind: a launch block left with a
+    // connection type would open multiplayer at the main menu's next start.
+    const NetOptions options = netgame.options;
+    const oa::app::netgame::launch::LaunchSwitches switches = netgame.launch;
+    const netgame::LaunchStatusChoice status = netgame::kept_launch_status();
+    try {
+        // As check_options does: a launch that hosts or joins plays over
+        // TCP/IP; one that leaves the choice to the multiplayer screens keeps
+        // the transport it names. A file never holds "-b" words alone.
+        if (apply_launch_plan(netgame, std::move(plan)) &&
+            netgame.options.direct_game.kind !=
+                oa::ui::frontend_multiplayer::DirectGame::Kind::none)
+            oa::app::netgame::launch::set_connection_type(
+                netgame.launch, oa::app::netgame::launch::connection_type::tcpip
+            );
+    } catch (...) {
+        netgame.options = options;
+        netgame.launch = switches;
+        netgame::keep_launch_status(status);
+        throw;
+    }
 }
 
 void fill_option_hooks(Extension& table, NetgameContext& context) {
