@@ -159,6 +159,12 @@ double-click, from Open With, or dropped on the game's window:
   with Open Annihilation. The app also takes a plain text file it is handed
   without being its opener, which is what `open -f -a` sends.
 
+Settings › System › **Launch files (.oalaunch)** chooses whether this copy
+opens them, On at first: Off withdraws the registration the game made for
+you on Windows and Linux, and on macOS hands them to the program that opens
+plain text ([Settings](settings.md#system)). The installer's registration
+for everyone on Windows stays until the game is uninstalled.
+
 What an opened launch file does depends on when it arrives:
 
 - **When it starts the game,** it is the start's launch, exactly as

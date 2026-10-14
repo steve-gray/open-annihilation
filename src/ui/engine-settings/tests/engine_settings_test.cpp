@@ -619,6 +619,58 @@ void file_type_switches_store_on_and_off() {
     CHECK(settings::read_settings(restored, {}, false).file_type_oamod);
 }
 
+void the_launch_file_switch_round_trips() {
+    // On by default, read as on from an absent key, "on" or any text but off.
+    const settings::EngineSettings defaults{};
+    CHECK(defaults.file_type_oalaunch);
+    CHECK(settings::key::file_type_oalaunch == "open-annihilation.file-types.oalaunch");
+    CHECK(settings::read_settings({}, {}, false).file_type_oalaunch);
+    for (const std::string_view text : {"on", "0", "no", "OFF", ""})
+        CHECK(
+            settings::read_settings(
+                one_key(settings::key::file_type_oalaunch, std::string(text)), {}, false
+            )
+                .file_type_oalaunch
+        );
+    const auto off =
+        settings::read_settings(one_key(settings::key::file_type_oalaunch, "off"), {}, false);
+    CHECK(!off.file_type_oalaunch);
+    CHECK(
+        off.file_type_oamod && off.file_type_oamap && off.file_type_oalang && off.file_type_oareg
+    );
+
+    // Moved off, it alone is stored, as off, and reads back off with the other four on.
+    auto chosen = defaults;
+    chosen.file_type_oalaunch = false;
+    Values written;
+    settings::write_settings(written, defaults, chosen, defaults, false);
+    CHECK(written.at(std::string{settings::key::file_type_oalaunch}) == "off");
+    for (const std::string_view other :
+         {settings::key::file_type_oamod,
+          settings::key::file_type_oamap,
+          settings::key::file_type_oalang,
+          settings::key::file_type_oareg})
+        CHECK(written.count(std::string{other}) == 0);
+    const auto read = settings::read_settings(written, {}, false);
+    CHECK(!read.file_type_oalaunch);
+    CHECK(
+        read.file_type_oamod && read.file_type_oamap && read.file_type_oalang &&
+        read.file_type_oareg
+    );
+
+    // Moved on again, it is stored as on and reads back on.
+    Values again = written;
+    settings::write_settings(again, chosen, defaults, defaults, false);
+    CHECK(again.at(std::string{settings::key::file_type_oalaunch}) == "on");
+    CHECK(settings::read_settings(again, {}, false).file_type_oalaunch);
+
+    // Restore defaults erases a stored off.
+    Values restored = written;
+    settings::write_settings(restored, chosen, defaults, defaults, true);
+    CHECK(restored.count(std::string{settings::key::file_type_oalaunch}) == 0);
+    CHECK(settings::read_settings(restored, {}, false).file_type_oalaunch);
+}
+
 void restore_defaults_erases_the_keys_of_settings_at_their_defaults() {
     const settings::EngineSettings defaults{};
     const auto stored = changed_settings();
@@ -2587,6 +2639,7 @@ int main() {
     switch_alt_comes_from_the_games_own_key();
     only_changed_settings_are_written();
     file_type_switches_store_on_and_off();
+    the_launch_file_switch_round_trips();
     restore_defaults_erases_the_keys_of_settings_at_their_defaults();
     the_round_trip_keeps_every_value();
     the_frame_rate_goes_down_to_a_frame_a_tick();

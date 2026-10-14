@@ -4706,6 +4706,14 @@
 	it=File di avvio non aperto: finisci o abbandona prima questa partita.;
 	}
 
+[Launch files (.oalaunch)]
+	{
+	de=Startdateien (.oalaunch);
+	fr=Fichiers de lancement (.oalaunch);
+	es=Archivos de lanzamiento (.oalaunch);
+	it=File di avvio (.oalaunch);
+	}
+
 [Left out]
 	{
 	de=Ausgelassen;

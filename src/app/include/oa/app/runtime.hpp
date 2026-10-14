@@ -5147,6 +5147,13 @@ class Runtime final : public menu::Host,
     /// window at 640x480 and the language as it found it.
     void check_window_edge_rows_fit();
 
+    /// Checks that System's File Type Registration and its five file-type
+    /// switches fit the settings dialog on a 640x480 window in English and
+    /// German, at the section's top and its end, as part of
+    /// --check-engine-settings. Leaves the window at 640x480 and the
+    /// language as it found it.
+    void check_file_type_rows_fit();
+
     /// Checks the main menu with its OA button, and the dialog on each of its
     /// sections, as windows of several sizes show them (part of
     /// --check-engine-settings).

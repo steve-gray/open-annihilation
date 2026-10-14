@@ -3,7 +3,7 @@
 
 // Writes the manual's pictures of the settings dialog: each section alone,
 // unlocked, at Compact and 2x (960 by 648), in the installed game's fonts,
-// and Controls and Downloads scrolled to their ends.
+// and Controls, Downloads and System scrolled to their ends.
 //
 // Usage: oa-ui-engine-settings-pictures DIRECTORY
 //
@@ -147,7 +147,8 @@ AppIcon load_app_icon() {
 /// The file docs/images/settings uses for a section's top.
 std::string picture_name(Page page) {
     const std::string word(settings::page_word(page));
-    if (word == "controls" || word == "language" || word == "graphics" || word == "downloads")
+    if (word == "controls" || word == "language" || word == "graphics" || word == "downloads" ||
+        word == "system")
         return word + "-1.png";
     return word + ".png";
 }
@@ -276,9 +277,10 @@ int main(int argc, char** argv) {
         Dialog dialog = section_dialog(page);
         if (!draw_section(dialog, fonts, icon.picture, directory / picture_name(page)))
             ok = false;
-        // Controls and Downloads scrolled to their ends: Window edge and Edge
-        // stickiness, and the downloads' last rows.
-        if (page == Page::controls || page == Page::downloads) {
+        // Controls, Downloads and System scrolled to their ends: Window edge
+        // and Edge stickiness, the downloads' last rows, and the file-type
+        // switches down to Launch files.
+        if (page == Page::controls || page == Page::downloads || page == Page::system) {
             dialog.scroll[static_cast<std::size_t>(page)] = settings::scroll_limit(dialog);
             const std::string end = std::string(settings::page_word(page)) + "-2.png";
             if (!draw_section(dialog, fonts, icon.picture, directory / end))

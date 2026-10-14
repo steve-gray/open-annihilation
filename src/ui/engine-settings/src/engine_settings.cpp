@@ -704,6 +704,7 @@ EngineSettings read_settings(
     settings.file_type_oamap = file_type_on(values, key::file_type_oamap);
     settings.file_type_oalang = file_type_on(values, key::file_type_oalang);
     settings.file_type_oareg = file_type_on(values, key::file_type_oareg);
+    settings.file_type_oalaunch = file_type_on(values, key::file_type_oalaunch);
     return settings;
 }
 
@@ -1117,6 +1118,7 @@ void write_settings(
     store_file_type(key::file_type_oamap, &EngineSettings::file_type_oamap);
     store_file_type(key::file_type_oalang, &EngineSettings::file_type_oalang);
     store_file_type(key::file_type_oareg, &EngineSettings::file_type_oareg);
+    store_file_type(key::file_type_oalaunch, &EngineSettings::file_type_oalaunch);
     // Restore defaults keeps the overrides: Restore profile values clears them.
     if (!profile_id.empty() && chosen.hack_overrides != opened.hack_overrides) {
         if (chosen.hack_overrides.empty())

@@ -1912,7 +1912,7 @@ bool file_types_not_applied(const oa::platform::file_types::Registration& done) 
 }
 
 /// The file types whose preference is not the word off. A missing file, a
-/// missing key, or a failure to read the preferences leaves all four on.
+/// missing key, or a failure to read the preferences leaves all five on.
 ///
 /// @return the types to register
 oa::platform::file_types::TypeSet enabled_file_types() {
@@ -1938,6 +1938,8 @@ oa::platform::file_types::TypeSet enabled_file_types() {
             enabled.map = false;
         if (off(key::file_type_oareg))
             enabled.registry = false;
+        if (off(key::file_type_oalaunch))
+            enabled.launch = false;
     } catch (const std::exception&) {
         return {};
     }

@@ -139,11 +139,11 @@ bottom right of the main menu opens. See [Settings](../settings.md), and
 
 Each start on a desktop registers this copy of the game, for your account,
 as the opener of the file types left on in [Settings › System](../settings.md#system):
-mod packages (`.oamod`), map packs (`.oamap`), language packs (`.oalang`)
-and registry files (`.oareg`). All four are on until you turn one off.
-Turning one off and pressing OK withdraws that type at once; turning one
-on registers it at once. With all four off, the desktop entry and the MIME
-package are removed. Neither waits for a restart. The game's icon is put
+mod packages (`.oamod`), map packs (`.oamap`), language packs (`.oalang`),
+registry files (`.oareg`) and launch files (`.oalaunch`). All five are on
+until you turn one off. Turning one off and pressing OK withdraws that type
+at once; turning one on registers it at once. With all five off, the
+desktop entries and the MIME package are removed. Neither waits for a restart. The game's icon is put
 on the types it opens. Open a `.oamod` file from the file manager to
 install the mod it holds
 ([mods](../mods/README.md#installing-a-oamod-file)). Opened while the game
