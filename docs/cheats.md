@@ -18,8 +18,10 @@ and then for every player alike. The host turns that option on. The Game
 Settings sheet's Cheat Codes row shows Allowed or Disallowed.
 
 Typing `+now Film Chris Include Reload Assert` still turns developer mode
-on, and typing anything else after `+now` turns it off. Developer mode
-does not allow the cheat commands. With Cheats off, the passphrase does
+on, and typing anything else after `+now` turns it off. Those five words
+are case-sensitive. The command names on this page are not. Developer mode
+does not allow the cheat commands. An unknown name, once developer mode is
+on, reads a debug script of that name. With Cheats off, the passphrase does
 not make `+atm`, `+ai`, `+control` or a unit name work. It still opens
 the debug commands that are not on this list, such as `+kill` and
 `+reload`, and the F11 debug keys.

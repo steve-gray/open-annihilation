@@ -155,6 +155,10 @@ console::Console* Runtime::match_console() {
         host.post_message = [](void* context, const char* text, uint8_t kind, uint8_t sender) {
             runtime_of(context)->console_post_message(text, kind, sender);
         };
+        host.apply_remote_line = [](void* context, const char* line, uint8_t sender) {
+            auto* runtime = runtime_of(context);
+            oa::ui::console::console_apply_remote_line(runtime->match_console(), line, sender);
+        };
         host.compact_render_cache = [](void* context) {
             runtime_of(context)->release_model_images();
         };

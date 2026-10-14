@@ -57,6 +57,12 @@ struct ConsoleHost {
     /// kMessageNoSender; a line with a sender starts with that player's logo
     /// and plays the arrival sound. Null posts nothing.
     void (*post_message)(void* context, const char* text, uint8_t kind, uint8_t sender){};
+    /// Runs a chat line another machine delivered, after it has been posted.
+    ///
+    /// The sender already ran the line. This runs only the commands that have
+    /// to agree on every machine. Null does nothing. `sender` is the player
+    /// who typed it; a bare +AI, +NoMetal or +NoEnergy names that player.
+    void (*apply_remote_line)(void* context, const char* line, uint8_t sender){};
     void (*compact_render_cache)(void* context){};
     void (*set_gamma)(void* context, float gamma){};
     void (*set_lighting)(void* context, int32_t a, int32_t b, int32_t c){};

@@ -12809,6 +12809,22 @@ class Runtime final : public menu::Host,
 
   public:
 
+    /// Checks the shared commands and the takeover cheats of a network game.
+    ///
+    /// "+shootall" runs on both machines and is turned back off. "+ai" takes
+    /// this machine's player only when cheats are allowed, and is handed back
+    /// before the wait; the peer's copy of that player stays mirrored.
+    /// "+control" of another player changes only this machine, and is handed
+    /// back at once. The line is shown in the player just taken. A failure
+    /// throws std::runtime_error.
+    ///
+    /// @param peer the other machine of the loopback game
+    /// @param advance runs one networked tick on this machine, and on the peer
+    ///        too when passed true
+    void check_console_network_takeover(
+        Runtime& peer, const std::function<void(bool peer_runs)>& advance
+    );
+
     /// Shows the comparison when `path`'s note needs other content.
     ///
     /// TURN ON AND LOAD stores the choice and asks for a soft restart, then

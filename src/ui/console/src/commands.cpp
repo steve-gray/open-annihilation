@@ -1524,6 +1524,33 @@ bool name_is(const char* body, const char* name) noexcept {
     return *body == '\0' || *body == ' ';
 }
 
+/// Tests whether the first token is a command whose class is not developer.
+///
+/// The debug-script fallback runs for a name the table does not have. A cheat
+/// or an option, such as "AI", is already a command: the developer class does
+/// not run it, and it is not a script. Command words ignore capitals. The '+'
+/// is only how the chat line marks a command; it is not part of the word.
+///
+/// @param console Console whose command table is searched.
+/// @param body Command text, without a leading '+'.
+/// @return True when the table has that name and its class omits developer.
+bool registered_without_developer(const Console* console, const char* body) noexcept {
+    char name[services::command_name_capacity];
+    std::size_t length = 0;
+    while (body[length] != '\0' && body[length] != ' ' && length + 1 < sizeof name) {
+        name[length] = body[length];
+        ++length;
+    }
+    name[length] = '\0';
+    for (std::size_t index = 0; index < console->commands.count; ++index) {
+        const auto& entry = console->commands.entries[index];
+        if (!equal_nocase(entry.name, name))
+            continue;
+        return (entry.mask & command_class::developer) == 0;
+    }
+    return false;
+}
+
 /// Tests whether the first token of a command body is a registered command.
 ///
 /// @param console Console whose command table is searched.
@@ -1677,7 +1704,10 @@ uint32_t console_execute(Console* console, const char* text, uint32_t mask) noex
         return result;
     if ((mask & command_class::cheat) != 0 && spawn_named_units(console, &line))
         return command_class::cheat;
-    if ((mask & command_class::developer) != 0 && !unit_pattern_matches(console, &line))
+    // A unit name is not a script. Neither is a command of another class:
+    // "AI" stays a cheat, so the developer class does not run it or a script.
+    if ((mask & command_class::developer) != 0 && !unit_pattern_matches(console, &line) &&
+        !registered_without_developer(console, text))
         return services::command_dispatch(&console->commands, &line, command_class::developer);
     return 0;
 }

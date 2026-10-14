@@ -39,7 +39,6 @@
 #include "oa/sim/messages.hpp"
 #include "oa/ui/console/console.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
-#include "oa/ui/console/console.hpp"
 #include "oa/ui/console/game_fields.hpp"
 #include "oa/ui/hud/chat_panel.hpp"
 #include "oa/ui/hud/order_panel.hpp"
@@ -883,13 +882,14 @@ struct NetworkPlay::NetHost {
     // engine fills as the match starts.
     static void chat(void* context, uint8_t sender, const char* text) {
         const auto* host = self(context).net_->console_host;
-        if (host != nullptr && host->post_message != nullptr)
+        if (host == nullptr)
+            return;
+        if (host->post_message != nullptr)
             host->post_message(host->context, text, oa::sim::messages::kind_player_chat, sender);
-        // The sender already ran the line. Commands that change the shared
-        // simulation run here too, so the machines stay together.
-        oa::ui::console::console_apply_remote_line(
-            self(context).runtime_.match_console(), text, sender
-        );
+        // The sender already ran the line. The host hook runs the commands
+        // that have to agree on every machine.
+        if (host->apply_remote_line != nullptr)
+            host->apply_remote_line(host->context, text, sender);
     }
 
     static void notice(void* context, const char* text) {
@@ -3906,6 +3906,7 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
         pump_both(kTickPumpWaitMs);
     };
     check_console_session_cheats(joiner, session_step);
+    runtime_.check_console_network_takeover(joiner, session_step);
     check_console_network_session(joiner, session_step);
     if (watching) {
         // The opponent check passes over a watcher, so the host wins at once.

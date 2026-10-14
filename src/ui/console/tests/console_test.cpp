@@ -1396,7 +1396,12 @@ void test_listed_command_gates() {
     CHECK(f.game().local_player_index == 0);
     CHECK(f.game().viewpoint_player == 0);
 
-    // An unknown word is still plain chat, not a cheat and not a unit.
+    // The passphrase is still on. 3.1c then reads a debug script for a name
+    // the command table does not have, so +xyzzy is not plain chat and not a unit.
+    g_rec.calls.clear();
+    CHECK(console::console_submit_chat_line(&f.con, "+xyzzy", 3, &echo) == 3);
+    CHECK((g_rec.calls == std::vector<std::string>{"read debugdat\\xyzzy.txt"}));
+    f.run("Now");
     g_rec.calls.clear();
     CHECK(console::console_submit_chat_line(&f.con, "+xyzzy", 3, &echo) == 3);
     CHECK(g_rec.calls.empty());

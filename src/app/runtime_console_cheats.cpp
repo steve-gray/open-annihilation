@@ -305,6 +305,125 @@ void Runtime::check_console_takeover_and_spawn(const std::function<void(const ch
     require(spawned || refused, "+UNITNAME neither created a unit nor said why");
 }
 
+void Runtime::check_console_network_takeover(
+    Runtime& peer, const std::function<void(bool)>& advance
+) {
+    constexpr int kNetworkCheatWait = 200;
+    oa::World& world = match_->state();
+    oa::Game& game = world.game;
+    const bool allowed = session_cheats_allowed_;
+    const auto wait = [&](const auto& done, const char* what) {
+        for (int i = 0; i < kNetworkCheatWait && !done(); ++i)
+            advance(true);
+        require(done(), what);
+    };
+    const auto count_line = [](Runtime& side, std::string_view sought) {
+        int count = 0;
+        for (const auto& row : side.match_message_lines())
+            count += row == sought ? 1 : 0;
+        return count;
+    };
+    const auto flag_on = [](Runtime& side) {
+        return (console::console_flags(side.match_->state().game) &
+                console::console_flag::shoot_all) != 0;
+    };
+    const auto prefix = speaker_prefix(world);
+    // +ShootAll changes who units fire at, so both machines run it. Turn it
+    // back off before the wait, or the units keep firing while the line travels.
+    const bool shoot = flag_on(*this);
+    const std::string shoot_line = prefix + "+shootall";
+    const int shoot_seen = count_line(peer, shoot_line);
+    enter_console_check_line("+shootall");
+    require(flag_on(*this) != shoot, "+shootall did not run");
+    enter_console_check_line("+shootall");
+    require(flag_on(*this) == shoot, "+shootall did not turn back");
+    wait(
+        [&] { return count_line(peer, shoot_line) >= shoot_seen + 2 && flag_on(peer) == shoot; },
+        "+shootall did not run on the peer and turn back"
+    );
+
+    const uint8_t mine = game.local_player_index;
+    const auto mine_status = game.players[mine].status;
+    oa::Game& remote_game = peer.match_->state().game;
+    const auto peer_status = remote_game.players[mine].status;
+    auto* peer_info = oa::world_player_info(&peer.match_->state(), &remote_game.players[mine]);
+    const auto peer_state = peer_info != nullptr ? peer_info->state : static_cast<uint8_t>(0);
+    const std::string ai = "+ai " + std::to_string(static_cast<unsigned>(mine));
+    const std::string ai_line = prefix + ai;
+    const int ai_seen = count_line(peer, ai_line);
+    if (allowed) {
+        enter_console_check_line(ai.c_str());
+        require(game.players[mine].status != mine_status, "+ai did not take the local player");
+        enter_console_check_line(ai.c_str());
+        require(game.players[mine].status == mine_status, "+ai did not hand the local player back");
+        wait(
+            [&] {
+                return count_line(peer, ai_line) >= ai_seen + 2 &&
+                       peer.match_->state().game.players[mine].status == peer_status &&
+                       (peer_info == nullptr || peer_info->state == peer_state);
+            },
+            "+ai did not reach the peer and hand the player back"
+        );
+    } else {
+        enter_console_check_line(ai.c_str());
+        require(game.players[mine].status == mine_status, "+ai ran with cheats disallowed");
+        for (int waited = 0; waited < kNetworkCheatWait && count_line(peer, ai_line) == ai_seen;
+             ++waited)
+            advance(true);
+        require(
+            peer.match_->state().game.players[mine].status == peer_status &&
+                (peer_info == nullptr || peer_info->state == peer_state),
+            "+ai changed the peer with cheats disallowed"
+        );
+    }
+    require(
+        peer.match_->state().game.players[mine].status == OA_PLAYER_STATUS_MIRRORED,
+        "the peer's copy of this player is not mirrored"
+    );
+
+    uint8_t target = OA_PLAYER_COUNT;
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index)
+        if (index != mine && sim::simulation_state::player_slot_active(index, game.players[index]))
+            target = index;
+    require(target != OA_PLAYER_COUNT, "no other player to control");
+    const auto peer_index = peer.match_->state().game.local_player_index;
+    const std::string control = "+control " + std::to_string(static_cast<unsigned>(target));
+    const std::string control_line = prefix + control;
+    if (allowed) {
+        enter_console_check_line(control.c_str());
+        require(game.local_player_index == target, "+control did not take the other player");
+        enter_console_check_line(
+            ("+control " + std::to_string(static_cast<unsigned>(mine))).c_str()
+        );
+        require(game.local_player_index == mine, "+control did not hand the player back");
+        // The command runs before the line is shown, so the echo carries the
+        // player just taken, not the one who typed it.
+        wait(
+            [&] {
+                const auto lines = peer.match_message_lines();
+                return std::any_of(lines.begin(), lines.end(), [&](const std::string& row) {
+                    return row.find(control) != std::string::npos;
+                });
+            },
+            "+control did not reach the peer"
+        );
+    } else {
+        enter_console_check_line(control.c_str());
+        require(game.local_player_index == mine, "+control ran with cheats disallowed");
+        for (int waited = 0;
+             waited < kNetworkCheatWait && !logged(peer.match_message_lines(), control_line);
+             ++waited)
+            advance(true);
+    }
+    require(
+        peer.match_->state().game.local_player_index == peer_index,
+        "+control changed the peer's player"
+    );
+    std::cout << "console cheat check: +shootall ran on both machines; +ai "
+              << (allowed ? "took this player and handed it back" : "was refused")
+              << " without changing the peer's player; +control stayed on this machine\n";
+}
+
 std::string Runtime::check_console_cheat_effects(
     const std::function<void(const char*)>& enter_line, bool start_strike
 ) {
