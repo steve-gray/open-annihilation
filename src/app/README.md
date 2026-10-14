@@ -1790,7 +1790,9 @@ hosts them on the OA layer.
   (`frame_stats_table`) titled "Frame stats (ms)" of the frames a second
   of the last second, with the rate the loop keeps, the frame, work, tick,
   draw and present times' least, mean and most in columns, the units
-  the last frame drew, the renderer: the tier frames are drawn in and
+  the last frame drew, the units' picture ("models": the megabytes the
+  model bridge holds, "MB of" its budget, and "dots" when the last frame
+  drew the units as dots), the renderer: the tier frames are drawn in and
   the render driver, as in "standard: metal", with the adapter's name, or
   "sprite memory full" while the full tier leaves out of a frame what its
   pages may not hold, each cut to 23 bytes, never inside a character; and

@@ -475,13 +475,13 @@ void test_panel_place() {
 }
 
 void test_bar_heights() {
-    // One pixel a millisecond, rounded to the nearest; at least one pixel,
-    // at most the graph's height.
+    // Three pixels for every four milliseconds, rounded to the nearest; at
+    // least one pixel, at most the graph's height.
     CHECK(panel::bar_height(0) == 1);
     CHECK(panel::bar_height(kNanosecondsPerMillisecond) == 1);
-    CHECK(panel::bar_height(8'333'333) == 8);
-    CHECK(panel::bar_height(8'500'000) == 9);
-    CHECK(panel::bar_height(frame_pacing::kTickBudgetNs) == 33);
+    CHECK(panel::bar_height(8'333'333) == 6);
+    CHECK(panel::bar_height(8'500'000) == 6);
+    CHECK(panel::bar_height(frame_pacing::kTickBudgetNs) == 25);
     CHECK(panel::bar_height(panel::kGraphTopNs) == panel::kGraphHeight);
     CHECK(panel::bar_height(frame_pacing::kNanosecondsPerSecond) == panel::kGraphHeight);
     CHECK(panel::bar_height(std::numeric_limits<uint64_t>::max()) == panel::kGraphHeight);
@@ -490,11 +490,11 @@ void test_bar_heights() {
     // over it; the tick's line sits inside the graph.
     const uint64_t allowance =
         frame_pacing::frame_allowance_ns(120, frame_pacing::FrameWait::precise);
-    CHECK(panel::line_rise(allowance) == 10);
+    CHECK(panel::line_rise(allowance) == panel::bar_height(allowance) + 1);
     CHECK(panel::bar_height(8'333'333) < panel::line_rise(allowance));
     CHECK(panel::bar_height(allowance) < panel::line_rise(allowance));
-    CHECK(panel::bar_height(9'500'000) >= panel::line_rise(allowance));
-    CHECK(panel::line_rise(frame_pacing::kTickBudgetNs) == 34);
+    CHECK(panel::bar_height(11'000'000) >= panel::line_rise(allowance));
+    CHECK(panel::line_rise(frame_pacing::kTickBudgetNs) == 26);
     CHECK(panel::line_rise(frame_pacing::kTickBudgetNs) <= panel::kGraphHeight);
 }
 

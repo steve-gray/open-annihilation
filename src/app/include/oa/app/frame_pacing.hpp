@@ -427,6 +427,9 @@ struct FrameStatsNotes {
     uint32_t paced_frames_per_second{}; ///< the rate the loop keeps now; 0 for no limit
     uint32_t units_drawn{};             ///< unit models the last frame drew
     uint32_t units_between_ticks{};     ///< of those, drawn between two ticks
+    uint64_t model_bytes{};             ///< bytes the units' picture holds, both blocks together
+    uint64_t model_budget{};            ///< the most the units' picture may hold; 0 for no limit
+    bool units_as_dots{};               ///< the last frame drew the units as dots
 };
 
 /// What the "+stats" table's renderer row names. The tier, its
@@ -479,6 +482,7 @@ struct FrameStatsDisplay {
 struct FrameDrawCounts {
     uint32_t units_drawn{};         ///< unit models drawn
     uint32_t units_between_ticks{}; ///< of those, drawn between two ticks' states
+    bool units_as_dots{};           ///< the frame drew the units as dots
     uint16_t probe_unit{};          ///< unit slot the frame log follows; 0 for none
     bool probe_drawn{};             ///< the drawing drew the probe unit this frame
     int32_t probe_x{};              ///< where it drew the probe unit: X, 16.16 map units
@@ -496,9 +500,9 @@ inline constexpr std::size_t kFrameStatsMeanColumn = 1;
 /// The value column of a measure's most time.
 inline constexpr std::size_t kFrameStatsMostColumn = 2;
 /// Rows of the "+stats" table: the title, the column names, the frames a
-/// second, one for each measure, the units drawn, the renderer and the
-/// display.
-inline constexpr std::size_t kFrameStatsRowsMost = 3 + kFrameMeasureCount + 3;
+/// second, one for each measure, the units drawn, the units' picture, the
+/// renderer and the display.
+inline constexpr std::size_t kFrameStatsRowsMost = 3 + kFrameMeasureCount + 4;
 
 /// Returns the start of a UTF-8 text that fits in a number of bytes and
 /// does not end inside a character: the whole text when it fits, else the

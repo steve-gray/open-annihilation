@@ -12,6 +12,7 @@
 #include "full_presentation.hpp"
 #include "graphics_report.hpp"
 #include "match_clock.hpp"
+#include "match_models.hpp"
 #include "pad_state.hpp"
 #include "oa/app/frame_pacing.hpp"
 #include "oa/app/match_console.hpp"
@@ -375,6 +376,11 @@ FrameStatsNotes Runtime::frame_stats_notes() const {
         frame_pacer_.started ? paced_frames_per_second_ : options_.max_frames_per_second;
     notes.units_drawn = frame_draws_.units_drawn;
     notes.units_between_ticks = frame_draws_.units_between_ticks;
+    notes.units_as_dots = frame_draws_.units_as_dots;
+    if (const MatchModels* models = drawn_match_models(); models != nullptr) {
+        notes.model_bytes = models->bridge.pixels.capacity() + models->bridge.baseline.capacity();
+        notes.model_budget = models->bridge.byte_budget;
+    }
     return notes;
 }
 

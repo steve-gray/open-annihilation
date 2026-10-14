@@ -1368,6 +1368,8 @@ void Runtime::render_match_surface() {
             models.bridge, rgb_frame, one_pixel, scale, models.display.palette, phase[0], phase[1]
         );
     }
+    // The "+stats" panel says when this frame drew the units as dots.
+    frame_draws_.units_as_dots = dots;
     // Models draw into the bridge and sprites straight into the RGB frame,
     // so the bridge's pixels go back to the frame before a sprite draws over
     // them (a commit), and the next model captures the frame again.

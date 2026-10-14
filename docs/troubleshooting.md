@@ -12,3 +12,7 @@ the program, keeps the line "Out of memory! Your hard disk may be full".
 
 A run can limit the memory the units' pictures take by setting
 `OA_RENDERED_UNITS_BUDGET` to a number of bytes.
+
+The `+stats` console command shows that memory on its "models" row: the
+megabytes the units' picture holds, "MB of" the most it may take, and "dots"
+when the last frame drew the units as dots.
