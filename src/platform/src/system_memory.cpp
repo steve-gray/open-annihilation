@@ -6,6 +6,7 @@
 // none of it.
 
 #include "oa/platform/memory_status.hpp"
+#include "oa/platform/system.hpp"
 
 #include <cstdio>
 #include <limits>
@@ -242,6 +243,18 @@ bool sample_system_memory(SystemMemorySample* out) noexcept {
 #endif
     return out->physical != 0 || out->available_known || out->committed_known ||
            out->hard_faults_known || out->pressure != MemoryPressure::unknown;
+}
+
+std::optional<uint64_t> available_virtual_bytes() noexcept {
+#if defined(_WIN32)
+    MEMORYSTATUSEX status{};
+    status.dwLength = sizeof status;
+    if (!GlobalMemoryStatusEx(&status))
+        return std::nullopt;
+    return status.ullAvailVirtual;
+#else
+    return std::nullopt;
+#endif
 }
 
 } // namespace oa::platform

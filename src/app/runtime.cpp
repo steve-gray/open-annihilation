@@ -579,9 +579,15 @@ int Runtime::run() {
         }
         if (extension_run(RunPhase::headless_first))
             return exit_code;
-        if constexpr (self_checks_built)
+        if constexpr (self_checks_built) {
             if (options_.check_navigation)
                 check_navigation();
+            if (options_.check_zoom_memory) {
+                check_zoom_memory();
+                flush_preferences();
+                return 0;
+            }
+        }
         if (extension_run(RunPhase::headless))
             return exit_code;
         if (options_.save_after || !options_.load_file.empty()) {

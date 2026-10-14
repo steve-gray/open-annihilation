@@ -23,9 +23,12 @@
 
 #include "oa/present/surface.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <optional>
 #include <vector>
 
 namespace oa::present::model {
@@ -33,6 +36,99 @@ namespace oa::present::model {
 /// Side of the square tiles, in 8-bit pixels, a bridge captures and writes
 /// back.
 inline constexpr int32_t bridge_tile_side = 32;
+
+/// The share of physical memory a bridge's picture and captured indices
+/// together may take. The same share of the free address space caps a
+/// 32-bit build.
+inline constexpr uint64_t bridge_memory_share = 8;
+
+/// Bytes a bridge may take when the machine does not say how much physical
+/// memory it has: 512 MiB.
+inline constexpr uint64_t bridge_unknown_budget = uint64_t{512} << 20;
+
+/// Bytes a 32-bit bridge may take when the free address space is not known:
+/// 256 MiB.
+inline constexpr uint64_t bridge_address_cap = uint64_t{256} << 20;
+
+/// The most a 32-bit address can name. A larger report of free address
+/// space is cut to this before the share is taken, so the budget stays
+/// within what a 32-bit process can address.
+inline constexpr uint64_t bridge_address_space = (uint64_t{1} << 32) - 1;
+
+/// Begins in a row, with the picture at most half the buffers, after which
+/// the buffers are released down to the picture.
+inline constexpr uint32_t bridge_release_frames = 45;
+
+/// Returns the bytes a bridge's picture and captured indices together may take.
+///
+/// An eighth of `physical`, or bridge_unknown_budget when `physical` is 0.
+/// On a 32-bit address (`address_is_32_bit`), also at most an eighth of
+/// `available_virtual`, cut to bridge_address_space first, or
+/// bridge_address_cap when that is unknown. Zero free address space is a
+/// real reading and yields no bytes.
+///
+/// @param physical physical memory, in bytes; 0 when it is not known
+/// @param available_virtual free address space, in bytes; nothing when it
+///     is not known, and 0 when none is free
+/// @param address_is_32_bit true when a pointer holds 32 bits
+/// @return the budget, in bytes
+[[nodiscard]] inline uint64_t bridge_byte_budget(
+    uint64_t physical, std::optional<uint64_t> available_virtual, bool address_is_32_bit
+) noexcept {
+    const uint64_t budget = physical == 0 ? bridge_unknown_budget : physical / bridge_memory_share;
+    if (!address_is_32_bit)
+        return budget;
+    const uint64_t address =
+        available_virtual ? std::min(*available_virtual, bridge_address_space) / bridge_memory_share
+                          : bridge_address_cap;
+    return address < budget ? address : budget;
+}
+
+/// Bytes a bridge holds for its 8-bit picture, or for the indices it captured.
+///
+/// Taken with malloc, so a failure returns to the caller. The block is not
+/// copied; a moved-from block is empty.
+struct BridgeBytes {
+    uint8_t* storage{};  ///< the block, or null
+    std::size_t count{}; ///< bytes in use
+    std::size_t room{};  ///< bytes the block holds
+
+    [[nodiscard]] uint8_t* data() noexcept { return storage; }
+
+    [[nodiscard]] const uint8_t* data() const noexcept { return storage; }
+
+    [[nodiscard]] std::size_t size() const noexcept { return count; }
+
+    [[nodiscard]] std::size_t capacity() const noexcept { return room; }
+
+    void release() noexcept {
+        std::free(storage);
+        storage = nullptr;
+        count = 0;
+        room = 0;
+    }
+
+    BridgeBytes() = default;
+    BridgeBytes(const BridgeBytes&) = delete;
+    BridgeBytes& operator=(const BridgeBytes&) = delete;
+
+    BridgeBytes(BridgeBytes&& other) noexcept { *this = std::move(other); }
+
+    BridgeBytes& operator=(BridgeBytes&& other) noexcept {
+        if (this != &other) {
+            release();
+            storage = other.storage;
+            count = other.count;
+            room = other.room;
+            other.storage = nullptr;
+            other.count = 0;
+            other.room = 0;
+        }
+        return *this;
+    }
+
+    ~BridgeBytes() { release(); }
+};
 
 /// A tile state bit: the bridge's capture copy holds the colour and index of
 /// every frame pixel the tile captures from, as last mapped.
@@ -90,8 +186,8 @@ struct CaptureCopy {
 
 struct RgbBridge {
     Surface surface{}; // the 8-bit view the routines draw into
-    std::vector<uint8_t> pixels;
-    std::vector<uint8_t> baseline; // indices as captured
+    BridgeBytes pixels;
+    BridgeBytes baseline; // indices as captured
     /// Each tile's state, row by row: bridge_tile_mapped and bridge_tile_open.
     std::vector<uint8_t> tiles;
     /// The tiles captured since the bridge was last written back, by their
@@ -119,6 +215,16 @@ struct RgbBridge {
     /// Counts the times bridge_begin built the colour lookup afresh (a new
     /// palette): a band's own colour memory from before is forgotten.
     uint32_t lookup_builds{};
+    /// Bytes the picture and the captured indices together may take. Zero
+    /// means no limit. A begin that would pass it keeps the buffers it has
+    /// and returns false.
+    uint64_t byte_budget{};
+    /// Bytes the last refused begin asked for, picture and indices together.
+    uint64_t refused_bytes{};
+    /// Times the picture's buffers grew.
+    uint32_t buffer_growths{};
+    /// Begins in a row whose picture needed at most half the buffers.
+    uint32_t small_frames{};
 };
 
 /// Covers a rectangle of an RGB frame with an 8-bit surface of the rectangle's size divided by the scale.
@@ -133,6 +239,15 @@ struct RgbBridge {
 /// that captures map again only the colours that changed, whatever the frame
 /// holds now; otherwise it is forgotten.
 ///
+/// The picture and the captured indices grow with headroom, at most to the
+/// bridge's byte budget (RgbBridge::byte_budget; zero means no limit), and
+/// are released down to the picture after bridge_release_frames begins that
+/// needed at most half of them. They are taken with malloc. A picture that
+/// would pass the budget, or that cannot be allocated, or whose size does
+/// not fit the surface, leaves the bridge unusable for that picture and
+/// returns false; the process carries on. The bytes asked for are
+/// RgbBridge::refused_bytes.
+///
 /// @param[in,out] bridge bridge to set up; its buffers are reused
 /// @param frame RGB frame; must outlive the bridge's use
 /// @param area inclusive RGB rectangle to cover
@@ -141,7 +256,8 @@ struct RgbBridge {
 /// @param phase_x how far into the 8-bit column 0 the rectangle's first
 ///     RGB column starts, 16.16 parts of the scale's step, below it
 /// @param phase_y the same for the 8-bit row 0 and the first RGB row
-void bridge_begin(
+/// @return false when the picture cannot be held
+bool bridge_begin(
     RgbBridge& bridge,
     const RgbFrame& frame,
     const Rect32& area,
@@ -150,6 +266,12 @@ void bridge_begin(
     uint32_t phase_x = 0,
     uint32_t phase_y = 0
 );
+
+/// Makes the bridge's picture allocation fail while set, so a begin that
+/// needs a new block returns false. The process's new handler is not called.
+///
+/// @param fail true to refuse the next picture allocations
+void bridge_fail_allocations(bool fail) noexcept;
 
 /// Captures the tiles overlapping a region and clips the surface to it.
 ///

@@ -918,9 +918,14 @@ hosts them on the OA layer.
   as a dot of its owner's colour over the fog, framed in the selection
   boxes' colour while selected (`draw_far_view_dots`), and no model of a
   unit, feature, projectile, fragment or debris, no health bar or squad
-  digit and a model bridge of one pixel. A frame past the floor whose
-  bridge would take more than `rendered_units_budget`, an eighth of the
-  machine's physical memory, is a frame of dots too. A frame of dots of
+  digit and a model bridge of one pixel. A frame at any zoom whose
+  bridge would take more than `rendered_units_budget` is a frame of dots
+  too: an eighth of the machine's physical memory, and on a 32-bit build
+  also at most an eighth of the free address space (or 256 MiB when that
+  is not known). `OA_RENDERED_UNITS_BUDGET` replaces that figure, in bytes.
+  The picture grows with headroom and is released after the view has zoomed
+  back in; a picture that cannot be allocated draws dots and does not end
+  the game. A frame of dots of
   the whole map takes the memory of a frame at the processor's floor
   whatever the map's size, and about its time but for the fog, whose grid
   holds every cell of the map in view (`build_fog_grid`): on the largest

@@ -3695,6 +3695,14 @@ class Runtime final : public menu::Host,
     /// those settings. Throws std::runtime_error at the first failure.
     void check_simulation_hash();
 
+    /// Eases a skirmish's zoom out to its limit and back, three times, on a
+    /// large battlefield, with the model budget OA_RENDERED_UNITS_BUDGET
+    /// names, then returns to the main menu.
+    ///
+    /// The budget must be 8 MiB or the check refuses to zoom. Units past the
+    /// budget are dots. Throws std::runtime_error at the first failure.
+    void check_zoom_memory();
+
     /// Checks the services and hooks the screens and the extension reach the
     /// runtime through, on the main menu.
     ///
@@ -7825,9 +7833,9 @@ class Runtime final : public menu::Host,
 
     /// Tells whether the match's next frame draws its units as dots: a
     /// frame of the player's view zoomed out farther than After zoom with
-    /// Zoomed out units at Dots, or past detail_zoom_floor where the models'
-    /// drawing would take more memory than the machine can spare
-    /// (rendered_units_budget) or where a unit drawn may stand farther from
+    /// Zoomed out units at Dots, or any zoom where the models' drawing would
+    /// take more memory than the machine can spare (rendered_units_budget),
+    /// or past detail_zoom_floor where a unit drawn may stand farther from
     /// the camera than kMostModelOffset map pixels. Such a frame draws no
     /// model of a unit, feature, projectile, fragment or debris, no health
     /// bar or squad digit, and a model bridge of one pixel. A director's
@@ -7836,11 +7844,14 @@ class Runtime final : public menu::Host,
     /// @return true when the units are drawn as dots
     [[nodiscard]] bool dots_frame() const noexcept;
 
-    /// Returns the memory the models' drawing may take past
-    /// detail_zoom_floor, where its model bridge holds every map pixel the
-    /// view shows: an eighth of the machine's physical memory
-    /// (kRenderedUnitsMemoryShare), or kRenderedUnitsUnknownBudget where the
-    /// machine does not say.
+    /// Returns the memory the models' drawing may take, where its model
+    /// bridge holds every map pixel the view shows: an eighth of the
+    /// machine's physical memory (kRenderedUnitsMemoryShare), or
+    /// kRenderedUnitsUnknownBudget where the machine does not say, and on a
+    /// 32-bit build at most an eighth of the free address space or
+    /// kRenderedUnitsAddressCap where that is not known. OA_RENDERED_UNITS_BUDGET,
+    /// a number of bytes, replaces it, and on a 32-bit build is cut to the
+    /// free address space.
     ///
     /// @return bytes
     [[nodiscard]] uint64_t rendered_units_budget() const noexcept;

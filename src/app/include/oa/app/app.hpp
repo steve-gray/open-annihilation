@@ -66,12 +66,16 @@ constexpr int32_t kUncachedTerrainCamera = INT32_MIN;
 /// Bytes the model bridge takes for each map pixel a frame shows: its 8-bit
 /// picture and the indices it captured.
 constexpr uint64_t kModelBridgeBytesPerMapPixel = 2;
-/// The share of the machine's physical memory the models' drawing may take
-/// past the drawing's floor, where it grows with the map shown: an eighth.
+/// The share of the machine's physical memory the models' drawing may take,
+/// at every zoom, where it grows with the map shown: an eighth. A 32-bit
+/// build also takes at most this share of the free address space.
 constexpr uint64_t kRenderedUnitsMemoryShare = 8;
-/// The memory the models' drawing may take past the drawing's floor where
-/// the machine does not say how much it has: 512 MiB.
+/// The memory the models' drawing may take where the machine does not say
+/// how much it has: 512 MiB.
 constexpr uint64_t kRenderedUnitsUnknownBudget = uint64_t{512} << 20U;
+/// The memory the models' drawing may take on a 32-bit build that cannot
+/// say how much address space is free: 256 MiB.
+constexpr uint64_t kRenderedUnitsAddressCap = uint64_t{256} << 20U;
 /// Screen pixels past the battlefield's edges a frame still draws what
 /// stands there at least, so that a large unit or its shadow reaching into
 /// the view is drawn.
@@ -469,6 +473,9 @@ struct Options {
     // Reads the simulation hash with no mod and under a mod, then after a
     // Developer Mode override that changes the simulation, without a new start.
     bool check_simulation_hash = false;
+    // Eases a large battlefield's zoom out and back with a small model
+    // budget and returns to the main menu.
+    bool check_zoom_memory = false;
     // Starts a skirmish and checks, through the SDL presenter, that the
     // build menu, the bottom bar and the unit panel show units' names and
     // descriptions in the language this BCP-47 tag names, as the unit files

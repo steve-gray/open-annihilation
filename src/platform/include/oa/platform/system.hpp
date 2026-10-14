@@ -39,6 +39,15 @@ using ThreadEntry = void (*)(void* argument);
 /// @return the number of logical processors the system reports, at least 1
 [[nodiscard]] uint32_t processor_count() noexcept;
 
+/// Returns the free address space of this process, in bytes.
+///
+/// On Windows this is GlobalMemoryStatusEx's ullAvailVirtual, including
+/// through the Windows 95 stand-in of that call. Zero is a real reading.
+/// Other systems do not report it.
+///
+/// @return the free address space, or nothing when it is not known
+[[nodiscard]] std::optional<uint64_t> available_virtual_bytes() noexcept;
+
 /// Returns the value of an environment variable of the process.
 ///
 /// @param name the variable's name
