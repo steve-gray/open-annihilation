@@ -846,21 +846,27 @@ PlacedRows place_rows(std::span<const RowView> views, const RowPlacement& placem
         // A control that does not fit beside its label stands on the next
         // line. The lock stays on the label line — immediately left of a
         // control that sits there, otherwise at the line's right — unless
-        // the label, the lock and that control do not fit on one line. Then
-        // the lock moves to the start of the line under the label and the
-        // control stays, drawn faded. A slider's track, a drop-down and a
-        // text field stay on a line of their own either way. A lock never
-        // hides a control, and a label is never narrowed below its text to
-        // make room for a lock.
+        // the label and the lock do not fit on that line. Then the lock
+        // moves to the start of the line under the label, before the hint,
+        // and the label keeps the whole line, or the room beside a control
+        // that stays. A slider's track, a drop-down and a text field stay
+        // on a line of their own either way. A lock never hides a control,
+        // and a label is never narrowed below its text to make room for a lock.
         const bool drop_line = view.control_below && control_width > 0;
         const bool on_label = control_width > 0 && !drop_line && view.kind != RowKind::link;
         bool lock_below = locked && view.lock_below;
-        if (locked && !lock_below && view.lock_columns <= 0 && on_label && !view.label.empty()) {
+        // No measured lock: decide from the estimate. A control on the label
+        // line counts, with the gap before it. A slider, a drop-down, a text
+        // field or a text row has only the label and the lock on that line.
+        if (locked && !lock_below && view.lock_columns <= 0 && !view.label.empty()) {
             const int32_t label_columns = estimated_width(view.label);
-            const int32_t need = label_columns + kMetrics.label_gap + lock_width +
-                                 kMetrics.label_gap + control_width;
-            if (need > width)
+            const int32_t beside = label_columns + kMetrics.label_gap + lock_width;
+            if (on_label) {
+                if (beside + kMetrics.label_gap + control_width > width)
+                    lock_below = true;
+            } else if (beside > width) {
                 lock_below = true;
+            }
         }
         if (lock_below) {
             // A measured lock is exactly its icon and words. Without a

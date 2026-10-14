@@ -1778,6 +1778,60 @@ void text_size_waits_for_the_modern_fonts() {
     CHECK(dialog.chosen.text_size == 200);
 }
 
+void a_slider_lock_drops_when_its_label_does_not_fit() {
+    // Text size is locked while modern fonts are off. Measured in a wide
+    // regular face, the label does not fit beside the lock, so the lock
+    // moves under the label and the label keeps the line. A narrow face
+    // still fits, and the lock stays on the label line.
+    settings::Dialog dialog;
+    settings::open_dialog(dialog, {}, {}, {}, "v0.2.0", Page::language);
+    const geometry::TextWidth small = [](std::string_view words) {
+        return static_cast<int32_t>(words.size()) * 4;
+    };
+    const auto text_size_row = [](const geometry::Rows& rows) -> const geometry::Row* {
+        for (const geometry::Row& row : rows.rows)
+            if (row.setting == Setting::text_size)
+                return &row;
+        return nullptr;
+    };
+    const auto place = [&](int32_t columns) {
+        const geometry::TextWidth regular = [columns](std::string_view words) {
+            return static_cast<int32_t>(words.size()) * columns;
+        };
+        return geometry::open_rows(dialog, &small, nullptr, &regular);
+    };
+
+    const geometry::ScrolledRows fitted = place(4);
+    const geometry::Row* fits = text_size_row(fitted.rows);
+    CHECK(fits != nullptr && fits->lock == Lock::needs_modern_fonts);
+    if (fits != nullptr) {
+        CHECK(fits->lock_area.y == fits->label.y);
+        CHECK(fits->lock_area.x == fits->label.x + fits->label.width + geometry::label_gap);
+        CHECK(fits->label.width >= static_cast<int32_t>(std::string_view("Text size").size()) * 4);
+        CHECK(!overlap(fits->label, fits->lock_area));
+        CHECK(!overlap(fits->lock_area, fits->control_area));
+    }
+
+    const geometry::ScrolledRows dropped = place(30);
+    const geometry::Row* wide = text_size_row(dropped.rows);
+    CHECK(wide != nullptr && wide->lock == Lock::needs_modern_fonts);
+    if (wide != nullptr) {
+        CHECK(wide->label.x == geometry::content_left);
+        CHECK(wide->label.width == geometry::content_width);
+        CHECK(wide->label.width >= static_cast<int32_t>(std::string_view("Text size").size()) * 30);
+        CHECK(wide->lock_area.x == geometry::content_left);
+        CHECK(
+            wide->lock_area.y == wide->label.y + geometry::label_line_height + geometry::hint_gap
+        );
+        CHECK(!overlap(wide->label, wide->lock_area));
+        CHECK(wide->hint_lines >= 1);
+        CHECK(
+            wide->hints[0].y == wide->lock_area.y + geometry::label_line_height + geometry::hint_gap
+        );
+        CHECK(wide->control_area.y >= wide->hints[0].y + geometry::hint_line_height);
+    }
+}
+
 void a_language_locks_the_modern_fonts_and_unicode_chat() {
     [[maybe_unused]] const InstalledSimplifiedChinese installed;
     // Simplified Chinese draws in the modern fonts, and its pack asks for
@@ -9811,6 +9865,7 @@ int main(int argc, char** argv) {
         path_tails_keep_the_last_components_that_fit();
         text_size_runs_from_half_to_three_times_in_tenths();
         text_size_waits_for_the_modern_fonts();
+        a_slider_lock_drops_when_its_label_does_not_fit();
         a_language_locks_the_modern_fonts_and_unicode_chat();
         every_stop_maps_to_its_value_and_back();
         sliders_follow_the_pointer_and_the_arrows();
