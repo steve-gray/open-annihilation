@@ -1378,7 +1378,9 @@ std::string launch_content_error(std::string_view problem) {
 
 [[nodiscard]] Options parse_options(int argc, char** argv, const Extension& extension) {
     Options result;
-    std::string joined_line;
+    // The game's switches, each argument one word: the system has already
+    // split the command line, honouring its quotes.
+    std::vector<const char*> switch_words;
     uint32_t extension_effects = 0;
     // The acceleration flags, wherever they stand, must name one level: the
     // first given and the first that names another are refused once the
@@ -1531,16 +1533,14 @@ std::string launch_content_error(std::string_view problem) {
             // One of the four file types, opened with the game or dropped on it.
             result.open_files.push_back(opened_file_path(argument));
         } else {
-            if (!joined_line.empty())
-                joined_line += ' ';
-            joined_line += argument;
+            switch_words.push_back(argv[index]);
         }
     }
     GuardedSwitches switches;
     switches.handler = call_hook_or_raise<&Extension::switch_handler>(extension);
     switches.guard = {&switches, take_guarded_switch, reset_guarded_switches};
     const auto parsed = oa::app::command_line::parse(
-        joined_line.c_str(), result.launch, switches.handler != nullptr ? &switches.guard : nullptr
+        switch_words, result.launch, switches.handler != nullptr ? &switches.guard : nullptr
     );
     // A handler that threw stops the start with its message, as a hook that
     // raises its error does.
