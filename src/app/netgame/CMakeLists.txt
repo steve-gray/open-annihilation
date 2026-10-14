@@ -272,15 +272,18 @@ if(BUILD_TESTING AND TARGET oa-game AND IS_DIRECTORY "${OA_GAME_DIR}")
       --scratch-root "${oa_netgame_checks}")
     set_tests_properties(native-net-options PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
     # A launch file, TA Forever's or this game's, opens the battle room on
-    # the file's map and rules. A file the game cannot use ends before a
-    # window, and --list-content --json prints the installed content.
+    # the file's map and rules. A file the game cannot use, or a map or mod
+    # it names that is not installed, ends before a window with the status
+    # stream's exit line, --list-content --json prints the installed content
+    # on standard output with no window, also beside --log-dir, and -n1
+    # alone opens the game list of its address.
     add_test(NAME native-launch-file COMMAND ${Python3_EXECUTABLE}
       "${PROJECT_SOURCE_DIR}/tools/check_native_launch_file.py"
       --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
       --scratch-root "${oa_netgame_checks}")
     set_tests_properties(native-launch-file PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
     # A launch file the system opens in the game, as a drop of the file: as the
-    # window first shows it is the start's launch, as -c makes it; at the main
+    # game starts, before its window, it is the start's launch, as -c makes it; at the main
     # menu, from a temporary .txt file as `open -f` writes one, it goes to the
     # same battle room; a file the battle room cannot use opens nothing.
     add_test(NAME native-opened-launch COMMAND ${Python3_EXECUTABLE}

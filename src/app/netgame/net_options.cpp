@@ -280,6 +280,31 @@ void store_launch_text(std::span<char> field, std::string_view text, std::string
     oa::base::text::copy_terminated(field, text);
 }
 
+/// Refuses a name or a password the command line gives a game to host or join that is longer than the game keeps.
+///
+/// The message names the option and the limit (kPlayerNameLimit,
+/// kGameNameLimit, kPasswordLimit). It does not repeat the text, so a
+/// password is never written out.
+///
+/// @param options the parsed options, a game to host or join among them
+void check_direct_game_texts(const NetOptions& options) {
+    const auto refuse_longer = [](std::string_view text,
+                                  std::size_t limit,
+                                  std::string_view option) {
+        if (text.size() > limit)
+            throw LaunchRefusal(
+                std::string(option) + ": is longer than " + std::to_string(limit) + " characters"
+            );
+    };
+    const auto& game = options.direct_game;
+    if (options.cli_player_name)
+        refuse_longer(game.player_name, netgame::kPlayerNameLimit, "--player-name");
+    if (options.cli_game_name)
+        refuse_longer(game.game_name, netgame::kGameNameLimit, "--game-name");
+    if (options.cli_password)
+        refuse_longer(game.password, netgame::kPasswordLimit, "--game-password");
+}
+
 /// Puts a launch plan into the context, then puts the command line's own fields back.
 ///
 /// --host, --join, --player-name, --game-name, --game-password, --dplay-guid
@@ -395,7 +420,11 @@ bool apply_launch_plan(NetgameContext& netgame, LaunchPlan plan) {
 
     if (cli_game_set) {
         options.direct_game.game_name = cli_game;
-        store_launch_text(switches.block.session_name, cli_game, "--game-name");
+        store_launch_text(
+            std::span<char>(switches.block.session_name).first(netgame::kGameNameLimit + 1),
+            cli_game,
+            "--game-name"
+        );
     } else if (from_session) {
         options.direct_game.game_name = saved_session;
     } else {
@@ -404,14 +433,22 @@ bool apply_launch_plan(NetgameContext& netgame, LaunchPlan plan) {
 
     if (cli_player_set) {
         options.direct_game.player_name = cli_player;
-        store_launch_text(switches.block.user_name, cli_player, "--player-name");
+        store_launch_text(
+            std::span<char>(switches.block.user_name).first(netgame::kPlayerNameLimit + 1),
+            cli_player,
+            "--player-name"
+        );
     } else {
         options.direct_game.player_name = plan.player_name;
     }
 
     if (cli_password_set) {
         options.direct_game.password = cli_password;
-        store_launch_text(switches.block.password, cli_password, "--game-password");
+        store_launch_text(
+            std::span<char>(switches.block.password).first(netgame::kPasswordLimit + 1),
+            cli_password,
+            "--game-password"
+        );
     } else {
         options.direct_game.password = plan.password;
     }
@@ -514,7 +551,8 @@ void note_missing_transport(const NetgameContext& netgame) {
 ///
 /// A launch is read here, after the long options and the game switches, and
 /// each field the command line named is put back. --player-name,
-/// --game-name and --game-password need --host or --join, or a launch. A
+/// --game-name and --game-password need --host or --join, or a launch, and
+/// are refused when longer than the game keeps. A
 /// game to host or join has the frontend open multiplayer over TCP/IP at
 /// once, whatever connection "-n" named. --list-content needs --json, and
 /// --json needs --list-content. A refused combination throws
@@ -552,6 +590,7 @@ void check_options(void* context) {
                 throw std::runtime_error("--game-password needs --host or --join");
             return;
         }
+        check_direct_game_texts(options);
         oa::app::netgame::launch::set_connection_type(
             netgame.launch, oa::app::netgame::launch::connection_type::tcpip
         );

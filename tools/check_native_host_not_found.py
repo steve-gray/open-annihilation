@@ -15,8 +15,11 @@ its "-n1" launch as active until the wait begins, reaches the second
 outcome.
 
 open-annihilation runs through its main loop on the dummy SDL drivers with
-"-n1:127.0.0.1", which opens multiplayer at once over TCP/IP and joins that
-address. The game asks for games at a DirectPlay port of the check's own
+"-n1:127.0.0.1", which, as in 3.1c, opens multiplayer at once over TCP/IP
+and goes to the game list of that address. Alone, -n1 leaves the choice of
+a game there to the player; the check's active launch has the game list
+wait for the host's game and join it, as a launched joiner does. The game
+asks for games at a DirectPlay port of the check's own
 (--dplay-port), which the check holds open and never answers, so no game is
 found there whatever else runs on this machine. The run must end by itself with status 0 after reporting the text
 and a leave about 4 seconds later with no reason and exit status 0.

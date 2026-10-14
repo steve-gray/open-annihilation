@@ -194,9 +194,10 @@ With either:
   [which games are listed](docs/multiplayer/application-guid.md) for why
   a launcher's per-mod GUID belongs here.
 
-Each is what you would type in the screens, and the same rules apply: a
-name keeps 16 characters at most, and a password 10. Without them, the
-screens' own entries are used. The intro is skipped, and your saved
+Each is what you would type in the screens, and the same limits apply: a
+name has 16 characters at most, and a password 10, and a longer one is
+refused ([launch settings](docs/command-line.md#launch-settings)). Without
+them, the screens' own entries are used. The intro is skipped, and your saved
 address, name and password stay as they were. The game says on its
 standard output when the battle room opens and who is in it:
 

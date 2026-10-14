@@ -38,6 +38,22 @@ class LaunchRefusal : public std::runtime_error {
     explicit LaunchRefusal(const std::string& message);
 };
 
+/// The most characters of a player's name: what the multiplayer screens'
+/// name entry takes, what the battle room keeps and what the session sends
+/// the other players. A launch's longer name is refused; TA Forever's file
+/// keeps the first ones.
+inline constexpr std::size_t kPlayerNameLimit = 16;
+/// The most characters of a game's name: what the multiplayer screens'
+/// entry takes, what the battle room keeps and what the game list shows of
+/// it. A launch's longer name is refused; TA Forever's file keeps the first
+/// ones.
+inline constexpr std::size_t kGameNameLimit = 16;
+/// The most characters of a game's password: what the multiplayer screens'
+/// entry takes and what the battle room keeps and sends every player. A
+/// launch's longer password is refused; TA Forever's file keeps the first
+/// ones.
+inline constexpr std::size_t kPasswordLimit = 10;
+
 /// Whether the launch hosts a game or joins one. Unset until a file or the command line says.
 enum class LaunchRole : uint8_t {
     unset, ///< neither host nor join

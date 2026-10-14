@@ -7,8 +7,12 @@
 
 #include "oa/app/game_directory.hpp"
 #include "oa/base/text.hpp"
+#include "oa/core/game_state.h"
+#include "oa/core/player_setup.h"
 #include "oa/formats/oamod.hpp"
 #include "oa/netgame/dplay.hpp"
+#include "oa/netgame/session.hpp"
+#include "oa/ui/frontend_multiplayer/lobby_net.hpp"
 
 #include <algorithm>
 #include <array>
@@ -50,6 +54,21 @@ namespace {
 
 namespace launch = oa::ui::frontend_multiplayer::launch;
 namespace oamod = oa::formats::oamod;
+
+// A launch's name and password limits are the game's own: the battle room's
+// fields, with their terminating NUL, the name the session sends the other
+// players, the game's name at the start of the session's name, and the
+// password the battle room sends every player.
+static_assert(sizeof(oa::Game::nickname) == kPlayerNameLimit + 1);
+static_assert(sizeof(oa::Game::game_name) == kGameNameLimit + 1);
+static_assert(sizeof(oa::Game::password) == kPasswordLimit + 1);
+static_assert(oa::netgame::session::player_name_bytes == kPlayerNameLimit);
+static_assert(oa::ui::frontend_multiplayer::kSessionGameNameBytes == kGameNameLimit);
+static_assert(sizeof(oa::PlayerSetupInfo::password) == kPasswordLimit + 1);
+// The launch block holds each of them whole.
+static_assert(launch::kLaunchUserNameBytes > kPlayerNameLimit);
+static_assert(launch::kLaunchSessionNameBytes > kGameNameLimit);
+static_assert(launch::kLaunchPasswordBytes > kPasswordLimit);
 
 // The battle room's metal and energy sliders stop at 10000.
 constexpr int64_t kHighestResource = 10000;
@@ -225,6 +244,15 @@ std::string_view read_text(const LaunchValue& value, const LaunchPlace& place) {
     return value.node->text;
 }
 
+/// Returns the part of a launch field that holds `limit` characters and the terminating NUL.
+///
+/// @param field the launch block's field
+/// @param limit the most characters the game keeps of it
+/// @return the field's first limit + 1 bytes, or the whole field when it is shorter
+std::span<char> first_characters(std::span<char> field, std::size_t limit) noexcept {
+    return field.first(std::min(field.size(), limit + 1));
+}
+
 /// Reads a text that fits a field, including the terminating NUL.
 ///
 /// The text is not repeated in a refusal, so a password is never written out.
@@ -360,7 +388,9 @@ void store_address(LaunchPlan& plan, const LaunchValue& value, const LaunchPlace
 /// @param value the value
 /// @param place where a refusal points
 void store_game_name(LaunchPlan& plan, const LaunchValue& value, const LaunchPlace& place) {
-    plan.game_name = std::string(read_fitting(value, place, plan.block.session_name));
+    plan.game_name = std::string(
+        read_fitting(value, place, first_characters(plan.block.session_name, kGameNameLimit))
+    );
 }
 
 /// Stores game.password, the game's password.
@@ -369,7 +399,9 @@ void store_game_name(LaunchPlan& plan, const LaunchValue& value, const LaunchPla
 /// @param value the value
 /// @param place where a refusal points
 void store_password(LaunchPlan& plan, const LaunchValue& value, const LaunchPlace& place) {
-    plan.password = std::string(read_fitting(value, place, plan.block.password));
+    plan.password = std::string(
+        read_fitting(value, place, first_characters(plan.block.password, kPasswordLimit))
+    );
 }
 
 /// Stores game.player-limit.
@@ -439,7 +471,9 @@ void store_port(LaunchPlan& plan, const LaunchValue& value, const LaunchPlace& p
 /// @param value the value
 /// @param place where a refusal points
 void store_player_name(LaunchPlan& plan, const LaunchValue& value, const LaunchPlace& place) {
-    plan.player_name = std::string(read_fitting(value, place, plan.block.user_name));
+    plan.player_name = std::string(
+        read_fitting(value, place, first_characters(plan.block.user_name, kPlayerNameLimit))
+    );
 }
 
 /// Stores player.side: a faction, or watching.
@@ -894,12 +928,12 @@ constexpr LaunchField kFields[] = {
      store_address},
     {"game.name",
      "--game-name NAME",
-     "The game's name, at most 63 characters.",
+     "The game's name, at most 16 characters.",
      Reader::direct_game,
      store_game_name},
     {"game.password",
      "--game-password PASSWORD",
-     "The game's password, at most 31 characters. It is never written to the log.",
+     "The game's password, at most 10 characters. It is never written to the log.",
      Reader::direct_game,
      store_password},
     {"game.player-limit",
@@ -938,7 +972,7 @@ constexpr LaunchField kFields[] = {
      store_port},
     {"player.name",
      "--player-name NAME",
-     "The player's name, at most 31 characters.",
+     "The player's name, at most 16 characters.",
      Reader::direct_game,
      store_player_name},
     {"player.side",
@@ -1384,9 +1418,11 @@ constexpr IniRule kIniRules[] = {
      [](LaunchPlan& plan, std::optional<std::string_view> value) {
          (void)ini_copy(plan.block.provider_label, value);
      }},
-    {{"session", "game.name", "The game's name, its first 63 characters kept."},
+    {{"session", "game.name", "The game's name, its first 16 characters kept."},
      [](LaunchPlan& plan, std::optional<std::string_view> value) {
-         plan.game_name = std::string(ini_copy(plan.block.session_name, value));
+         plan.game_name = std::string(
+             ini_copy(first_characters(plan.block.session_name, kGameNameLimit), value)
+         );
      }},
     {{"mission",
       "map",
@@ -1395,15 +1431,17 @@ constexpr IniRule kIniRules[] = {
      [](LaunchPlan& plan, std::optional<std::string_view> value) {
          (void)ini_copy(plan.block.mission, value);
      }},
-    {{"password", "game.password", "The game's password, its first 31 characters kept."},
+    {{"password", "game.password", "The game's password, its first 10 characters kept."},
      [](LaunchPlan& plan, std::optional<std::string_view> value) {
-         plan.password = std::string(ini_copy(plan.block.password, value));
+         plan.password =
+             std::string(ini_copy(first_characters(plan.block.password, kPasswordLimit), value));
      }},
     {{"player",
       "player.name",
-      "The player's name, its first 31 characters kept. Empty leaves the player's own name."},
+      "The player's name, its first 16 characters kept. Empty leaves the player's own name."},
      [](LaunchPlan& plan, std::optional<std::string_view> value) {
-         plan.player_name = std::string(ini_copy(plan.block.user_name, value));
+         plan.player_name =
+             std::string(ini_copy(first_characters(plan.block.user_name, kPlayerNameLimit), value));
      }},
     {{"address",
       "game.address",

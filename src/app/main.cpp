@@ -99,6 +99,19 @@
 #error "OA_TOUCH_FIRST (0 or 1) says whether the touch controls are on from the start"
 #endif
 
+// The status stream's entry points (automation/status.hpp, which says what
+// each does).
+namespace oa::app::automation {
+bool status_stdout_wanted() noexcept;
+bool status_following() noexcept;
+void capture_status_stdout();
+void begin_status_lines(std::string_view version);
+void finish_status_lines(int played);
+void finish_refused_status_lines(int code);
+int status_exit_code(int played) noexcept;
+void write_started_output(std::string_view line);
+} // namespace oa::app::automation
+
 namespace oa::app {
 namespace {
 
@@ -113,6 +126,8 @@ constexpr bool kTouchFirst = OA_TOUCH_FIRST != 0;
 
 // Process exit status after an out-of-memory report.
 constexpr int kOutOfMemoryExitStatus = 3;
+// Process exit status of a launch the game cannot use.
+constexpr int kLaunchRefusedStatus = 2;
 
 // The folder ErrorLog.txt goes in, found once at start-up so that the
 // out-of-memory report does not have to look for it.
@@ -300,45 +315,32 @@ struct HostDisplay {
     // the probe found of it.
     RendererHost renderer_host{};
     bool active = false;
+    /// start_video has run: SDL's video and sound are up, with or without
+    /// the window.
+    bool video_started = false;
     /// initialize has run: the window opens once, early for the Game files
     /// screen or where the game opens it.
     bool initialized = false;
     // The mode Alt+Enter last asked for while the intro movies play.
     FullScreenSwitch full_screen{};
 
-    /// Starts SDL's video and sound and opens the window, at the size
-    /// --resolution gives when it is given, else at the Screen size setting's
-    /// (start_settings, starting_screen_size), else at the default, held to
-    /// the desktop in Steam's Game Mode (default_window_size), and logs the
-    /// size it opened at (report_window_size); at the display's own pixel
-    /// density only where decide_window_density allows it, with the
-    /// renderer records read first (records_place,
-    /// RendererHost::open_records), and its renderer
-    /// (RendererHost::create), which it describes and logs with the tier its
-    /// first frame is drawn in, from the flags and the Hardware acceleration
-    /// setting read before the window opens (RendererHost::decide_start_tier).
-    /// A window of a set screen size takes the display's mode of that size
-    /// in full screen where full screen switches modes and the display has
-    /// one, and is otherwise drawn at the size and scaled to the screen
-    /// there (take_screen_size, FullScreenSwitch::screen_width); a set size
-    /// the display does not offer opens as Desktop for this run
-    /// (shown_screen_size). A place remembered from the last run
-    /// (open-annihilation.window-place) opens directly: full screen on that
-    /// display, or the window at its size and place, fitted onto the main
-    /// display when the old one is gone. A first start is unchanged. -d and
-    /// --resolution win for this run and are not remembered. A build
-    /// whose touch controls are on from the start sets their input hints
-    /// before SDL starts (set_input_hints), and the
-    /// platform's window_ready hook, when there is one, is told once the
-    /// window and its renderer are made.
+    /// Starts SDL's video and sound without opening the window.
     ///
-    /// Throws std::runtime_error when SDL, the window or the renderer fails.
-    /// It runs at most once (initialized).
+    /// Sets the hints SDL reads as its video starts, takes the game's sound
+    /// for a capture first, starts the gamepads and the watch on files the
+    /// system opens the game with. A launch file the system opens the game
+    /// with arrives once the video has started, before any window opens. A
+    /// build whose touch controls are on from the start sets their input
+    /// hints before SDL starts (set_input_hints).
+    ///
+    /// Throws std::runtime_error when SDL's video fails. It runs at most once
+    /// (video_started).
     ///
     /// @param options the parsed command line
-    void initialize(const Options& options) {
-        const uint32_t probe_began = oa::platform::tick_ms();
-        initialized = true;
+    void start_video(const Options& options) {
+        if (video_started)
+            return;
+        video_started = true;
         if (!SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1"))
             throw std::runtime_error("SDL mouse focus click-through hint was rejected");
         // Closing the window reaches the game as a close request, which a
@@ -373,6 +375,41 @@ struct HostDisplay {
         // A .oamod file opened in the game, now or later, reaches the inbox
         // whatever polls SDL's events at that moment.
         watch_opened_files();
+    }
+
+    /// Starts SDL's video and sound (start_video) when they are not up yet,
+    /// and opens the window, at the size
+    /// --resolution gives when it is given, else at the Screen size setting's
+    /// (start_settings, starting_screen_size), else at the default, held to
+    /// the desktop in Steam's Game Mode (default_window_size), and logs the
+    /// size it opened at (report_window_size); at the display's own pixel
+    /// density only where decide_window_density allows it, with the
+    /// renderer records read first (records_place,
+    /// RendererHost::open_records), and its renderer
+    /// (RendererHost::create), which it describes and logs with the tier its
+    /// first frame is drawn in, from the flags and the Hardware acceleration
+    /// setting read before the window opens (RendererHost::decide_start_tier).
+    /// A window of a set screen size takes the display's mode of that size
+    /// in full screen where full screen switches modes and the display has
+    /// one, and is otherwise drawn at the size and scaled to the screen
+    /// there (take_screen_size, FullScreenSwitch::screen_width); a set size
+    /// the display does not offer opens as Desktop for this run
+    /// (shown_screen_size). A place remembered from the last run
+    /// (open-annihilation.window-place) opens directly: full screen on that
+    /// display, or the window at its size and place, fitted onto the main
+    /// display when the old one is gone. A first start is unchanged. -d and
+    /// --resolution win for this run and are not remembered. The
+    /// platform's window_ready hook, when there is one, is told once the
+    /// window and its renderer are made.
+    ///
+    /// Throws std::runtime_error when SDL, the window or the renderer fails.
+    /// It runs at most once (initialized).
+    ///
+    /// @param options the parsed command line
+    void initialize(const Options& options) {
+        const uint32_t probe_began = oa::platform::tick_ms();
+        initialized = true;
+        start_video(options);
         // The settings the window and its renderer start with, read before
         // either exists.
         const auto desktop = desktop_size(options);
@@ -1397,7 +1434,9 @@ publish_launch_catalogue(const Options& options, const GameDirectory& directory)
         }
         writer.end_array();
         writer.end_object();
-        std::cout << writer.text() << std::endl;
+        // The standard output the process was started with, even where the
+        // log took the streams.
+        automation::write_started_output(writer.text());
         return 0;
     }
     std::string asked;
@@ -1460,6 +1499,19 @@ void take_launch_opened_at_start(Options& options) {
     options.skip_intro = true;
 }
 
+/// Tells whether the window waits for the launch's checks.
+///
+/// --list-content opens no window at all. A launch, named on the command
+/// line, piped in or opened with the game, opens it once the launch's
+/// content and map are found installed (publish_launch_catalogue), so that a
+/// launch the game cannot use is refused before any window opens.
+///
+/// @return true for a listing or a launch
+[[nodiscard]] bool window_waits_for_launch() {
+    const auto& net = netgame_context().options;
+    return net.list_content || net.launch_planned;
+}
+
 /// Runs the game once: finds the game folders and their profile, with the
 /// Game files screen where the platform brings game files in and none is
 /// usable, opens the window the first time, plays the intro movies the
@@ -1511,15 +1563,22 @@ int run_once(
     // choice is read from the preferences on every start, including the soft
     // restart a mod switch uses, so a change of choice is what the next start
     // mounts. --game-dir keeps the scan of the named folder.
+    // A listing starts no video. Any other start brings SDL's video up
+    // first, which hands over a launch file the system opened the game with:
+    // that file's launch is this start's, taken before the folder is
+    // resolved, which the launch's content chooses.
+    const bool listing = netgame_context().options.list_content;
+    if (!options.headless_check && !listing)
+        display.start_video(options);
+    if (options.restarts == 0 && display.video_started)
+        take_launch_opened_at_start(options);
     // The window is up before the folder is resolved, so a slow look at the
     // copy does not leave the screen blank. A run nobody watches can ask no
     // dialog, so that look leaves this thread and the window keeps drawing.
-    if (!options.headless_check && !display.initialized)
+    // A listing, and a launch until its content and map are checked, keep
+    // the window closed.
+    if (!options.headless_check && !display.initialized && !window_waits_for_launch())
         display.initialize(options);
-    // A launch file the system opened the game with is this start's launch,
-    // before the folder is resolved, which the launch's content chooses.
-    if (options.restarts == 0 && display.initialized)
-        take_launch_opened_at_start(options);
     if (options.check_window_place) {
         if (!display.initialized)
             display.initialize(options);
@@ -1533,8 +1592,10 @@ int run_once(
     // While they will, the system's folder dialog, the in-engine locator and
     // the Game files screen stay closed: those were what showed before the
     // language step. The look itself still runs on the side thread when a
-    // run nobody watches has the window up.
-    const bool setup_now = setup_before_game_due(options, mount_copy);
+    // run nobody watches has the window up. A listing shows none of them,
+    // and no setup either: it asks nothing.
+    const bool setup_now = !listing && setup_before_game_due(options, mount_copy);
+    const bool dialogs_closed = setup_now || listing;
     GameFilesNeeded needed;
     const uint32_t folder_began = oa::platform::tick_ms();
     const auto resolve_folder = [&] {
@@ -1543,10 +1604,10 @@ int run_once(
         if (!game_directory)
             game_directory = find_game_directory(
                 options,
-                setup_now
+                dialogs_closed
                     ? nullptr
                     : ((game_files.offered || folder_chooser_offered(options)) ? &needed : nullptr),
-                setup_now
+                dialogs_closed
             );
     };
     const bool folder_aside = display.initialized && (options.unattended || options.headless_check);
@@ -1568,6 +1629,10 @@ int run_once(
         resolve_folder();
     }
     oa::platform::log_files::note_timing_span("game folder", folder_began);
+    if (listing && !game_directory)
+        throw std::runtime_error(
+            "--list-content: no Total Annihilation folder is known; name it with --game-dir PATH"
+        );
     if (!setup_now) {
         // Without a usable folder where the in-engine chooser is asked for, it picks one.
         if (!game_directory && needed.needed && needed.chooser) {
@@ -2110,15 +2175,6 @@ void release_launch_window() {
 
 using namespace oa::app;
 
-namespace oa::app::automation {
-bool status_stdout_wanted() noexcept;
-bool status_following() noexcept;
-void capture_status_stdout();
-void begin_status_lines(std::string_view version);
-void finish_status_lines(int played);
-int status_exit_code(int played) noexcept;
-} // namespace oa::app::automation
-
 int main(int argc, char** argv) {
     const uint32_t process_started_ms = oa::platform::tick_ms();
     // --version prints one line and leaves before the log folder, the
@@ -2178,10 +2234,13 @@ int main(int argc, char** argv) {
         // A game started for play, from a terminal or the desktop, logs to the
         // logs folder. Checks, benchmarks and other scripted runs keep their
         // output where it goes, and so does a run whose output another
-        // program captures, such as a test or a script.
+        // program captures, such as a test or a script. --list-content keeps
+        // that standard output too, for its listing, whatever takes the log.
         if (automation::status_stdout_wanted()) {
             automation::capture_status_stdout();
             oa::platform::log_files::hold_lines_for_log();
+        } else if (netgame_context().options.list_content) {
+            automation::capture_status_stdout();
         }
         if (parsed.log_dir)
             start_log_in(*parsed.log_dir);
@@ -2256,8 +2315,11 @@ int main(int argc, char** argv) {
             package_install::finish_pending_change(change);
         }
     } catch (const netgame::LaunchRefusal& error) {
+        // A launch refused once the status lines began ends them with an
+        // exit line, before the refusal is reported.
+        automation::finish_refused_status_lines(kLaunchRefusedStatus);
         report_fatal(error.what());
-        return 2;
+        return kLaunchRefusedStatus;
     } catch (const fs::filesystem_error& error) {
         // A path longer than the system opens is reported with its length,
         // the limit and what to do.

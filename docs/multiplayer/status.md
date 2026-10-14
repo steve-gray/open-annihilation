@@ -38,17 +38,29 @@ no newline of its own. `pid` is this game's process. `status` is 1.
 {"event":"hello","status":1,"version":"Open Annihilation 0.8.0 (macos-universal arm64, 2ac0217b)","pid":41877}
 ```
 
-The last line is exit, and nothing is written after it. `reason` is one
-of `game-ended`, `left`, `connection-lost` and `quit`.
+Every stream that writes hello ends with exit, and nothing is written
+after it. `reason` is one of `game-ended`, `left`, `connection-lost`,
+`quit` and `refused`.
 
 With `--quit-after-game`, `code` is 0 when the game ended and 3 when the
 player left or lost the connection, and the process exits with that code.
 Without the option, `code` is the code the process is already going to
-return, and the process stays running until the player leaves it. A
-refused option exits with code 1 and writes no line.
+return, and the process stays running until the player leaves it.
 
 ```json
 {"event":"exit","reason":"game-ended","code":0}
+```
+
+An option refused as the command line is read ends the game before
+hello, with code 1, or 2 for a launch's value, and writes no line. A
+launch refused after hello, because its map, base game, expansion or mod
+is not installed, ends the stream with `refused` and code 2, the code the
+process exits with, with or without `--quit-after-game`. The refusal
+itself goes to the log ([exit statuses and
+refusals](../command-line.md#exit-statuses-and-refusals)).
+
+```json
+{"event":"exit","reason":"refused","code":2}
 ```
 
 ## What happens during the game

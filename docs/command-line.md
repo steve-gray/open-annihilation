@@ -398,7 +398,7 @@ Network play's own checks, the last rows, are in every build.
 | `--net-loopback-computer` | The loopback check's host seats a computer player. |
 | `--net-loopback-each-ai` | The loopback check's host and joiner each seat a computer player. |
 | `--check-host-not-found` | Checks a joiner whose host is never found. |
-| `--check-opened-launch start\|menu FILE` | Opens `FILE` as the system opens a launch file: as the window first shows, or once the main menu has settled. |
+| `--check-opened-launch start\|menu FILE` | Opens `FILE` as the system opens a launch file: as the game starts, before its window opens, or once the main menu has settled. |
 | `--check-recording-hook` | Checks the game declines bytes that are no recording and refuses a cut one. |
 
 ### Tools
@@ -454,7 +454,9 @@ ways to say what the game is:
 
 3.1c's `-h`, `-n` and `-b` switches work beside `-c` as they do in 3.1c
 ([The 3.1c command line](#the-31c-command-line)). On their own they start no
-game: with `-n1:192.0.2.10` alone the game opens on its main menu.
+game: `-n1:192.0.2.10` alone opens the multiplayer screens over TCP/IP at
+that address, as in 3.1c, and the game list shows the games there for the
+player to choose.
 
 `-c FILE` and `--launch FILE` are one option. Each names a launch file, which
 is either Open Annihilation's own `.oalaunch` file or the settings file TA
@@ -472,10 +474,10 @@ them starts a launch of its own. Without a launch file, `--host` or
 `--join`, a launch option is refused: `--metal needs --host or --join`.
 
 A value is checked as the file's value is. A launch the game cannot use
-ends the game as it starts, with status 2 and one line that names the file
-and the field (`host.oalaunch: rules.metal: 250000 is above 10000`), or the
-option (`--metal: 250000 is above 10000`). The password is never part of
-that line and is never written to the log.
+ends the game before a window opens, with status 2 and one line that names
+the file and the field (`host.oalaunch: rules.metal: 250000 is above
+10000`), or the option (`--metal: 250000 is above 10000`). The password is
+never part of that line and is never written to the log.
 
 The launch stays active for the whole run, and every battle room applies it
 as it opens. A player who joins takes the launch's player settings and
@@ -699,14 +701,15 @@ Restrictions does. A unit the game's content does not have is left out.
 only for this run. `base-game` is the base game's id, `expansions` a list of
 expansion ids, which needs a base game, and `mod` a mod's id, or the path of
 a mod folder or a mod profile. If this player does not have the base game,
-an expansion or the mod, the game ends as it starts, with status 2, and the
-line says which (`host.oalaunch: content.mod: "ridge" is not an installed
-mod`). A file that leaves `content` out plays what the Library has chosen.
+an expansion or the mod, the game ends before a window opens, with status
+2, and the line says which (`host.oalaunch: content.mod: "ridge" is not an
+installed mod`). A file that leaves `content` out plays what the Library
+has chosen.
 `--content`, `--base-game`, `--mod` and `--mod-dir` beside the file replace
 that choice.
 
 `map` is the map's shown name, or its key (`name@package` for a pack map). A
-map that is not installed is refused as the game starts
+map that is not installed is refused before a window opens
 (`host.oalaunch: map: "Acid Foursum" is not an installed map`). The game
 does not open on a different map.
 
@@ -815,15 +818,15 @@ settings in src/app/netgame/launch_file.cpp, word for word. -->
 |---|---|---|
 | `game.role` | `--host \| --join ADDRESS` | Hosts the game, or joins the game at `game.address`: `host` or `join`. A host plays over TCP/IP. |
 | `game.address` | `--join ADDRESS` | The address of the game to join, at most 63 characters. A host needs none. |
-| `game.name` | `--game-name NAME` | The game's name, at most 63 characters. |
-| `game.password` | `--game-password PASSWORD` | The game's password, at most 31 characters. It is never written to the log. |
+| `game.name` | `--game-name NAME` | The game's name, at most 16 characters. |
+| `game.password` | `--game-password PASSWORD` | The game's password, at most 10 characters. It is never written to the log. |
 | `game.player-limit` | `--player-limit N` | How many players the game takes, from 2 through 10. |
 | `game.launcher-name` | `--launcher-name NAME` | The launcher's name, at most 15 characters. The battle room shows it in place of Previous Menu when it has at most 11. |
 | `game.tournament` | `--tournament[=on\|off]` | A tournament game: `on` or `off`. It seats no computer players, and with `rules.lock-options` the players' sides and teams are locked too. |
 | `game.closed` | `--closed[=on\|off]` | Closes the game to more players once the launch's own computer players are seated: `on` or `off`. |
 | `game.directplay.application-guid` | `--dplay-guid GUID` | The DirectPlay application GUID the game hosts under and looks for, with or without braces. |
 | `game.directplay.port` | `--dplay-port PORT` | The DirectPlay port the game hosts on and looks for games at, from 1 through 65535. |
-| `player.name` | `--player-name NAME` | The player's name, at most 31 characters. |
+| `player.name` | `--player-name NAME` | The player's name, at most 16 characters. |
 | `player.side` | `--side arm\|core\|watcher` | The player's side, or `watcher` to watch instead of play. |
 | `player.team` | `--team 1-5\|none` | The player's team, from 1 through 5, or `none`. |
 | `player.colour` | `--colour 1-10` | The player's colour, from 1 through 10 in the order the battle room steps through them. A colour another player has gives the next free one. |
@@ -944,8 +947,8 @@ What an opened launch file does depends on when it arrives:
 - **When it starts the game,** it is the start's launch, exactly as
   `-c FILE`: the intro is skipped, the launch's content chooses what the
   game plays, and the battle room opens on the file's map, rules and
-  players. A file the game cannot use ends the game with status 2 and a
-  message that names the file and the field.
+  players. A file the game cannot use ends the game before a window opens,
+  with status 2 and a message that names the file and the field.
 - **While the game shows the main menu,** the game goes to that launch's
   battle room. From the single-player menu it goes back to the main menu
   first.
@@ -969,11 +972,14 @@ does. On macOS the system hands the file to the copy that runs.
 ## Listing what is installed
 
 `--list-content --json` prints the installed maps, mods and expansions as
-one JSON object and exits with status 0, before the game's first screen.
-The maps are sorted by key, and the mods and expansions by id. The object
-is one line of standard output, the line that begins `{`; lines of the
-game's log may come before it. Leave `--log-dir` out: with it, the log
-takes standard output, and the object goes into the log.
+one JSON object and exits with status 0, without opening a window. The maps
+are sorted by key, and the mods and expansions by id. The object is one line
+of the standard output the game was started with, whatever the log
+settings. With `--log-dir`, or when the game keeps its log in its logs
+folder, it is the only line there; otherwise lines of the game's log may
+come before it, and the object is the line that begins `{`. A listing asks
+nothing: when no game folder is known it ends with status 1 and says to
+name one with `--game-dir`.
 
 ```json
 {"maps":[{"shown-name":"Acid Foursome","key":"Acid Foursome","players":4,"size":"13 x 13"}],"mods":[{"id":"ridge","name":"Ridge"}],"expansions":[{"id":"core-contingency","name":"Core Contingency"}]}
@@ -1040,9 +1046,9 @@ switches, a `-b` that does nothing, a `-c` with no file, and `-h`, `-n` and
 | `-d`, `-df` | `-d` runs the game in a window, where the intro does not play, and `-df` full screen, for this run only: neither is remembered. Another letter after `d` counts as `-d`. |
 | `-e PERCENT` | Drops that percentage of this machine's outgoing network frames at random, to test a poor connection: 0 to 100. Anything else, or a value that begins with `-`, is 0. |
 | `-f` | Nothing. |
-| `-h NAME` | Marks this machine as the host and names the game; 63 characters are kept. A next word that begins with `-` is used up and sets nothing. |
+| `-h NAME` | Marks this machine as the host and names the game; its first 16 characters are kept. A next word that begins with `-` is used up and sets nothing. |
 | `-l` | Nothing, as in 3.1c. |
-| `-n TYPE[:ADDRESS]` | Skips the intro and names the transport the multiplayer screens open on: `1` TCP/IP, with the address to connect to after a colon (`-n1:192.0.2.10`); `2` IPX, `3` a modem and `4` a serial cable, which this game does not have, so the screens open on the provider list. Another number only skips the intro. |
+| `-n TYPE[:ADDRESS]` | Skips the intro, and the main menu goes straight to the multiplayer screens on the transport it names: `1` TCP/IP, with the address to connect to after a colon (`-n1:192.0.2.10`), whose games the game list then shows for the player to choose, or, with no address, the screens ask for one; `2` IPX, `3` a modem and `4` a serial cable, which this game does not have, so the screens open on the provider list. Another number only skips the intro. |
 | `-p RATE` | The network send rate in packets per second: 1 counts as 2 and above 30 as 30, 0 is 5 a second, and below 0, or a value that begins with `-`, turns paced sending off. A launch file's `pfs` replaces it. |
 | `-r TEXT` | Says, on standard output, that this game needs no DirectPlay registration, and ends with status 0 without opening a window. TEXT is the rest of the line. |
 | `-s` | No sound. |
@@ -1104,10 +1110,10 @@ the -c file in src/app/netgame/launch_file.cpp, word for word. -->
 | `timelimit` | `rules.time-limit` | Passed on with the score report; it does not end the game. Below 0 counts as 0. |
 | `pfs` | none | The network send rate in packets per second, in place of `-p`: below 0 turns paced sending off, 1 counts as 2, above 30 counts as 30, and 0 leaves the rate alone. |
 | `provider` | `game.launcher-name` | The launcher's name, its first 15 characters kept. The battle room shows it in place of Previous Menu when it has at most 11. |
-| `session` | `game.name` | The game's name, its first 63 characters kept. |
+| `session` | `game.name` | The game's name, its first 16 characters kept. |
 | `mission` | `map` | The map the host plays, by the name the list shows or its key, its first 63 characters kept. A map that is not installed ends the start. |
-| `password` | `game.password` | The game's password, its first 31 characters kept. |
-| `player` | `player.name` | The player's name, its first 31 characters kept. Empty leaves the player's own name. |
+| `password` | `game.password` | The game's password, its first 10 characters kept. |
+| `player` | `player.name` | The player's name, its first 16 characters kept. Empty leaves the player's own name. |
 | `address` | `game.address` | The TCP/IP address, its first 63 characters kept. With TCP/IP, a host creates its game at once and a player who joins joins the game there. |
 | `lockOptions` | `rules.lock-options` | Any whole number but 0 locks the battle room's options, and 0 unlocks them. |
 | `maxunits` | `rules.unit-limit` | The most units each player may have; 0 leaves the battle room's own. Below 20 counts as 20, and above 6553 as 6553. |
@@ -1187,11 +1193,15 @@ open-annihilation: taforever.ini: mission: "Acid Foursum" is not an installed ma
 open-annihilation: nothere.oalaunch: the file: cannot be read from the current folder or the game folder
 ```
 
-A value refused on the command line, or in the launch file it names, ends
-the game before a window opens. A map or content that is not installed is
-found as the game starts, and ends it before its first screen. The password
-is never part of a refusal, and never written to the log.
+A launch the game cannot use ends it before a window opens: a value
+refused on the command line or in the launch file, and a map, base game,
+expansion or mod that is not installed. A launch file opened with the game
+is checked the same way. Only where the game must first ask where Total
+Annihilation is, or show its first setup, does that window come before
+the check. The password is never part of a refusal, and never written to
+the log.
 
 With `--status-stdout` the status lines own standard output; the refusal
-goes to the log, and `--log-dir` names where that is
-([what a game reports](multiplayer/status.md)).
+goes to the log, and `--log-dir` names where that is. A launch refused
+once the status lines have begun ends them with `exit`, its reason
+`refused` and its code 2 ([what a game reports](multiplayer/status.md)).

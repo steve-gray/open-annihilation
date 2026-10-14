@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Status lines: hello, the events, and one exit line, each flushed, and the
-// code --quit-after-game gives a game that ended or a player who left.
+// Status lines: hello, the events, and one exit line, each flushed, the
+// code --quit-after-game gives a game that ended or a player who left, and
+// the exit line of a refused launch.
 #include "status.hpp"
 
 #include "oa/formats/json.hpp"
@@ -166,6 +167,37 @@ void check_quit() {
     OA_CHECK(bare.resolved_code(4) == 0);
 }
 
+/// A launch refused after hello ends the stream with reason refused and the
+/// refusal's code, with or without --quit-after-game; before hello nothing
+/// is written.
+void check_refused() {
+    for (const automation::QuitAfter quit :
+         {automation::QuitAfter::none, automation::QuitAfter::game}) {
+        Sink sink;
+        automation::StatusStream stream;
+        stream.set_writer(&sink, keep_line);
+        stream.set_quit(quit);
+        stream.hello("Open Annihilation 0.8.0", 5);
+        stream.note_refused();
+        OA_CHECK(stream.resolved_code(2) == 2);
+        stream.finish(2);
+        OA_CHECK(sink.lines.size() == 2);
+        if (sink.lines.size() != 2)
+            continue;
+        const Json exit_line = parsed_line(sink.lines.back());
+        OA_CHECK(text(exit_line, "event") == "exit");
+        OA_CHECK(text(exit_line, "reason") == "refused");
+        OA_CHECK(number(exit_line, "code") == 2);
+    }
+
+    Sink unopened;
+    automation::StatusStream before;
+    before.set_writer(&unopened, keep_line);
+    before.note_refused();
+    before.finish(2);
+    OA_CHECK(unopened.lines.empty());
+}
+
 /// The same line is written to a file, and flushed there.
 void check_file() {
     // A fixed name in the shared temporary folder collides when two runs
@@ -199,6 +231,7 @@ void check_file() {
 int main() {
     check_lines();
     check_quit();
+    check_refused();
     check_file();
     return oa::test::check_exit_status();
 }

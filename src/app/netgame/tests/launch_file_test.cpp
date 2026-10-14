@@ -488,7 +488,8 @@ void check_ini_keys() {
     expect(ini_block("timelimit=-5\n").time_limit == 0, "a negative timelimit is 0");
     // pfs: kept for the send rate (check_ini_hosting applies it).
     expect(ini_block("pfs=12\n").pfs == 12 && ini_block("pfs=-1\n").pfs == -1, "pfs");
-    // Texts: quotes dropped, cut to their fields.
+    // Texts: quotes dropped, cut to their fields, and the names and the
+    // password to what the game keeps of them.
     const std::string long_text(80, 'x');
     const auto texts = ini_plan(
         "provider=" + long_text + "\nsession=" + long_text + "\nmission=" + long_text +
@@ -496,16 +497,17 @@ void check_ini_keys() {
     );
     expect(
         std::string_view(texts.block.provider_label).size() == 15 &&
-            std::string_view(texts.block.session_name).size() == 63 &&
+            std::string_view(texts.block.session_name).size() == launch_file::kGameNameLimit &&
             std::string_view(texts.block.mission).size() == 63 &&
-            std::string_view(texts.block.password).size() == 31 &&
-            std::string_view(texts.block.user_name).size() == 31 &&
+            std::string_view(texts.block.password).size() == launch_file::kPasswordLimit &&
+            std::string_view(texts.block.user_name).size() == launch_file::kPlayerNameLimit &&
             std::string_view(texts.block.address).size() == 63,
-        "a long text is cut to its field, never refused"
+        "a long text is cut to what the game keeps, never refused"
     );
     expect(
-        texts.game_name.size() == 63 && texts.password.size() == 31 &&
-            texts.player_name.size() == 31 && texts.address.size() == 63,
+        texts.game_name.size() == launch_file::kGameNameLimit &&
+            texts.password.size() == launch_file::kPasswordLimit &&
+            texts.player_name.size() == launch_file::kPlayerNameLimit && texts.address.size() == 63,
         "the plan's names are cut as the block's are"
     );
     const auto named = ini_plan(
@@ -1192,6 +1194,84 @@ void check_options_match_the_file(const std::string& launch, const std::string& 
         }
 }
 
+/// The names and the password a launch takes are as long as the game keeps
+/// them, one limit for each: the file's field and its option refuse one
+/// character more, with or without a launch beside the option, the manual's
+/// table and --help say that limit, and TA Forever's file keeps that many.
+void check_name_limits() {
+    struct Limited {
+        const char* field;
+        const char* option;
+        const char* key;
+        std::size_t limit;
+    };
+
+    const Limited limited[] = {
+        {"player.name", "--player-name", "player", launch_file::kPlayerNameLimit},
+        {"game.name", "--game-name", "session", launch_file::kGameNameLimit},
+        {"game.password", "--game-password", "password", launch_file::kPasswordLimit},
+    };
+    expect(
+        launch_file::kPlayerNameLimit == 16 && launch_file::kGameNameLimit == 16 &&
+            launch_file::kPasswordLimit == 10,
+        "a name keeps 16 characters and a password 10, as the battle room does"
+    );
+    for (const auto& one : limited) {
+        const std::string longest(one.limit, 'n');
+        const std::string longer(one.limit + 1, 'n');
+        const std::string why = "is longer than " + std::to_string(one.limit) + " characters";
+        const std::string field(one.field);
+        const std::string group = field.substr(0, field.find('.'));
+        const std::string key = field.substr(field.find('.') + 1);
+        const auto file = [&](const std::string& value) {
+            const std::string head = "oalaunch: 1\ngame:\n  role: host\n";
+            const std::string text = group == "game"
+                                         ? head + "  " + key + ": " + value + "\n"
+                                         : head + group + ":\n  " + key + ": " + value + "\n";
+            return refused_text(text);
+        };
+        expect(
+            file(longest).empty(), field + " takes " + std::to_string(one.limit) + " characters"
+        );
+        expect(
+            file(longer) == "launch.oalaunch: " + field + ": " + why,
+            field + " refuses one more: " + file(longer)
+        );
+        const std::string option(one.option);
+        expect(
+            rejection({"--host", one.option, longest.c_str()}).empty(),
+            option + " takes " + std::to_string(one.limit) + " characters"
+        );
+        expect(
+            rejection({"--host", one.option, longer.c_str()}) == option + ": " + why,
+            option + " refuses one more without a launch: " +
+                rejection({"--host", one.option, longer.c_str()})
+        );
+        expect(
+            rejection({"--host", "--metal", "1000", one.option, longer.c_str()}) ==
+                option + ": " + why,
+            option + " refuses one more beside a launch"
+        );
+        const launch_file::LaunchField* setting = launch_file::find_launch_field(field);
+        const std::string said = "at most " + std::to_string(one.limit) + " characters";
+        expect(
+            setting != nullptr && setting->meaning.find(said) != std::string_view::npos,
+            field + "'s row says " + said
+        );
+        const std::string kept = "its first " + std::to_string(one.limit) + " characters kept";
+        bool row_found = false;
+        for (const auto& row : launch_file::launch_ini_keys())
+            if (row.key == one.key) {
+                row_found = true;
+                expect(
+                    row.meaning.find(kept) != std::string_view::npos,
+                    std::string(one.key) + "'s row says " + kept
+                );
+            }
+        expect(row_found, std::string(one.key) + " is a key of the -c file");
+    }
+}
+
 /// Each refusal names the field in the file, or the option, and why.
 ///
 /// @param scratch the directory the files are written in
@@ -1308,14 +1388,14 @@ void check_refusals(const Scratch& scratch) {
     const std::string long_password =
         refused_text("oalaunch: 1\ngame:\n  password: G104-password-that-must-stay-out\n");
     expect(
-        long_password == "launch.oalaunch: game.password: is longer than 31 characters" &&
+        long_password == "launch.oalaunch: game.password: is longer than 10 characters" &&
             long_password.find(password) == std::string::npos,
         "a long password is refused without being repeated"
     );
     const std::string option_password =
         rejection({"--host", "--metal", "1000", "--game-password", password.data()});
     expect(
-        option_password == "--game-password: is longer than 31 characters",
+        option_password == "--game-password: is longer than 10 characters",
         "a long --game-password beside a launch names the option: " + option_password
     );
     expect(
@@ -1687,6 +1767,7 @@ int main() {
         scratch.write("launch.oalaunch", kLaunch), scratch.write("plain.oalaunch", kPlainHost)
     );
     check_refusals(scratch);
+    check_name_limits();
     check_either_file(scratch);
     check_kept_status(scratch);
     check_standard_input(scratch);
