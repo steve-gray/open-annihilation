@@ -185,6 +185,45 @@ kit::Rect frame_to_points(const LayerView& seen, const kit::Rect& frame_rect) {
     return {left, top, right - left, bottom - top};
 }
 
+/// The window row where a frame rectangle's bottom edge ends, rounded outward.
+///
+/// @param seen what the layer's screens are placed on
+/// @param frame_rect the rectangle, in the frame's pixels
+/// @return that row, in window pixels
+int32_t frame_window_bottom(const LayerView& seen, const kit::Rect& frame_rect) {
+    if (seen.picture_size.y <= 0)
+        return frame_rect.y + frame_rect.height;
+    const int64_t down = std::max(seen.picture_size.y, int32_t{1});
+    const int64_t row = static_cast<int64_t>(frame_rect.y) + frame_rect.height;
+    const int64_t mapped = (row * static_cast<int64_t>(seen.picture.height) + down - 1) / down;
+    return static_cast<int32_t>(static_cast<int64_t>(seen.picture.y) + mapped);
+}
+
+/// The first point that draws on or below a window row.
+///
+/// A point drawn with nearest rounding can land one window pixel above the
+/// row the frame's own scale rounds outward, which leaves the button on the
+/// frame when the picture is not a whole number of frame pixels.
+///
+/// @param window_row the row, in window pixels
+/// @param percent the layer's scale, in percent
+/// @return the point
+int32_t point_on_or_below(int32_t window_row, int32_t percent) {
+    const int64_t scale = std::max(percent, int32_t{1});
+    int32_t point = 0;
+    if (window_row > 0)
+        point = static_cast<int32_t>(static_cast<int64_t>(window_row) * 100 / scale);
+    else if (window_row < 0)
+        point =
+            static_cast<int32_t>(-((static_cast<int64_t>(-window_row) * 100 + scale - 1) / scale));
+    for (int32_t step = 0; step < 4; ++step) {
+        if (kit::to_canvas(kit::Rect{0, point, 1, 1}, percent).y >= window_row)
+            return point;
+        ++point;
+    }
+    return point;
+}
+
 /// Reads a whole file of at most a size.
 ///
 /// @param file the file
@@ -1485,9 +1524,13 @@ struct Runtime::MoreMapsScreen final : LayerScreen {
         framed.width += list_frame_outset * 2;
         framed.height += list_frame_outset * 2;
         const kit::Rect frame_points = frame_to_points(placed_on, framed);
+        const int32_t percent = std::max(placed_on.scale_percent, int32_t{100});
+        // The top is the first point that draws on or below the frame's outer
+        // edge. The picture's scale rounds that edge outward, and a point
+        // just inside it draws on the frame.
         kit::Rect place{
             list_points.x + list_points.width - width,
-            frame_points.y + frame_points.height,
+            point_on_or_below(frame_window_bottom(placed_on, framed), percent),
             width,
             metrics.button_height
         };

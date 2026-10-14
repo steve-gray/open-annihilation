@@ -456,6 +456,12 @@ data::campaign::CampaignFiles map_files() {
     return data::campaign::campaign_asset_files(*ui().ctx->assets);
 }
 
+/// The row the battle room starts on: a map it can read, else one that can
+/// be played, else the first row.
+///
+/// @return that row; 0 when the list is empty
+int32_t starting_map_index();
+
 /// Orders the battle room's maps by the name each row shows.
 ///
 /// A list past the sorting limits stays in the order it was gathered.
@@ -608,17 +614,12 @@ void load_maps() {
         }
     }
     order_listed_maps(state.maps);
-    // A sorted list can open on a grey pack map. Start on the first map that
-    // can be played; a list of only grey maps stays on the first row.
-    if (!state.maps.empty() && state.map < 0) {
-        state.map = 0;
-        for (std::size_t index = 0; index < state.maps.size(); ++index) {
-            if (state.maps[index].blocked_reason.empty()) {
-                state.map = static_cast<int32_t>(index);
-                break;
-            }
-        }
-    }
+    // The room starts on a map it can read, so Select Map can open. A pack
+    // map that sorts first and has no file yet is not that map. A grey map
+    // is not either. When none can be read, the first map that can be played
+    // stays selected, and a list of only grey maps stays on the first row.
+    if (!state.maps.empty() && state.map < 0)
+        state.map = starting_map_index();
 }
 
 const MapInfo* current_map() {
@@ -663,6 +664,27 @@ data::campaign::CampaignFile* bound_map_context() {
 bool maps_selected(void*) {
     const auto* context = bound_map_context();
     return context != nullptr && data::campaign::campaign_mission_file_size(context) != 0;
+}
+
+int32_t starting_map_index() {
+    auto& state = ui();
+    const bool can_read = state.ctx != nullptr && state.ctx->assets != nullptr;
+    int32_t playable = -1;
+    for (std::size_t index = 0; index < state.maps.size(); ++index) {
+        if (!state.maps[index].blocked_reason.empty())
+            continue;
+        if (playable < 0)
+            playable = static_cast<int32_t>(index);
+        if (!can_read)
+            return playable;
+        state.map = static_cast<int32_t>(index);
+        const auto* held = bound_map_context();
+        if (held != nullptr && data::campaign::campaign_mission_file_size(held) != 0)
+            return state.map;
+    }
+    if (playable >= 0)
+        return playable;
+    return 0;
 }
 
 const char* maps_name(void*) {
