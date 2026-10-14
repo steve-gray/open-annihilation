@@ -13,6 +13,7 @@
 #include "oa/app/package_install/inbox.hpp"
 #include "oa/platform/display_modes.hpp"
 #include "oa/platform/job_pool.hpp"
+#include "oa/platform/preferences.hpp"
 #include "oa/platform/system.hpp"
 #include <algorithm>
 #include <array>
@@ -1293,6 +1294,31 @@ void write_parent_console(std::string_view text) {
 #endif
 }
 
+/// Finds the game folder, where a launch file named without a folder is looked for after the current folder.
+///
+/// It is the folder --game-dir names, or else the one the preferences
+/// remember from an earlier start.
+///
+/// @param context the Options being parsed
+/// @return the folder, or nothing when neither names one
+std::optional<fs::path> launch_game_folder(const void* context) {
+    const auto& options = *static_cast<const Options*>(context);
+    if (!options.game_dir.empty())
+        return options.game_dir;
+    try {
+        const auto values = oa::platform::preferences::load(
+            options.preferences_file ? *options.preferences_file
+                                     : oa::platform::preferences::default_file()
+        );
+        const auto found = values.find(std::string(kGameDirectoryPreference));
+        if (found != values.end() && !found->second.empty())
+            return path_from_utf8(found->second);
+    } catch (const std::exception&) {
+        // Unreadable preferences remember no folder.
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 void write_startup_line(std::string_view text) {
@@ -1306,48 +1332,6 @@ void write_startup_line(std::string_view text) {
         write_parent_console(bytes);
     std::cout << bytes;
     std::exit(0);
-}
-
-/// Turns a content choice the launch named into a refusal that names the field.
-///
-/// @param problem the message `--content` would have reported
-/// @return the launch refusal, naming the file and the field
-std::string launch_content_error(std::string_view problem) {
-    const auto& net = netgame_context().options;
-    const std::string prefix = net.launch_source + ": ";
-    auto line = [&](std::string_view field, std::string_view id, std::string_view why) {
-        return prefix + std::string(field) + ": \"" + std::string(id) + "\" " + std::string(why);
-    };
-    constexpr std::string_view unknown_base = "--content names an unknown base game: ";
-    constexpr std::string_view expansion_as_base =
-        "--content names an expansion as the base game: ";
-    constexpr std::string_view unknown_expansion = "--content names an unknown expansion: ";
-    constexpr std::string_view base_as_expansion = "--content names a base game as an expansion: ";
-    if (problem.starts_with(unknown_base))
-        return line(
-            "content.base-game",
-            problem.substr(unknown_base.size()),
-            "is not an installed base game"
-        );
-    if (problem.starts_with(expansion_as_base))
-        return line(
-            "content.base-game",
-            problem.substr(expansion_as_base.size()),
-            "is not an installed base game"
-        );
-    if (problem.starts_with(unknown_expansion))
-        return line(
-            "content.expansions",
-            problem.substr(unknown_expansion.size()),
-            "is not an installed expansion"
-        );
-    if (problem.starts_with(base_as_expansion))
-        return line(
-            "content.expansions",
-            problem.substr(base_as_expansion.size()),
-            "is not an installed expansion"
-        );
-    return prefix + "content.base-game: " + std::string(problem);
 }
 
 [[nodiscard]] Options parse_options(int argc, char** argv, const Extension& extension) {
@@ -1391,9 +1375,9 @@ std::string launch_content_error(std::string_view problem) {
             take_acceleration(argument, *level);
         } else if (argument == "--no-hardware-acceleration") {
             take_acceleration(argument, HardwareAcceleration::off);
-        } else if (argument == "--help" || argument == "-h") {
-            // A bare -h stays the help flag, so the game's "-h NAME" (name as
-            // the next argument) must be written -hNAME here.
+        } else if (argument == "--help" || (argument == "-h" && index + 1 == argc)) {
+            // -h with nothing after it is the help flag; with a word after
+            // it, it is the game's "-h NAME".
             std::ostringstream usage;
             usage << "usage: open-annihilation [--version] [--game-dir PATH | --choose-game-dir] "
                      "[--archive PATH]... "
@@ -1476,7 +1460,7 @@ std::string launch_content_error(std::string_view problem) {
                      "[--chunks A-B] [--stills F,F...]] "
                      "[game switches such as "
                   << extension_text(extension, ExtensionText::usage_switches, "")
-                  << "-d -s] "
+                  << "-d|-df -f -l -r TEXT -s -w] "
                      "[LANGUAGE]\n"
                      "--generate-script plans a director script from a recording an "
                      "extension of this build replays;\n"
@@ -1524,15 +1508,16 @@ std::string launch_content_error(std::string_view problem) {
     case oa::app::command_line::Status::run:
         break;
     case oa::app::command_line::Status::register_application:
-        throw std::runtime_error(extension_text(
+        // 3.1c registers itself with DirectPlay and ends; there is nothing
+        // to register here, so the game says so and ends as well.
+        write_startup_line(extension_text(
             extension,
             ExtensionText::register_switch,
             "-r registers the game for multiplayer, which this game does not need"
         ));
+        break;
     case oa::app::command_line::Status::line_too_long:
         throw std::runtime_error("the game switches exceed the command-line limit");
-    case oa::app::command_line::Status::argument_too_long:
-        throw std::runtime_error("the language argument is too long");
     case oa::app::command_line::Status::unavailable_switch:
         throw std::runtime_error(
             std::string("-") + result.launch.unavailable_switch + " is not handled by this build"
@@ -1561,10 +1546,22 @@ std::string launch_content_error(std::string_view problem) {
         throw std::runtime_error(
             "--frame-log, --scroll-camera, --march, --follow and --frame-clock need --frame-rate"
         );
-    call_hook_or_raise<&Extension::check_options>(extension);
+    {
+        // A launch file named without a folder is looked for in the game
+        // folder too, which only the engine's options name, while the hook
+        // reads it.
+        struct ForgetGameFolder {
+            ~ForgetGameFolder() { find_launch_files_in({}); }
+        };
+
+        find_launch_files_in({launch_game_folder, &result});
+        const ForgetGameFolder forget;
+        call_hook_or_raise<&Extension::check_options>(extension);
+    }
     // A launch file refused inside the hook is raised here, so main exits 2.
     raise_launch_refusal();
     adopt_launch_run(result);
+    note_game_switches(result);
     if (const auto env = oa::platform::environment_value("OA_DEBUG_ORDER_LINES");
         env && !env->empty())
         result.debug_order_lines = true;
@@ -1679,12 +1676,22 @@ std::string launch_content_error(std::string_view problem) {
             "--display-modes is accepted only with checks, snapshots, benchmarks and frame "
             "limits"
         );
+    // -df starts a player's run full screen and -d, with any other suffix,
+    // in a window. Without either, a player's run on Windows starts full
+    // screen. Unattended runs and video captures keep a window.
+    namespace display_option = oa::app::command_line::display_option;
 #ifdef _WIN32
-    // On Windows a player's run starts full screen; -d, with any suffix, keeps
-    // a window, and so do unattended runs and video captures.
-    result.start_full_screen =
-        result.launch.display_option == 0 && !result.unattended && result.capture_video.empty();
+    constexpr bool platform_full_screen = true;
+#else
+    constexpr bool platform_full_screen = false;
 #endif
+    const int32_t display = result.launch.display_option;
+    result.start_full_screen =
+        (display == display_option::f_suffix || (display == 0 && platform_full_screen)) &&
+        !result.unattended && result.capture_video.empty();
+    // 3.1c never plays its intro in the window -d asks for.
+    if (display == display_option::other)
+        result.skip_intro = true;
     if (result.print_profile && result.mod_file.empty() && result.mod_dir.empty() &&
         result.game_dir.empty())
         throw std::runtime_error(
@@ -1721,14 +1728,12 @@ std::string launch_content_error(std::string_view problem) {
             "--choose-game-dir opens a dialog, which headless, check, benchmark, --frames and "
             "--snapshot runs never show"
         );
+    // A launch's content was checked as it was taken (adopt_launch_run).
     if (!result.content.empty()) {
         const oa::data::content_bundles::ContentChoice named =
             oa::data::content_bundles::parse_content_argument(result.content);
-        if (!named.error.empty()) {
-            if (netgame_context().options.launch_content_applied)
-                throw netgame::LaunchRefusal(launch_content_error(named.error));
+        if (!named.error.empty())
             throw std::runtime_error(named.error);
-        }
     }
     return result;
 }

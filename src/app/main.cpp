@@ -426,8 +426,11 @@ struct HostDisplay {
                 std::cerr << "open-annihilation: the window's place was not read: " << error.what()
                           << '\n';
             }
+            // -df is full screen for this run, and -d a window; neither is remembered.
             const PlaceOverride override_mode =
-                options.launch.display_option != 0 ? PlaceOverride::window : PlaceOverride::none;
+                options.launch.display_option == 0 ? PlaceOverride::none
+                : options.start_full_screen        ? PlaceOverride::full_screen
+                                                   : PlaceOverride::window;
             RestoredPlace restored = restore_window_place(
                 saved_place ? &*saved_place : nullptr,
                 override_mode,
@@ -1413,6 +1416,50 @@ publish_launch_catalogue(const Options& options, const GameDirectory& directory)
     return std::nullopt;
 }
 
+/// Makes a launch file the system opened the game with this start's launch, as -c FILE does.
+///
+/// macOS hands the game the file it was started for once SDL's video has
+/// started, as a drop of the file, which the watch on SDL's events reads into
+/// network play's waiting launches (mod_install_watch.cpp); the events the
+/// system holds are pumped first, so that it arrives now. The launch's
+/// content then chooses the game's folders, the map check runs before the
+/// runtime starts, and the intro is skipped. A start that names a launch of
+/// its own leaves the file waiting, and the running game refuses it. A file
+/// that arrives later is the running game's (follow_opened_launches).
+/// --check-opened-launch start opens its file in the game here, as the
+/// system opens one.
+///
+/// Throws netgame::LaunchRefusal, naming the file and the field, when the
+/// launch cannot be used.
+///
+/// @param[in,out] options the run, its content and intro among them
+void take_launch_opened_at_start(Options& options) {
+    const auto& net = netgame_context().options;
+    if (net.opened_launch_check == OpenedLaunchCheck::start) {
+        // SDL keeps the pointer: the text lives as long as the process.
+        static std::string dropped;
+        dropped = net.opened_launch_check_file;
+        SDL_Event drop{};
+        drop.type = SDL_EVENT_DROP_FILE;
+        drop.drop.data = dropped.c_str();
+        if (!SDL_PushEvent(&drop))
+            std::cerr << "open-annihilation: opened-launch check: the file could not be opened: "
+                      << SDL_GetError() << '\n';
+    }
+    SDL_PumpEvents();
+    if (net.launch_planned || !netgame::opened_launch_waiting())
+        return;
+    const std::optional<netgame::OpenedLaunch> opened = netgame::take_opened_launch();
+    if (!opened)
+        return;
+    std::cerr << "open-annihilation: a launch file opened with the game is this start's launch: "
+              << opened->source << '\n';
+    put_launch_in_place(netgame_context(), netgame::read_opened_launch_plan(*opened));
+    adopt_launch_run(options);
+    resolve_launch_mod(options);
+    options.skip_intro = true;
+}
+
 /// Runs the game once: finds the game folders and their profile, with the
 /// Game files screen where the platform brings game files in and none is
 /// usable, opens the window the first time, plays the intro movies the
@@ -1469,6 +1516,10 @@ int run_once(
     // dialog, so that look leaves this thread and the window keeps drawing.
     if (!options.headless_check && !display.initialized)
         display.initialize(options);
+    // A launch file the system opened the game with is this start's launch,
+    // before the folder is resolved, which the launch's content chooses.
+    if (options.restarts == 0 && display.initialized)
+        take_launch_opened_at_start(options);
     if (options.check_window_place) {
         if (!display.initialized)
             display.initialize(options);

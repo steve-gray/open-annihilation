@@ -42,15 +42,16 @@ struct Switches {
     uint8_t playback_suppressed{};          // -s -w: the mixer plays nothing
     uint8_t system_sound{};                 // -w: named sounds use the system player
     char unavailable_switch{};              // the reserved letter, as typed, that stopped the parse
-    char language[kTextBytes]{};            // last bare argument
+    char language[kTextBytes]{};            // last bare argument, its first 63 characters
     char registration[kMaximumLineBytes]{}; // text after -r
+    uint32_t developer_switches{};          // developer switches skipped, such as -memfussy
+    char developer_switch[kTextBytes]{};    // the first of them, as written
 };
 
 enum class Status : uint8_t {
     run,                  // start the game
     register_application, // -r: register the text in Switches::registration and quit
     line_too_long,        // longer than kMaximumLineBytes - 1; nothing parsed
-    argument_too_long,    // a bare argument does not fit Switches::language
     // A reserved letter no handler took; Switches::unavailable_switch names it.
     unavailable_switch,
 };
@@ -80,9 +81,11 @@ struct SwitchHandler {
 /// Parses a command line into `switches`, applying each recognised switch in order.
 ///
 /// Tokens are split at blanks and tabs. A token not starting with '-' or '/'
-/// is the language argument (the last one wins). Debug-heap switches such as
-/// "-memfussy" are skipped whole. The switch letter is case-insensitive: -b,
-/// -d, -f, -l, -r, -s and -w are handled here; any other letter is offered to
+/// is the language argument (the last one wins; its first 63 characters are
+/// kept). Developer switches such as "-memfussy" are skipped whole and
+/// counted in developer_switches. The switch letter is case-insensitive: -d,
+/// -f, -l, -r, -s and -w are handled here; -b is offered to `handler` first
+/// and handled here when it declines; any other letter is offered to
 /// `handler` in lower case, and one it does not take is ignored unless it is
 /// in kReservedSwitches. Before the first token skip_intro is reset to 0 and
 /// the handler's reset runs; every other field keeps its earlier value.
@@ -93,11 +96,10 @@ struct SwitchHandler {
 /// @param handler Takes the letters the engine does not handle; null offers none.
 /// @return run when the whole line was read; register_application at "-r", whose
 ///         text is the rest of the unsplit line; line_too_long (nothing parsed)
-///         when the line is kMaximumLineBytes or longer; argument_too_long when a
-///         bare argument does not fit Switches::language; unavailable_switch at
+///         when the line is kMaximumLineBytes or longer; unavailable_switch at
 ///         a reserved letter no handler took.
-/// @quirk "-b" compares the whole token, switch character included, with "lock",
-///        so no "-b" token ever sets kGameLocked.
+/// @quirk "-b" that no handler takes compares the whole token, switch
+///        character included, with "lock", so it never sets kGameLocked.
 Status parse(const char* line, Switches& switches, const SwitchHandler* handler = nullptr) noexcept;
 
 /// Stores the forced disc drive flag that "-f" sets.

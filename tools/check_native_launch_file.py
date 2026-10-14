@@ -13,9 +13,14 @@ check runs beside anything else on this machine:
 - -c with the same file, under another name, does the same;
 - the same launch piped in on standard input, with no option, does the same;
 - the same launch as options alone does the same;
-- -c with TA Forever's file opens the battle room on its map and rules;
+- -c with TA Forever's file opens the battle room on its map and rules, and
+  the log names the two keys 3.1c does not read;
+- -c with a bare name in the current folder, a file that names connect,
+  creator and address as 3.1c reads them, and -b after it, hosts at once with
+  the values 3.1c's battle room takes;
 - a file whose metal is above the slider ends with status 2 and names the
   field, and an option above it names the option;
+- -r ends with status 0 and says why, without opening a window;
 - --list-content --json prints one JSON object and ends with status 0, and
   does so at once with an idle pipe as its standard input.
 
@@ -121,6 +126,32 @@ registeredonly=0
 tournment=1
 tournament=1
 """
+
+# A file that names connect, creator and address, with odd values 3.1c's
+# battle room takes as it can: energy above the slider, a unit limit below it,
+# a key it does not read; and -b after -c replaces the line of sight.
+KEYS_INI = """[TotalA]
+connect=TCPIP
+creator=1
+address=127.0.0.1
+session="Example game"
+mission=Acid Foursome
+deathopt=3
+los=1
+metal=2500
+energy=40000
+maxunits=5
+cheats=1
+watching=2
+mapmode=2
+location=2
+tournament=1
+"""
+KEYS_RULES = ("multiplayer: battle room rules: commander deathmatch, metal 2500, energy 10000, "
+              "units 20, los permanent, mapping mapped, starts random, cheats off, watchers on, "
+              "player limit 6")
+KEYS_NOTE = "open-annihilation: keys.ini: tournament: not read, as 3.1c does not read them"
+INI_NOTE = "totala.ini: tournment, tournament: not read, as 3.1c does not read them"
 
 BAD_YAML = """oalaunch: 1
 game:
@@ -260,8 +291,8 @@ def require_quiet_password(game):
 
 
 def battle_room(native, game_dir, workdir, name, launch_arguments, rules=RULES, seats=None,
-                piped=None):
-    """Starts a host from a launch and waits for its map, rules and seats in the log."""
+                piped=None, notes=()):
+    """Starts a host from a launch and waits for its map, rules, seats and notes in the log."""
     port = free_port()
     user = workdir / f"{name}-user"
     user.mkdir()
@@ -271,7 +302,7 @@ def battle_room(native, game_dir, workdir, name, launch_arguments, rules=RULES, 
         "--skip-intro", "--dplay-port", str(port), "--player-name", "Commander",
         "--user-folder", str(user), "--log-dir", str(logs), *launch_arguments,
     ], log_dir=logs, piped=piped)
-    expected = [ROOM_LINE, MAP_LINE, rules] + ([seats] if seats else [])
+    expected = [ROOM_LINE, MAP_LINE, rules] + ([seats] if seats else []) + list(notes)
     try:
         for line in expected:
             game.wait_in_log(line)
@@ -315,6 +346,23 @@ def check_bad_file(native, game_dir, workdir):
     if "--metal: 20000 is above 10000" not in option.output():
         raise LaunchFileFailure(f"bad-option did not name --metal:\n{option.output()}")
     print("bad-option: --metal: 20000 is above 10000")
+
+
+def check_register(native, game_dir, workdir):
+    """-r says this game needs no registration and ends with status 0, with no window."""
+    user = workdir / "register-user"
+    user.mkdir()
+    game = Game(native, game_dir, workdir, "register", [
+        "--user-folder", str(user), "-s", "-r", "C:\\Games\\launcher", "-c", "game.ini",
+    ])
+    try:
+        game.wait_status(0)
+    finally:
+        game.stop()
+    line = next((line for line in game.lines if line.startswith("-r registers")), None)
+    if line is None:
+        raise LaunchFileFailure(f"register did not say why it ended:\n{game.output()}")
+    print(f"register: {line}")
 
 
 def check_list(native, game_dir, workdir):
@@ -380,8 +428,13 @@ def check(native, game_dir, workdir):
     battle_room(native, game_dir, workdir, "piped-host", [], LAUNCH_RULES, SEATS_LINE,
                 piped=YAML)
     battle_room(native, game_dir, workdir, "options-host", OPTIONS, LAUNCH_RULES, SEATS_LINE)
-    battle_room(native, game_dir, workdir, "ini-host", ["-c", str(ini_path)])
+    battle_room(native, game_dir, workdir, "ini-host", ["-c", str(ini_path)], notes=[INI_NOTE])
+    # A bare name is read from the current folder, which is the scratch folder.
+    (workdir / "keys.ini").write_text(KEYS_INI, encoding="utf-8")
+    battle_room(native, game_dir, workdir, "keys-host", ["-c", "keys.ini", "-b", "permlos"],
+                KEYS_RULES, notes=[KEYS_NOTE])
     check_bad_file(native, game_dir, workdir)
+    check_register(native, game_dir, workdir)
     check_list(native, game_dir, workdir)
 
 
@@ -400,8 +453,9 @@ def main():
             print(f"launch file check: {failure}", file=sys.stderr)
             return 1
     print("launch file check: --launch, -c, a pipe and the options opened the battle room on "
-          "Acid Foursome with the launch's rules and seats, -c read TA Forever's file, a bad "
-          "file and a bad option exited 2, and --list-content --json parsed beside an idle pipe")
+          "Acid Foursome with the launch's rules and seats, -c read TA Forever's file and a "
+          "file of 3.1c's keys as 3.1c reads them, a bad file and a bad option exited 2, -r "
+          "exited 0, and --list-content --json parsed beside an idle pipe")
     return 0
 
 

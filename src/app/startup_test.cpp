@@ -796,8 +796,9 @@ void version_line_stands_alone() {
         std::fputs("FAILED: the --help check could not be registered\n", stderr);
         std::_Exit(1);
     }
-    std::ignore = parse({"--help"});
-    std::fputs("FAILED: --help did not end the program\n", stderr);
+    // -h with nothing after it is the help flag, as --help is.
+    std::ignore = parse({"-h"});
+    std::fputs("FAILED: -h did not end the program\n", stderr);
     std::_Exit(1);
 }
 
@@ -1158,10 +1159,18 @@ int main() {
             flag
         );
     expect(parse({"-s", "-w"}).launch.system_sound == 1, "the other game switches still apply");
+    // -h with a word after it is the game's -h NAME, not the help flag.
     expect(
-        rejection({"-rkey"}) ==
-            "-r registers the game for multiplayer, which this game does not need",
-        "-r without an extension"
+        rejection({"-h", "Name"}) == "-h is not handled by this build", "-h NAME is a game switch"
+    );
+    // A language word of any length starts the game with its first 63
+    // characters; the switches after it still apply.
+    const std::string language(80, 'l');
+    const auto long_word = parse({language.c_str(), "-s"});
+    expect(
+        std::string_view(long_word.launch.language).size() == 63 &&
+            long_word.launch.playback_suppressed == 1,
+        "a long language word is not refused"
     );
 
     // An extension's options take their values and imply engine options.
@@ -1216,7 +1225,6 @@ int main() {
             rejection({"-t60"}, table) == "-t is not handled by this build",
             "a reserved switch the extension leaves is refused"
         );
-        expect(rejection({"-rkey"}, table) == "-r is the extension's", "the extension words -r");
     }
 
     expect(parse({"--draw-threads", "1"}).draw_threads == 1u, "--draw-threads takes one thread");
@@ -1358,21 +1366,27 @@ int main() {
         parse({}).start_full_screen && parse({"--skip-intro", "--mute"}).start_full_screen,
         "a player's run on Windows starts full screen"
     );
+#else
+    expect(!parse({}).start_full_screen, "a player's run elsewhere starts in a window");
+#endif
     expect(
         !parse({"-d"}).start_full_screen && !parse({"-dx"}).start_full_screen,
         "-d keeps a player's run in a window"
     );
     expect(
+        parse({"-df"}).start_full_screen && parse({"/DF"}).start_full_screen,
+        "-df starts a player's run full screen on every system"
+    );
+    expect(
+        parse({"-d"}).skip_intro && !parse({"-df"}).skip_intro && !parse({}).skip_intro,
+        "-d skips the intro, as 3.1c's window does; -df plays it"
+    );
+    expect(
         !parse({"--headless-check"}).start_full_screen &&
-            !parse({"--frames", "10"}).start_full_screen,
+            !parse({"--frames", "10"}).start_full_screen &&
+            !parse({"-df", "--frames", "10"}).start_full_screen,
         "an unattended run keeps a window"
     );
-#else
-    expect(
-        !parse({}).start_full_screen && !parse({"-d"}).start_full_screen,
-        "only a run on Windows starts full screen"
-    );
-#endif
     std::vector<std::vector<const char*>> scripted_runs{
         {"--headless-check"},        {"--check-navigation"},        {"--check-multiplayer-menu"},
         {"--check-load-save"},       {"--check-frontend-controls"}, {"--check-scroll-bars"},

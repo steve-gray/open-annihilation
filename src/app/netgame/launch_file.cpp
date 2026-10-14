@@ -1144,75 +1144,184 @@ LaunchPlan read_yaml(std::string_view source, std::string_view text) {
 }
 
 // ---------------------------------------------------------------------------
-// TA Forever's INI
+// The INI, read as 3.1c reads it
 
-/// Requires a whole number and a reason when it is not one.
+// The one section 3.1c reads, in any case.
+constexpr std::string_view kIniSection = "TotalA";
+// The room 3.1c reads connect's text into, its terminating NUL included.
+constexpr std::size_t kConnectRoom = 20;
+// A connect value this long or longer is first compared with the transport words.
+constexpr std::size_t kTransportWordShortest = 3;
+// playerlimit's default; every other key's is 0, or empty text.
+constexpr int32_t kDefaultPlayerLimit = 6;
+// What 3.1c does with a player limit: 1 or less leaves the game's own, more
+// than 10 counts as 10. 0 is the launch block's "the game's own".
+constexpr int32_t kOwnPlayerLimit = 0;
+// The least starting metal or energy; 0 leaves the battle room's own 1000.
+constexpr int32_t kLowestResource = 0;
+
+/// One word a connect value may begin with, and the transport it names.
+struct TransportWord {
+    std::string_view word{};
+    int32_t transport{};
+};
+
+// The words, in the order 3.1c compares them.
+constexpr TransportWord kTransportWords[] = {
+    {"ipx", launch::connection_type::ipx},
+    {"tcpip", launch::connection_type::tcpip},
+    {"modem", launch::connection_type::modem},
+    {"serial", launch::connection_type::serial},
+    {"internet", launch::connection_type::tcpip},
+    {"novell", launch::connection_type::ipx},
+};
+
+/// One key of the section, as a Windows settings file is read.
+struct IniEntry {
+    std::string_view key{}; ///< as the file wrote it
+    /// After `=`, spaces dropped; none for a line without `=`.
+    std::optional<std::string_view> value{};
+};
+
+/// Reads the first `[TotalA]` section, as a Windows settings file is read.
 ///
-/// @param text the text
-/// @param source the file's name
-/// @param key the key as the file wrote it
+/// The section's name and the keys match in any case; spaces around a key
+/// and a value are dropped; the first copy of a key is the one kept; a line
+/// that begins with `;` is a comment; and a later section, of any name,
+/// ends the first.
+///
+/// @param text the file's bytes, without a byte order mark
+/// @return the section's keys, in the file's order
+std::vector<IniEntry> read_ini_section(std::string_view text) {
+    std::vector<IniEntry> entries;
+    bool inside = false;
+    std::size_t cursor = 0;
+    while (cursor <= text.size()) {
+        const auto end = text.find('\n', cursor);
+        auto line = text.substr(
+            cursor, end == std::string_view::npos ? text.size() - cursor : end - cursor
+        );
+        cursor = end == std::string_view::npos ? text.size() + 1 : end + 1;
+        line = trim(line);
+        if (line.empty())
+            continue;
+        if (line.front() == '[') {
+            const auto close = line.rfind(']');
+            if (close != std::string_view::npos) {
+                if (inside)
+                    break;
+                inside = same_name(trim(line.substr(1, close - 1)), kIniSection);
+                continue;
+            }
+        }
+        if (!inside || line.front() == ';')
+            continue;
+        const auto separator = line.find('=');
+        IniEntry entry;
+        entry.key = trim(line.substr(0, separator));
+        if (separator != std::string_view::npos)
+            entry.value = trim(line.substr(separator + 1));
+        const bool seen =
+            std::any_of(entries.begin(), entries.end(), [&entry](const IniEntry& kept) {
+                return same_name(kept.key, entry.key);
+            });
+        if (!seen && !entry.key.empty())
+            entries.push_back(entry);
+    }
+    return entries;
+}
+
+/// Drops the quotes around a value: a value that begins and ends with the same quote mark.
+///
+/// @param value the value
+/// @return the value inside the quotes, or the value as it was
+std::string_view without_quotes(std::string_view value) noexcept {
+    if (value.size() >= 2 && (value.front() == '"' || value.front() == '\'') &&
+        value.back() == value.front())
+        return value.substr(1, value.size() - 2);
+    return value;
+}
+
+/// Reads a key as text, as 3.1c does: its quotes dropped and cut to the room.
+///
+/// @param value the key's value; none when the key is absent, which reads as empty
+/// @param room the field's bytes, its terminating NUL included
+/// @return the text, at most room - 1 characters
+std::string_view ini_text(std::optional<std::string_view> value, std::size_t room) noexcept {
+    if (!value || room == 0)
+        return {};
+    const std::string_view text = without_quotes(*value);
+    return text.substr(0, std::min(text.size(), room - 1));
+}
+
+/// Copies a key's text into a launch field, cut to fit.
+///
+/// @param[out] field the field
+/// @param value the key's value
+/// @return the text copied
+std::string_view ini_copy(std::span<char> field, std::optional<std::string_view> value) {
+    const std::string_view text = ini_text(value, field.size());
+    oa::base::text::copy_terminated(field, text);
+    return text;
+}
+
+/// Reads a key as a whole number, as 3.1c does: the number its value begins with.
+///
+/// An optional sign and the decimal digits after it are read, wrapping at 32
+/// bits; a value that does not begin with a number reads as 0.
+///
+/// @param value the key's value; none when the key is absent
+/// @param fallback the number an absent key, or an empty value, reads as
 /// @return the number
-int64_t ini_whole(std::string_view text, std::string_view source, std::string_view key) {
-    const auto number = whole_number(text);
-    if (!number || !fits_int32(*number))
-        refuse(source, key, "expected a whole number");
-    return *number;
+int32_t ini_number(std::optional<std::string_view> value, int32_t fallback) noexcept {
+    if (!value)
+        return fallback;
+    std::string_view text = trim(without_quotes(*value));
+    if (text.empty())
+        return fallback;
+    const char sign = text.front();
+    if (sign == '-' || sign == '+')
+        text.remove_prefix(1);
+    uint32_t number = 0;
+    for (const char digit : text) {
+        if (digit < '0' || digit > '9')
+            break;
+        number = number * 10U + static_cast<uint32_t>(digit - '0');
+    }
+    return static_cast<int32_t>(sign == '-' ? 0U - number : number);
 }
 
-/// Stores a whole number that is kept as written.
+/// Reads connect: a transport word, or else a number.
 ///
-/// @param[out] field the launch field
-/// @param text the value
-/// @param source the file's name
-/// @param key the key
-void ini_kept(
-    int32_t& field, std::string_view text, std::string_view source, std::string_view key
-) {
-    field = static_cast<int32_t>(ini_whole(text, source, key));
+/// A value of three characters or more is compared, in any case and over the
+/// shorter of the two lengths, with each transport word in turn; the first
+/// that matches names the transport.
+///
+/// @param value the key's value
+/// @return the transport: a connection_type value, or the number written
+int32_t ini_transport(std::optional<std::string_view> value) noexcept {
+    const std::string_view text = ini_text(value, kConnectRoom);
+    if (text.size() >= kTransportWordShortest)
+        for (const TransportWord& entry : kTransportWords) {
+            const std::size_t length = std::min(text.size(), entry.word.size());
+            if (same_name(text.substr(0, length), entry.word.substr(0, length)))
+                return entry.transport;
+        }
+    return ini_number(value, 0);
 }
 
-/// Stores a whole number within a range.
+/// Keeps a number within a range, as a value past either end counts as that end.
 ///
-/// @param[out] field the launch field
-/// @param text the value
-/// @param source the file's name
-/// @param key the key
+/// @param number the number
 /// @param lowest the least it may be
 /// @param highest the most it may be
-void ini_between(
-    int32_t& field,
-    std::string_view text,
-    std::string_view source,
-    std::string_view key,
-    int64_t lowest,
-    int64_t highest
-) {
-    const int64_t number = ini_whole(text, source, key);
-    if (number < lowest)
-        refuse(source, key, std::to_string(number) + " is below " + std::to_string(lowest));
-    if (number > highest)
-        refuse(source, key, std::to_string(number) + " is above " + std::to_string(highest));
-    field = static_cast<int32_t>(number);
+/// @return the number within the range
+int32_t kept_between(int32_t number, int64_t lowest, int64_t highest) noexcept {
+    return static_cast<int32_t>(std::clamp<int64_t>(number, lowest, highest));
 }
 
-/// Stores a text when it fits the field, including the terminating NUL.
-///
-/// @param field the field
-/// @param text the text
-/// @param source the file's name
-/// @param key the key
-void ini_text(
-    std::span<char> field, std::string_view text, std::string_view source, std::string_view key
-) {
-    if (field.empty() || text.size() >= field.size()) {
-        const auto limit = field.empty() ? std::size_t{0} : field.size() - 1;
-        refuse(source, key, "is longer than " + std::to_string(limit) + " characters");
-    }
-    oa::base::text::copy_terminated(field, text);
-}
-
-/// What one INI key does with its value.
-using IniStore = void (*)(LaunchPlan&, std::string_view, std::string_view, std::string_view);
+/// What one INI key does with its value; the value is none when the key is absent.
+using IniStore = void (*)(LaunchPlan& plan, std::optional<std::string_view> value);
 
 /// One INI key: the public row and what it stores.
 struct IniRule {
@@ -1220,111 +1329,175 @@ struct IniRule {
     IniStore store{};
 };
 
-// TA Forever's keys and the launch fields they fill, as G52 reads them: the
-// numbers TA Forever writes are kept as written where the battle room reads
-// only some of them.
+// Every key of the INI 3.1c reads, in its order, and the two TA Forever
+// writes that it never reads. A key absent from the file reads as its
+// default, as 3.1c reads it. A value is never refused: each row says what an
+// odd one does. The battle room applies the rule keys, from lockOptions on,
+// as it opens; 0 leaves its own choice.
 constexpr IniRule kIniRules[] = {
-    {{"watching",
-      "rules.watchers",
-      "`2` allows watchers. Any other whole number is kept as written."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_kept(plan.block.watching, value, source, key);
+    {{"connect",
+      {},
+      "The transport: `tcpip`, `internet` or `1` is TCP/IP; `ipx`, `novell` or `2`, `modem` or "
+      "`3`, and `serial` or `4` name ones this game does not have, and the provider list opens. A "
+      "word of three letters or more counts when it and one of these begin alike, so `tcp` is "
+      "TCP/IP. `0`, the default, leaves the transport to the menus."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.block.connection_type = ini_transport(value);
      }},
-    {{"mapmode", "rules.mapping", "`1` starts the map unmapped, `2` mapped. Kept as written."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_kept(plan.block.mapping, value, source, key);
+    {{"creator",
+      "game.role",
+      "Any whole number but 0 hosts, and 0 joins. With TCP/IP and an `address` the game is "
+      "hosted or joined at once; otherwise the multiplayer screens ask."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.block.hosting = ini_number(value, 0) != 0 ? 1U : 0U;
      }},
-    {{"location",
-      "rules.start-positions",
-      "`1` uses fixed start positions, `2` random. Kept as written."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_kept(plan.block.location, value, source, key);
-     }},
-    {{"cheats", "rules.cheats", "`2` allows the cheat codes. `1` turns them off. Kept as written."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_kept(plan.block.cheats, value, source, key);
-     }},
-    {{"los", "rules.line-of-sight", "`1` true line of sight, `2` circular, `3` permanent."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_between(plan.block.los, value, source, key, kSightTrue, kSightPermanent);
-     }},
-    {{"deathopt",
-      "rules.commander-death",
-      "`1` the commander continues, `2` the game ends, `3` deathmatch."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_between(
-             plan.block.death_option, value, source, key, kCommanderContinues, kCommanderDeathmatch
-         );
-     }},
-    {{"metal",
-      "rules.metal",
-      "Starting metal, from 0 through 10000. 0 leaves the battle room's own amount."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_between(plan.block.metal, value, source, key, 0, kHighestResource);
-     }},
-    {{"energy",
-      "rules.energy",
-      "Starting energy, from 0 through 10000. 0 leaves the battle room's own amount."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_between(plan.block.energy, value, source, key, 0, kHighestResource);
-     }},
-    {{"lockOptions", "rules.lock-options", "`1` locks the battle room's option controls."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         int32_t stored = 0;
-         ini_between(stored, value, source, key, 0, std::numeric_limits<int32_t>::max());
-         plan.block.lock_options = static_cast<uint32_t>(stored);
-     }},
+    {{"registeredonly", {}, "Read and not used."},
+     [](LaunchPlan&, std::optional<std::string_view> value) { (void)ini_number(value, 0); }},
     {{"playerlimit",
       "game.player-limit",
-      "Players allowed, from 2 through 10. 0 leaves the session uncapped. 1 is refused."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         if (ini_whole(value, source, key) == 0) {
-             plan.block.player_limit = 0;
-             return;
-         }
-         ini_between(
-             plan.block.player_limit, value, source, key, kLowestPlayerLimit, kHighestPlayerLimit
-         );
+      "How many players the game takes, from 2 through 10; above 10 counts as 10, and 1 or less "
+      "leaves the game's own. 6 when the key is absent."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         const int32_t limit = ini_number(value, kDefaultPlayerLimit);
+         plan.block.player_limit =
+             limit < kLowestPlayerLimit
+                 ? kOwnPlayerLimit
+                 : kept_between(limit, kLowestPlayerLimit, kHighestPlayerLimit);
      }},
-    {{"pfs", {}, "Kept as written and passed on with the score report."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_kept(plan.block.pfs, value, source, key);
+    {{"timelimit",
+      "rules.time-limit",
+      "Passed on with the score report; it does not end the game. Below 0 counts as 0."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.block.time_limit = std::max(ini_number(value, 0), 0);
      }},
-    {{"timelimit", "rules.time-limit", "Kept as written and passed on with the score report."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_kept(plan.block.time_limit, value, source, key);
-     }},
-    {{"session", "game.name", "The game's name, at most 63 characters."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_text(plan.block.session_name, value, source, key);
-         plan.game_name = std::string(value);
+    {{"pfs",
+      {},
+      "The network send rate in packets per second, in place of `-p`: below 0 turns paced sending "
+      "off, 1 counts as 2, above 30 counts as 30, and 0 leaves the rate alone."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.block.pfs = ini_number(value, 0);
      }},
     {{"provider",
       "game.launcher-name",
-      "The launcher's name on the battle room's previous-menu caption, at most 15 characters."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_text(plan.block.provider_label, value, source, key);
+      "The launcher's name, its first 15 characters kept. The battle room shows it in place of "
+      "Previous Menu when it has at most 11."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         (void)ini_copy(plan.block.provider_label, value);
+     }},
+    {{"session", "game.name", "The game's name, its first 63 characters kept."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.game_name = std::string(ini_copy(plan.block.session_name, value));
      }},
     {{"mission",
       "map",
-      "The map, by the name the list shows or by its key, at most 63 characters."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_text(plan.block.mission, value, source, key);
+      "The map the host plays, by the name the list shows or its key, its first 63 characters "
+      "kept. A map that is not installed ends the start."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         (void)ini_copy(plan.block.mission, value);
      }},
-    {{"registeredonly", {}, "Read and ignored."},
-     [](LaunchPlan&, std::string_view, std::string_view, std::string_view) {}},
-    {{"tournment",
-      "game.tournament",
-      "A tournament game. When it and `tournament` are both written, the later one is kept."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_kept(plan.block.tournament, value, source, key);
+    {{"password", "game.password", "The game's password, its first 31 characters kept."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.password = std::string(ini_copy(plan.block.password, value));
+     }},
+    {{"player",
+      "player.name",
+      "The player's name, its first 31 characters kept. Empty leaves the player's own name."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.player_name = std::string(ini_copy(plan.block.user_name, value));
+     }},
+    {{"address",
+      "game.address",
+      "The TCP/IP address, its first 63 characters kept. With TCP/IP, a host creates its game at "
+      "once and a player who joins joins the game there."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.address = std::string(ini_copy(plan.block.address, value));
+     }},
+    {{"lockOptions",
+      "rules.lock-options",
+      "Any whole number but 0 locks the battle room's options, and 0 unlocks them."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.block.lock_options = ini_number(value, 0) != 0 ? 1U : 0U;
+     }},
+    {{"maxunits",
+      "rules.unit-limit",
+      "The most units each player may have; 0 leaves the battle room's own. Below 20 counts as "
+      "20, and above 6553 as 6553."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         const int32_t limit = ini_number(value, 0);
+         plan.block.max_units =
+             limit == 0 ? 0 : kept_between(limit, kLowestUnitLimit, kHighestUnitLimit);
+     }},
+    {{"energy",
+      "rules.energy",
+      "Starting energy; 0 leaves the battle room's own 1000. Above 10000 counts as 10000, and "
+      "below 0 as 0."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.block.energy = kept_between(ini_number(value, 0), kLowestResource, kHighestResource);
+     }},
+    {{"metal",
+      "rules.metal",
+      "Starting metal; 0 leaves the battle room's own 1000. Above 10000 counts as 10000, and "
+      "below 0 as 0."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         plan.block.metal = kept_between(ini_number(value, 0), kLowestResource, kHighestResource);
+     }},
+    {{"deathopt",
+      "rules.commander-death",
+      "`1` the game continues, `2` the player's game ends, `3` deathmatch; any other number "
+      "leaves the battle room's choice."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         const int32_t rule = ini_number(value, 0);
+         plan.block.death_option =
+             rule >= kCommanderContinues && rule <= kCommanderDeathmatch ? rule : 0;
+     }},
+    {{"los",
+      "rules.line-of-sight",
+      "`1` true line of sight, `2` circular, `3` permanent; any other number leaves the battle "
+      "room's choice."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         const int32_t sight = ini_number(value, 0);
+         plan.block.los = sight >= kSightTrue && sight <= kSightPermanent ? sight : 0;
+     }},
+    {{"cheats",
+      "rules.cheats",
+      "`2` allows the cheat codes, any other number but 0 disallows them, and 0 leaves the "
+      "battle room's choice."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         const int32_t cheats = ini_number(value, 0);
+         plan.block.cheats = cheats == 0 ? 0 : cheats == kChoiceOn ? kChoiceOn : kChoiceOff;
+     }},
+    {{"location",
+      "rules.start-positions",
+      "`1` fixed start positions, any other number but 0 random, and 0 leaves the battle room's "
+      "choice."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         const int32_t starts = ini_number(value, 0);
+         plan.block.location = starts == 0 ? 0 : starts == kChoiceOff ? kChoiceOff : kChoiceOn;
+     }},
+    {{"mapmode",
+      "rules.mapping",
+      "`1` starts the map unmapped, any other number but 0 mapped, and 0 leaves the battle room's "
+      "choice."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         const int32_t mapping = ini_number(value, 0);
+         plan.block.mapping = mapping == 0 ? 0 : mapping == kChoiceOff ? kChoiceOff : kChoiceOn;
+     }},
+    {{"watching",
+      "rules.watchers",
+      "`2` allows watchers, any other number but 0 disallows them, and 0 leaves the battle room's "
+      "choice."},
+     [](LaunchPlan& plan, std::optional<std::string_view> value) {
+         const int32_t watching = ini_number(value, 0);
+         plan.block.watching = watching == 0 ? 0 : watching == kChoiceOn ? kChoiceOn : kChoiceOff;
      }},
     {{"tournament",
-      "game.tournament",
-      "A tournament game. When it and `tournment` are both written, the later one is kept."},
-     [](LaunchPlan& plan, std::string_view value, std::string_view source, std::string_view key) {
-         ini_kept(plan.block.tournament, value, source, key);
-     }},
+      {},
+      "Not read: 3.1c never reads it. The game logs it and goes on; a tournament game is "
+      "`game.tournament` in an `.oalaunch` file.",
+      false},
+     nullptr},
+    {{"tournment", {}, "Not read: 3.1c never reads it. The game logs it and goes on.", false},
+     nullptr},
 };
 
 /// The public rows of kIniRules, in its order.
@@ -1335,60 +1508,65 @@ constexpr auto kIniKeys = [] {
     return rows;
 }();
 
-/// Applies one `[totala]` key through kIniRules.
+/// Finds a key of the section, in any case.
 ///
-/// @param[in,out] plan the plan
-/// @param key the key, in the file's case
-/// @param value the value
-/// @param source the file's name
-void apply_ini_key(
-    LaunchPlan& plan, std::string_view key, std::string_view value, std::string_view source
-) {
-    for (const IniRule& rule : kIniRules)
-        if (same_name(key, rule.row.key)) {
-            rule.store(plan, value, source, key);
-            return;
-        }
-    refuse(source, key, "is not a launch setting");
+/// @param entries the section's keys
+/// @param key the key
+/// @return the entry, or null when the section does not hold the key
+const IniEntry*
+find_ini_entry(const std::vector<IniEntry>& entries, std::string_view key) noexcept {
+    for (const IniEntry& entry : entries)
+        if (same_name(entry.key, key))
+            return &entry;
+    return nullptr;
 }
 
-/// Reads TA Forever's INI. Only `[totala]` is read; other sections are skipped.
+/// Reads the INI as 3.1c reads it, through kIniRules.
+///
+/// Every key 3.1c reads is read, an absent one as its default. A key the
+/// section holds that is not read is noted once. When the file names none
+/// of connect, creator and address, the plan hosts over TCP/IP.
 ///
 /// @param source the file's name
 /// @param text the file's bytes, without a byte order mark
-/// @return the plan, hosting over TCP/IP
+/// @return the plan
 LaunchPlan read_ini(std::string_view source, std::string_view text) {
     LaunchPlan plan;
     plan.ini = true;
-    plan.role = LaunchRole::host;
-    plan.block.hosting = 1;
-    plan.block.connection_type = launch::connection_type::tcpip;
-    bool in_totala = false;
-    std::size_t cursor = 0;
-    while (cursor <= text.size()) {
-        const auto end = text.find('\n', cursor);
-        auto line = text.substr(
-            cursor, end == std::string_view::npos ? text.size() - cursor : end - cursor
+    const std::vector<IniEntry> entries = read_ini_section(text);
+    for (const IniRule& rule : kIniRules) {
+        if (rule.store == nullptr)
+            continue;
+        const IniEntry* entry = find_ini_entry(entries, rule.row.key);
+        rule.store(plan, entry != nullptr ? entry->value : std::nullopt);
+        if (entry != nullptr && !rule.row.field.empty())
+            plan.ini_keys.emplace_back(std::string(rule.row.field), std::string(entry->key));
+    }
+    std::string unread;
+    for (const IniEntry& entry : entries) {
+        const bool read =
+            std::any_of(std::begin(kIniRules), std::end(kIniRules), [&entry](const IniRule& rule) {
+                return rule.store != nullptr && same_name(entry.key, rule.row.key);
+            });
+        if (read)
+            continue;
+        if (!unread.empty())
+            unread += ", ";
+        unread += entry.key;
+    }
+    if (!unread.empty())
+        plan.notes.push_back(
+            std::string(source) + ": " + unread + ": not read, as 3.1c does not read them"
         );
-        cursor = end == std::string_view::npos ? text.size() + 1 : end + 1;
-        line = trim(line);
-        if (line.empty() || line.front() == ';' || line.front() == '#')
-            continue;
-        if (line.front() == '[') {
-            const auto close = line.find(']');
-            if (close == std::string_view::npos)
-                refuse(source, "the file", "a section has no closing bracket");
-            in_totala = same_name(trim(line.substr(1, close - 1)), "totala");
-            continue;
-        }
-        if (!in_totala)
-            continue;
-        const auto separator = line.find('=');
-        if (separator == std::string_view::npos)
-            refuse(source, "the file", "a setting needs a value");
-        apply_ini_key(
-            plan, trim(line.substr(0, separator)), trim(line.substr(separator + 1)), source
-        );
+    plan.connection_named = find_ini_entry(entries, "connect") != nullptr ||
+                            find_ini_entry(entries, "creator") != nullptr ||
+                            find_ini_entry(entries, "address") != nullptr;
+    if (plan.connection_named) {
+        plan.role = role_from_record(plan.block);
+    } else {
+        plan.role = LaunchRole::host;
+        plan.block.hosting = 1;
+        plan.block.connection_type = launch::connection_type::tcpip;
     }
     return plan;
 }
@@ -1563,6 +1741,16 @@ std::span<const LaunchIniKey> launch_ini_keys() noexcept {
     return kIniKeys;
 }
 
+LaunchRole role_from_record(const launch::LaunchBlock& block) noexcept {
+    if (block.connection_type != launch::connection_type::tcpip || block.address[0] == '\0')
+        return LaunchRole::unset;
+    return block.hosting != 0 ? LaunchRole::host : LaunchRole::join;
+}
+
+bool names_bare_file(std::string_view path) noexcept {
+    return path.find_first_of("\\/:") == std::string_view::npos;
+}
+
 LaunchFileKind launch_file_kind(std::string_view text) noexcept {
     text = without_byte_order_mark(text);
     bool first_line = true;
@@ -1612,22 +1800,42 @@ LaunchPlan read_launch_text(std::string_view source, std::string_view text) {
     return plan;
 }
 
-LaunchPlan read_launch_file(std::string_view path) {
+LaunchPlan read_launch_file(std::string_view path, const LaunchFolders& folders) {
     std::string bytes;
     std::string_view source = path;
+    std::optional<fs::path> found_in_game_folder;
     if (path == "-") {
         source = kStandardInputName;
         bytes.assign(std::istreambuf_iterator<char>(std::cin), std::istreambuf_iterator<char>());
     } else {
-        const fs::path file = path_from_utf8(path);
-        std::ifstream input(file, std::ios::in | std::ios::binary);
+        std::ifstream input(path_from_utf8(path), std::ios::in | std::ios::binary);
+        // A bare name not in the current folder is looked for in the game folder.
+        const bool bare = names_bare_file(path);
+        if (!input && bare && folders.game_folder != nullptr)
+            if (const auto folder = folders.game_folder(folders.context)) {
+                input.clear();
+                input.open(*folder / path_from_utf8(path), std::ios::in | std::ios::binary);
+                if (input)
+                    found_in_game_folder = *folder;
+            }
         if (!input)
-            refuse(path, "the file", "cannot be read");
+            refuse(
+                path,
+                "the file",
+                bare ? "cannot be read from the current folder or the game folder"
+                     : "cannot be read"
+            );
         bytes.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
     }
     if (bytes.size() > kLaunchFileLimit)
         refuse(source, "the file", "is longer than " + std::to_string(kLaunchFileLimit) + " bytes");
-    return read_launch_text(source, bytes);
+    LaunchPlan plan = read_launch_text(source, bytes);
+    if (found_in_game_folder)
+        plan.notes.push_back(
+            std::string(path) + " was read from the game folder, " +
+            path_to_utf8(*found_in_game_folder)
+        );
+    return plan;
 }
 
 void replace_launch_field(
@@ -1662,6 +1870,9 @@ std::string launch_place(const LaunchPlan& plan, std::string_view field) {
             return option;
     if (plan.source.empty())
         return std::string(field);
+    for (const auto& [filled_field, key] : plan.ini_keys)
+        if (filled_field == field)
+            return plan.source + ": " + key;
     return plan.source + ": " + std::string(field);
 }
 

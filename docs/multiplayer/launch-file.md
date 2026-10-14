@@ -156,39 +156,14 @@ open-annihilation --host --game-name "Example game" --game-password secret \
 
 ## TA Forever's file
 
-TA Forever's file is a `[totala]` group of `key=value` lines. The keys may
-be written in any case. Blank lines, and lines whose first character is `;`
-or `#`, are skipped. Another section is skipped. A section without a closing
-bracket is refused. The file hosts over TCP/IP, and its keys fill these
-fields:
-
-<!-- netgame-launch-help checks that this table is the table of TA
-Forever's keys in src/app/netgame/launch_file.cpp, word for word. -->
-
-| Key | Field | What the battle room uses |
-|---|---|---|
-| `watching` | `rules.watchers` | `2` allows watchers. Any other whole number is kept as written. |
-| `mapmode` | `rules.mapping` | `1` starts the map unmapped, `2` mapped. Kept as written. |
-| `location` | `rules.start-positions` | `1` uses fixed start positions, `2` random. Kept as written. |
-| `cheats` | `rules.cheats` | `2` allows the cheat codes. `1` turns them off. Kept as written. |
-| `los` | `rules.line-of-sight` | `1` true line of sight, `2` circular, `3` permanent. |
-| `deathopt` | `rules.commander-death` | `1` the commander continues, `2` the game ends, `3` deathmatch. |
-| `metal` | `rules.metal` | Starting metal, from 0 through 10000. 0 leaves the battle room's own amount. |
-| `energy` | `rules.energy` | Starting energy, from 0 through 10000. 0 leaves the battle room's own amount. |
-| `lockOptions` | `rules.lock-options` | `1` locks the battle room's option controls. |
-| `playerlimit` | `game.player-limit` | Players allowed, from 2 through 10. 0 leaves the session uncapped. 1 is refused. |
-| `pfs` | none | Kept as written and passed on with the score report. |
-| `timelimit` | `rules.time-limit` | Kept as written and passed on with the score report. |
-| `session` | `game.name` | The game's name, at most 63 characters. |
-| `provider` | `game.launcher-name` | The launcher's name on the battle room's previous-menu caption, at most 15 characters. |
-| `mission` | `map` | The map, by the name the list shows or by its key, at most 63 characters. |
-| `registeredonly` | none | Read and ignored. |
-| `tournment` | `game.tournament` | A tournament game. When it and `tournament` are both written, the later one is kept. |
-| `tournament` | `game.tournament` | A tournament game. When it and `tournment` are both written, the later one is kept. |
-
-A key in `[totala]` that is not in this table is refused, and the line
-names the key as the file wrote it. `--join ADDRESS` beside the file joins
-that address instead of hosting.
+TA Forever's file is the settings file 3.1c's `-c` reads: a `[TotalA]`
+section of `key=value` lines. The game reads it as 3.1c does, every key 3.1c
+reads with 3.1c's defaults, and refuses none of its values. A key 3.1c does
+not read, such as `tournament`, is named in the log and skipped. A file that
+names none of `connect`, `creator` and `address`, as TA Forever's does, hosts
+over TCP/IP; `--join ADDRESS` beside it joins that address instead.
+[The `-c` file](../command-line.md#the--c-file) lists every key, what each
+does here, and where this game differs from 3.1c.
 
 ## What is installed
 

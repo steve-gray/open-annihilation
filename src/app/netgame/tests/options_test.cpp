@@ -3,8 +3,8 @@
 
 // Network play's long options through oa-game's command line: the loopback,
 // host-not-found, demo and network game options, with the options the engine keeps, none
-// of them without the extension, and "-y", which network play leaves to an
-// extension built on it; the names the frontend's entry takes from a launch;
+// of them without the extension, and "-y", which network play takes and which
+// only skips the intro; the names the frontend's entry takes from a launch;
 // and the multiplayer frontend states' answers about joining and leaving a
 // session.
 #include "oa/app/app.hpp"
@@ -313,7 +313,15 @@ int main() {
           "--host",
           "--join"})
         expect(rejection({flag}, false) == std::string("unknown option: ") + flag, flag);
-    // "-y" is not network play's: with network play alone the build refuses it.
-    expect(rejection({"-y"}) == "-y is not handled by this build", "-y is not network play's");
+    // "-y" opens 3.1c's built-in internet lobby, which this game does not
+    // have: network play takes it, and it only skips the intro.
+    const auto lobby = parse({"-y"});
+    expect(
+        lobby.app.launch.skip_intro == 1 && !lobby.net.launch_planned &&
+            !oa::app::start_notes().empty() &&
+            oa::app::start_notes().front().starts_with("-y opens"),
+        "-y skips the intro and is noted"
+    );
+    expect(rejection({"-y"}, false) == "-y is not handled by this build", "-y is network play's");
     return failures == 0 ? 0 : 1;
 }

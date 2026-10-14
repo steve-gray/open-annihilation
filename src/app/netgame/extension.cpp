@@ -26,12 +26,15 @@
 #include "traffic_overlay.hpp"
 
 #include "oa/app/check_host.hpp"
+#include "oa/app/netgame/opened_launch.hpp"
+#include "oa/data/languages/interface_text.hpp"
 #include "oa/netgame/frontend/multiplayer_states.hpp"
 #include "oa/netgame/messages/departures.hpp"
 #include "oa/session/demo.hpp"
 #include "oa/sim/messages.hpp"
 #include "oa/formats/tad.hpp"
 #include "oa/ui/hud/team_panels.hpp"
+#include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/frontend_multiplayer/connect.hpp"
 #include "oa/ui/frontend_multiplayer/lobby.hpp"
 #include "oa/ui/frontend_multiplayer/screens.hpp"
@@ -50,6 +53,8 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 // The version of the engine's extension table these hooks follow. A build
@@ -74,10 +79,13 @@ namespace report_event = oa::app::netgame::extension_api::report_event;
 namespace demo = oa::session::demo;
 
 // ScreenContext::host and ::services, kept from the overlay registered for
-// them; null until the runtime creates its overlays.
+// them; null until the runtime creates its overlays. The screen shown, and
+// whether a match's world is bound, as the overlay last ticked.
 struct KeptServices {
     void* host{};
     const ScreenServices* services{};
+    ScreenId screen{};
+    bool world{};
 };
 
 KeptServices g_services;
@@ -321,6 +329,202 @@ void direct_game_frame() {
     oa::platform::log_files::write_line("multiplayer: battle room seats: " + report.seats);
 }
 
+// --check-opened-launch menu has opened its file in the game.
+bool g_opened_launch_check_sent = false;
+// Frames in a row the main menu has shown settled, for an opened launch file.
+uint32_t g_launch_menu_frames = 0;
+
+/// Returns where the game stands for a launch file the system opened.
+///
+/// In a match while one runs, on its own screen or beneath its menu, the
+/// network match included; on the main menu once it has shown for
+/// netgame::kOpenedLaunchMenuFrames frames in a row with no dialog over it;
+/// on the single-player menu; passing on a loading screen; and elsewhere on
+/// any other screen, the end of a match among them. The screen is the one
+/// the services overlay last ticked on. Run every frame while a file waits.
+///
+/// @param runtime the running app
+/// @param play network play's state for it
+/// @return where it stands
+oa::app::netgame::GameStanding launch_standing(const Runtime& runtime, const NetworkPlay& play) {
+    using oa::app::netgame::GameStanding;
+    if (runtime.match_running() || play.net_match_active()) {
+        g_launch_menu_frames = 0;
+        return GameStanding::match;
+    }
+    if (g_services.screen == screen_id(Screen::main_menu) && !g_services.world) {
+        if (oa::ui::frontend_dialogs::dialog_count() != 0) {
+            g_launch_menu_frames = 0;
+            return GameStanding::passing;
+        }
+        if (g_launch_menu_frames < oa::app::netgame::kOpenedLaunchMenuFrames)
+            ++g_launch_menu_frames;
+        return g_launch_menu_frames >= oa::app::netgame::kOpenedLaunchMenuFrames
+                   ? GameStanding::main_menu
+                   : GameStanding::passing;
+    }
+    g_launch_menu_frames = 0;
+    if (g_services.screen == screen_id(Screen::single_player))
+        return GameStanding::single_player;
+    if (g_services.screen == screen_id(Screen::loading))
+        return GameStanding::passing;
+    return GameStanding::elsewhere;
+}
+
+/// Tells the player that the game did not open a launch file, and the log.
+///
+/// In a match the line goes to its message log; elsewhere, or when no match
+/// takes it, a notice on the OA layer shows it over the menus.
+///
+/// @param play network play's state for the running app
+/// @param why the line, already in the language shown
+/// @param in_match the game stands in a match
+void tell_launch_not_opened(NetworkPlay& play, std::string_view why, bool in_match) {
+    oa::platform::log_files::write_line("multiplayer: launch file not opened: " + std::string(why));
+    if (in_match && play.post_match_line(why))
+        return;
+    if (g_services.services == nullptr || g_services.services->show_notice == nullptr)
+        return;
+    const std::string title(oa::data::languages::interface_text("LAUNCH FILE NOT OPENED"));
+    const std::string paragraph(why);
+    const char* const paragraphs[] = {paragraph.c_str()};
+    NoticeRequest request{};
+    request.title = title.c_str();
+    request.paragraphs = paragraphs;
+    request.paragraph_count = 1;
+    static_cast<void>(g_services.services->show_notice(g_services.host, &request));
+}
+
+/// Opens a file in the game as the system opens one, double-clicked or dropped on the window:
+/// as SDL's drop event, which the engine's watch on SDL's events takes as it is queued.
+///
+/// @param file the file, UTF-8
+void open_as_the_system_does(const std::string& file) {
+    // SDL keeps the pointer: the text lives until the next file is opened so.
+    static std::string dropped;
+    dropped = file;
+    SDL_Event drop{};
+    drop.type = SDL_EVENT_DROP_FILE;
+    drop.drop.data = dropped.c_str();
+    if (!SDL_PushEvent(&drop))
+        oa::platform::log_files::write_line(
+            std::string("opened-launch check: the file could not be opened: ") + SDL_GetError()
+        );
+}
+
+/// Opens the battle room of a launch put in place while the game shows the main menu.
+///
+/// As a launch named on the command line does from the start, the launch is active and the
+/// multiplayer screens host or join its game as they are next entered; the main menu then
+/// leaves for them, as it does when -n names a connection, and each frame asks for a pass of
+/// the frontend until a multiplayer screen shows (direct_game_frame).
+void open_launched_battle_room() {
+    set_launch_active(true);
+    mp::multiplayer_bind_direct_game(net_options().direct_game);
+    g_direct_report = DirectGameReport{};
+    if (g_services.services == nullptr)
+        return;
+    if (g_services.services->set_frontend_signal != nullptr)
+        g_services.services->set_frontend_signal(
+            g_services.host, oa::ui::frontend_state::signal_id::multiplayer
+        );
+    if (g_services.services->run_frontend != nullptr)
+        g_services.services->run_frontend(g_services.host);
+}
+
+/// Takes, steers or refuses a launch file the system opened while the game runs.
+///
+/// From the main menu the file becomes the launch and the game goes to its battle room; the
+/// single-player menu goes back to the main menu first. During a match, a game being set up,
+/// on any other screen, or while a launch is already under way, the file is taken and the
+/// player is told it was not opened. A file the battle room cannot use, or that plays other
+/// content than the game plays now, is told the same way. In the intro, a loading screen or a
+/// change of screen the file waits. --check-opened-launch menu opens its file once the main
+/// menu has settled. Run every frame.
+///
+/// @param runtime the running app
+/// @param play network play's state for it
+void follow_opened_launches(const Runtime& runtime, NetworkPlay& play) {
+    namespace net = oa::app::netgame;
+    const NetOptions& options = net_options();
+    const bool check_due =
+        options.opened_launch_check == OpenedLaunchCheck::menu && !g_opened_launch_check_sent;
+    if (!check_due && !net::opened_launch_waiting())
+        return;
+    const net::GameStanding standing = launch_standing(runtime, play);
+    if (check_due) {
+        if (standing == net::GameStanding::main_menu) {
+            g_opened_launch_check_sent = true;
+            oa::platform::log_files::write_line(
+                "opened-launch check: the main menu shows; the file is opened in the game"
+            );
+            open_as_the_system_does(options.opened_launch_check_file);
+        }
+        return;
+    }
+    namespace languages = oa::data::languages;
+    const bool under_way = options.launch_planned || launch_active(nullptr);
+    switch (net::opened_launch_step(standing, under_way)) {
+    case net::OpenedLaunchStep::wait:
+        return;
+    case net::OpenedLaunchStep::back_to_main_menu:
+        if (g_services.services != nullptr && g_services.services->request_screen != nullptr)
+            g_services.services->request_screen(g_services.host, screen_id(Screen::main_menu));
+        return;
+    case net::OpenedLaunchStep::refuse_in_match:
+        std::ignore = net::take_opened_launch();
+        tell_launch_not_opened(
+            play,
+            languages::interface_text("Launch file not opened: finish or leave this game first."),
+            true
+        );
+        return;
+    case net::OpenedLaunchStep::refuse:
+        std::ignore = net::take_opened_launch();
+        tell_launch_not_opened(
+            play,
+            under_way ? languages::interface_text(
+                            "A launch is already open. Quit Open Annihilation, then open the file "
+                            "again."
+                        )
+                      : languages::interface_text(
+                            "Open Annihilation opens a launch file's battle room from the main "
+                            "menu. Go back to the main menu, then open the file again."
+                        ),
+            false
+        );
+        return;
+    case net::OpenedLaunchStep::go_to_battle_room:
+        break;
+    }
+    const std::optional<net::OpenedLaunch> opened = net::take_opened_launch();
+    if (!opened)
+        return;
+    try {
+        net::LaunchPlan plan = net::read_opened_launch_plan(*opened);
+        if (net::launch_content_differs(plan.content, play.running_content())) {
+            tell_launch_not_opened(
+                play,
+                languages::interface_text(
+                    "This launch plays other content than the game plays now. Quit Open "
+                    "Annihilation, then open the file again."
+                ),
+                false
+            );
+            return;
+        }
+        put_launch_in_place(netgame_context(), std::move(plan));
+    } catch (const net::LaunchRefusal& refusal) {
+        tell_launch_not_opened(play, refusal.what(), false);
+        return;
+    }
+    oa::platform::log_files::write_line(
+        "multiplayer: a launch file opened at the main menu goes to its battle room: " +
+        opened->source
+    );
+    open_launched_battle_room();
+}
+
 /// Keeps the screen host and services an overlay's create is given.
 ///
 /// @param ctx the overlay's context
@@ -328,6 +532,15 @@ void direct_game_frame() {
 void keep_services(ScreenContext* ctx, void* /*state*/) {
     g_services.host = ctx->host;
     g_services.services = ctx->services;
+}
+
+/// Keeps the screen shown, and whether a match's world is bound, as the overlay ticks.
+///
+/// @param ctx the overlay's context
+/// @param state unused
+void note_screen(ScreenContext* ctx, void* /*state*/) {
+    g_services.screen = ctx->screen;
+    g_services.world = ctx->world != nullptr;
 }
 
 /// Ends the run through the kept screen services (ScreenServices::quit).
@@ -387,7 +600,7 @@ LaunchBinding netgame_launch_binding() {
 /// Registers network play's screens, dispatcher steps and queries (Extension::register_screens).
 ///
 /// The multiplayer screens register first, then the overlay that keeps the
-/// screen services, the steps that reload the unit overrides and open the
+/// screen services and the screen shown, the steps that reload the unit overrides and open the
 /// setup's provider list, and the answers to the frontend's questions about
 /// joining and leaving a session. A launch lands in the launch block
 /// the switches write, which the multiplayer screens, the frontend states and
@@ -403,6 +616,7 @@ void register_screens(void* /*context*/, ScreenRegistry* registry) {
     services.name = "netgame-screen-services";
     services.screen = kScreenAny;
     services.create = keep_services;
+    services.tick = note_screen;
     (void)overlay_register(registry, &services);
     auto& netgame = netgame_context();
     bind_launch(netgame_launch_binding());
@@ -1060,7 +1274,8 @@ struct RuntimeExtension {
     /// @param context Extension context (unused).
     /// @param runtime The running app.
     /// @param stage pump follows the game into its close handler (and runs
-    ///              --check-host-not-found's part of the frame and the part
+    ///              --check-host-not-found's part of the frame, takes or
+    ///              refuses a launch file the system opened, and runs the part
     ///              that follows --host's and --join's game), binds the
     ///              profile's rules again once Developer Mode changes them
     ///              and Unicode chat as it is now, then runs the network
@@ -1071,6 +1286,7 @@ struct RuntimeExtension {
             observe_close_handlers(runtime);
             if (net_options().check_host_not_found)
                 host_not_found_frame();
+            follow_opened_launches(runtime, NetworkPlay::of(runtime));
             direct_game_frame();
             // The rules Developer Mode lays over the profile reach the
             // multiplayer screens and the session.

@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 # SPDX-License-Identifier: GPL-3.0-only
 
-# One installer for the four Windows packages. makensis (NSIS 3) on macOS,
+# One installer for the four Windows packages, which also associates launch
+# files (.oalaunch) with the game. makensis (NSIS 3) on macOS,
 # Debian or Nix:
 #
 #   makensis -WX \
@@ -107,6 +108,16 @@ SetCompressor /SOLID lzma
 !define OA_SM_GAME "$SMPROGRAMS\Open Annihilation\Open Annihilation.lnk"
 !define OA_SM_UNINST "$SMPROGRAMS\Open Annihilation\Uninstall Open Annihilation.lnk"
 !define OA_DESKTOP_LNK "$DESKTOP\Open Annihilation.lnk"
+# A launch file (.oalaunch) opens the game in that launch's battle room, as
+# open-annihilation.exe -c FILE does. The installer associates it for everyone
+# who uses this computer; the game's own registration of the other four types
+# is per user, at run time. These are the names src/platform/file-types uses.
+!define OA_LAUNCH_EXTENSION_KEY "Software\Classes\.oalaunch"
+!define OA_LAUNCH_PROGRAM_ID "OpenAnnihilation.Launch"
+!define OA_LAUNCH_PROGRAM_KEY "Software\Classes\OpenAnnihilation.Launch"
+!define OA_LAUNCH_MIME_TYPE "application/x-oalaunch"
+# SHChangeNotify's SHCNE_ASSOCCHANGED: Explorer shows the icon and the opener at once.
+!define OA_SHELL_ASSOCIATIONS_CHANGED 0x08000000
 
 # The named files of every package. A missing one stops the compile.
 !macro OA_Require _relative
@@ -255,6 +266,14 @@ Section "Open Annihilation" SecProgram
   WriteRegDWORD HKLM "${OA_UNINST_KEY}" "EstimatedSize" $0
   WriteRegDWORD HKLM "${OA_UNINST_KEY}" "NoModify" 1
   WriteRegDWORD HKLM "${OA_UNINST_KEY}" "NoRepair" 1
+
+  WriteRegStr HKLM "${OA_LAUNCH_EXTENSION_KEY}" "" "${OA_LAUNCH_PROGRAM_ID}"
+  WriteRegStr HKLM "${OA_LAUNCH_EXTENSION_KEY}" "Content Type" "${OA_LAUNCH_MIME_TYPE}"
+  WriteRegStr HKLM "${OA_LAUNCH_EXTENSION_KEY}\OpenWithProgids" "${OA_LAUNCH_PROGRAM_ID}" ""
+  WriteRegStr HKLM "${OA_LAUNCH_PROGRAM_KEY}" "" "Open Annihilation launch file"
+  WriteRegStr HKLM "${OA_LAUNCH_PROGRAM_KEY}\DefaultIcon" "" "$INSTDIR\open-annihilation.exe,0"
+  WriteRegStr HKLM "${OA_LAUNCH_PROGRAM_KEY}\shell\open\command" "" '"$INSTDIR\open-annihilation.exe" -c "%1"'
+  System::Call 'shell32::SHChangeNotify(i ${OA_SHELL_ASSOCIATIONS_CHANGED}, i 0, i 0, i 0)'
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
@@ -307,4 +326,23 @@ Section "Uninstall"
   Delete "$INSTDIR\Uninstall.exe"
   DeleteRegKey HKLM "${OA_UNINST_KEY}"
   RMDir "$INSTDIR"
+
+  # The launch file's association: the program identifier is the game's by its
+  # name; the extension's values only while they still name the game, so a
+  # program that took .oalaunch over keeps it.
+  DeleteRegKey HKLM "${OA_LAUNCH_PROGRAM_KEY}"
+  DeleteRegValue HKLM "${OA_LAUNCH_EXTENSION_KEY}\OpenWithProgids" "${OA_LAUNCH_PROGRAM_ID}"
+  DeleteRegKey /ifempty HKLM "${OA_LAUNCH_EXTENSION_KEY}\OpenWithProgids"
+  ClearErrors
+  ReadRegStr $0 HKLM "${OA_LAUNCH_EXTENSION_KEY}" ""
+  ${If} $0 == "${OA_LAUNCH_PROGRAM_ID}"
+    DeleteRegValue HKLM "${OA_LAUNCH_EXTENSION_KEY}" ""
+  ${EndIf}
+  ReadRegStr $0 HKLM "${OA_LAUNCH_EXTENSION_KEY}" "Content Type"
+  ${If} $0 == "${OA_LAUNCH_MIME_TYPE}"
+    DeleteRegValue HKLM "${OA_LAUNCH_EXTENSION_KEY}" "Content Type"
+  ${EndIf}
+  DeleteRegKey /ifempty HKLM "${OA_LAUNCH_EXTENSION_KEY}"
+  ClearErrors
+  System::Call 'shell32::SHChangeNotify(i ${OA_SHELL_ASSOCIATIONS_CHANGED}, i 0, i 0, i 0)'
 SectionEnd
