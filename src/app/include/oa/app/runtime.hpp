@@ -3153,11 +3153,25 @@ class Runtime final : public menu::Host,
     ///         match's other keys
     bool press_match_panel_key(const SDL_KeyboardEvent& key);
 
+    /// Steps the lightbar sweep of the preferences a match opens, before the frame's HUD is drawn.
+    ///
+    /// Once a frame, while the sweep is due. The step that reaches the end plays "Options"
+    /// and opens the sound page, the first of the four, in place of the turned-over picture.
+    void advance_options_lightbar();
+
     /// Steps and draws the lightbar sweep of the preferences a match opens while it runs.
     ///
-    /// Called as the match frame draws its menus; the sweep steps once a frame
-    /// and is drawn over the side column and the battlefield beside it.
+    /// Called as the match frame draws its menus. The sweep is drawn over the side column
+    /// and the battlefield beside it until advance_options_lightbar opens the sound page.
     void draw_options_lightbar();
+
+    /// Loads one in-match options page beside the tabs.
+    ///
+    /// PREFS.GUI is widened and the page's GUI is merged into it. A page that cannot be
+    /// loaded is left unshown and the reason is written to the log.
+    ///
+    /// @param which sound, music, interface (speeds) or visuals
+    void open_match_options_page(ui::frontend::OptionsPanel which);
 
     /// Binds the running match's speech with its own captions to the offline services.
     void bind_match_speech();
@@ -4341,8 +4355,9 @@ class Runtime final : public menu::Host,
     /// greyed by that check until the table arrives, and a miss then is not
     /// logged. A map that cannot be played for good writes one log line for
     /// its pack and the game, the first time that pair is greyed. An open
-    /// skirmish map list is filled again, and so is an open battle-room map
-    /// list. The default stays a map that can be played.
+    /// skirmish map list is filled again, in one order by the name each row
+    /// shows, and so is an open battle-room map list. The default stays a
+    /// map that can be played.
     void refresh_listed_pack_maps();
 
     /// Rebuilds the pack-map lists when the catalogue snapshot has moved on.
@@ -14304,6 +14319,15 @@ class Runtime final : public menu::Host,
     ///
     /// @return the names, in find order
     std::vector<std::string> copy_map_names() override;
+
+    /// Orders the skirmish map list by the name each row shows.
+    ///
+    /// The game's own maps, installed pack maps and maps offered for download
+    /// are one list. A grey reason is not part of the name, so a map that
+    /// cannot be played keeps its place.
+    ///
+    /// @param[in,out] names the map names
+    void order_map_names(std::vector<std::string>& names) override;
 
     /// Loads SELMAP.GUI as the map selection screen over the skirmish screen's frame.
     ///

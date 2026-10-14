@@ -768,23 +768,39 @@ void a_mods_path_budget_scales_the_credit() {
     );
 }
 
+void the_skirmish_player_count_is_not_an_engine_key() {
+    settings::EngineSettings chosen{};
+    chosen.skirmish_players = 6;
+    Values values;
+    settings::write_settings(values, {}, chosen, {}, false);
+    CHECK(values.empty());
+    CHECK(
+        settings::read_settings(values, {}, false).skirmish_players ==
+        settings::default_skirmish_players
+    );
+}
+
 void a_game_locks_the_next_game_settings() {
     const auto alone = settings::settings_locks({true, false, false, false});
     CHECK(alone.path_search == settings::Lock::in_game);
     CHECK(alone.unit_limit == settings::Lock::in_game);
+    CHECK(alone.skirmish_players == settings::Lock::in_game);
     CHECK(alone.max_frame_rate == settings::Lock::none);
     CHECK(!alone.shared_game);
     const auto shared = settings::settings_locks({true, true, false, false});
     CHECK(shared.path_search == settings::Lock::set_by_host);
     CHECK(shared.unit_limit == settings::Lock::set_by_host);
+    CHECK(shared.skirmish_players == settings::Lock::set_by_host);
     CHECK(shared.shared_game);
     const auto replay = settings::settings_locks({true, false, true, false});
     CHECK(replay.path_search == settings::Lock::set_by_host);
     CHECK(replay.unit_limit == settings::Lock::set_by_host);
+    CHECK(replay.skirmish_players == settings::Lock::set_by_host);
     CHECK(!replay.shared_game);
     const auto menu = settings::settings_locks({});
     CHECK(menu.path_search == settings::Lock::none);
     CHECK(menu.unit_limit == settings::Lock::none);
+    CHECK(menu.skirmish_players == settings::Lock::none);
     CHECK(!menu.shared_game);
     const auto command_line = settings::settings_locks({false, false, false, true});
     CHECK(command_line.max_frame_rate == settings::Lock::command_line);
@@ -2510,6 +2526,7 @@ int main() {
     shared_games_and_replays_search_at_one_cycle();
     a_mods_unit_limits_set_the_range_and_the_default();
     a_mods_path_budget_scales_the_credit();
+    the_skirmish_player_count_is_not_an_engine_key();
     a_game_locks_the_next_game_settings();
     the_mod_is_stored_as_its_folder();
     a_picked_folder_is_kept_while_it_is_played();

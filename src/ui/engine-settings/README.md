@@ -27,6 +27,7 @@ the locks a running game puts on them (`settings_locks`).
 | | Window edge, a strip: whether a window holds the pointer on its edges while a match's battlefield shows, so the view edge-scrolls. A firm push or a flick lets it leave. Menus, the pause screen and a window without the focus leave it free. Full screen holds the pointer either way | Sticky, Free | Sticky | `open-annihilation.window-edge` (`sticky` or `free`) |
 | Engine Limits | Unit limit | 50 to 1500 per player, steps of 50, or on to a mod's higher maximum | the installation's `totala.ini` UnitLimit, else 250 or a mod's default | `open-annihilation.unit-limit` |
 | | Pathfinding cycles | 1× to 8× of 1333 path nodes a tick, or of a mod's budget | 1× | `open-annihilation.path-search-nodes` |
+| | Skirmish players: how many player rows the skirmish setup shows. The dialog's working copy of the setup's own count; OK stores it only when the slider moved, and the setup's key codes write the same count | 2 to 10; a stored count outside that shows as it is until the slider moves | 10 when none is stored | `NumSkirmishPlayers` |
 | Language & Text | Language | System default, English, Deutsch, Español, Français, Italiano, and any installed pack | System default with the player's own preferences file; English with `--preferences-file` | `open-annihilation.language` (`system` or a language's tag, as `de`) |
 | | Use modern fonts for game text; On, locked, while a language drawn only in them is chosen | Off, On | On with the player's own preferences file; Off with `--preferences-file` | `open-annihilation.modern-fonts` |
 | | Text size, of the modern fonts | 50% to 300% of the game fonts' sizes, steps of 10% | 80% | `open-annihilation.text-size` |
@@ -449,8 +450,8 @@ the Text size slider, by 129, User Interface, with its three switches, Menu
 scaling's strip and Interface size's drop-down, by 88, Touch, with its
 three strips, the Hold delay slider and two switches, by 121, and Controls,
 with Mouse wheel zoom, the two zoom drop-downs, View past the map's edge,
-Select groups without Alt and Window edge, by 131; Engine Limits fits, its two sliders
-in 151 pixels, and draws as if there were no scrolling,
+Select groups without Alt and Window edge, by 131; Engine Limits fits, its three sliders
+in 216 pixels, and draws as if there were no scrolling,
 with no bar. While the dialog's words are drawn in the modern fonts, as in
 Simplified Chinese, whose ideographs stand as tall as a hint line, the
 lines of a hint or a notice lie three pixels further apart
@@ -1267,8 +1268,8 @@ installed game, the header's icon in its place and the mark without it;
 the sections' order and names, Developer at the foot under the divider,
 and System holding Your files, then File Type Registration's switches
 where the game registers file types at run time or the File types text row
-where the app declares them, and Engine Limits holding the unit limit and
-pathfinding;
+where the app declares them, and Engine Limits holding the unit limit, pathfinding and the skirmish
+player count;
 Language's drop-down, four switches and Text size slider,
 their place in the list, their texts, clicks, drags and keys on them, the
 text style they set, the slider's 26 stops from 50% to 300%, and its lock
@@ -1399,3 +1400,22 @@ language is only available as a download. The screen is named
 dialog as `oa.language-notice`. Use English, when the operating system
 asked for the language, writes that language's tag into
 `open-annihilation.language-notice-dismissed`.
+
+## The manual's pictures
+
+`oa-ui-engine-settings-pictures DIRECTORY` draws each section the engine's
+dialog lists when Touch, Controller and Game files are on: the dialog
+alone, unlocked, at Compact and 2× (960 by 648), in the installed game's
+fonts (`OA_GAME_DIR`). The header shows the shipped app icon, the plates,
+cropped to the pixels that show (`branding/open-annihilation-256.png`). It writes one PNG a section, under the names
+`docs/images/settings/` uses (`controls-1.png`, `language-1.png`,
+`graphics-1.png`, `downloads-1.png`, and `page_word` plus `.png` for the
+others), and `downloads-2.png` with Downloads scrolled to its end. The
+rows a host fills (Your files, Game files, Downloads' install ID, Game
+Content) are the defaults the manual describes. The data test
+`ui-engine-settings-pictures` runs the same program into a scratch folder
+under the build. To refresh the manual, build the tests and run:
+
+```sh
+oa-ui-engine-settings-pictures docs/images/settings
+```

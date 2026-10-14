@@ -157,25 +157,24 @@ starts, against the game and the mod being played then.
 ## The map lists and MORE MAPS…
 
 The skirmish list and the battle room host's map list hold every installed
-pack's maps beside the base maps. A pack map's row shows the title from
-the pack's index, or the title in its map file when the index has none. A
-row that would read the same as another adds the pack's name in brackets.
-A map that cannot be played is greyed, and the row adds the reason: "for
-the TA demo", "for Total Annihilation", "needs Battle Tactics", "for
-ridge", or "doesn't fit". Choosing that row says why, and a missing
-expansion says to turn it on in the Library. The game's own rows stay
-their file names. The skirmish list puts the pack maps after the base
-maps, in the packs' order. The battle room's list sorts every name
-together, not by the title. The name under a list, and the battle room's
-map name, are that same title. Choosing the row still uses `<stem>@<id>`.
+pack's maps beside the base maps, in one order by the name the row shows.
+A pack map's row shows the title from the pack's index, or the title in
+its map file when the index has none. A row that would read the same as
+another adds the pack's name in brackets. A map that cannot be played is
+greyed in that place, and the row adds the reason: "for the TA demo",
+"for Total Annihilation", "needs Battle Tactics", "for ridge", or
+"doesn't fit". Choosing that row says why, and a missing expansion says
+to turn it on in the Library. The game's own rows stay their file names.
+The name under a list, and the battle room's map name, are that same
+title. Choosing the row still uses `<stem>@<id>`.
 
 A pack installed from the Library joins both lists at once. A pack
-removed leaves both lists at once. The base maps stay in the order and
-under the names they had.
+removed leaves both lists at once.
 
 Under the skirmish map list, and under the battle room's map list for the
-host, **MORE MAPS…** opens the map browser, and so do Cmd+F on macOS,
-Ctrl+F elsewhere and a controller's Y.
+host, **MORE MAPS…** sits clear of the list's frame, at the same size.
+It opens the map browser, and so do Cmd+F on macOS, Ctrl+F elsewhere and
+a controller's Y.
 
 ## The map browser
 

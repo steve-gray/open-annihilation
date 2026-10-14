@@ -775,8 +775,8 @@ hosts them on the OA layer.
   SHA-256 name, never during a match.
 - **Select.** Select moves the picker's selection to the map and closes the
   browser; the player still chooses the map with the picker's LOAD. In
-  SELMAP a pack installed since the list was made joins it after the base
-  maps first, then `preview_map_index` selects and previews it; in the
+  SELMAP a pack installed since the list was made joins it in the name
+  order first, then `preview_map_index` selects and previews it; in the
   battle room `multiplayer_offer_map` builds the screens' map list again
   when it lacks the map, fills the dialog's list, selects the row and
   previews it, sending nothing.

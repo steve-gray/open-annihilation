@@ -16,7 +16,11 @@ copy of Total Annihilation.
 
 The Windows 95 package runs on Windows 95 as first released and OSR2,
 Windows 98 and Windows Me. It is 32-bit x86, for a Pentium II or newer
-with 128 MB of memory, and it does not need SSE.
+with 128 MB of memory, and it does not need SSE. It is built for speed
+the same way as the other Windows packages. It computes with the
+processor's floating-point unit, and it does not include the Linux SDL
+notice. A separate download keeps the programs' symbols, for reading a
+crash.
 
 Each zip has a matching installer,
 `open-annihilation-<version>-<package>-setup.exe`, made from the same

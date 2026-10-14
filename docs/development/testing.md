@@ -999,11 +999,19 @@ the engine, with their size class and scale.
   not got, with a loader dialogue rather than a message.
 
   The release package is the flake's `win95` output. `nix build .#win95`
-  installs the game, `oa-intro.exe`, `oa-tool.exe`, the notices,
-  `licenses/`, `fonts/`, `languages/interface.tdf` and `registries/` into
-  `$out/bin`, the package root. `oa-intro.exe` is the intro player the game
-  links, built with that toolchain. The four Windows installers are built
-  from packages in that shape; see
+  configures a Release build with the game's self-checks left out, the same
+  way the other Windows release packages are built, and within what this
+  toolchain can do: the i686 instruction set, no SSE, floats on the
+  processor's floating-point unit.
+  It installs the game, `oa-intro.exe` and `oa-tool.exe` stripped of their
+  symbol tables, the notices, `licenses/`, `fonts/`,
+  `languages/interface.tdf` and `registries/` into `$out/bin`, the package
+  root. The programs as the build made them, symbol table included, are
+  installed in `$out/symbols` for the symbols zip. `licenses/` is every
+  notice the other Windows packages carry; the Linux-only SDL notice,
+  `licenses/SDL-linux.txt`, is not among them. `oa-intro.exe` is the intro
+  player the game links, built with that toolchain. The four Windows
+  installers are built from packages in that shape; see
   [The Windows installers](releasing.md#the-windows-installers).
 
   Windows 95 cannot execute SSE at all, so a build for it wants

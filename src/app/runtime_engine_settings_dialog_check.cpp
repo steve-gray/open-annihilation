@@ -400,6 +400,8 @@ std::string_view label_of(settings::Setting setting) {
         return "Registry files (.oareg)";
     case settings::Setting::file_types_note:
         return "File types";
+    case settings::Setting::skirmish_players:
+        return "Skirmish players";
     case settings::Setting::welcome_setup:
         return "Welcome setup";
     default:
