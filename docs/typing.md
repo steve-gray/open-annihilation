@@ -37,9 +37,11 @@ in the field or the game. Escape still closes the field.
 
 A line that starts with an ASCII `+` or `.` is a command, such as a cheat
 code or the recorder's `.record`, read and sent exactly as before. The
-full-width `＋`, `．` and `。` a Chinese input method types are ordinary
-text. To type a command, switch the input method to English first; in
-most Pinyin input methods Shift switches it.
+codes and where each one works are in [cheats.md](cheats.md); the chat
+line itself is in [console.md](console.md). The full-width `＋`, `．` and
+`。` a Chinese input method types are ordinary text. To type a command,
+switch the input method to English first; in most Pinyin input methods
+Shift switches it.
 
 ## Saved games and recordings named in any script
 

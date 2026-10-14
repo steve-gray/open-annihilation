@@ -12565,10 +12565,12 @@ class Runtime final : public menu::Host,
     ///
     /// The mission start opened the cheat class to the chat line, so "+atm" runs
     /// and its echo goes to everyone; a word no list registers goes out as plain
-    /// chat, since the spawn fallback needs the developer class. Every cheat then
-    /// takes effect (check_console_cheat_effects). The Game Settings sheet
-    /// MISSION opens shows the difficulty and no Cheat Codes row, and its OK
-    /// returns to the options panel. Throws std::runtime_error on a failure.
+    /// chat. Every cheat then takes effect (check_console_cheat_effects). The
+    /// Game Settings sheet MISSION opens shows the difficulty and no Cheat Codes
+    /// row, and its OK returns to the options panel. "+control" and "+ai" then
+    /// take another player and hand it back, and a unit name refuses a missing
+    /// player (check_console_takeover_and_spawn). Throws std::runtime_error on
+    /// a failure.
     ///
     /// @param enter_line runs one console line
     void check_console_skirmish_cheats(const std::function<void(const char*)>& enter_line);
@@ -12580,9 +12582,22 @@ class Runtime final : public menu::Host,
     /// and its echo goes to everyone, option commands such as "+clock" run,
     /// every cheat takes effect (check_console_cheat_effects) and "+sing"
     /// works (check_console_sing_command), all typed through the chat line
-    /// without the developer passphrase. Throws std::runtime_error on a
-    /// failure.
+    /// without the developer passphrase. "+control" and "+ai" take another
+    /// player and hand it back, and a unit name refuses a missing player.
+    /// Throws std::runtime_error on a failure.
     void check_console_campaign_cheats();
+
+    /// Checks "+control", "+ai" and a unit name on the running match.
+    ///
+    /// "+control" makes another player the local and viewed player, then hands
+    /// the original player back. "+ai" swaps that other player between local
+    /// and computer control and swaps them back. "+NAME 99" posts "No such
+    /// player" and creates nothing. "+NAME" then creates a unit beside a live
+    /// unit of the local player, or posts why the ground refused it. Throws
+    /// std::runtime_error on a failure.
+    ///
+    /// @param enter_line runs one console line
+    void check_console_takeover_and_spawn(const std::function<void(const char*)>& enter_line);
 
     /// Checks the mod profile's texts in the running match.
     ///
@@ -12622,10 +12637,11 @@ class Runtime final : public menu::Host,
     /// turns the damage bars on and off. Pause flips the pause bit of
     /// Game.sim_run_flags and reports it through Extension::pause_changed. In
     /// a multiplayer game Tab opens and closes the team menu and 'h' opens
-    /// SHARE.GUI. Developer keys: backslash repeats the last console line
-    /// (where the key below Escape types it, that key turns the damage bars on
-    /// and off instead) and F11 toggles the debug keys once the passphrase
-    /// is accepted; while the debug keys are on, '=', ']', 'i' and 'm' go to the
+    /// SHARE.GUI. Backslash repeats the last console line under the same rule
+    /// as typing it (where the key below Escape types it, that key turns the
+    /// damage bars on and off instead). F11 toggles the debug keys once the
+    /// passphrase is accepted; while the debug keys are on, '=', ']', 'i' and
+    /// 'm' go to the
     /// debug dispatcher instead of their normal use. Ctrl+F10 starts a film
     /// capture.
     ///

@@ -752,9 +752,9 @@ bool Runtime::handle_console_hotkey(const SDL_KeyboardEvent& key) {
     // '`' key, such as the Italian one, where it types '\', has the key too.
     else if (key.key == SDLK_GRAVE || key.scancode == SDL_SCANCODE_GRAVE)
         code = '`';
-    else if (developer && !remaps && key.key == SDLK_BACKSLASH)
+    else if (!remaps && key.key == SDLK_BACKSLASH)
         code = console::hotkey::repeat_command;
-    else if (developer && remaps && key.key == SDLK_INSERT)
+    else if (remaps && key.key == SDLK_INSERT)
         code = console::hotkey::insert;
     else if (developer && key.key == SDLK_F11)
         code = console::hotkey::f11;

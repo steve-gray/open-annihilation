@@ -380,7 +380,11 @@ void prepare_match_computer_players(Match& match) {
 }
 
 void tick_match_computer_orders(Match& match, uint8_t player) {
-    computer_player_tick_orders(match_computer_players(match), make_host(match), player);
+    const ComputerHost host = make_host(match);
+    // +AI can hand a human to the computer after the start. That player has
+    // no controller until this tick builds one.
+    computer_players_adopt(match_computer_players(match), host, player);
+    computer_player_tick_orders(match_computer_players(match), host, player);
 }
 
 } // namespace oa::sim::ai

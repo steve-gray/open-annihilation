@@ -13,7 +13,7 @@
 
 ## Description
 
-The `+AI` and `+Control` console commands become cheats instead of developer commands, so they work in a multiplayer game whenever cheats are allowed. In 3.1c they need developer mode.
+`+AI` and `+Control` are cheats. They work in every single-player game, and in a multiplayer game whenever cheats are allowed. The hack no longer chooses that class: on or off, the commands are cheats. It stays in the profile hash. In 3.1c they need developer mode.
 
 ## Configuration example
 
@@ -34,9 +34,9 @@ Every console command belongs to a class that decides when it runs:
 | Cheat | Cheats are allowed: in a campaign or a skirmish, or when the multiplayer lobby's Cheats option is on |
 | Developer | Developer mode is on |
 
-With this hack on, `+AI [player]` (switch a player between local and computer control) and `+Control <player>` (make another player the local and viewed player) are cheats. With cheats allowed, a player can type them on the chat line; the line is echoed to every player and runs on every machine, as other cheats do. With cheats not allowed, they are refused like other cheats.
+`+AI [player]` switches a player between local and computer control, and `+Control <player>` makes that player the local and viewed player. Both are cheats whether or not this hack is on. With cheats allowed, a player can type them on the chat line and the line is echoed to every player. `+AI` is applied on every machine: the machine that plays that player changes who gives the orders, and the others record the same choice. `+Control` changes only the machine that typed it. With cheats not allowed, both are refused. The developer passphrase does not allow them.
 
-Every other command keeps its class.
+Every other command keeps its class. The hack's on or off value is still part of the profile hash, and it no longer changes a class.
 
 ### 3.1c baseline
 
@@ -44,7 +44,7 @@ Every other command keeps its class.
 
 ### Network games
 
-Every machine applies the classes to its own console. A `+` line is sent to every player and each machine runs it with its own command table, so every machine must use the same setting; the hack is part of the profile hash.
+Every machine registers `+AI` and `+Control` as cheats. The line is sent to every player. Each machine runs `+AI`; only the machine that typed `+Control` runs that. The hack remains part of the profile hash so old profiles still match, and every machine must still agree on it.
 
 ### Interactions
 
@@ -52,8 +52,8 @@ Every machine applies the classes to its own console. A `+` line is sent to ever
 
 ### Implementation notes
 
-- Applied in `console_apply_rules` in `src/ui/console/src/commands.cpp` (module `src/ui/console`), which reads `MatchRules::console.ai_control_cheat_group.enabled` and sets the class of the `AI` and `Control` entries. The application calls it when it binds the console to a match; applying 3.1c's rules restores the developer class.
-- Tested by `test_mod_console_rules` in `src/ui/console/tests/console_test.cpp` (ctest `ui-console`): the commands run under the cheat class only with the hack on, a chat line runs `+ai` only while cheats are allowed, and 3.1c's rules put the classes back.
+- Applied in `console_apply_rules` in `src/ui/console/src/commands.cpp` (module `src/ui/console`). The enabled flag is ignored. `AI` and `Control` are always registered as cheats. The application calls it when it binds the console to a match.
+- Tested by `test_mod_console_rules` in `src/ui/console/tests/console_test.cpp` (ctest `ui-console`): the commands run under the cheat class with the hack off and on, and a chat line runs `+ai` only while cheats are allowed.
 
 ## Full configuration schema
 
@@ -63,7 +63,7 @@ Hack id `console.ai-control-cheat-group`, written under the profile's `hacks` bl
 | Write | Means |
 | --- | --- |
 | `console.ai-control-cheat-group: true` | On. |
-| `console.ai-control-cheat-group: false` | Off, the same as leaving it out: 3.1c behaviour. |
+| `console.ai-control-cheat-group: false` | Off, the same as leaving it out. `+AI` and `+Control` stay cheats either way. |
 
 ### Parameters
 

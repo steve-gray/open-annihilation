@@ -37,6 +37,7 @@
 #include "oa/sim/ai.hpp"
 #include "oa/sim/match_runtime.hpp"
 #include "oa/sim/messages.hpp"
+#include "oa/ui/console/console.hpp"
 #include "oa/ui/frontend_dialogs.hpp"
 #include "oa/ui/console/console.hpp"
 #include "oa/ui/console/game_fields.hpp"
@@ -884,6 +885,11 @@ struct NetworkPlay::NetHost {
         const auto* host = self(context).net_->console_host;
         if (host != nullptr && host->post_message != nullptr)
             host->post_message(host->context, text, oa::sim::messages::kind_player_chat, sender);
+        // The sender already ran the line. Commands that change the shared
+        // simulation run here too, so the machines stay together.
+        oa::ui::console::console_apply_remote_line(
+            self(context).runtime_.match_console(), text, sender
+        );
     }
 
     static void notice(void* context, const char* text) {

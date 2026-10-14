@@ -9,7 +9,9 @@
 
 #include "oa/sim/scenario/commander_rules.hpp"
 #include "oa/sim/match_runtime.hpp"
+#include "oa/sim/simulation_state.hpp"
 #include "oa/ui/console/console.hpp"
+#include "oa/ui/console/game_fields.hpp"
 #include "oa/ui/frontend/ingame_menu.hpp"
 
 #include <SDL3/SDL.h>
@@ -153,10 +155,117 @@ void NetworkPlay::check_console_session_cheats(
             "the peer's +atm line did not reach this machine"
         );
     }
+
+    const auto count_line = [](Runtime& side, std::string_view text) {
+        int count = 0;
+        for (const auto& row : side.match_message_lines())
+            count += row == text ? 1 : 0;
+        return count;
+    };
+    const auto flag_on = [](Runtime& side) {
+        return (oa::ui::console::console_flags(side.match_->state().game) &
+                oa::ui::console::console_flag::shoot_all) != 0;
+    };
+    // +ShootAll changes who units fire at, so both machines run it. Turn it
+    // back off before the wait, or the units keep firing while the line travels.
+    const bool shoot = flag_on(runtime_);
+    const std::string shoot_line = prefix + "+shootall";
+    const int shoot_seen = count_line(peer, shoot_line);
+    runtime_.enter_console_check_line("+shootall");
+    require(flag_on(runtime_) != shoot, "+shootall did not run");
+    runtime_.enter_console_check_line("+shootall");
+    require(flag_on(runtime_) == shoot, "+shootall did not turn back");
+    wait(
+        [&] { return count_line(peer, shoot_line) >= shoot_seen + 2 && flag_on(peer) == shoot; },
+        "+shootall did not run on the peer and turn back"
+    );
+
+    const uint8_t mine = game.local_player_index;
+    const auto mine_status = game.players[mine].status;
+    oa::Game& remote_game = peer.match_->state().game;
+    const auto peer_status = remote_game.players[mine].status;
+    auto* peer_info = oa::world_player_info(&peer.match_->state(), &remote_game.players[mine]);
+    const auto peer_state = peer_info != nullptr ? peer_info->state : static_cast<uint8_t>(0);
+    const std::string ai = "+ai " + std::to_string(static_cast<unsigned>(mine));
+    const std::string ai_line = prefix + ai;
+    const int ai_seen = count_line(peer, ai_line);
+    if (allowed) {
+        runtime_.enter_console_check_line(ai.c_str());
+        require(game.players[mine].status != mine_status, "+ai did not take the local player");
+        runtime_.enter_console_check_line(ai.c_str());
+        require(game.players[mine].status == mine_status, "+ai did not hand the local player back");
+        wait(
+            [&] {
+                return count_line(peer, ai_line) >= ai_seen + 2 &&
+                       peer.match_->state().game.players[mine].status == peer_status &&
+                       (peer_info == nullptr || peer_info->state == peer_state);
+            },
+            "+ai did not reach the peer and hand the player back"
+        );
+    } else {
+        runtime_.enter_console_check_line(ai.c_str());
+        require(game.players[mine].status == mine_status, "+ai ran with cheats disallowed");
+        for (int step_index = 0;
+             step_index < kSessionWaitSteps && count_line(peer, ai_line) == ai_seen;
+             ++step_index)
+            step(true);
+        require(
+            peer.match_->state().game.players[mine].status == peer_status &&
+                (peer_info == nullptr || peer_info->state == peer_state),
+            "+ai changed the peer with cheats disallowed"
+        );
+    }
+    require(
+        peer.match_->state().game.players[mine].status == OA_PLAYER_STATUS_MIRRORED,
+        "the peer's copy of this player is not mirrored"
+    );
+
+    uint8_t target = OA_PLAYER_COUNT;
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index)
+        if (index != mine && sim::simulation_state::player_slot_active(index, game.players[index]))
+            target = index;
+    require(target != OA_PLAYER_COUNT, "no other player to control");
+    const auto peer_index = peer.match_->state().game.local_player_index;
+    const std::string control = "+control " + std::to_string(static_cast<unsigned>(target));
+    const std::string control_line = prefix + control;
+    if (allowed) {
+        runtime_.enter_console_check_line(control.c_str());
+        require(game.local_player_index == target, "+control did not take the other player");
+        runtime_.enter_console_check_line(
+            ("+control " + std::to_string(static_cast<unsigned>(mine))).c_str()
+        );
+        require(game.local_player_index == mine, "+control did not hand the player back");
+        // The command runs before the line is shown, so the echo carries the
+        // player just taken, not the one who typed it.
+        wait(
+            [&] {
+                const auto lines = peer.match_message_lines();
+                return std::any_of(lines.begin(), lines.end(), [&](const std::string& row) {
+                    return row.find(control) != std::string::npos;
+                });
+            },
+            "+control did not reach the peer"
+        );
+    } else {
+        runtime_.enter_console_check_line(control.c_str());
+        require(game.local_player_index == mine, "+control ran with cheats disallowed");
+        for (int step_index = 0;
+             step_index < kSessionWaitSteps && !logged(peer.match_message_lines(), control_line);
+             ++step_index)
+            step(true);
+    }
+    require(
+        peer.match_->state().game.local_player_index == peer_index,
+        "+control changed the peer's player"
+    );
+
     std::cout << "console cheat check: both machines take the host's CHEATING option ("
               << (allowed ? "allowed" : "disallowed") << "), +atm "
-              << (allowed ? "ran" : "was refused") << " and its line reached the peer and the "
-              << "match report\n";
+              << (allowed ? "ran" : "was refused")
+              << " and its line reached the peer and the match report; +shootall ran on both "
+              << "machines; +ai "
+              << (allowed ? "took this player and handed it back" : "was refused")
+              << " without changing the peer's player; +control stayed on this machine\n";
 }
 
 } // namespace oa::app

@@ -28,7 +28,7 @@ hacks:
 
 `+LOSType` switches how line of sight is drawn. With the hack on it is registered in the cheat command group instead of the option group:
 
-- it runs only when the caller may run cheats: with cheats enabled in the game, or with the developer passphrase entered;
+- it runs only when cheats are allowed: a campaign, a skirmish, or a multiplayer game whose room allows cheats. The developer passphrase does not allow it;
 - typed as a chat `+` line, its echo goes to every player, as every cheat's does.
 
 ### 3.1c behaviour
@@ -41,7 +41,7 @@ Every machine registers the command the same way, so every machine must agree th
 
 ### Interactions
 
-- [console.ai-control-cheat-group](console.ai-control-cheat-group.md) moves other console commands into the cheat group in the same way.
+- [console.ai-control-cheat-group](console.ai-control-cheat-group.md) stays in the profile hash. `+AI` and `+Control` are cheats whether or not that hack is on.
 
 ### Implementation notes
 

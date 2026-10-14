@@ -73,6 +73,56 @@ constexpr int32_t kTestShotDamage = 1000;
 /// The folder below the save root that "+MakePoster" writes to in the check.
 constexpr const char* kPosterFolder = "cheat-posters";
 
+/// Counts live units in a match.
+std::size_t live_unit_count(const oa::sim::match_runtime::Match& match) {
+    std::size_t count = 0;
+    for (const auto& slot : match.world().slots)
+        if (slot.unit != nullptr && slot.record.type_index != 0 &&
+            (slot.record.flags & OA_UNIT_FLAG_LIVE) != 0)
+            ++count;
+    return count;
+}
+
+/// Tests whether a message logged at or after `from` contains `text`.
+bool lines_contain(const std::vector<std::string>& lines, std::size_t from, std::string_view text) {
+    for (std::size_t index = from; index < lines.size(); ++index)
+        if (lines[index].find(text) != std::string::npos)
+            return true;
+    return false;
+}
+
+char upper_ascii(char letter) {
+    return letter >= 'a' && letter <= 'z' ? static_cast<char>(letter - 'a' + 'A') : letter;
+}
+
+bool same_unit_name(const char* unit, const char* wanted) {
+    while (*unit != '\0' && *wanted != '\0' && upper_ascii(*unit) == upper_ascii(*wanted)) {
+        ++unit;
+        ++wanted;
+    }
+    return *unit == '\0' && *wanted == '\0';
+}
+
+/// A unit name the spawn check can type as one token. A commander or a kbot
+/// when the data has one, otherwise the first name with no space.
+const char* spawn_unit_name(const oa::World& world) {
+    for (const char* wanted : {"ARMCOM", "CORCOM", "ARMPW", "CORAK"})
+        for (uint32_t type = 1; type < world.unit_def_count; ++type)
+            if (same_unit_name(world.unit_defs[type].unit_name, wanted))
+                return world.unit_defs[type].unit_name;
+    for (uint32_t type = 1; type < world.unit_def_count; ++type) {
+        const char* unit = world.unit_defs[type].unit_name;
+        if (unit[0] == '\0')
+            continue;
+        bool spaced = false;
+        for (const char* letter = unit; *letter != '\0'; ++letter)
+            spaced = spaced || *letter == ' ';
+        if (!spaced)
+            return unit;
+    }
+    return nullptr;
+}
+
 } // namespace
 
 void Runtime::check_console_skirmish_cheats(const std::function<void(const char*)>& enter_line) {
@@ -135,9 +185,11 @@ void Runtime::check_console_skirmish_cheats(const std::function<void(const char*
         "the sheet's OK did not return to the options panel"
     );
     resume_match_pause();
+    check_console_takeover_and_spawn(enter_line);
     std::cout << "console cheat check: a skirmish runs +atm and echoes it to everyone, sends an "
                  "unknown +word as chat and shows its Game Settings without Cheat Codes; "
-              << effects << '\n';
+              << effects << "; +control and +ai take a player and hand it back, and a unit name "
+              << "refuses a missing player\n";
 }
 
 void Runtime::check_console_campaign_cheats() {
@@ -177,9 +229,80 @@ void Runtime::check_console_campaign_cheats() {
     enter_line("+clock");
     const auto effects = check_console_cheat_effects(enter_line, true);
     const auto sung = check_console_sing_command(enter_line);
+    check_console_takeover_and_spawn(enter_line);
     require(!developer(game), "a cheat set the developer passphrase");
     std::cout << "console cheat check: a campaign runs +atm and echoes it, runs +clock; " << effects
-              << "; +sing " << sung << '\n';
+              << "; +sing " << sung
+              << "; +control and +ai take a player and hand it back, and a unit name refuses a "
+                 "missing player\n";
+}
+
+void Runtime::check_console_takeover_and_spawn(const std::function<void(const char*)>& enter_line) {
+    oa::World& world = match_->state();
+    oa::Game& game = world.game;
+    const uint8_t local = game.local_player_index;
+    uint8_t other = OA_PLAYER_COUNT;
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT && other == OA_PLAYER_COUNT; ++index)
+        if (index != local && sim::simulation_state::player_slot_active(index, game.players[index]))
+            other = index;
+    require(other != OA_PLAYER_COUNT, "no other player to take over");
+    const auto line = [&](const std::string& text) { enter_line(text.c_str()); };
+
+    line("+control " + std::to_string(other));
+    require(
+        game.local_player_index == other && game.viewpoint_player == other,
+        "+control did not take the other player"
+    );
+    line("+control " + std::to_string(local));
+    require(
+        game.local_player_index == local && game.viewpoint_player == local,
+        "+control did not hand the player back"
+    );
+
+    const auto status = game.players[other].status;
+    auto* info = oa::world_player_info(&world, &game.players[other]);
+    const auto info_state = info != nullptr ? info->state : status;
+    const uint8_t handed =
+        status == OA_PLAYER_STATUS_LOCAL ? OA_PLAYER_STATUS_COMPUTER : OA_PLAYER_STATUS_LOCAL;
+    line("+ai " + std::to_string(other));
+    require(game.players[other].status == handed, "+ai did not take over the other player");
+    line("+ai " + std::to_string(other));
+    require(
+        game.players[other].status == status && (info == nullptr || info->state == info_state),
+        "+ai did not hand the player back"
+    );
+
+    const char* found = spawn_unit_name(world);
+    require(found != nullptr, "the match has no unit name to spawn");
+    const std::string name(found, strnlen(found, sizeof oa::UnitDef::unit_name));
+    const auto before = live_unit_count(*match_);
+    const auto noticed_at = match_message_lines().size();
+    line("+" + name + " 99");
+    require(live_unit_count(*match_) == before, "+UNITNAME for a missing player created a unit");
+    require(
+        lines_contain(match_message_lines(), noticed_at, "No such player"),
+        "+UNITNAME for a missing player said nothing"
+    );
+
+    const oa::Unit* anchor = nullptr;
+    for (const auto& slot : match_->world().slots)
+        if (anchor == nullptr && slot.unit != nullptr && slot.record.type_index != 0 &&
+            slot.record.owner_index == local && (slot.record.flags & OA_UNIT_FLAG_LIVE) != 0)
+            anchor = &slot.record;
+    if (anchor != nullptr) {
+        constexpr int32_t kBeside = 128 << 16;
+        game.cursor_position = anchor->position;
+        const int64_t limit = static_cast<int64_t>(game.map_pixel_width) << 16;
+        if (static_cast<int64_t>(game.cursor_position.x) + kBeside < limit)
+            game.cursor_position.x += kBeside;
+        else if (game.cursor_position.x >= kBeside)
+            game.cursor_position.x -= kBeside;
+    }
+    const auto spawned_at = match_message_lines().size();
+    line("+" + name);
+    const bool spawned = live_unit_count(*match_) > before;
+    const bool refused = lines_contain(match_message_lines(), spawned_at, "spawn:");
+    require(spawned || refused, "+UNITNAME neither created a unit nor said why");
 }
 
 std::string Runtime::check_console_cheat_effects(

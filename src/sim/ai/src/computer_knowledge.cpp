@@ -637,6 +637,43 @@ void apply_profile(ComputerPlayers* state, const ComputerHost& host) noexcept {
     }
 }
 
+/// Gives one computer player the controller the game start gives its computers.
+///
+/// The profile and the downloadable directives are applied while every other
+/// controller is hidden, so their weights are not scaled a second time.
+///
+/// @param[in,out] state computer players; types and profile already loaded
+/// @param host world, map and random stream
+/// @param player player index, already a computer
+void adopt_handed_player(
+    ComputerPlayers* state, const ComputerHost& host, uint8_t player
+) noexcept {
+    auto& ai = state->players[player];
+    release_knowledge(ai.knowledge);
+    ai = {};
+    computer_player_create(ai, player, host.world->game, state->rules.rules().ai);
+    if (!create_knowledge(state, host, ai.knowledge)) {
+        ai.present = 0;
+        return;
+    }
+    scan_metal_spots(host, ai.knowledge);
+    uint8_t saved_present[OA_PLAYER_COUNT];
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index) {
+        saved_present[index] = state->players[index].present;
+        if (index != player)
+            state->players[index].present = 0;
+    }
+    const bool saved_plan = state->plan_matches;
+    if (state->profile_text != nullptr)
+        apply_script(state, host, state->profile_text, state->profile_length, state->plan_matches);
+    apply_downloadable_weights(state, host, player);
+    apply_downloadable_limits(state, host, player);
+    for (uint8_t index = 0; index < OA_PLAYER_COUNT; ++index)
+        if (index != player)
+            state->players[index].present = saved_present[index];
+    state->plan_matches = saved_plan;
+}
+
 } // namespace
 
 int32_t truncate_to_int32(double value) noexcept {
@@ -713,6 +750,18 @@ bool computer_players_initialize(ComputerPlayers* state, const ComputerHost& hos
             scan_metal_spots(host, ai.knowledge);
     state->initialized = 1;
     return true;
+}
+
+void computer_players_adopt(
+    ComputerPlayers* state, const ComputerHost& host, uint8_t player
+) noexcept {
+    if (state == nullptr || host.world == nullptr || !state->initialized ||
+        player >= OA_PLAYER_COUNT || state->players[player].present != 0)
+        return;
+    const auto& record = host.world->game.players[player];
+    if (record.in_use == 0 || record.status != OA_PLAYER_STATUS_COMPUTER)
+        return;
+    adopt_handed_player(state, host, player);
 }
 
 bool computer_players_reload_profile(

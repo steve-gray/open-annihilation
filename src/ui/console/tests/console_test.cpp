@@ -461,6 +461,20 @@ void test_masks_and_chat() {
     console::console_submit_chat_line(&f.con, "+SeaLevel 9", 1, &echo);
     CHECK(f.game().sea_level == 9);
 
+    // The passphrase does not grant cheats. With cheats off, +atm and +ai
+    // do nothing even though developer commands such as SeaLevel ran above.
+    f.con.cheats_enabled = false;
+    CHECK(console::console_chat_mask(&f.con) == 0x15);
+    const float held = f.game().players[0].metal;
+    const auto local = f.game().players[0].status;
+    mode = console::console_submit_chat_line(&f.con, "+atm", 1, &echo);
+    CHECK(mode == 1);
+    CHECK(f.game().players[0].metal == held);
+    mode = console::console_submit_chat_line(&f.con, "+ai", 1, &echo);
+    CHECK(mode == 1);
+    CHECK(f.game().players[0].status == local);
+    f.con.cheats_enabled = true;
+
     // A null line re-runs the previous command.
     f.run("ATM", 0x02);
     const float metal = f.game().players[0].metal;
@@ -648,6 +662,20 @@ void test_logo_and_control() {
     CHECK(f.world->player_info[0].state == OA_PLAYER_STATUS_COMPUTER);
     f.run("AI 0");
     CHECK(f.game().players[0].status == OA_PLAYER_STATUS_LOCAL);
+
+    // A mirrored slot is another machine's player. +AI flips the announced
+    // state and does not take the orders.
+    oa::Player& remote = f.game().players[2];
+    remote.in_use = 1;
+    remote.status = OA_PLAYER_STATUS_MIRRORED;
+    remote.index = 2;
+    remote.info = oa::oa_ref_from_index(2);
+    f.world->player_info[2].state = OA_PLAYER_STATUS_COMPUTER;
+    f.run("AI 2");
+    CHECK(remote.status == OA_PLAYER_STATUS_MIRRORED);
+    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_LOCAL);
+    f.run("AI 2");
+    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_COMPUTER);
 }
 
 void test_outcomes_and_kill() {
@@ -1013,7 +1041,15 @@ void test_hotkeys() {
     CHECK((f.game().outcome_flags & console::outcome_flag::debug_keys) == 0);
     CHECK(f.game().debug_overlay == 0);
 
-    // '\' re-runs the last console line.
+    // '\' re-runs the last line under the chat gate. Clock is an option, so
+    // it repeats with cheats still off. ATM repeats once cheats are allowed.
+    f.run("Clock");
+    const auto clock = console::console_flags(f.game()) & console::console_flag::clock;
+    console::hotkey_dispatch(&f.con, &keys, console::hotkey::repeat_command);
+    CHECK((console::console_flags(f.game()) & console::console_flag::clock) != clock);
+    f.run("Clock");
+    f.run("Clock");
+    f.con.cheats_enabled = true;
     f.run("ATM");
     const float metal = f.game().players[0].metal;
     console::hotkey_dispatch(&f.con, &keys, console::hotkey::repeat_command);
@@ -1095,22 +1131,23 @@ void key_team_menu(void*) {
     g_keys.calls.push_back("team menu");
 }
 
-// A mod's console rules: the classes of AI, Control and LOSType, the ATM
-// amount, and each one back at 3.1c's when the rules are.
+// A mod's console rules: AI and Control are cheats whatever
+// console.ai-control-cheat-group says, LOSType moves only under its own
+// rule, and the ATM amount follows console.atm-amount.
 void test_mod_console_rules() {
     namespace rules = oa::data::match_rules;
     const uint32_t cheat = console::command_class::cheat;
     const uint32_t chat_options =
         console::command_class::option | console::command_class::private_echo;
     {
-        // 3.1c: AI and Control are developer commands, LOSType an option.
+        // OA: AI and Control are cheats with the hack off. LOSType stays an option.
         Fixture f;
         console::console_apply_rules(&f.con, rules::MatchRules{});
-        CHECK(f.run("AI", cheat) == 0);
-        CHECK(f.run("Control 1", cheat) == 0);
+        CHECK(f.run("AI", cheat) == cheat);
+        CHECK(f.run("Control 1", cheat) == cheat);
         CHECK(f.run("LOSType", cheat) == 0);
         CHECK(f.run("LOSType", chat_options) == chat_options);
-        CHECK(f.run("AI", console::command_class::developer) == console::command_class::developer);
+        CHECK(f.run("AI", console::command_class::developer) == 0);
         CHECK(f.con.atm_amount == 1000.0f && !f.con.key_remaps && !f.con.team_menu_every_game);
     }
     {
@@ -1130,9 +1167,9 @@ void test_mod_console_rules() {
         );
         f.con.cheats_enabled = false;
         CHECK(console::console_submit_chat_line(&f.con, "+ai", 3, &echo) == 3);
-        // The 3.1c rules put the classes back.
+        // Turning the hack off leaves AI a cheat.
         console::console_apply_rules(&f.con, rules::MatchRules{});
-        CHECK(f.run("AI", cheat) == 0);
+        CHECK(f.run("AI", cheat) == cheat);
     }
     {
         Fixture f;
@@ -1150,7 +1187,7 @@ void test_mod_console_rules() {
             console::console_submit_chat_line(&f.con, "+LOSType", 3, &echo) ==
             console::kChatModeEveryone
         );
-        CHECK(f.run("AI", cheat) == 0);
+        CHECK(f.run("AI", cheat) == cheat);
     }
     {
         // ATM: the amount is added in single precision.
@@ -1206,7 +1243,7 @@ void test_key_remaps() {
     console::console_apply_rules(&f.con, mod);
     f.run("ATM");
     float metal = f.game().players[0].metal;
-    // Both still need the passphrase.
+    // F10 still needs the passphrase. Insert repeats only while the last line may run.
     console::hotkey_dispatch(&f.con, &keys, console::hotkey::insert);
     console::hotkey_dispatch(&f.con, &keys, console::hotkey::f10);
     CHECK(f.game().players[0].metal == metal);
@@ -1214,8 +1251,13 @@ void test_key_remaps() {
     f.run("Now Film Chris Include Reload Assert");
     f.run("ATM");
     metal = f.game().players[0].metal;
+    // The remapped backslash still does nothing. Insert repeats, and a cheat
+    // repeats only while cheats are allowed: the passphrase is not enough.
     console::hotkey_dispatch(&f.con, &keys, console::hotkey::repeat_command);
     CHECK(f.game().players[0].metal == metal);
+    console::hotkey_dispatch(&f.con, &keys, console::hotkey::insert);
+    CHECK(f.game().players[0].metal == metal);
+    f.con.cheats_enabled = true;
     console::hotkey_dispatch(&f.con, &keys, console::hotkey::insert);
     CHECK(f.game().players[0].metal == metal + 1000.0f);
     console::hotkey_dispatch(&f.con, &keys, console::hotkey::f10);
@@ -1225,6 +1267,264 @@ void test_key_remaps() {
     // Ctrl+F10 keeps its own key.
     console::hotkey_dispatch(&f.con, &keys, console::hotkey::control_f10);
     CHECK(f.game().capture_enabled != 0);
+}
+
+// Every listed code's gate. Universal commands run from the chat line with
+// cheats off. +atm, +nowisee, +ai, +control and a unit name do not, and the
+// passphrase does not let them. With cheats on they run, in the fixture
+// that stands for a skirmish or a campaign (both allow cheats) and for a
+// multiplayer game whose room allows them.
+void test_listed_command_gates() {
+    Fixture f;
+    const char* echo = nullptr;
+    const uint32_t options = console::command_class::option | console::command_class::private_echo;
+    const char* universal[] = {
+        "NoShake",
+        "ShootAll",
+        "SetShareMetal 10",
+        "SetShareEnergy 10",
+        "ShareRadar",
+        "ShareMetal",
+        "ShareEnergy",
+        "ShareMapping",
+        "ShareAll",
+        "Give 1 1 metal",
+        "Clock",
+        "SwitchAlt",
+        "BPS",
+        "Dither",
+        "Logo 1 0",
+        "ScreenChat",
+        "Contour 1",
+        "ShowRanges",
+        "SFX",
+        "Compression",
+        "Selectable",
+        "BigBrother",
+        "Gamma 10",
+        "Shadow",
+        "FShadow",
+        "TShadow",
+        "AntiAlias",
+        "Shading",
+        "Light 1 2 3",
+        "ScrollSpeed 4",
+        "Sound3D",
+        "CDStop",
+        "CDPlay 1",
+        "MusicMode 1",
+        "LOSType",
+        "Sing",
+        "IFace 1",
+        "NoMetal",
+        "NoEnergy",
+        "MakePoster 10 10",
+    };
+    for (const char* command : universal) {
+        const auto ran = f.run(command, options);
+        const std::string line = std::string("+") + command;
+        const auto mode = console::console_submit_chat_line(&f.con, line.c_str(), 3, &echo);
+        // BPS and Compression are registered by network play, not the console
+        // alone, so the option mask finds nothing here.
+        const bool extension_only =
+            std::strcmp(command, "BPS") == 0 || std::strcmp(command, "Compression") == 0;
+        if (extension_only) {
+            CHECK(ran == 0);
+            CHECK(mode == 3);
+            continue;
+        }
+        CHECK(ran == options);
+        const bool shared = std::strncmp(command, "ShootAll", 8) == 0 ||
+                            std::strncmp(command, "NoMetal", 7) == 0 ||
+                            std::strncmp(command, "NoEnergy", 8) == 0;
+        CHECK(mode == (shared ? console::kChatModeEveryone : console::kChatModeLocalOnly));
+    }
+    // BPS and Compression are registered by network play, not the console
+    // alone, so the option mask finds nothing here. The extension test
+    // covers them once that play is bound. They are still universal.
+    CHECK(f.run("BPS", options) == 0);
+    CHECK(f.run("Compression", options) == 0);
+
+    const auto metal = f.game().players[0].metal;
+    const auto local = f.game().local_player_index;
+    const auto status = f.game().players[1].status;
+    for (const char* command : {"atm", "nowisee", "ai 1", "control 1", "ARMCOM"}) {
+        const std::string line = std::string("+") + command;
+        CHECK(console::console_submit_chat_line(&f.con, line.c_str(), 3, &echo) == 3);
+    }
+    CHECK(f.game().players[0].metal == metal);
+    CHECK(f.game().local_player_index == local);
+    CHECK(f.game().players[1].status == status);
+    CHECK(g_rec.calls.empty() || g_rec.calls.back() != "create 0 1 0,0");
+
+    f.run("Now Film Chris Include Reload Assert");
+    CHECK(console::console_submit_chat_line(&f.con, "+atm", 3, &echo) == 3);
+    CHECK(f.game().players[0].metal == metal);
+    CHECK(console::console_submit_chat_line(&f.con, "+SeaLevel 4", 3, &echo) == 3);
+    CHECK(f.game().sea_level == 4);
+
+    f.con.cheats_enabled = true;
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+atm", 3, &echo) == console::kChatModeEveryone
+    );
+    CHECK(f.game().players[0].metal == metal + 1000.0f);
+    f.game().visibility_flags = console::visibility_flag::mapping;
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+nowisee", 3, &echo) ==
+        console::kChatModeEveryone
+    );
+    CHECK((f.game().visibility_flags & console::visibility_flag::mapping) == 0);
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+ai 1", 3, &echo) == console::kChatModeEveryone
+    );
+    CHECK(f.game().players[1].status == OA_PLAYER_STATUS_LOCAL);
+    CHECK(f.world->player_info[1].state == OA_PLAYER_STATUS_LOCAL);
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+ai 1", 3, &echo) == console::kChatModeEveryone
+    );
+    CHECK(f.game().players[1].status == OA_PLAYER_STATUS_COMPUTER);
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+control 1", 3, &echo) ==
+        console::kChatModeEveryone
+    );
+    CHECK(f.game().local_player_index == 1);
+    CHECK(f.game().viewpoint_player == 1);
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+control 0", 3, &echo) ==
+        console::kChatModeEveryone
+    );
+    CHECK(f.game().local_player_index == 0);
+    CHECK(f.game().viewpoint_player == 0);
+
+    // An unknown word is still plain chat, not a cheat and not a unit.
+    g_rec.calls.clear();
+    CHECK(console::console_submit_chat_line(&f.con, "+xyzzy", 3, &echo) == 3);
+    CHECK(g_rec.calls.empty());
+}
+
+// +UNITNAME creates the unit at the pointer for player 0, or for the player
+// named after it. A player that is not in the game is announced and no unit
+// is created. With cheats off the name does nothing, passphrase or not.
+void test_unit_name_spawn() {
+    Fixture f;
+    console::game_store(
+        f.game(), console::game_offset::cursor_position, oa::FixedVec3{100 << 16, 0, 200 << 16}
+    );
+    f.con.cheats_enabled = true;
+    const char* echo = nullptr;
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+ARMCOM", 3, &echo) == console::kChatModeEveryone
+    );
+    CHECK((g_rec.calls == std::vector<std::string>{"create 0 1 100,200"}));
+    g_rec.calls.clear();
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+ARMSOLAR 1", 3, &echo) ==
+        console::kChatModeEveryone
+    );
+    CHECK((g_rec.calls == std::vector<std::string>{"create 1 3 100,200"}));
+    g_rec.calls.clear();
+    g_rec.messages.clear();
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+ARMCOM 4", 3, &echo) ==
+        console::kChatModeEveryone
+    );
+    CHECK(g_rec.calls.empty());
+    CHECK(g_rec.messages.back() == "2:No such player");
+    g_rec.messages.clear();
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+ARM* 99", 3, &echo) ==
+        console::kChatModeEveryone
+    );
+    CHECK(g_rec.calls.empty());
+    CHECK(g_rec.messages.back() == "2:No such player");
+
+    // A mirrored player is named, so the notice is not "No such player",
+    // and this machine does not create the unit.
+    oa::Player& remote = f.game().players[2];
+    remote.in_use = 1;
+    remote.status = OA_PLAYER_STATUS_MIRRORED;
+    remote.index = 2;
+    remote.info = oa::oa_ref_from_index(2);
+    g_rec.calls.clear();
+    g_rec.messages.clear();
+    CHECK(
+        console::console_submit_chat_line(&f.con, "+ARMCOM 2", 3, &echo) ==
+        console::kChatModeEveryone
+    );
+    CHECK(g_rec.calls.empty());
+    CHECK(g_rec.messages.empty());
+
+    f.con.cheats_enabled = false;
+    g_rec.calls.clear();
+    CHECK(console::console_submit_chat_line(&f.con, "+ARMCOM", 3, &echo) == 3);
+    CHECK(g_rec.calls.empty());
+    f.run("Now Film Chris Include Reload Assert");
+    CHECK(console::console_submit_chat_line(&f.con, "+ARMCOM", 3, &echo) == 3);
+    CHECK(g_rec.calls.empty());
+}
+
+// A received line runs the shared commands and leaves +ATM and +Control to
+// the machine that typed them.
+void test_remote_command_lines() {
+    Fixture f;
+    f.con.cheats_enabled = true;
+    f.game().players[0].metal = 3.0f;
+    console::console_apply_remote_line(&f.con, "<Alpha> +atm");
+    CHECK(f.game().players[0].metal == 3.0f);
+    console::console_apply_remote_line(&f.con, "<Alpha> +control 1");
+    CHECK(f.game().local_player_index == 0);
+    console::console_apply_remote_line(&f.con, "<Alpha> +shootall");
+    CHECK((console::console_flags(f.game()) & console::console_flag::shoot_all) != 0);
+    console::console_apply_remote_line(&f.con, "<Alpha> +nometal 1 40");
+    CHECK(f.game().players[1].metal == 40.0f);
+
+    // Player 0 is local, so this machine simulates it and +AI takes it.
+    // A bare +AI names the sender, even when this machine's local player is someone else.
+    f.game().local_player_index = 1;
+    console::console_apply_remote_line(&f.con, "<Alpha> +ai", 0);
+    CHECK(f.game().players[0].status == OA_PLAYER_STATUS_COMPUTER);
+    CHECK(f.world->player_info[0].state == OA_PLAYER_STATUS_COMPUTER);
+    CHECK(f.game().players[1].status == OA_PLAYER_STATUS_COMPUTER);
+    console::console_apply_remote_line(&f.con, "<Alpha> +ai", 0);
+    CHECK(f.game().players[0].status == OA_PLAYER_STATUS_LOCAL);
+    f.game().local_player_index = 0;
+
+    console::game_store(
+        f.game(), console::game_offset::cursor_position, oa::FixedVec3{80 << 16, 0, 90 << 16}
+    );
+    g_rec.calls.clear();
+    console::console_apply_remote_line(&f.con, "<Alpha> +CORCOM 1");
+    CHECK((g_rec.calls == std::vector<std::string>{"create 1 2 80,90"}));
+    g_rec.calls.clear();
+    oa::Player& remote = f.game().players[2];
+    remote.in_use = 1;
+    remote.status = OA_PLAYER_STATUS_MIRRORED;
+    remote.index = 2;
+    remote.info = oa::oa_ref_from_index(2);
+    f.world->player_info[2].state = OA_PLAYER_STATUS_LOCAL;
+    console::console_apply_remote_line(&f.con, "<Alpha> +ai 2");
+    CHECK(remote.status == OA_PLAYER_STATUS_MIRRORED);
+    CHECK(f.world->player_info[2].state == OA_PLAYER_STATUS_COMPUTER);
+    console::console_apply_remote_line(&f.con, "<Alpha> +ARMCOM 2");
+    CHECK(g_rec.calls.empty());
+
+    f.con.cheats_enabled = false;
+    const auto status = f.game().players[1].status;
+    console::console_apply_remote_line(&f.con, "<Alpha> +ai 1");
+    CHECK(f.game().players[1].status == status);
+    console::console_apply_remote_line(&f.con, "<Alpha> +ARMCOM 1");
+    CHECK(g_rec.calls.empty());
+    // A universal shared command still runs with cheats off.
+    f.game().players[0].metal = 9.0f;
+    console::console_apply_remote_line(&f.con, "<Alpha> +nometal");
+    CHECK(f.game().players[0].metal == 0.0f);
+    // A bare +NoMetal names the sender, not this machine's local player.
+    f.game().local_player_index = 1;
+    f.game().players[0].metal = 9.0f;
+    f.game().players[1].metal = 4.0f;
+    console::console_apply_remote_line(&f.con, "<Alpha> +nometal", 0);
+    CHECK(f.game().players[0].metal == 0.0f);
+    CHECK(f.game().players[1].metal == 4.0f);
 }
 
 // Tab opens the team menu outside multiplayer under the alliance-menu rule.
@@ -1275,6 +1575,9 @@ int main() {
     test_indexed_names();
     test_mod_console_rules();
     test_key_remaps();
+    test_listed_command_gates();
+    test_unit_name_spawn();
+    test_remote_command_lines();
     test_team_menu_every_game();
     if (g_failures != 0) {
         std::fprintf(stderr, "%d check(s) failed\n", g_failures);
