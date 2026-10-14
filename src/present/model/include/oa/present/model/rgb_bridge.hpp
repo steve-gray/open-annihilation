@@ -93,14 +93,27 @@ struct BridgeBytes {
     std::size_t count{}; ///< bytes in use
     std::size_t room{};  ///< bytes the block holds
 
+    /// Returns the block.
+    ///
+    /// @return the block, or null
     [[nodiscard]] uint8_t* data() noexcept { return storage; }
 
+    /// Returns the block, read only.
+    ///
+    /// @return the block, or null
     [[nodiscard]] const uint8_t* data() const noexcept { return storage; }
 
+    /// Returns the bytes in use.
+    ///
+    /// @return the bytes in use
     [[nodiscard]] std::size_t size() const noexcept { return count; }
 
+    /// Returns the bytes the block holds.
+    ///
+    /// @return the bytes the block holds
     [[nodiscard]] std::size_t capacity() const noexcept { return room; }
 
+    /// Frees the block and empties it.
     void release() noexcept {
         std::free(storage);
         storage = nullptr;
@@ -112,8 +125,15 @@ struct BridgeBytes {
     BridgeBytes(const BridgeBytes&) = delete;
     BridgeBytes& operator=(const BridgeBytes&) = delete;
 
+    /// Takes another block's bytes, leaving it empty.
+    ///
+    /// @param[in,out] other the block given up
     BridgeBytes(BridgeBytes&& other) noexcept { *this = std::move(other); }
 
+    /// Frees this block and takes another's bytes, leaving it empty.
+    ///
+    /// @param[in,out] other the block given up
+    /// @return this block
     BridgeBytes& operator=(BridgeBytes&& other) noexcept {
         if (this != &other) {
             release();
@@ -127,6 +147,7 @@ struct BridgeBytes {
         return *this;
     }
 
+    /// Frees the block.
     ~BridgeBytes() { release(); }
 };
 

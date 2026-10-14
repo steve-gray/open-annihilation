@@ -106,16 +106,22 @@ void ease_within_budget(int32_t wide, int32_t high, uint64_t budget, bool expect
     for (int step = 0; step < 10000 && zoom != 1.0F; ++step) {
         zoom = ease_zoom(zoom, 1.0F);
         const bool held = bridge_begin(bridge, frame.view(), area, zoom, palette);
-        CHECK(picture_bytes(bridge) <= budget);
+        const std::size_t held_bytes = picture_bytes(bridge);
+        CHECK(held_bytes <= budget);
+        if (held_bytes > peak)
+            peak = held_bytes;
         if (!held)
             CHECK(bridge.refused_bytes > budget || bridge.refused_bytes == 0);
-        (void)held;
     }
     CHECK(zoom == 1.0F);
     CHECK(bridge.buffer_growths - growths_before <= 16);
     const std::size_t before_release = picture_bytes(bridge);
+    // The two blocks a frame at zoom 1 needs. A budget below that draws this
+    // battlefield's units as dots at every zoom.
+    const uint64_t at_rest =
+        uint64_t{2} * (static_cast<uint64_t>(wide) * static_cast<uint64_t>(high) + 1);
     for (uint32_t step = 0; step < bridge_release_frames; ++step)
-        CHECK(bridge_begin(bridge, frame.view(), area, 1.0F, palette));
+        CHECK(bridge_begin(bridge, frame.view(), area, 1.0F, palette) == (at_rest <= budget));
     const std::size_t after_release = picture_bytes(bridge);
     CHECK(after_release <= budget);
     if (expect_release) {
