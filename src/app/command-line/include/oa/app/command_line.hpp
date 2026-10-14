@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // Start-up switches of the 3.1c command line: "-x" or "/x" single-letter
-// switches, the "-b" word options and a bare language argument. Letters the
-// engine does not handle itself are offered to an optional SwitchHandler.
+// switches, the "-b" word options and a bare language argument, read from one
+// line split at blanks and tabs, or from the arguments the system has already
+// split, each one word. Letters the engine does not handle itself are offered
+// to an optional SwitchHandler.
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace oa::app::command_line {
 
@@ -101,6 +104,27 @@ struct SwitchHandler {
 /// @quirk "-b" that no handler takes compares the whole token, switch
 ///        character included, with "lock", so it never sets kGameLocked.
 Status parse(const char* line, Switches& switches, const SwitchHandler* handler = nullptr) noexcept;
+
+/// Parses the arguments a program was started with, each one word, into `switches`.
+///
+/// Reads the words as the line overload reads its tokens, except that a
+/// blank or tab inside a word does not split it: the system has already
+/// split the command line, honouring its quotes, so a file name with a space
+/// in it stays one word, apart from its switch or attached to it. (3.1c
+/// splits its whole line again, quotes included, so such a name is two words
+/// there, and no launcher written for 3.1c relies on it.) Blanks and tabs at
+/// either end of a word are dropped, and a word with nothing else is no word,
+/// as when the line is split. The words count as the line they make joined
+/// with one blank between each: its length is checked against
+/// kMaximumLineBytes, and "-r" takes the rest of that line.
+///
+/// @param words The arguments, NUL-terminated, in order.
+/// @param[in,out] switches Receives the switch values, as the line overload does.
+/// @param handler Takes the letters the engine does not handle; null offers none.
+/// @return As the line overload returns for the line the words make.
+Status parse(
+    std::span<const char* const> words, Switches& switches, const SwitchHandler* handler = nullptr
+) noexcept;
 
 /// Stores the forced disc drive flag that "-f" sets.
 ///

@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace cl = oa::app::command_line;
 
@@ -247,6 +248,102 @@ void registration_and_limits() {
         "a long language word keeps 63 characters"
     );
 }
+
+// The arguments a program is started with are each one word: a blank or tab
+// inside one does not split it, and everything else reads as the line does.
+void whole_arguments() {
+    Offered offered;
+    const cl::SwitchHandler handler{&offered, take_probe, reset_probe};
+    cl::Switches switches;
+    const std::vector<const char*> spaced{
+        "-s", "Lang uage", "-X", "/Users/me/Launch Files/host.oalaunch", "-Qattached\tvalue", "-dF"
+    };
+    require(cl::parse(spaced, switches, &handler) == cl::Status::run, "spaced words run");
+    require(
+        offered.letters == "xq" && offered.argument == "/Users/me/Launch Files/host.oalaunch" &&
+            offered.attached == "|attached\tvalue|" && switches.skip_intro == 1,
+        "a word with a blank or tab in it is one argument, apart or attached"
+    );
+    require(
+        std::strcmp(switches.language, "Lang uage") == 0 && switches.playback_suppressed == 1 &&
+            switches.display_option == cl::display_option::f_suffix,
+        "a bare word with a space is the language, and the switches around it apply"
+    );
+    require(offered.resets == 1, "one reset per parse of words");
+
+    // Blanks and tabs at a word's ends are dropped, and a word of nothing
+    // else is no word, as when the line is split.
+    offered = Offered{};
+    const std::vector<const char*> padded{" -x", "", " \t ", "\tnext word ", "  english "};
+    require(cl::parse(padded, switches, &handler) == cl::Status::run, "padded words run");
+    require(
+        offered.letters == "x" && offered.argument == "next word" &&
+            std::strcmp(switches.language, "english") == 0,
+        "the ends of a word are trimmed and empty words skipped"
+    );
+    offered = Offered{};
+    const std::vector<const char*> last{"-x", "", " "};
+    require(cl::parse(last, switches, &handler) == cl::Status::run, "-x before empty words");
+    require(offered.argument == "(none)", "empty words give a switch no argument");
+
+    // The same words as a line are split again, as 3.1c splits its line.
+    offered = Offered{};
+    cl::Switches split;
+    require(
+        cl::parse("-s -X /Users/me/Launch Files/host.oalaunch", split, &handler) ==
+                cl::Status::run &&
+            offered.argument == "/Users/me/Launch" &&
+            std::strcmp(split.language, "Files/host.oalaunch") == 0,
+        "the line overload still splits at blanks"
+    );
+
+    // -r takes the rest of the line the words make, one blank between each.
+    cl::Switches registered;
+    const std::vector<const char*> registration{
+        "-s", "-r", "C:\\Program Files\\TA\\Game.exe", "-c", "my game.ini"
+    };
+    require(
+        cl::parse(registration, registered) == cl::Status::register_application, "-r among words"
+    );
+    require(
+        std::strcmp(registered.registration, "C:\\Program Files\\TA\\Game.exe -c my game.ini") ==
+                0 &&
+            registered.playback_suppressed == 1,
+        "-r takes the later words whole"
+    );
+    const std::vector<const char*> attached{"-rC:\\TA Dir\\Game.exe", "-t60"};
+    require(
+        cl::parse(attached, registered) == cl::Status::register_application &&
+            std::strcmp(registered.registration, "C:\\TA Dir\\Game.exe -t60") == 0,
+        "-r with its text attached"
+    );
+
+    // Without a handler a reserved letter still stops the parse.
+    cl::Switches reserved;
+    const std::vector<const char*> launch{"-s", "-c", "a b.ini"};
+    require(
+        cl::parse(launch, reserved) == cl::Status::unavailable_switch &&
+            reserved.unavailable_switch == 'c' && reserved.playback_suppressed == 1,
+        "-c without a handler is unavailable among words too"
+    );
+
+    // The limit counts each word and one separator between each.
+    const std::string half(2047, 'a');
+    const std::string longer(2048, 'a');
+    const std::vector<const char*> fits{half.c_str(), half.c_str()};
+    const std::vector<const char*> over{half.c_str(), longer.c_str()};
+    const std::vector<const char*> separators(2049, "a");
+    const std::vector<const char*> just_fits(2048, "a");
+    cl::Switches limited;
+    require(cl::parse(fits, limited) == cl::Status::run, "4095 characters of words");
+    require(cl::parse(over, limited) == cl::Status::line_too_long, "4096 characters of words");
+    require(cl::parse(just_fits, limited) == cl::Status::run, "2048 one-letter words");
+    require(
+        cl::parse(separators, limited) == cl::Status::line_too_long,
+        "2049 one-letter words and their separators"
+    );
+    require(cl::parse(std::vector<const char*>{}, limited) == cl::Status::run, "no words");
+}
 } // namespace
 
 int main() {
@@ -256,6 +353,7 @@ int main() {
     flags();
     words_and_debug_switches();
     registration_and_limits();
+    whole_arguments();
     if (failures != 0)
         return 1;
     std::puts("command line passed");

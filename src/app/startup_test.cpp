@@ -875,10 +875,83 @@ void mod_install_options() {
     );
 }
 
+// Each argument is one word of the game's switches, spaces and all: a file
+// whose path has a space in it reaches -c whole, however -c is written, a
+// word after it is still the language, and the line's limit counts the
+// words and one separator between each.
+void switch_words_keep_their_spaces() {
+    namespace cl = oa::app::command_line;
+    std::vector<std::string> files;
+    cl::SwitchHandler handler{};
+    handler.context = &files;
+    handler.take = [](void* context, char letter, const cl::SwitchArguments* arguments, uint32_t*) {
+        if (letter != 'c')
+            return 0;
+        const char* file = *arguments->attached != '\0' ? arguments->attached
+                                                        : arguments->next_token(arguments->tokens);
+        static_cast<std::vector<std::string>*>(context)->emplace_back(
+            file != nullptr ? file : "(none)"
+        );
+        return 1;
+    };
+    oa::app::Extension table{};
+    table.context = &handler;
+    table.switch_handler = [](void* context) -> const cl::SwitchHandler* {
+        return static_cast<const cl::SwitchHandler*>(context);
+    };
+    const std::string spaced_launch = "/Users/me/Launch Files/host.oalaunch";
+    const std::string spaced_settings = "C:\\Program Files\\TA Forever\\totala.ini";
+    const auto took = [&](const std::vector<const char*>& arguments, const std::string& file) {
+        files.clear();
+        try {
+            const auto options = parse(arguments, table);
+            return files == std::vector<std::string>{file} && options.launch.language[0] == '\0';
+        } catch (const std::runtime_error& error) {
+            std::fprintf(stderr, "refused: %s\n", error.what());
+            return false;
+        }
+    };
+    for (const char* letter : {"-c", "-C", "/c", "/C"}) {
+        const std::string attached = letter + spaced_launch;
+        expect(
+            took({letter, spaced_launch.c_str()}, spaced_launch) &&
+                took({letter, spaced_settings.c_str()}, spaced_settings) &&
+                took({attached.c_str()}, spaced_launch),
+            (std::string(letter) + " takes a path with a space in it whole, apart or attached")
+                .c_str()
+        );
+    }
+    files.clear();
+    const auto with_language = parse({"-s", "-c", spaced_launch.c_str(), "german", "-w"}, table);
+    expect(
+        files == std::vector<std::string>{spaced_launch} &&
+            std::string_view(with_language.launch.language) == "german" &&
+            with_language.launch.system_sound == 1,
+        "the word after a spaced path is the language, and the switches around it apply"
+    );
+    files.clear();
+    const auto tabbed = parse({"-c", "Launch\tFiles/host.oalaunch"}, table);
+    expect(
+        files == std::vector<std::string>{"Launch\tFiles/host.oalaunch"} &&
+            tabbed.launch.language[0] == '\0',
+        "a tab inside an argument does not split it either"
+    );
+    // A switch line of 4095 characters is read; one of 4096 is refused.
+    const std::string half(2047, 'a');
+    const std::string longer(2048, 'a');
+    expect(rejection({half.c_str(), half.c_str()}, table).empty(), "a line just under the limit");
+    expect(
+        rejection({half.c_str(), longer.c_str()}, table) ==
+            "the game switches exceed the command-line limit",
+        "the limit counts each word and the separator between them"
+    );
+}
+
 int main() {
     renderer_ladder_options();
     game_files_options();
     mod_install_options();
+    switch_words_keep_their_spaces();
     options_by_name();
     value_options();
     const auto plain = parse({"--headless-check"});
