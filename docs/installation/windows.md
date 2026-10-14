@@ -1,16 +1,26 @@
 # Installing on Windows
 
-Open Annihilation has three Windows packages. One of them runs on every
-Windows from XP SP3 to Windows 11. No game data is included: you also need
-the game data from your own copy of Total Annihilation.
+Open Annihilation has four Windows packages, and an installer for each.
+Together they cover Windows 95 through Windows 11, including Windows on
+ARM. No game data is included: you also need the game data from your own
+copy of Total Annihilation.
 
 ## 1. Choose your package
 
 | Your computer | Package |
 |---|---|
-| 64-bit Windows 7, 8, 10 or 11: most PCs | `open-annihilation-<version>-windows-x64.zip` |
-| 32-bit Windows, including Windows XP SP3, on a Pentium III, Athlon XP or newer processor | `open-annihilation-<version>-windows-x86.zip` |
+| 64-bit Windows 7, 8, 10, 11 or later | `open-annihilation-<version>-windows-x64.zip` |
+| 32-bit Windows from XP SP3 on, on a Pentium III, Athlon XP or newer processor | `open-annihilation-<version>-windows-x86.zip` |
 | Windows 11 on ARM | `open-annihilation-<version>-windows-arm64.zip` |
+| Windows 95, 98 or Me | `open-annihilation-<version>-windows-95.zip` |
+
+The Windows 95 package runs on Windows 95 as first released and OSR2,
+Windows 98 and Windows Me. It is 32-bit x86, for a Pentium II or newer
+with 128 MB of memory, and it does not need SSE.
+
+Each zip has a matching installer,
+`open-annihilation-<version>-<package>-setup.exe`, made from the same
+files.
 
 To see which Windows you have:
 
@@ -21,23 +31,57 @@ To see which Windows you have:
 - **Windows XP:** right-click **My Computer**, choose **Properties** and read
   the **General** tab. Unless it says "x64 Edition", it is 32-bit.
 
-If you are not sure, the 32-bit package runs on 64-bit Windows too.
+If you are not sure, the 32-bit package runs on 64-bit Windows too. Its
+installer uses **Program Files (x86)** there.
+
+The Windows 95 installer also runs on later Windows, including Windows NT,
+and does not refuse them. Use the package made for your Windows when there
+is one. Windows XP and later 32-bit Windows use the 32-bit package.
 
 ## 2. Download it
 
 1. Open the latest release on GitHub:
    [github.com/open-annihilation/open-annihilation/releases/latest](https://github.com/open-annihilation/open-annihilation/releases/latest).
-2. Under **Assets**, download your package.
+2. Under **Assets**, download the installer or the zip for your package.
 
-## 3. Unzip it
+## 3. Install it
+
+### With the installer
+
+1. Double-click the setup program. Windows may ask for an administrator,
+   because the game is installed for everyone who uses the computer.
+2. The pages are a welcome, the licence (`LICENSE`), a desktop shortcut
+   (on unless you turn it off), the folder, the install, and a finish page
+   that offers to start Open Annihilation.
+3. The folder starts as `Program Files\Open Annihilation`. The 64-bit and
+   ARM packages use `C:\Program Files` on 64-bit Windows. The 32-bit package
+   uses `C:\Program Files` on 32-bit Windows and `C:\Program Files (x86)` on
+   64-bit Windows. The Windows 95 package uses `C:\Program Files`.
+4. A Start Menu folder named **Open Annihilation** holds the game and the
+   uninstaller.
+
+Running the installer again replaces the copy already there, in the same
+folder.
+
+A silent install, for a script, is the setup program followed by `/S`. To
+choose the folder, add `/D=` and the full path as the last thing on the
+command line, with no quotes around the path:
+
+```bat
+open-annihilation-<version>-windows-x64-setup.exe /S /D=C:\Games\Open Annihilation
+```
+
+### From the zip
 
 1. Right-click the downloaded `.zip` and choose **Extract All…**. On
    Windows XP this opens the Extraction Wizard.
 2. Choose where to put it, for example `C:\Games`, and extract.
 
 This makes a folder such as `open-annihilation-<version>-windows-x64` that
-holds `open-annihilation.exe`. Always start the game from this folder,
-never from inside the `.zip`.
+holds `open-annihilation.exe`, `oa-intro.exe`, `oa-tool.exe`, `LICENSE`,
+`ATTRIBUTIONS.md`, `licenses/`, `fonts/`, `languages/interface.tdf` and
+`registries/`. Always start the game from this folder, never from inside
+the `.zip`.
 
 ## 4. Get the game data
 
@@ -64,7 +108,9 @@ game says so if it cannot open the folder.
 
 ## 5. Start the game
 
-1. Double-click `open-annihilation.exe` in the folder from step 3.
+1. Start **Open Annihilation** from the Start Menu or the desktop shortcut,
+   or double-click `open-annihilation.exe` in the install folder or the
+   folder from step 3.
 2. Windows may say **"Windows protected your PC"**, because the program is
    new to it. Click **More info**, then **Run anyway**. On Windows XP, a
    security warning may ask whether to run the file: click **Run**.
@@ -124,8 +170,11 @@ game, TCP ports 2300 to 2400 and UDP ports 2350 to 2400.
 
   On a newer Windows that plays no sound, `set OA_SOUND_OUTPUT=waveout`
   chooses the game's own output in the same way.
-- Windows XP draws no icon stored the way the game's is, so the program and
-  `.oamod` files show Windows' plain icons there.
+- Windows XP, and Windows 95, 98 and Me, draw no icon stored the way the
+  game's is, so the program and `.oamod` files show Windows' plain icons
+  there.
+- Windows 95, 98 and Me use the Windows 95 package: a Pentium II or newer,
+  128 MB of memory, and no need for SSE.
 
 ## Where it keeps its files
 
@@ -184,14 +233,27 @@ command, still takes the screenshots and films.
 
 ## Updating and removing
 
-- **To update:** unzip the newer package and use its folder. Your settings
-  are kept.
-- **To remove:** delete the game's folder. To remove your settings and logs
-  too, delete the Local AppData folder above; your saved games,
-  screenshots, films, recordings and mods are in the Open Annihilation
-  folder in Documents. To make Windows forget the game as the opener of
-  `.oamod`, `.oalang`, `.oamap` and `.oareg` files, delete these eight keys
-  with the Registry Editor:
+- **To update an installed copy:** run the newer setup program. It replaces
+  the copy in the same folder. Your settings are kept, and so is the Open
+  Annihilation folder in Documents.
+- **To update a zip copy:** unzip the newer package and use its folder.
+  Your settings are kept.
+- **To remove an installed copy:** open **Settings** or **Control Panel**,
+  choose **Apps** or **Add or Remove Programs**, select **Open
+  Annihilation** and remove it. Or open the Start Menu folder and run
+  **Uninstall Open Annihilation**, or run `Uninstall.exe` in the install
+  folder. A silent removal is `Uninstall.exe /S`.
+- The uninstaller removes the files it installed, the Start Menu folder,
+  and the desktop shortcut when the installer added that shortcut. It does
+  not remove the Open Annihilation folder in Documents, so saved games,
+  screenshots, films, recordings and mods stay. It does not remove a copy
+  of the game you unzipped somewhere else.
+- **To remove a zip copy:** delete that folder. The Open Annihilation
+  folder in Documents is separate and stays until you delete it yourself.
+- **To remove your settings and logs too,** delete the Local AppData folder
+  above. To make Windows forget the game as the opener of `.oamod`,
+  `.oalang`, `.oamap` and `.oareg` files, delete these eight keys with the
+  Registry Editor:
   `HKEY_CURRENT_USER\Software\Classes\.oamod`,
   `HKEY_CURRENT_USER\Software\Classes\OpenAnnihilation.Mod`,
   `HKEY_CURRENT_USER\Software\Classes\.oalang`,

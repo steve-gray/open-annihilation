@@ -63,6 +63,7 @@
           windowsName,
           toolchain,
           definitions,
+          fullPackage ? false,
         }:
         let
           zlib = cross.zlib.override { shared = false; };
@@ -85,7 +86,7 @@
         in
         cross.callPackage ./tools/nix/windows.nix {
           src = self;
-          inherit version freetype zlib sdl3 toolchain definitions;
+          inherit version freetype zlib sdl3 toolchain definitions fullPackage;
           inherit pname;
           description = "Open Source port of the Total Annihilation & TA: Kingdoms engines, for ${windowsName}";
           textFonts = (linux pkgs).textFonts;
@@ -125,8 +126,11 @@
             definitions = [ ];
           }).game;
 
-          # `nix build .#win95` builds the executables for Windows 95, from the
-          # one set whose toolchain tools/nix/win95-toolchain.nix rebuilt.
+          # `nix build .#win95` builds the Windows 95 package, from the one set
+          # whose toolchain tools/nix/win95-toolchain.nix rebuilt. fullPackage
+          # installs the notices, the interface catalogue and oa-intro.exe
+          # beside the executables, in the same shape as the other Windows
+          # packages.
           win95 =
             let
               win95Pkgs = mkWin95Pkgs system;
@@ -136,6 +140,7 @@
               windowsName = "Windows 95";
               toolchain = "i686-w64-mingw32.cmake";
               definitions = [ "-DOA_WINDOWS_95=ON" "-DOA_X86_FLOAT=fpu" ];
+              fullPackage = true;
             }).game;
         }
       );
