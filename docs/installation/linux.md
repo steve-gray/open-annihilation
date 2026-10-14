@@ -124,6 +124,11 @@ cd open-annihilation-<version>-linux-x86_64
 
   The game draws straight to the screen.
 
+A later start on a desktop opens as you left it: full screen, or the
+window at the same size and place, on the same display when that display
+is still connected. The first start opens a window. From the text console
+the game still draws straight to the screen.
+
 If the shell says `Permission denied`, the unzip tool lost the program's
 permission: run `chmod +x open-annihilation` once.
 

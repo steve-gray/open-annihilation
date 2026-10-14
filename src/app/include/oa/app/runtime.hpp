@@ -805,6 +805,10 @@ class Runtime final : public menu::Host,
     /// @param full_screen the switch the movies used
     void take_full_screen_switch(const FullScreenSwitch& full_screen) noexcept;
 
+    /// Points the remembered window place at this runtime's preferences, so a
+    /// change is written into the file the runtime flushes.
+    void attach_window_place();
+
     /// Hands the runtime the names of the renderer it borrows, which the
     /// "+stats" overlay's renderer row shows.
     ///

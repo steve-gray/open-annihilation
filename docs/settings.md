@@ -360,6 +360,18 @@ the game draws its text and how the modern fonts draw it.
     the battlefield. A size chosen in full screen is the window's size
     once you leave full screen.
 
+  The next start opens as you left it. Full screen opens full screen on the
+  same display when that display is still connected, and otherwise on the
+  main display, at this Screen size. A window opens at the size and place
+  it had, on that display when it is still connected and otherwise on the
+  main one, kept wholly on the screen and made smaller when that display
+  is smaller. Alt+Enter, the window's own full-screen button, moving or
+  resizing the window, and Screen size are remembered as they happen, and
+  again when the game closes. A start with `-d`, or with `--resolution`,
+  uses that choice for the one run and does not change what is remembered.
+  The first start is unchanged: full screen on Windows, and a window on
+  the other desktops.
+
   A size the display no longer offers, as when another monitor is
   connected, starts at Desktop; the setting keeps it for when the display
   offers it again. The options' Screen Size, under Visuals, lists the same
