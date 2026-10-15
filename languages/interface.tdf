@@ -866,6 +866,14 @@
 	it=Pausa automatica: solo l'host può riprendere;
 	}
 
+[Available]
+	{
+	de=Verfügbar;
+	fr=Disponible;
+	es=Disponible;
+	it=Disponibile;
+	}
+
 [B]
 	{
 	de=B;

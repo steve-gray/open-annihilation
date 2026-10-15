@@ -284,12 +284,16 @@ bool query_matches(const MapCard& card, std::string_view query) {
            holds(card.source_name, query);
 }
 
-std::string overlay_name(const MapCard& card) {
+std::string overlay_name(const MapCard& card, bool downloading) {
     const bool pack =
         card.origin == MapCard::Origin::installed || card.origin == MapCard::Origin::online;
-    if (pack && !card.pack_name.empty() &&
-        (same_text(card.pack_name, card.title) || same_text(card.pack_name, name_stem(card.name))))
-        return "Downloaded";
+    if (downloading && pack)
+        return "Downloading…";
+    const bool named_for_map =
+        !card.pack_name.empty() &&
+        (same_text(card.pack_name, card.title) || same_text(card.pack_name, name_stem(card.name)));
+    if (pack && named_for_map)
+        return card.origin == MapCard::Origin::installed ? "Downloaded" : "Available";
     if (!card.source_name.empty())
         return card.source_name;
     return card.pack_name;

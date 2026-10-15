@@ -46,9 +46,11 @@ layout names, and acts on what the screen returns.
   by title, ignoring ASCII case, then by name, wherever the map comes from.
   A selection that no longer shows is cleared. `source_counts` counts each
   pill without the source filter, so the pills read "All (324)".
-- `overlay_name(card)`: "Downloaded" when an installed or online pack is
-  named for the map (its title, or the stem of its game name before '@'),
-  otherwise the card's source name, otherwise the pack's name.
+- `overlay_name(card, downloading)`: "Downloaded" when an installed pack is
+  named for the map (its title, or the stem of its game name before '@').
+  The same map offered by a catalogue and not installed shows "Available". While
+  that card's pack is downloading it shows "Downloading…". Any other card
+  shows its source name, or else the pack's name.
 - `primary_action(browser)`: Select for a game, mod or installed map that
   fits; Download and select for an online map that fits or whose fit is not
   yet known; disabled, with its reason, for a map that does not fit;

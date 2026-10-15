@@ -217,7 +217,7 @@ struct Ui {
     /// install, they live on with the runtime; a sound played or a setting
     /// read after the callback returns uses these, never the context.
     void* host = nullptr;
-    const ScreenServices* services = nullptr;
+    const app::ScreenServices* services = nullptr;
     uint32_t last_click_ms = 0;
     int32_t last_click_index = kNoControl;
     bool in_lobby = false;
@@ -4509,7 +4509,7 @@ void multiplayer_reload_unit_headers(ScreenContext* ctx) {
     auto* previous = state.ctx;
     const oa::AssetStore* previous_assets = state.assets;
     void* previous_host = state.host;
-    const ScreenServices* previous_services = state.services;
+    const app::ScreenServices* previous_services = state.services;
     remember_screen(state, ctx);
     const oa::data::defs::UnitHeaderLoader loader{nullptr, [](void*, Game* game) {
                                                       auto& units = ui().units;

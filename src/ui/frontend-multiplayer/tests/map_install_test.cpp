@@ -176,7 +176,7 @@ void installed_map_is_read_after_the_screen_returns() {
     // The install has finished. The callback that showed the room has
     // returned, and its context's install slot no longer names the install.
     room.installed = true;
-    ctx.assets = reinterpret_cast<oa::AssetStore*>(static_cast<std::uintptr_t>(1));
+    ctx.assets = reinterpret_cast<oa::AssetStore*>(static_cast<uintptr_t>(1));
     mp::multiplayer_reload_maps();
 
     OA_CHECK(mp::multiplayer_map_count() == 2);
