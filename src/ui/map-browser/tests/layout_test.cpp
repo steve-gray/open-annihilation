@@ -814,6 +814,57 @@ void header_and_footer_words() {
     );
 }
 
+/// The chip on a card of this title, or empty when that card is not drawn.
+///
+/// @param list the display list
+/// @param title the card's title
+/// @return the chip's text
+std::string card_chip(const kit::DisplayList& list, std::string_view title) {
+    for (const kit::Item& item : list.items) {
+        if (const auto* card = std::get_if<kit::CardLook>(&item.look);
+            card != nullptr && card->title == title && !card->chips.empty())
+            return card->chips.front().text;
+    }
+    return {};
+}
+
+/// Battle room rows: a catalogue map not installed does not say Downloaded,
+/// an installed one does, and the map being downloaded says so.
+void battle_room_map_rows() {
+    auto made = [](std::string_view name, std::string_view title, std::string_view pack) {
+        mb::MapCard card;
+        card.name = std::string(name);
+        card.title = std::string(title);
+        card.pack_name = std::string(pack);
+        card.players = 2;
+        card.size = "8x8";
+        return card;
+    };
+    const mb::MapCard installed = made("dune@dune", "Dune", "Dune");
+    const mb::MapCard offered = made("tidewater@tidewater", "Tidewater", "Tidewater");
+    const mb::MapCard lowlands = made("fen_crossing@lowlands", "Fen Crossing", "Lowlands");
+    mb::Browser browser;
+    browser.opener = mb::Browser::Opener::battle_room;
+    browser.cards = mb::merge_cards({}, {}, {installed}, {offered, lowlands});
+    mb::apply_filters(browser);
+    const kit::Frame frame = frames()[2].frame;
+    const kit::DisplayList list = laid_out(browser, {}, frame);
+    bool header = false;
+    for (const kit::Item& item : list.items)
+        if (const auto* look = std::get_if<kit::HeaderLook>(&item.look))
+            header = look->title == "Maps" && look->version == "Battle room · No Mod";
+    OA_CHECK(header);
+    OA_CHECK(card_chip(list, "Dune") == "Downloaded");
+    OA_CHECK(card_chip(list, "Tidewater") == "Available");
+    OA_CHECK(card_chip(list, "Tidewater") != "Downloaded");
+    OA_CHECK(card_chip(list, "Fen Crossing") == "Lowlands");
+    browser.downloading = "tidewater@tidewater";
+    const kit::DisplayList fetching = laid_out(browser, {}, frame);
+    OA_CHECK(card_chip(fetching, "Tidewater") == "Downloading…");
+    OA_CHECK(card_chip(fetching, "Dune") == "Downloaded");
+    OA_CHECK(card_chip(fetching, "Fen Crossing") == "Lowlands");
+}
+
 /// Draws a line in the modern fonts, as the game does for the characters
 /// its fonts lack.
 ///
@@ -1025,4 +1076,5 @@ void layout_tests() {
     card_reads_the_largest_count();
     header_and_footer_words();
     compact_byline_and_chips_fit();
+    battle_room_map_rows();
 }

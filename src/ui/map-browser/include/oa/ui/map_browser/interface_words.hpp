@@ -21,6 +21,7 @@ inline constexpr std::string_view interface_words[] = {
     "5–10",
     "All",
     "Any",
+    "Available",
     "Battle room · No Mod",
     "Battle room · playing {mod}",
     "Cancel",
