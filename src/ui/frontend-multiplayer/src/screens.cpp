@@ -209,6 +209,15 @@ struct Ui {
     data::campaign::CampaignFiles picture_files{};
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     ScreenContext* ctx = nullptr;
+    /// The install the last live screen context named. The context does not
+    /// outlive its callback; a map installed while the battle room shows is
+    /// listed after that callback returns, and the list reads this install.
+    const oa::AssetStore* assets = nullptr;
+    /// The host and services the last live screen context named. Like the
+    /// install, they live on with the runtime; a sound played or a setting
+    /// read after the callback returns uses these, never the context.
+    void* host = nullptr;
+    const app::ScreenServices* services = nullptr;
     uint32_t last_click_ms = 0;
     int32_t last_click_index = kNoControl;
     bool in_lobby = false;
@@ -245,6 +254,21 @@ struct Ui {
 Ui& ui() {
     static auto state = std::make_unique<Ui>();
     return *state;
+}
+
+/// Remembers the screen for this callback, and the install it names.
+///
+/// The context belongs to the caller and does not outlive the callback. A
+/// map got while the battle room shows is listed once the callback has
+/// returned, so the list keeps the install, which lives on with the runtime.
+///
+/// @param state the screens
+/// @param ctx the callback's context; null clears the remembered install
+void remember_screen(Ui& state, ScreenContext* ctx) {
+    state.ctx = ctx;
+    state.assets = ctx != nullptr ? ctx->assets : nullptr;
+    state.host = ctx != nullptr ? ctx->host : nullptr;
+    state.services = ctx != nullptr ? ctx->services : nullptr;
 }
 
 // The clock multiplayer_bind_clock bound; it survives multiplayer_reset.
@@ -375,9 +399,11 @@ uint32_t elapsed_ms() {
 // Boundaries bound to the application
 
 void service_play_sound(void*, const char* name) {
-    if (ui().ctx != nullptr && ui().ctx->services != nullptr &&
-        ui().ctx->services->play_sound != nullptr)
-        app::screen_play_sound(ui().ctx, name);
+    auto& state = ui();
+    // The host and services, not the callback's context, which may be gone
+    // by the time the battle room plays a sound.
+    if (state.services != nullptr && state.services->play_sound != nullptr)
+        state.services->play_sound(state.host, name);
 }
 
 void service_message(void*, const char* text) {
@@ -421,12 +447,12 @@ uint32_t service_random_below(void*, uint32_t bound) {
 
 oa_ref32 service_load_picture(void*, const char* path, int32_t* width, int32_t* height) {
     auto& state = ui();
-    if (state.ctx == nullptr || state.ctx->assets == nullptr)
+    if (state.assets == nullptr)
         return 0;
     std::unique_ptr<Image> image;
     try {
         image = std::make_unique<Image>(
-            ui::decoded::require(decode_pcx(state.ctx->assets->read(path).bytes), path)
+            ui::decoded::require(decode_pcx(state.assets->read(path).bytes), path)
         );
     } catch (const std::exception&) {
         return 0;
@@ -453,7 +479,9 @@ int32_t service_display_modes(void*, DisplayMode* out, int32_t capacity) {
 }
 
 data::campaign::CampaignFiles map_files() {
-    return data::campaign::campaign_asset_files(*ui().ctx->assets);
+    if (ui().assets == nullptr)
+        return {};
+    return data::campaign::campaign_asset_files(*ui().assets);
 }
 
 /// The row the battle room starts on: a map it can read, else one that can
@@ -504,11 +532,11 @@ void load_maps() {
     if (state.maps_loaded)
         return;
     // A source that supplies both the base maps and the pack maps can build
-    // the list before a multiplayer screen has a context. The fallback scan
-    // of the installed maps still needs that context.
+    // the list before a multiplayer screen has an install. The fallback scan
+    // of the installed maps still needs that install.
     const bool sourced = g_map_source.base_count != nullptr && g_map_source.base_at != nullptr &&
                          g_map_source.count != nullptr && g_map_source.at != nullptr;
-    if (!sourced && (state.ctx == nullptr || state.ctx->assets == nullptr))
+    if (!sourced && state.assets == nullptr)
         return;
     state.maps_loaded = true;
 
@@ -559,7 +587,7 @@ void load_maps() {
                 append({map.name, map.description, map.size, map.memory_mb});
         }
     } else {
-        auto& assets = *state.ctx->assets;
+        auto& assets = *state.assets;
         char* names = nullptr;
         // The list keeps the maps' file names, which the screens find the maps
         // by; a chosen map shows its translated name (campaign_localized_name).
@@ -668,7 +696,7 @@ bool maps_selected(void*) {
 
 int32_t starting_map_index() {
     auto& state = ui();
-    const bool can_read = state.ctx != nullptr && state.ctx->assets != nullptr;
+    const bool can_read = state.assets != nullptr;
     int32_t playable = -1;
     for (std::size_t index = 0; index < state.maps.size(); ++index) {
         if (!state.maps[index].blocked_reason.empty())
@@ -802,11 +830,10 @@ const char* maps_at(void*, int32_t index) {
 }
 
 bool maps_read(void*, const char* path, uint32_t offset, void* out, uint32_t size) {
-    auto* ctx = ui().ctx;
-    if (ctx == nullptr || ctx->assets == nullptr)
+    if (ui().assets == nullptr)
         return false;
     try {
-        return ctx->assets->read_chunk(path, offset, std::span(static_cast<uint8_t*>(out), size));
+        return ui().assets->read_chunk(path, offset, std::span(static_cast<uint8_t*>(out), size));
     } catch (const std::exception&) {
         return false;
     }
@@ -934,9 +961,8 @@ class UnitFileReader final : public oa::data::unit_definitions::CatalogAssetRead
 };
 
 void load_units() {
-    auto* ctx = ui().ctx;
-    if (ctx != nullptr && ctx->assets != nullptr)
-        load_units(*ctx->assets);
+    if (ui().assets != nullptr)
+        load_units(*ui().assets);
 }
 
 uint32_t service_unit_checksum(void*, const LobbyUnit& unit) {
@@ -951,16 +977,16 @@ uint32_t service_unit_checksum(void*, const LobbyUnit& unit) {
 }
 
 bool settings_read(void*, char* out, std::size_t capacity) {
-    auto* ctx = ui().ctx;
-    if (ctx == nullptr || ctx->services == nullptr || ctx->services->read_string == nullptr)
+    const auto& state = ui();
+    if (state.services == nullptr || state.services->read_string == nullptr)
         return false;
-    return ctx->services->read_string(ctx->host, "multiplayer", "tcpaddr", out, capacity) != 0;
+    return state.services->read_string(state.host, "multiplayer", "tcpaddr", out, capacity) != 0;
 }
 
 void settings_write(void*, const char* address) {
-    auto* ctx = ui().ctx;
-    if (ctx != nullptr && ctx->services != nullptr && ctx->services->write_string != nullptr)
-        ctx->services->write_string(ctx->host, "multiplayer", "tcpaddr", address);
+    const auto& state = ui();
+    if (state.services != nullptr && state.services->write_string != nullptr)
+        state.services->write_string(state.host, "multiplayer", "tcpaddr", address);
 }
 
 bool settings_user(void*, char* out, std::size_t capacity) {
@@ -995,9 +1021,9 @@ bool service_read_file(void*, const char* name, std::size_t limit, std::string* 
         return !file.bad();
     }
     const auto& state = ui();
-    if (state.ctx == nullptr || state.ctx->assets == nullptr)
+    if (state.assets == nullptr)
         return false;
-    const auto bytes = state.ctx->assets->load_file_contents(name);
+    const auto bytes = state.assets->load_file_contents(name);
     if (!bytes || bytes->size() > limit)
         return false;
     contents->assign(bytes->begin(), bytes->end());
@@ -1028,8 +1054,8 @@ void bind_boundaries() {
         lobby_reset(lobby, *state.game);
     }
     lobby.net = state.custom_net ? state.bound_net : loopback_lobby_net(state.loopback);
-    if (state.ctx != nullptr && state.ctx->assets != nullptr)
-        state.picture_files = data::campaign::campaign_asset_files(*state.ctx->assets);
+    if (state.assets != nullptr)
+        state.picture_files = data::campaign::campaign_asset_files(*state.assets);
     lobby.services = {
         nullptr,
         service_play_sound,
@@ -3352,7 +3378,7 @@ void say_engine_banner(Ui& state) {
 ///
 /// @param ctx Screen context of the running frontend.
 void begin(ScreenContext* ctx) {
-    ui().ctx = ctx;
+    remember_screen(ui(), ctx);
     ui().showing = true;
     bind_boundaries();
     set_text_input(ctx, true);
@@ -3729,7 +3755,7 @@ PresenceCardTrigger* row_key_trigger = nullptr;
 
 int screen_event(ScreenContext* ctx, void*) {
     auto& state = ui();
-    state.ctx = ctx;
+    remember_screen(state, ctx);
     const auto* input = ctx->input;
     if (input == nullptr)
         return 0;
@@ -3893,7 +3919,7 @@ int screen_event(ScreenContext* ctx, void*) {
 
 void screen_tick(ScreenContext* ctx, void*) {
     auto& state = ui();
-    state.ctx = ctx;
+    remember_screen(state, ctx);
     if (state.exit_confirm_requested) {
         state.exit_confirm_requested = false;
         open_exit_confirm(ctx);
@@ -3945,7 +3971,7 @@ void screen_tick(ScreenContext* ctx, void*) {
 
 void screen_draw(ScreenContext* ctx, void*) {
     auto& state = ui();
-    state.ctx = ctx;
+    remember_screen(state, ctx);
     if (ctx->surface == nullptr || !state.base.loaded)
         return;
     auto& res = front();
@@ -4481,7 +4507,10 @@ const DirectGameProgress& multiplayer_direct_game_progress() noexcept {
 void multiplayer_reload_unit_headers(ScreenContext* ctx) {
     auto& state = ui();
     auto* previous = state.ctx;
-    state.ctx = ctx;
+    const oa::AssetStore* previous_assets = state.assets;
+    void* previous_host = state.host;
+    const app::ScreenServices* previous_services = state.services;
+    remember_screen(state, ctx);
     const oa::data::defs::UnitHeaderLoader loader{nullptr, [](void*, Game* game) {
                                                       auto& units = ui().units;
                                                       units = UnitStore{};
@@ -4491,6 +4520,9 @@ void multiplayer_reload_unit_headers(ScreenContext* ctx) {
                                                   }};
     oa::data::defs::reload_unit_headers(state.game.get(), loader);
     state.ctx = previous;
+    state.assets = previous_assets;
+    state.host = previous_host;
+    state.services = previous_services;
 }
 
 RestrictPanel& multiplayer_restrict() noexcept {
@@ -4520,7 +4552,7 @@ const std::string& multiplayer_message() noexcept {
 }
 
 bool multiplayer_click(ScreenContext* ctx, const char* name, uint8_t button) noexcept {
-    ui().ctx = ctx;
+    remember_screen(ui(), ctx);
     if (!ui().message.empty()) {
         ui().message.clear();
         return true;
@@ -4534,7 +4566,7 @@ bool multiplayer_click(ScreenContext* ctx, const char* name, uint8_t button) noe
 }
 
 void multiplayer_type(ScreenContext* ctx, const char* text) noexcept {
-    ui().ctx = ctx;
+    remember_screen(ui(), ctx);
     Control* control = focused_text_box();
     if (control == nullptr || text == nullptr)
         return;

@@ -71,4 +71,11 @@ if(BUILD_TESTING)
   add_test(NAME ui-multiplayer-lobby-rules-data COMMAND oa-ui-frontend-multiplayer-lobby-rules-test --data)
   oa_game_data_tests(ui-multiplayer-lobby-rules-data)
   oa_game_data_tests(ui-multiplayer-lobby-data ui-multiplayer-screens)
+  # A map installed while the battle room shows: the list is rebuilt after
+  # the screen callback has returned, and the new map is still read.
+  add_executable(oa-ui-frontend-multiplayer-map-install-test tests/map_install_test.cpp)
+  target_link_libraries(oa-ui-frontend-multiplayer-map-install-test PRIVATE
+    oa-ui-frontend-multiplayer oa-formats-hpi oa-test-support)
+  add_test(NAME ui-multiplayer-map-install COMMAND oa-ui-frontend-multiplayer-map-install-test)
+  set_tests_properties(ui-multiplayer-map-install PROPERTIES TIMEOUT 30)
 endif()
