@@ -221,11 +221,11 @@ void counts_and_overlays() {
     titled.origin = Origin::online;
     titled.pack_name = "Tidewater";
     titled.title = "Tidewater";
-    OA_CHECK(mb::overlay_name(titled) == "GET");
+    OA_CHECK(mb::overlay_name(titled) == "Available");
     OA_CHECK(mb::overlay_name(titled) != "Downloaded");
     titled.title = "The Tide";
     titled.pack_name = "tidewater";
-    OA_CHECK(mb::overlay_name(titled) == "GET");
+    OA_CHECK(mb::overlay_name(titled) == "Available");
     titled.origin = Origin::installed;
     OA_CHECK(mb::overlay_name(titled) == "Downloaded");
     // The card whose pack is downloading says so, installed or not.

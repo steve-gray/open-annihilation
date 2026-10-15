@@ -293,7 +293,7 @@ std::string overlay_name(const MapCard& card, bool downloading) {
         !card.pack_name.empty() &&
         (same_text(card.pack_name, card.title) || same_text(card.pack_name, name_stem(card.name)));
     if (pack && named_for_map)
-        return card.origin == MapCard::Origin::installed ? "Downloaded" : "GET";
+        return card.origin == MapCard::Origin::installed ? "Downloaded" : "Available";
     if (!card.source_name.empty())
         return card.source_name;
     return card.pack_name;

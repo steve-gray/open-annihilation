@@ -48,7 +48,7 @@ layout names, and acts on what the screen returns.
   pill without the source filter, so the pills read "All (324)".
 - `overlay_name(card, downloading)`: "Downloaded" when an installed pack is
   named for the map (its title, or the stem of its game name before '@').
-  The same map offered by a catalogue and not installed shows "GET". While
+  The same map offered by a catalogue and not installed shows "Available". While
   that card's pack is downloading it shows "Downloading…". Any other card
   shows its source name, or else the pack's name.
 - `primary_action(browser)`: Select for a game, mod or installed map that

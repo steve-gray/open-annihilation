@@ -29,7 +29,7 @@ struct MapCard {
     std::string registry_name{}; ///< the name of the registry the pack comes from; empty for none
     /// Where a game or mod map comes from, in English, as the overlay shows it:
     /// "TA 3.1c", a bundle's name, or the mod's name. Empty when the overlay
-    /// uses the pack's name, "Downloaded", "GET" or "Downloading…".
+    /// uses the pack's name, "Downloaded", "Available" or "Downloading…".
     std::string source_name{};
     /// The map's width and height as its source writes them, in the game's
     /// size units: "16 x 16" from a base map's header, "16x16" from a pack.
@@ -211,11 +211,11 @@ struct BaseMapPlayers {
 ///
 /// An installed map whose pack is named for the map (its title, or the stem
 /// of its game name before '@', ignoring ASCII case) shows "Downloaded".
-/// The same map, offered by a catalogue and not installed, shows "GET": it
+/// The same map, offered by a catalogue and not installed, shows "Available": it
 /// is available to get. While that card's pack is downloading,
 /// `downloading` shows "Downloading…". Any other card shows source_name
 /// when that is set, and otherwise the pack's name. The name is the
-/// catalogue's English key for "Downloaded", "GET", "Downloading…" and
+/// catalogue's English key for "Downloaded", "Available", "Downloading…" and
 /// "TA 3.1c", and the name as given for a bundle, a mod or a pack.
 ///
 /// @param card the card

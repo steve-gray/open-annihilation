@@ -108,7 +108,7 @@ constexpr std::string_view word_search = "Search maps";
 constexpr std::string_view word_loading = "Loading preview";
 constexpr std::string_view word_no_preview = "No preview";
 constexpr std::string_view word_downloaded = "Downloaded";
-constexpr std::string_view word_get = "GET";
+constexpr std::string_view word_available = "Available";
 constexpr std::string_view word_ta = "TA 3.1c";
 constexpr std::string_view word_close = "Close";
 constexpr std::string_view word_does_not_fit_chip = "Doesn't fit";
@@ -831,7 +831,7 @@ std::string card_line(const MapCard& card) {
     );
 }
 
-/// Returns a card's overlay as the player reads it. "Downloaded", "GET",
+/// Returns a card's overlay as the player reads it. "Downloaded", "Available",
 /// "Downloading…" and "TA 3.1c" are looked up. A bundle's name, a mod's
 /// name and a pack's name are shown as the card gives them.
 ///
@@ -840,7 +840,7 @@ std::string card_line(const MapCard& card) {
 /// @return the overlay
 std::string overlay_text(const MapCard& card, bool downloading = false) {
     const std::string english = overlay_name(card, downloading);
-    if (english == word_downloaded || english == word_get || english == word_downloading ||
+    if (english == word_downloaded || english == word_available || english == word_downloading ||
         english == word_ta)
         return ids::word(english);
     return english;
@@ -848,7 +848,7 @@ std::string overlay_text(const MapCard& card, bool downloading = false) {
 
 /// Returns a card's source chip: the overlay, coloured by where the map is.
 ///
-/// A map not installed yet whose pack is named for it says "GET". While
+/// A map not installed yet whose pack is named for it says "Available". While
 /// that card's pack downloads, the chip says "Downloading…". "Downloaded"
 /// is only an installed pack named for its map.
 ///

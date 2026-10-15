@@ -855,7 +855,7 @@ void battle_room_map_rows() {
             header = look->title == "Maps" && look->version == "Battle room · No Mod";
     OA_CHECK(header);
     OA_CHECK(card_chip(list, "Dune") == "Downloaded");
-    OA_CHECK(card_chip(list, "Tidewater") == "GET");
+    OA_CHECK(card_chip(list, "Tidewater") == "Available");
     OA_CHECK(card_chip(list, "Tidewater") != "Downloaded");
     OA_CHECK(card_chip(list, "Fen Crossing") == "Lowlands");
     browser.downloading = "tidewater@tidewater";
