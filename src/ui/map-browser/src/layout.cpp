@@ -108,6 +108,7 @@ constexpr std::string_view word_search = "Search maps";
 constexpr std::string_view word_loading = "Loading preview";
 constexpr std::string_view word_no_preview = "No preview";
 constexpr std::string_view word_downloaded = "Downloaded";
+constexpr std::string_view word_get = "GET";
 constexpr std::string_view word_ta = "TA 3.1c";
 constexpr std::string_view word_close = "Close";
 constexpr std::string_view word_does_not_fit_chip = "Doesn't fit";
@@ -830,26 +831,33 @@ std::string card_line(const MapCard& card) {
     );
 }
 
-/// Returns a card's overlay as the player reads it. "Downloaded" and
-/// "TA 3.1c" are looked up. A bundle's name, a mod's name and a pack's name
-/// are shown as the card gives them.
+/// Returns a card's overlay as the player reads it. "Downloaded", "GET",
+/// "Downloading…" and "TA 3.1c" are looked up. A bundle's name, a mod's
+/// name and a pack's name are shown as the card gives them.
 ///
 /// @param card the card
+/// @param downloading true while this card's pack is downloading
 /// @return the overlay
-std::string overlay_text(const MapCard& card) {
-    const std::string english = overlay_name(card);
-    if (english == word_downloaded || english == word_ta)
+std::string overlay_text(const MapCard& card, bool downloading = false) {
+    const std::string english = overlay_name(card, downloading);
+    if (english == word_downloaded || english == word_get || english == word_downloading ||
+        english == word_ta)
         return ids::word(english);
     return english;
 }
 
 /// Returns a card's source chip: the overlay, coloured by where the map is.
 ///
+/// A map not installed yet whose pack is named for it says "GET". While
+/// that card's pack downloads, the chip says "Downloading…". "Downloaded"
+/// is only an installed pack named for its map.
+///
 /// @param card the card
+/// @param downloading true while this card's pack is downloading
 /// @return the chip
-kit::ChipLook source_chip(const MapCard& card) {
+kit::ChipLook source_chip(const MapCard& card, bool downloading = false) {
     kit::ChipLook chip;
-    chip.text = overlay_text(card);
+    chip.text = overlay_text(card, downloading);
     switch (card.origin) {
     case MapCard::Origin::game:
         chip.state = kit::ChipState::get;
@@ -924,7 +932,8 @@ void add_grid(Building& building, const PreviewHooks& previews) {
             look.placeholder =
                 ids::word(no_picture(previews, card) ? word_no_preview : word_loading);
             look.subtitle = card_line(card);
-            look.chips.push_back(source_chip(card));
+            const bool fetching = browser.downloading && *browser.downloading == card.name;
+            look.chips.push_back(source_chip(card, fetching));
             if (!fits(card)) {
                 kit::ChipLook problem;
                 problem.text = ids::word(word_does_not_fit_chip);

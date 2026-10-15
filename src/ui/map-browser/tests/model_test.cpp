@@ -207,7 +207,8 @@ void counts_and_overlays() {
         if (made.name == "isle_of_ashes@archipelago")
             OA_CHECK(mb::overlay_name(made) == "Archipelago Pack");
     }
-    // A pack named as the map, or as the stem before @, shows Downloaded.
+    // A pack named as the map, or as the stem before @, shows Downloaded
+    // only once it is installed. The same map from a catalogue says GET.
     mb::MapCard titled = card("tidewater@lowlands", "Tidewater", 4, "24x24");
     titled.origin = Origin::installed;
     titled.pack_name = "tidewater";
@@ -220,12 +221,26 @@ void counts_and_overlays() {
     titled.origin = Origin::online;
     titled.pack_name = "Tidewater";
     titled.title = "Tidewater";
+    OA_CHECK(mb::overlay_name(titled) == "GET");
+    OA_CHECK(mb::overlay_name(titled) != "Downloaded");
+    titled.title = "The Tide";
+    titled.pack_name = "tidewater";
+    OA_CHECK(mb::overlay_name(titled) == "GET");
+    titled.origin = Origin::installed;
     OA_CHECK(mb::overlay_name(titled) == "Downloaded");
+    // The card whose pack is downloading says so, installed or not.
+    OA_CHECK(mb::overlay_name(titled, true) == "Downloading…");
+    titled.origin = Origin::online;
+    OA_CHECK(mb::overlay_name(titled, true) == "Downloading…");
+    titled.pack_name = "Lowlands";
+    OA_CHECK(mb::overlay_name(titled, true) == "Downloading…");
+    OA_CHECK(mb::overlay_name(titled, false) == "Lowlands");
     // A game map keeps its source name even when that name is the title.
     titled.origin = Origin::game;
     titled.pack_name = "Tidewater";
     titled.source_name = "TA 3.1c";
     OA_CHECK(mb::overlay_name(titled) == "TA 3.1c");
+    OA_CHECK(mb::overlay_name(titled, true) == "TA 3.1c");
 }
 
 /// A card whose only count is `players`, as a pack map's manifest gives it.

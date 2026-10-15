@@ -210,7 +210,8 @@ Interface size ([settings](../settings.md#graphics)):
   and a map you have installed shown once. Each shows its preview, "Loading
   preview" until it is drawn, or "No preview"; a chip naming where it comes
   from ("TA 3.1c", "Core Contingency", "Battle Tactics", the mod's name,
-  the pack's name, or "Downloaded" when the pack is named for the map);
+  the pack's name, "Downloaded" when you have a pack named for the map,
+  "GET" when that pack is still to get, or "Downloading…" while it is);
   and "4 · 16×16", its players and size. Previews are drawn only for the
   cards in view. Pictures of the three sizes are in
   [images/maps](../images/maps/).

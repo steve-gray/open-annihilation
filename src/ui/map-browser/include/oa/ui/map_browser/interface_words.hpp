@@ -34,6 +34,7 @@ inline constexpr std::string_view interface_words[] = {
     "Downloads",
     "Fit with {game} is checked when it's installed",
     "Fits {game} ✓",
+    "GET",
     "Game",
     "L",
     "Loading preview",
