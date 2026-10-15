@@ -213,6 +213,11 @@ struct Ui {
     /// outlive its callback; a map installed while the battle room shows is
     /// listed after that callback returns, and the list reads this install.
     const oa::AssetStore* assets = nullptr;
+    /// The host and services the last live screen context named. Like the
+    /// install, they live on with the runtime; a sound played or a setting
+    /// read after the callback returns uses these, never the context.
+    void* host = nullptr;
+    const ScreenServices* services = nullptr;
     uint32_t last_click_ms = 0;
     int32_t last_click_index = kNoControl;
     bool in_lobby = false;
@@ -262,6 +267,8 @@ Ui& ui() {
 void remember_screen(Ui& state, ScreenContext* ctx) {
     state.ctx = ctx;
     state.assets = ctx != nullptr ? ctx->assets : nullptr;
+    state.host = ctx != nullptr ? ctx->host : nullptr;
+    state.services = ctx != nullptr ? ctx->services : nullptr;
 }
 
 // The clock multiplayer_bind_clock bound; it survives multiplayer_reset.
@@ -392,9 +399,11 @@ uint32_t elapsed_ms() {
 // Boundaries bound to the application
 
 void service_play_sound(void*, const char* name) {
-    if (ui().ctx != nullptr && ui().ctx->services != nullptr &&
-        ui().ctx->services->play_sound != nullptr)
-        app::screen_play_sound(ui().ctx, name);
+    auto& state = ui();
+    // The host and services, not the callback's context, which may be gone
+    // by the time the battle room plays a sound.
+    if (state.services != nullptr && state.services->play_sound != nullptr)
+        state.services->play_sound(state.host, name);
 }
 
 void service_message(void*, const char* text) {
@@ -968,16 +977,16 @@ uint32_t service_unit_checksum(void*, const LobbyUnit& unit) {
 }
 
 bool settings_read(void*, char* out, std::size_t capacity) {
-    auto* ctx = ui().ctx;
-    if (ctx == nullptr || ctx->services == nullptr || ctx->services->read_string == nullptr)
+    const auto& state = ui();
+    if (state.services == nullptr || state.services->read_string == nullptr)
         return false;
-    return ctx->services->read_string(ctx->host, "multiplayer", "tcpaddr", out, capacity) != 0;
+    return state.services->read_string(state.host, "multiplayer", "tcpaddr", out, capacity) != 0;
 }
 
 void settings_write(void*, const char* address) {
-    auto* ctx = ui().ctx;
-    if (ctx != nullptr && ctx->services != nullptr && ctx->services->write_string != nullptr)
-        ctx->services->write_string(ctx->host, "multiplayer", "tcpaddr", address);
+    const auto& state = ui();
+    if (state.services != nullptr && state.services->write_string != nullptr)
+        state.services->write_string(state.host, "multiplayer", "tcpaddr", address);
 }
 
 bool settings_user(void*, char* out, std::size_t capacity) {
@@ -4499,6 +4508,8 @@ void multiplayer_reload_unit_headers(ScreenContext* ctx) {
     auto& state = ui();
     auto* previous = state.ctx;
     const oa::AssetStore* previous_assets = state.assets;
+    void* previous_host = state.host;
+    const ScreenServices* previous_services = state.services;
     remember_screen(state, ctx);
     const oa::data::defs::UnitHeaderLoader loader{nullptr, [](void*, Game* game) {
                                                       auto& units = ui().units;
@@ -4510,6 +4521,8 @@ void multiplayer_reload_unit_headers(ScreenContext* ctx) {
     oa::data::defs::reload_unit_headers(state.game.get(), loader);
     state.ctx = previous;
     state.assets = previous_assets;
+    state.host = previous_host;
+    state.services = previous_services;
 }
 
 RestrictPanel& multiplayer_restrict() noexcept {
